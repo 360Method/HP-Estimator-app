@@ -89,6 +89,7 @@ const PAINT = 100;   // $/hr paint prep
 // ─── PHASE 1: PRE-CONSTRUCTION ────────────────────────────────
 const phase1: PhaseGroup = {
   id: 1, name: 'Pre-Construction', icon: '📋',
+  description: 'Site assessment, permitting, material procurement, and subcontractor coordination before any work begins.',
   items: [
     laborItem('p1-site', 'Site Assessment / Measurements', 'Site assessment', 'hr', 1, LABOR,
       'Detailed site walk, measurements, and project scoping.',
@@ -108,6 +109,7 @@ const phase1: PhaseGroup = {
 // ─── PHASE 2: DEMOLITION & ROUGH WORK ─────────────────────────
 const phase2: PhaseGroup = {
   id: 2, name: 'Demo & Rough Work', icon: '🔨',
+  description: 'Removal of existing materials, debris haul-away, and any hazardous material abatement required to prepare the space.',
   items: [
     matItem('p2-demo-int', 'Interior Demolition', 'Interior demo', 'sqft',
       tiers(0.50,'Standard demo','Walls, ceilings, flooring, fixtures', 0.75,'Selective demo','Careful removal preserving adjacent surfaces', 1.10,'Precision demo','Detailed selective demo, minimal disruption'),
@@ -134,6 +136,7 @@ const phase2: PhaseGroup = {
 // ─── PHASE 3: MECHANICAL ROUGH-IN ─────────────────────────────
 const phase3: PhaseGroup = {
   id: 3, name: 'Mechanical Rough-In', icon: '🔧',
+  description: 'Rough-in of plumbing, electrical, HVAC, and gas lines before walls are closed — all work performed by licensed contractors.',
   items: [
     laborItem('p3-plumb', 'Plumbing Rough-In', 'Plumbing rough-in', 'fixture', 4, LABOR,
       'Supply lines, DWV, and new drain locations.',
@@ -153,6 +156,7 @@ const phase3: PhaseGroup = {
 // ─── PHASE 4: INSULATION & WEATHERPROOFING ────────────────────
 const phase4: PhaseGroup = {
   id: 4, name: 'Insulation & Weatherproofing', icon: '🏠',
+  description: 'Insulation installation and weather barrier application to improve energy efficiency, comfort, and moisture protection.',
   items: [
     matItem('p4-batt', 'Batt Insulation', 'Batt insulation', 'sqft',
       tiers(0.45,'R-13 fiberglass batt','Standard wall insulation', 0.70,'R-19 fiberglass batt','Upgraded wall/ceiling insulation', 1.10,'R-21 mineral wool','Premium sound + thermal insulation'),
@@ -180,6 +184,7 @@ const phase4: PhaseGroup = {
 // ─── PHASE 5: DRYWALL ─────────────────────────────────────────
 const phase5: PhaseGroup = {
   id: 5, name: 'Drywall', icon: '🧱',
+  description: 'Drywall installation, taping, mudding, and finishing to the specified level — ready for paint or texture.',
   items: [
     matItem('p5-hang', 'Hang Drywall', 'Drywall hang', 'sqft',
       tiers(0.35,'1/2" standard drywall','Walls and ceilings', 0.45,'5/8" Type X drywall','Fire-rated, ceilings', 0.65,'5/8" soundboard','Sound-dampening drywall'),
@@ -207,6 +212,7 @@ const phase5: PhaseGroup = {
 // ─── PHASE 6: FLOORING ────────────────────────────────────────
 const phase6: PhaseGroup = {
   id: 6, name: 'Flooring', icon: '🪵',
+  description: 'Flooring supply and installation including subfloor preparation, material installation, transitions, and cleanup.',
   items: [
     matItem('p6-subfloor', 'Subfloor Prep', 'Subfloor prep', 'sqft',
       tiers(0.40,'Basic leveling','Self-leveler, minor repairs', 0.75,'Subfloor repair','Sheathing replacement, sistering', 1.20,'Full subfloor replacement','New 3/4" T&G sheathing'),
@@ -249,6 +255,7 @@ const phase6: PhaseGroup = {
 // ─── PHASE 7: TILE WORK ───────────────────────────────────────
 const phase7: PhaseGroup = {
   id: 7, name: 'Tile Work', icon: '🚿',
+  description: 'Tile supply and installation for showers, tub surrounds, backsplashes, and feature walls — including waterproofing, grouting, and sealing.',
   items: [
     matItem('p7-shower', 'Shower Wall Tile', 'Shower tile', 'sqft',
       tiers(3.50,'Ceramic subway tile','3×6 classic subway', 5.50,'Porcelain wall tile','12×24 porcelain', 9.00,'Natural stone tile','Marble, travertine, or slate'),
@@ -284,6 +291,7 @@ const phase7: PhaseGroup = {
 // ─── PHASE 8: FRAMING & CARPENTRY ─────────────────────────────
 const phase8: PhaseGroup = {
   id: 8, name: 'Framing & Carpentry', icon: '🪚',
+  description: 'Structural framing for new walls, ceilings, openings, and subfloor repairs — the backbone of any remodel.',
   items: [
     matItem('p8-wall', 'New Wall Framing', 'Wall framing', 'lf',
       tiers(4.50,'2×4 stud wall','Standard interior partition', 6.00,'2×6 stud wall','Exterior or plumbing wall', 8.50,'Steel stud framing','Commercial-grade metal framing'),
@@ -312,6 +320,7 @@ const phase8: PhaseGroup = {
 // ─── PHASE 9: EXTERIOR WORK ───────────────────────────────────
 const phase9: PhaseGroup = {
   id: 9, name: 'Exterior Work', icon: '🏡',
+  description: 'Exterior improvements including siding, roofing, gutters, decks, fencing, and concrete flatwork.',
   items: [
     matItem('p9-siding', 'Siding Installation', 'Siding', 'sqft',
       tiers(2.50,'LP SmartSide lap','Engineered wood lap siding', 3.80,'Fiber cement (HardiePlank)','James Hardie lap siding', 6.00,'Cedar siding','Natural wood siding'),
@@ -370,6 +379,7 @@ const phase9: PhaseGroup = {
 // ─── PHASE 10: DOORS & WINDOWS ────────────────────────────────
 const phase10: PhaseGroup = {
   id: 10, name: 'Doors & Windows', icon: '🚪',
+  description: 'Interior and exterior door and window installation, including hardware, weatherstripping, and exterior trim.',
   items: [
     matItem('p10-int-door', 'Interior Doors', 'Interior doors', 'door',
       tiers(120,'Hollow-core prehung','Standard hollow-core', 220,'Solid-core prehung','Solid-core 1-3/4"', 380,'Solid wood prehung','Knotty alder or pine'),
@@ -410,6 +420,7 @@ const phase10: PhaseGroup = {
 // ─── PHASE 11: TRIM & FINISH CARPENTRY ────────────────────────
 const phase11: PhaseGroup = {
   id: 11, name: 'Trim & Finish Carpentry', icon: '📐',
+  description: 'Finish carpentry including baseboard, door and window casing, crown molding, wainscoting, built-ins, and stair work — the details that make a home feel finished.',
   items: [
     matItem('p11-bb', 'Baseboard', 'Baseboard', 'lf',
       tiers(0.68,'Finger-joint pine, primed','Colonial 3.5" — paint-grade', 1.05,'MDF colonial base, primed','Colonial 4.25" — smooth MDF', 1.95,'Solid poplar, unfinished','Colonial 4.25" — stain-grade'),
@@ -475,6 +486,7 @@ const phase11: PhaseGroup = {
 // ─── PHASE 12: CABINETRY & COUNTERTOPS ────────────────────────
 const phase12: PhaseGroup = {
   id: 12, name: 'Cabinetry & Countertops', icon: '🍳',
+  description: 'Kitchen and bathroom cabinetry, countertops, and hardware — supply and installation.',
   items: [
     matItem('p12-cab', 'Kitchen Cabinets', 'Kitchen cabinets', 'lf',
       tiers(180,'Stock cabinets','Home Depot/Lowe\'s stock', 320,'Semi-custom cabinets','IKEA or semi-custom', 580,'Custom cabinets','Full custom cabinetry'),
@@ -507,6 +519,7 @@ const phase12: PhaseGroup = {
 // ─── PHASE 13: PLUMBING FINISH ────────────────────────────────
 const phase13: PhaseGroup = {
   id: 13, name: 'Plumbing Finish', icon: '🚰',
+  description: 'Plumbing fixture installation including faucets, sinks, toilets, tubs, shower systems, and appliance hookups.',
   items: [
     matItem('p13-faucet', 'Fixture Swap (Faucet / Showerhead)', 'Fixture swap', 'fixture',
       tiers(80,'Builder-grade fixture','Standard chrome fixture', 180,'Mid-grade fixture','Brushed nickel or matte black', 380,'Premium fixture','Kohler, Moen, or Delta premium'),
@@ -551,6 +564,7 @@ const phase13: PhaseGroup = {
 // ─── PHASE 14: ELECTRICAL FINISH ──────────────────────────────
 const phase14: PhaseGroup = {
   id: 14, name: 'Electrical Finish', icon: '💡',
+  description: 'Electrical finish work including light fixtures, ceiling fans, outlets, recessed lighting, and smart devices.',
   items: [
     matItem('p14-light', 'Light Fixture Swap', 'Light fixtures', 'fixture',
       tiers(45,'Builder-grade fixture','Standard light fixture', 120,'Mid-grade fixture','Brushed nickel or matte black', 280,'Designer fixture','Premium designer fixture'),
@@ -596,6 +610,7 @@ const phase14: PhaseGroup = {
 // ─── PHASE 15: PAINTING ───────────────────────────────────────
 const phase15: PhaseGroup = {
   id: 15, name: 'Painting', icon: '🎨',
+  description: 'Interior and exterior painting — walls, ceilings, trim, cabinets, decks, and fences — prep, prime, and finish coats.',
   items: [
     matItem('p15-int-wall', 'Interior Walls', 'Interior walls', 'sqft',
       tiers(0.35,'1-coat paint','Primer + 1 finish coat', 0.55,'2-coat paint','Primer + 2 finish coats', 0.80,'Premium paint','Sherwin-Williams Emerald 2-coat'),
@@ -648,6 +663,7 @@ const phase15: PhaseGroup = {
 // ─── PHASE 16: APPLIANCES & SPECIALTIES ───────────────────────
 const phase16: PhaseGroup = {
   id: 16, name: 'Appliances & Specialties', icon: '🔌',
+  description: 'Appliance installation, specialty items, and finishing touches including range hoods, fireplaces, and window treatments.',
   items: [
     laborItem('p16-appliance', 'Appliance Install (Range, Fridge, DW, Microwave)', 'Appliance install', 'unit', 1.5, LABOR,
       'Appliance installation and hookup.',
@@ -670,6 +686,7 @@ const phase16: PhaseGroup = {
 // ─── PHASE 17: FINAL CLEANING & CLOSEOUT ──────────────────────
 const phase17: PhaseGroup = {
   id: 17, name: 'Final Cleaning & Closeout', icon: '✅',
+  description: 'Post-construction cleaning, exterior site cleanup, punch list completion, and final walkthrough with client sign-off.',
   items: [
     laborItem('p17-clean', 'Post-Construction Clean — Interior', 'Post-construction clean', 'sqft', 0.004, LABOR,
       'Final interior post-construction cleaning.',

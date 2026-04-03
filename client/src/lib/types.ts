@@ -76,6 +76,7 @@ export interface PhaseGroup {
   id: number;
   name: string;
   icon: string;
+  description: string;   // customer-facing phase description for estimate
   items: LineItem[];
 }
 

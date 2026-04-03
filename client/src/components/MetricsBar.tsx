@@ -12,11 +12,11 @@ interface MetricsBarProps {
   totals: TotalsResult;
 }
 
-const NAV_ITEMS: { id: AppSection; label: string }[] = [
-  { id: 'customer', label: 'Customer Info' },
-  { id: 'sales',    label: 'Sales View' },
-  { id: 'calculator', label: 'Calculator' },
-  { id: 'estimate', label: 'Estimate' },
+const NAV_ITEMS: { id: AppSection; icon: string; label: string; shortLabel: string }[] = [
+  { id: 'customer',    icon: '👤', label: 'Customer Info', shortLabel: 'Client' },
+  { id: 'sales',       icon: '🛍', label: 'Sales View',   shortLabel: 'Sales' },
+  { id: 'calculator',  icon: '🧮', label: 'Calculator',   shortLabel: 'Calc' },
+  { id: 'estimate',    icon: '📄', label: 'Estimate',     shortLabel: 'Estimate' },
 ];
 
 export default function MetricsBar({ totals }: MetricsBarProps) {
@@ -102,19 +102,21 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
           </button>
         </div>
 
-        {/* Section nav tabs */}
-        <div className="flex border-t border-border -mx-4 px-4 overflow-x-auto">
+        {/* Section nav tabs — flex-1 so each tab fills equal width on all screen sizes */}
+        <div className="flex border-t border-border -mx-4 px-0">
           {NAV_ITEMS.map(item => (
             <button
               key={item.id}
               onClick={() => setSection(item.id)}
-              className={`px-4 py-2 text-xs font-semibold border-b-2 transition-colors whitespace-nowrap ${
+              className={`flex-1 flex flex-col items-center gap-0.5 py-1.5 text-[11px] font-semibold border-b-2 transition-colors min-w-0 ${
                 state.activeSection === item.id
                   ? 'border-primary text-primary'
                   : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
-              {item.label}
+              <span className="text-sm leading-none">{item.icon}</span>
+              <span className="leading-none hidden sm:inline">{item.label}</span>
+              <span className="leading-none sm:hidden">{item.shortLabel}</span>
             </button>
           ))}
         </div>
