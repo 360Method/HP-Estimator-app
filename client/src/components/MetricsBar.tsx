@@ -26,6 +26,9 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
   const minGM = totalHard < 2000 ? 0.40 : 0.30;
   const gmFlag = getMarginFlag(totalGM, totalHard);
 
+  // Hide internal cost data on customer-facing screens (Sales View, Estimate)
+  const isCustomerFacing = state.activeSection === 'sales' || state.activeSection === 'estimate';
+
   const gmColor = {
     empty: 'text-muted-foreground',
     ok:    'text-emerald-700',
@@ -63,21 +66,32 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
             </div>
           </div>
 
-          {/* Metrics */}
+          {/* Metrics — internal figures hidden on customer-facing screens */}
           <div className="flex items-center gap-5 flex-1 min-w-0">
-            <Metric label="Hard Cost" value={totalHard > 0 ? fmtDollar(totalHard) : '—'} sub="internal only" valueClass="text-foreground" />
-            <div className="h-7 w-px bg-border shrink-0" />
+            {!isCustomerFacing && (
+              <>
+                <Metric label="Hard Cost" value={totalHard > 0 ? fmtDollar(totalHard) : '—'} sub="internal only" valueClass="text-foreground" />
+                <div className="h-7 w-px bg-border shrink-0" />
+              </>
+            )}
             <Metric label="Customer Price" value={totalPrice > 0 ? fmtDollar(totalPrice) : '—'} sub="all phases" valueClass="text-primary font-black" />
-            <div className="h-7 w-px bg-border shrink-0" />
-            <Metric
-              label="Gross Margin"
-              value={totalHard > 0 ? fmtPct(totalGM) : '—'}
-              sub={totalHard > 0 ? (totalGM >= minGM - 0.001 ? `${Math.round(minGM * 100)}% floor met` : `${Math.round(minGM * 100)}% floor not met`) : 'no data'}
-              valueClass={gmColor}
-              containerClass={gmBg}
-            />
-            <div className="h-7 w-px bg-border shrink-0" />
-            <Metric label="Gross Profit" value={totalGP > 0 ? fmtDollar(totalGP) : '—'} sub="price − hard cost" valueClass="text-foreground" />
+            {!isCustomerFacing && (
+              <>
+                <div className="h-7 w-px bg-border shrink-0" />
+                <Metric
+                  label="Gross Margin"
+                  value={totalHard > 0 ? fmtPct(totalGM) : '—'}
+                  sub={totalHard > 0 ? (totalGM >= minGM - 0.001 ? `${Math.round(minGM * 100)}% floor met` : `${Math.round(minGM * 100)}% floor not met`) : 'no data'}
+                  valueClass={gmColor}
+                  containerClass={gmBg}
+                />
+                <div className="h-7 w-px bg-border shrink-0" />
+                <Metric label="Gross Profit" value={totalGP > 0 ? fmtDollar(totalGP) : '—'} sub="price − hard cost" valueClass="text-foreground" />
+              </>
+            )}
+            {isCustomerFacing && totalPrice > 0 && (
+              <span className="text-[10px] text-muted-foreground italic">Internal details hidden</span>
+            )}
           </div>
 
           <button
