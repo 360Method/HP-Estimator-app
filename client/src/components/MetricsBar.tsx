@@ -57,9 +57,11 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
         <div className="flex items-center gap-0 py-2 overflow-x-auto">
           {/* Brand */}
           <div className="flex items-center gap-2 pr-4 border-r border-border mr-4 shrink-0">
-            <div className="w-7 h-7 rounded-md bg-primary flex items-center justify-center">
-              <span className="text-white font-black text-xs leading-none">HP</span>
-            </div>
+            <img
+              src="https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg"
+              alt="Handy Pioneers"
+              className="w-8 h-8 object-contain rounded"
+            />
             <div>
               <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest leading-none">Handy Pioneers</div>
               <div className="text-xs font-semibold text-foreground leading-tight">Field Estimator</div>

@@ -105,13 +105,18 @@ export interface PhaseGroup {
 
 export interface JobInfo {
   client: string;
+  companyName: string;   // customer company name (optional)
   address: string;
   city: string;
+  state: string;
+  zip: string;
   phone: string;
   email: string;
-  date: string;
+  date: string;          // estimate created date
+  expiresDate: string;   // estimate expiry date
+  servicedDate: string;  // scheduled service date
   jobType: string;
-  estimator: string;
+  estimator: string;     // comma-separated technician names
   jobNumber: string;
   scope: string;
 }

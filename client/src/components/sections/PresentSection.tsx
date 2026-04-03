@@ -300,8 +300,8 @@ export default function PresentSection() {
 
   const renderCover = () => (
     <div className="flex flex-col items-center justify-center h-full text-center px-8">
-      <div className="w-20 h-20 rounded-2xl bg-white/10 flex items-center justify-center mb-6 shadow-xl">
-        <span className="text-white font-black text-3xl leading-none">HP</span>
+      <div className="w-24 h-24 rounded-2xl bg-white flex items-center justify-center mb-6 shadow-xl p-2">
+        <img src="https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg" alt="Handy Pioneers" className="w-full h-full object-contain" />
       </div>
       <div className="text-4xl sm:text-5xl font-black text-white mb-3 tracking-tight">Handy Pioneers</div>
       <div className="text-slate-300 text-lg mb-8">Project Estimate</div>
