@@ -29,6 +29,8 @@ export interface TierData {
   rate: number;   // $/unit hard cost
   name: string;   // material name shown to customer
   desc: string;   // short description
+  photo?: string; // Unsplash URL for visual sales card
+  specs?: string; // e.g. "4mm wear layer · waterproof core"
 }
 
 export interface LineItem {
@@ -54,6 +56,20 @@ export interface LineItem {
   notes: string;
   salesDesc: string;       // customer-facing description
   sowTemplate: string;     // template for SOW bullet
+  salesSelected: boolean;  // tier chosen in Sales View
+}
+
+// Custom line item added by estimator outside normal scope
+export interface CustomLineItem {
+  id: string;
+  phaseId: number;
+  description: string;     // customer-facing description
+  unitType: UnitType;
+  qty: number;
+  matCostPerUnit: number;  // hard cost $/unit
+  laborHrsPerUnit: number;
+  laborRate: number;
+  notes: string;
 }
 
 export interface PhaseGroup {
@@ -89,6 +105,7 @@ export interface EstimatorState {
   jobInfo: JobInfo;
   global: GlobalSettings;
   phases: PhaseGroup[];
+  customItems: CustomLineItem[];
   fieldNotes: string;
   summaryNotes: string;
   estimatorNotes: string;

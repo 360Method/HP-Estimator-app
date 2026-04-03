@@ -3,8 +3,9 @@
 // ============================================================
 
 import React, { createContext, useContext, useReducer, useCallback } from 'react';
-import { EstimatorState, JobInfo, GlobalSettings, AppSection, LineItem } from '@/lib/types';
+import { EstimatorState, JobInfo, GlobalSettings, AppSection, LineItem, CustomLineItem } from '@/lib/types';
 import { ALL_PHASES, DEFAULTS } from '@/lib/phases';
+import { nanoid } from 'nanoid';
 
 const initialState: EstimatorState = {
   activeSection: 'customer',
@@ -26,6 +27,7 @@ const initialState: EstimatorState = {
     paintRate: DEFAULTS.paintRate,
   },
   phases: ALL_PHASES,
+  customItems: [],
   fieldNotes: '',
   summaryNotes: '',
   estimatorNotes: '',
@@ -36,6 +38,9 @@ type Action =
   | { type: 'SET_JOB_INFO'; payload: Partial<JobInfo> }
   | { type: 'SET_GLOBAL'; payload: Partial<GlobalSettings> }
   | { type: 'UPDATE_ITEM'; phaseId: number; itemId: string; payload: Partial<LineItem> }
+  | { type: 'ADD_CUSTOM_ITEM'; payload: Omit<CustomLineItem, 'id'> }
+  | { type: 'UPDATE_CUSTOM_ITEM'; id: string; payload: Partial<CustomLineItem> }
+  | { type: 'REMOVE_CUSTOM_ITEM'; id: string }
   | { type: 'SET_FIELD_NOTES'; payload: string }
   | { type: 'SET_SUMMARY_NOTES'; payload: string }
   | { type: 'SET_ESTIMATOR_NOTES'; payload: string }
@@ -51,7 +56,6 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
 
     case 'SET_GLOBAL': {
       const newGlobal = { ...state.global, ...action.payload };
-      // Sync labor rate and paint rate to all items
       const syncLabor = action.payload.laborRate !== undefined;
       const syncPaint = action.payload.paintRate !== undefined;
       const phases = state.phases.map(phase => ({
@@ -79,17 +83,43 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
       return { ...state, phases };
     }
 
+    case 'ADD_CUSTOM_ITEM':
+      return {
+        ...state,
+        customItems: [...state.customItems, { ...action.payload, id: nanoid(8) }],
+      };
+
+    case 'UPDATE_CUSTOM_ITEM':
+      return {
+        ...state,
+        customItems: state.customItems.map(ci =>
+          ci.id === action.id ? { ...ci, ...action.payload } : ci
+        ),
+      };
+
+    case 'REMOVE_CUSTOM_ITEM':
+      return {
+        ...state,
+        customItems: state.customItems.filter(ci => ci.id !== action.id),
+      };
+
     case 'SET_FIELD_NOTES':
       return { ...state, fieldNotes: action.payload };
     case 'SET_SUMMARY_NOTES':
       return { ...state, summaryNotes: action.payload };
     case 'SET_ESTIMATOR_NOTES':
       return { ...state, estimatorNotes: action.payload };
+
     case 'RESET':
-      return { ...initialState, phases: ALL_PHASES.map(p => ({
-        ...p,
-        items: p.items.map(i => ({ ...i, qty: 0, notes: '' })),
-      })) };
+      return {
+        ...initialState,
+        phases: ALL_PHASES.map(p => ({
+          ...p,
+          items: p.items.map(i => ({ ...i, qty: 0, notes: '', salesSelected: false })),
+        })),
+        customItems: [],
+      };
+
     default:
       return state;
   }
@@ -101,6 +131,9 @@ interface EstimatorContextValue {
   setJobInfo: (payload: Partial<JobInfo>) => void;
   setGlobal: (payload: Partial<GlobalSettings>) => void;
   updateItem: (phaseId: number, itemId: string, payload: Partial<LineItem>) => void;
+  addCustomItem: (payload: Omit<CustomLineItem, 'id'>) => void;
+  updateCustomItem: (id: string, payload: Partial<CustomLineItem>) => void;
+  removeCustomItem: (id: string) => void;
   setFieldNotes: (v: string) => void;
   setSummaryNotes: (v: string) => void;
   setEstimatorNotes: (v: string) => void;
@@ -117,6 +150,12 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
   const setGlobal = useCallback((payload: Partial<GlobalSettings>) => dispatch({ type: 'SET_GLOBAL', payload }), []);
   const updateItem = useCallback((phaseId: number, itemId: string, payload: Partial<LineItem>) =>
     dispatch({ type: 'UPDATE_ITEM', phaseId, itemId, payload }), []);
+  const addCustomItem = useCallback((payload: Omit<CustomLineItem, 'id'>) =>
+    dispatch({ type: 'ADD_CUSTOM_ITEM', payload }), []);
+  const updateCustomItem = useCallback((id: string, payload: Partial<CustomLineItem>) =>
+    dispatch({ type: 'UPDATE_CUSTOM_ITEM', id, payload }), []);
+  const removeCustomItem = useCallback((id: string) =>
+    dispatch({ type: 'REMOVE_CUSTOM_ITEM', id }), []);
   const setFieldNotes = useCallback((v: string) => dispatch({ type: 'SET_FIELD_NOTES', payload: v }), []);
   const setSummaryNotes = useCallback((v: string) => dispatch({ type: 'SET_SUMMARY_NOTES', payload: v }), []);
   const setEstimatorNotes = useCallback((v: string) => dispatch({ type: 'SET_ESTIMATOR_NOTES', payload: v }), []);
@@ -125,6 +164,7 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
   return (
     <EstimatorContext.Provider value={{
       state, setSection, setJobInfo, setGlobal, updateItem,
+      addCustomItem, updateCustomItem, removeCustomItem,
       setFieldNotes, setSummaryNotes, setEstimatorNotes, reset,
     }}>
       {children}
@@ -132,8 +172,8 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function useEstimator() {
+export function useEstimator(): EstimatorContextValue {
   const ctx = useContext(EstimatorContext);
-  if (!ctx) throw new Error('useEstimator must be used within EstimatorProvider');
+  if (!ctx) throw new Error('useEstimator must be used inside EstimatorProvider');
   return ctx;
 }

@@ -2,7 +2,7 @@
 // HP Field Estimator v2 — Calculation Engine
 // ============================================================
 
-import { LineItem, PhaseGroup, GlobalSettings, Tier } from './types';
+import { LineItem, PhaseGroup, GlobalSettings, Tier, CustomLineItem } from './types';
 
 // ─── MARKUP / GM MATH ─────────────────────────────────────────
 // Markup % is applied as: price = hardCost / (1 - GM)
@@ -141,11 +141,13 @@ export function calcLineItem(item: LineItem, global: GlobalSettings): LineItemRe
 
 function buildSowLine(item: LineItem, matName: string): string {
   const tierLabel = item.tier.charAt(0).toUpperCase() + item.tier.slice(1);
+  // When salesSelected, show the actual material name prominently
+  const displayMat = item.salesSelected ? matName : `${tierLabel} grade`;
   let line = item.sowTemplate
     .replace('{qty}', item.qty.toString())
     .replace('{tier}', tierLabel)
     .replace('{name}', item.name)
-    .replace('{mat}', matName);
+    .replace('{mat}', displayMat);
   return line;
 }
 
@@ -182,7 +184,34 @@ export function calcPhase(phase: PhaseGroup, global: GlobalSettings): PhaseResul
   };
 }
 
-// ─── TOTALS ───────────────────────────────────────────────────
+// ─── CUSTOM LINE ITEM CALC ───────────────────────────────────
+export interface CustomItemResult {
+  id: string;
+  phaseId: number;
+  description: string;
+  qty: number;
+  unitType: string;
+  hardCost: number;
+  price: number;
+  matPrice: number;
+  laborPrice: number;
+  gm: number;
+  sowLine: string;
+}
+
+export function calcCustomItem(ci: CustomLineItem, global: GlobalSettings): CustomItemResult {
+  const matCost = ci.qty * ci.matCostPerUnit;
+  const laborCost = ci.qty * ci.laborHrsPerUnit * ci.laborRate;
+  const hardCost = matCost + laborCost;
+  const { price, gm } = applyMarkup(hardCost, global.markupPct);
+  const matFraction = hardCost > 0 ? matCost / hardCost : 0;
+  const matPrice = Math.round(price * matFraction);
+  const laborPrice = price - matPrice;
+  const sowLine = `${ci.description} — ${ci.qty} ${ci.unitType}`;
+  return { id: ci.id, phaseId: ci.phaseId, description: ci.description, qty: ci.qty, unitType: ci.unitType, hardCost, price, matPrice, laborPrice, gm, sowLine };
+}
+
+// ─── TOTALS ───────────────────────────────────────────────
 export interface TotalsResult {
   totalHard: number;
   totalPrice: number;
@@ -192,12 +221,12 @@ export interface TotalsResult {
   totalGM: number;
 }
 
-export function calcTotals(phases: PhaseResult[]): TotalsResult {
+export function calcTotals(phases: PhaseResult[], customItems: CustomItemResult[] = []): TotalsResult {
   const activePhases = phases.filter(p => p.hasData);
-  const totalHard = activePhases.reduce((s, p) => s + p.hardCost, 0);
-  const totalPrice = activePhases.reduce((s, p) => s + p.price, 0);
-  const totalMatPrice = activePhases.reduce((s, p) => s + p.matPrice, 0);
-  const totalLaborPrice = activePhases.reduce((s, p) => s + p.laborPrice, 0);
+  const totalHard = activePhases.reduce((s, p) => s + p.hardCost, 0) + customItems.reduce((s, c) => s + c.hardCost, 0);
+  const totalPrice = activePhases.reduce((s, p) => s + p.price, 0) + customItems.reduce((s, c) => s + c.price, 0);
+  const totalMatPrice = activePhases.reduce((s, p) => s + p.matPrice, 0) + customItems.reduce((s, c) => s + c.matPrice, 0);
+  const totalLaborPrice = activePhases.reduce((s, p) => s + p.laborPrice, 0) + customItems.reduce((s, c) => s + c.laborPrice, 0);
   const totalGP = totalPrice - totalHard;
   const totalGM = totalPrice > 0 ? totalGP / totalPrice : 0;
   return { totalHard, totalPrice, totalMatPrice, totalLaborPrice, totalGP, totalGM };
@@ -228,6 +257,7 @@ export function generateCustomerEstimate(
   phases: PhaseResult[],
   totals: TotalsResult,
   notes: string,
+  customItems: CustomItemResult[] = [],
 ): string {
   const dateStr = jobInfo.date
     ? new Date(jobInfo.date + 'T12:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })

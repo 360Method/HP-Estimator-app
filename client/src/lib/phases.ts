@@ -9,11 +9,13 @@ function tiers(
   goodRate: number, goodName: string, goodDesc: string,
   betterRate: number, betterName: string, betterDesc: string,
   bestRate: number, bestName: string, bestDesc: string,
+  photos?: { good?: string; better?: string; best?: string },
+  specs?: { good?: string; better?: string; best?: string },
 ): { good: TierData; better: TierData; best: TierData } {
   return {
-    good:   { rate: goodRate,   name: goodName,   desc: goodDesc },
-    better: { rate: betterRate, name: betterName, desc: betterDesc },
-    best:   { rate: bestRate,   name: bestName,   desc: bestDesc },
+    good:   { rate: goodRate,   name: goodName,   desc: goodDesc,   photo: photos?.good,   specs: specs?.good },
+    better: { rate: betterRate, name: betterName, desc: betterDesc, photo: photos?.better, specs: specs?.better },
+    best:   { rate: bestRate,   name: bestName,   desc: bestDesc,   photo: photos?.best,   specs: specs?.best },
   };
 }
 
@@ -43,6 +45,7 @@ function laborItem(
     notes: '',
     salesDesc,
     sowTemplate,
+    salesSelected: false,
   };
 }
 
@@ -75,6 +78,7 @@ function matItem(
     notes: '',
     salesDesc,
     sowTemplate,
+    salesSelected: false,
   };
 }
 

@@ -5,7 +5,8 @@
 
 import { useMemo, useState } from 'react';
 import { useEstimator } from '@/contexts/EstimatorContext';
-import { calcPhase, calcTotals, generateCustomerEstimate, generateMarginAudit, fmtDollar, fmtPct, getMarginFlag } from '@/lib/calc';
+import { calcPhase, calcCustomItem, calcTotals, generateCustomerEstimate, generateMarginAudit, fmtDollar, fmtPct, getMarginFlag } from '@/lib/calc';
+import { ALL_PHASES } from '@/lib/phases';
 import { Copy, Printer, ChevronDown, ChevronUp, AlertTriangle, CheckCircle2, XCircle, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -14,11 +15,12 @@ export default function EstimateSection() {
   const [showAudit, setShowAudit] = useState(false);
   const [showMatLabor, setShowMatLabor] = useState(true);
 
-  const { phaseResults, totals } = useMemo(() => {
+  const { phaseResults, customResults, totals } = useMemo(() => {
     const phaseResults = state.phases.map(p => calcPhase(p, state.global));
-    const totals = calcTotals(phaseResults);
-    return { phaseResults, totals };
-  }, [state.phases, state.global]);
+    const customResults = state.customItems.map(ci => calcCustomItem(ci, state.global));
+    const totals = calcTotals(phaseResults, customResults);
+    return { phaseResults, customResults, totals };
+  }, [state.phases, state.customItems, state.global]);
 
   const activePhases = phaseResults.filter(p => p.hasData);
 
@@ -33,7 +35,8 @@ export default function EstimateSection() {
     phaseResults,
     totals,
     state.summaryNotes,
-  ), [state.jobInfo, phaseResults, totals, state.summaryNotes]);
+    customResults,
+  ), [state.jobInfo, phaseResults, totals, state.summaryNotes, customResults]);
 
   const auditText = useMemo(() => generateMarginAudit(
     { client: state.jobInfo.client, jobNumber: state.jobInfo.jobNumber, date: state.jobInfo.date },
@@ -203,6 +206,48 @@ export default function EstimateSection() {
                       </div>
                     </div>
                   ))}
+
+                  {/* Custom items grouped by phase */}
+                  {customResults.length > 0 && (() => {
+                    const grouped = customResults.reduce((acc, ci) => {
+                      const key = ci.phaseId;
+                      if (!acc[key]) acc[key] = [];
+                      acc[key].push(ci);
+                      return acc;
+                    }, {} as Record<number, typeof customResults>);
+                    return Object.entries(grouped).map(([phaseId, items]) => {
+                      const phase = ALL_PHASES.find(p => p.id === Number(phaseId));
+                      const totalPrice = items.reduce((s, i) => s + i.price, 0);
+                      const matPrice = items.reduce((s, i) => s + i.matPrice, 0);
+                      const laborPrice = items.reduce((s, i) => s + i.laborPrice, 0);
+                      return (
+                        <div key={phaseId} className="rounded-lg border border-amber-200 overflow-hidden">
+                          <div className="flex items-center justify-between px-3 py-2 bg-amber-50/50">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-sm">{phase?.icon ?? '✨'}</span>
+                              <span className="text-sm font-semibold">{phase?.name ?? 'Custom'}</span>
+                              <span className="text-[10px] text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded-full font-medium">Custom</span>
+                            </div>
+                            <span className="text-sm font-bold mono text-primary">{fmtDollar(totalPrice)}</span>
+                          </div>
+                          {showMatLabor && (
+                            <div className="px-3 py-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground border-t border-amber-100">
+                              <div>Materials: <span className="font-semibold text-foreground">{fmtDollar(matPrice)}</span></div>
+                              <div>Labor: <span className="font-semibold text-foreground">{fmtDollar(laborPrice)}</span></div>
+                            </div>
+                          )}
+                          <div className="px-3 pb-2 space-y-0.5">
+                            {items.map(ci => (
+                              <div key={ci.id} className="text-xs text-muted-foreground flex items-start gap-1">
+                                <span className="mt-0.5">·</span>
+                                <span>{ci.sowLine}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
 
                 {/* Totals */}
