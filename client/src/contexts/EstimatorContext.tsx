@@ -6,6 +6,7 @@ import React, { createContext, useContext, useReducer, useCallback } from 'react
 import {
   EstimatorState, JobInfo, GlobalSettings, AppSection,
   LineItem, CustomLineItem, EstimateLineOverride,
+  Opportunity, PipelineArea,
 } from '@/lib/types';
 import { ALL_PHASES, DEFAULTS } from '@/lib/phases';
 import { nanoid } from 'nanoid';
@@ -45,6 +46,9 @@ const initialState: EstimatorState = {
   signature: null,
   signedAt: null,
   signedBy: null,
+  // CRM pipeline
+  opportunities: [],
+  activePipelineArea: 'lead' as PipelineArea,
 };
 
 type Action =
@@ -63,6 +67,10 @@ type Action =
   | { type: 'REMOVE_ESTIMATE_OVERRIDE'; itemId: string }
   | { type: 'SET_SIGNATURE'; payload: { signature: string; signedBy: string } }
   | { type: 'CLEAR_SIGNATURE' }
+  | { type: 'ADD_OPPORTUNITY'; payload: Omit<Opportunity, 'id' | 'createdAt' | 'updatedAt'> }
+  | { type: 'UPDATE_OPPORTUNITY'; id: string; payload: Partial<Opportunity> }
+  | { type: 'REMOVE_OPPORTUNITY'; id: string }
+  | { type: 'SET_PIPELINE_AREA'; payload: PipelineArea }
   | { type: 'RESET' };
 
 function reducer(state: EstimatorState, action: Action): EstimatorState {
@@ -161,6 +169,34 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
     case 'CLEAR_SIGNATURE':
       return { ...state, signature: null, signedAt: null, signedBy: null };
 
+    case 'ADD_OPPORTUNITY':
+      return {
+        ...state,
+        opportunities: [...state.opportunities, {
+          ...action.payload,
+          id: nanoid(8),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }],
+      };
+
+    case 'UPDATE_OPPORTUNITY':
+      return {
+        ...state,
+        opportunities: state.opportunities.map(o =>
+          o.id === action.id ? { ...o, ...action.payload, updatedAt: new Date().toISOString() } : o
+        ),
+      };
+
+    case 'REMOVE_OPPORTUNITY':
+      return {
+        ...state,
+        opportunities: state.opportunities.filter(o => o.id !== action.id),
+      };
+
+    case 'SET_PIPELINE_AREA':
+      return { ...state, activePipelineArea: action.payload };
+
     case 'RESET':
       return {
         ...initialState,
@@ -197,6 +233,10 @@ interface EstimatorContextValue {
   removeEstimateOverride: (itemId: string) => void;
   setSignature: (signature: string, signedBy: string) => void;
   clearSignature: () => void;
+  addOpportunity: (payload: Omit<Opportunity, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  updateOpportunity: (id: string, payload: Partial<Opportunity>) => void;
+  removeOpportunity: (id: string) => void;
+  setPipelineArea: (area: PipelineArea) => void;
   reset: () => void;
 }
 
@@ -227,6 +267,14 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
   const setSignature = useCallback((signature: string, signedBy: string) =>
     dispatch({ type: 'SET_SIGNATURE', payload: { signature, signedBy } }), []);
   const clearSignature = useCallback(() => dispatch({ type: 'CLEAR_SIGNATURE' }), []);
+  const addOpportunity = useCallback((payload: Omit<Opportunity, 'id' | 'createdAt' | 'updatedAt'>) =>
+    dispatch({ type: 'ADD_OPPORTUNITY', payload }), []);
+  const updateOpportunity = useCallback((id: string, payload: Partial<Opportunity>) =>
+    dispatch({ type: 'UPDATE_OPPORTUNITY', id, payload }), []);
+  const removeOpportunity = useCallback((id: string) =>
+    dispatch({ type: 'REMOVE_OPPORTUNITY', id }), []);
+  const setPipelineArea = useCallback((area: PipelineArea) =>
+    dispatch({ type: 'SET_PIPELINE_AREA', payload: area }), []);
   const reset = useCallback(() => dispatch({ type: 'RESET' }), []);
 
   return (
@@ -235,7 +283,9 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
       addCustomItem, updateCustomItem, removeCustomItem,
       setFieldNotes, setSummaryNotes, setEstimatorNotes, setClientNote,
       upsertEstimateOverride, removeEstimateOverride,
-      setSignature, clearSignature, reset,
+      setSignature, clearSignature,
+      addOpportunity, updateOpportunity, removeOpportunity, setPipelineArea,
+      reset,
     }}>
       {children}
     </EstimatorContext.Provider>

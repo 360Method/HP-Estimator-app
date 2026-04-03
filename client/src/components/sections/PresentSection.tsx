@@ -1,27 +1,37 @@
 // ============================================================
-// HP Field Estimator v3 — Present Section
-// Full-screen client presentation mode with e-signature capture
+// HP Field Estimator — Present Section (PDF-style single page)
+// Design: Matches the HP estimate PDF layout exactly.
+//   - White document on dark overlay
+//   - HP logo top-left, estimate info table top-right
+//   - Client block left / HP contact block right
+//   - Per-phase service tables with SOW bullets
+//   - Subtotal per phase, grand total, deposit
+//   - Inline e-signature canvas + "Accept & Sign" flow
+//   - Email-to-sign button (mailto: pre-filled)
+//   - Print button (triggers window.print())
 // ============================================================
 
-import { useMemo, useRef, useState, useEffect, useCallback } from 'react';
+import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import { useEstimator } from '@/contexts/EstimatorContext';
-import { calcPhase, calcCustomItem, calcTotals, fmtDollar } from '@/lib/calc';
-import { ALL_PHASES } from '@/lib/phases';
-import {
-  X, ChevronLeft, ChevronRight, CheckCircle2, PenLine,
-  RotateCcw, Check, Mail, Printer,
-} from 'lucide-react';
+import { calcPhase, calcCustomItem, calcTotals, fmtDollar, fmtDollarCents } from '@/lib/calc';
+import { X, Printer, Mail, PenLine, RotateCcw, Check, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 
-// ─── SOW bullet generator (same logic as EstimateSection) ─────
-function buildSowBullets(phase: { description: string; items: { id: string; name: string; shortName: string; qty: number; tier: string; tiers: Record<string, { name: string }>; hasTiers: boolean; unitType: string; wastePct: number; salesDesc?: string; hasPaintPrep?: boolean; paintPrep?: string; flagged?: boolean; flagNote?: string }[] }, activeItems: typeof phase.items): string[] {
-  const bullets: string[] = [];
-  for (const item of activeItems) {
+const HP_LOGO = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg';
+const HP_ADDRESS = '808 SE Chkalov Dr, 3-433\nVancouver, WA 98683';
+const HP_PHONE = '(360) 544-9858';
+const HP_EMAIL = 'help@handypioneers.com';
+const HP_WEB = 'http://handypioneers.com';
+
+// ─── SOW bullet generator ─────────────────────────────────────
+function buildSowBullets(items: { id: string; name: string; qty: number; tier: string; tiers: Record<string, { name: string }>; hasTiers: boolean; unitType: string; wastePct: number; paintPrep?: string; hasPaintPrep?: boolean; sowTemplate?: string; salesSelected?: boolean }[]): { title: string; desc: string }[] {
+  const bullets: { title: string; desc: string }[] = [];
+  for (const item of items) {
     const tierData = item.hasTiers ? item.tiers[item.tier] : null;
     const tierName = tierData?.name ?? '';
     const qty = item.qty;
     const u = item.unitType;
-    const map: Record<string, string> = {
+    const qtyMap: Record<string, string> = {
       lf: `${qty} linear ft`, sqft: `${qty} sq ft`, unit: `${qty} unit${qty !== 1 ? 's' : ''}`,
       hr: `${qty} hr${qty !== 1 ? 's' : ''}`, opening: `${qty} opening${qty !== 1 ? 's' : ''}`,
       load: `${qty} load${qty !== 1 ? 's' : ''}`, patch: `${qty} patch${qty !== 1 ? 'es' : ''}`,
@@ -31,25 +41,21 @@ function buildSowBullets(phase: { description: string; items: { id: string; name
       box: `${qty} box${qty !== 1 ? 'es' : ''}`, window: `${qty} window${qty !== 1 ? 's' : ''}`,
       fan: `${qty} fan${qty !== 1 ? 's' : ''}`, device: `${qty} device${qty !== 1 ? 's' : ''}`,
     };
-    const qtyLabel = map[u] ?? `${qty} ${u}`;
-    let bullet = item.hasTiers && tierName
-      ? `Supply and install ${qtyLabel} of ${tierName}${item.wastePct > 0 ? ` (includes ${item.wastePct}% waste)` : ''}`
+    const qtyLabel = qtyMap[u] ?? `${qty} ${u}`;
+    const matLabel = item.hasTiers && tierName ? tierName : item.name;
+    const title = item.hasTiers
+      ? `Supply and install ${qtyLabel} of ${matLabel}${item.wastePct > 0 ? ` (includes ${item.wastePct}% waste allowance)` : ''}`
       : `${item.name} — ${qtyLabel}`;
-    if (item.hasPaintPrep && item.paintPrep !== 'none') {
-      bullet += item.paintPrep === 'caulk' ? '. Includes caulk and touch-up.' : '. Includes full paint prep.';
-    }
-    bullets.push(bullet);
-  }
-  if (bullets.length > 6) {
-    const shown = bullets.slice(0, 5);
-    shown.push(`Plus ${bullets.length - 5} additional items`);
-    return shown;
+    const desc = item.hasPaintPrep && item.paintPrep && item.paintPrep !== 'none'
+      ? item.paintPrep === 'caulk' ? 'Includes caulk and touch-up prep.' : 'Includes full paint prep and caulking.'
+      : '';
+    bullets.push({ title, desc });
   }
   return bullets;
 }
 
 // ─── Signature Canvas ─────────────────────────────────────────
-function SignatureCanvas({ onSave, onCancel }: { onSave: (dataUrl: string) => void; onCancel: () => void }) {
+function SignatureCanvas({ onSave, onCancel }: { onSave: (dataUrl: string, name: string) => void; onCancel: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasStrokes, setHasStrokes] = useState(false);
@@ -61,15 +67,10 @@ function SignatureCanvas({ onSave, onCancel }: { onSave: (dataUrl: string) => vo
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
     if ('touches' in e) {
-      return {
-        x: (e.touches[0].clientX - rect.left) * scaleX,
-        y: (e.touches[0].clientY - rect.top) * scaleY,
-      };
+      const t = e.touches[0];
+      return { x: (t.clientX - rect.left) * scaleX, y: (t.clientY - rect.top) * scaleY };
     }
-    return {
-      x: (e.clientX - rect.left) * scaleX,
-      y: (e.clientY - rect.top) * scaleY,
-    };
+    return { x: ((e as React.MouseEvent).clientX - rect.left) * scaleX, y: ((e as React.MouseEvent).clientY - rect.top) * scaleY };
   };
 
   const startDraw = (e: React.MouseEvent | React.TouchEvent) => {
@@ -77,7 +78,6 @@ function SignatureCanvas({ onSave, onCancel }: { onSave: (dataUrl: string) => vo
     const canvas = canvasRef.current;
     if (!canvas) return;
     setIsDrawing(true);
-    setHasStrokes(true);
     lastPos.current = getPos(e, canvas);
   };
 
@@ -87,27 +87,23 @@ function SignatureCanvas({ onSave, onCancel }: { onSave: (dataUrl: string) => vo
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (!ctx || !lastPos.current) return;
     const pos = getPos(e, canvas);
-    if (lastPos.current) {
-      ctx.beginPath();
-      ctx.moveTo(lastPos.current.x, lastPos.current.y);
-      ctx.lineTo(pos.x, pos.y);
-      ctx.strokeStyle = '#1e293b';
-      ctx.lineWidth = 2.5;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.stroke();
-    }
+    ctx.beginPath();
+    ctx.moveTo(lastPos.current.x, lastPos.current.y);
+    ctx.lineTo(pos.x, pos.y);
+    ctx.strokeStyle = '#1a1a2e';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
     lastPos.current = pos;
+    setHasStrokes(true);
   };
 
-  const endDraw = () => {
-    setIsDrawing(false);
-    lastPos.current = null;
-  };
+  const endDraw = () => { setIsDrawing(false); lastPos.current = null; };
 
-  const clearCanvas = () => {
+  const clear = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -116,109 +112,75 @@ function SignatureCanvas({ onSave, onCancel }: { onSave: (dataUrl: string) => vo
     setHasStrokes(false);
   };
 
-  const handleSave = () => {
+  const save = () => {
     if (!hasStrokes) { toast.error('Please sign before accepting'); return; }
     if (!signerName.trim()) { toast.error('Please enter your name'); return; }
     const canvas = canvasRef.current;
     if (!canvas) return;
-    onSave(canvas.toDataURL('image/png'));
+    onSave(canvas.toDataURL('image/png'), signerName.trim());
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
-        <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-          <div>
-            <div className="font-bold text-foreground">Client Signature</div>
-            <div className="text-xs text-muted-foreground">Sign to accept the estimate</div>
+    <div className="border border-border rounded-xl p-5 bg-white shadow-sm">
+      <div className="text-sm font-semibold text-foreground mb-3">Client Signature</div>
+      <div className="mb-3">
+        <label className="block text-xs text-muted-foreground mb-1">Full Name (print)</label>
+        <input
+          type="text"
+          value={signerName}
+          onChange={e => setSignerName(e.target.value)}
+          placeholder="Client's full name"
+          className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+        />
+      </div>
+      <div className="border-2 border-dashed border-border rounded-lg bg-slate-50 mb-3 relative" style={{ touchAction: 'none' }}>
+        <canvas
+          ref={canvasRef}
+          width={700}
+          height={160}
+          className="w-full h-28 rounded-lg cursor-crosshair"
+          onMouseDown={startDraw}
+          onMouseMove={draw}
+          onMouseUp={endDraw}
+          onMouseLeave={endDraw}
+          onTouchStart={startDraw}
+          onTouchMove={draw}
+          onTouchEnd={endDraw}
+        />
+        {!hasStrokes && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <span className="text-muted-foreground/50 text-sm italic">Sign here</span>
           </div>
-          <button onClick={onCancel} className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground">
-            <X size={16} />
-          </button>
-        </div>
-
-        <div className="px-6 py-4">
-          <div className="mb-4">
-            <label className="field-label">Full Name</label>
-            <input
-              type="text"
-              value={signerName}
-              onChange={e => setSignerName(e.target.value)}
-              placeholder="Client's full name"
-              className="field-input w-full"
-            />
-          </div>
-
-          <div className="mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Signature</div>
-          <div className="border-2 border-dashed border-border rounded-xl overflow-hidden bg-slate-50 relative">
-            <canvas
-              ref={canvasRef}
-              width={500}
-              height={160}
-              className="w-full touch-none cursor-crosshair"
-              onMouseDown={startDraw}
-              onMouseMove={draw}
-              onMouseUp={endDraw}
-              onMouseLeave={endDraw}
-              onTouchStart={startDraw}
-              onTouchMove={draw}
-              onTouchEnd={endDraw}
-            />
-            {!hasStrokes && (
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="flex items-center gap-2 text-muted-foreground/50 text-sm">
-                  <PenLine size={16} />
-                  Sign here
-                </div>
-              </div>
-            )}
-          </div>
-          <div className="flex items-center justify-between mt-2">
-            <button
-              onClick={clearCanvas}
-              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <RotateCcw size={12} />
-              Clear
-            </button>
-            <div className="text-xs text-muted-foreground">Draw your signature above</div>
-          </div>
-        </div>
-
-        <div className="px-6 py-4 border-t border-border flex gap-3 justify-end">
-          <button
-            onClick={onCancel}
-            className="px-4 py-2 rounded-lg border border-border text-sm font-semibold hover:bg-muted transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            className="flex items-center gap-2 px-5 py-2 rounded-lg bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition-colors"
-          >
-            <Check size={14} />
-            Accept & Sign
-          </button>
-        </div>
+        )}
+      </div>
+      <div className="flex gap-2">
+        <button onClick={clear} className="flex items-center gap-1.5 px-3 py-2 text-xs border border-border rounded-lg hover:bg-muted transition-colors">
+          <RotateCcw className="w-3.5 h-3.5" /> Clear
+        </button>
+        <button onClick={onCancel} className="flex items-center gap-1.5 px-3 py-2 text-xs border border-border rounded-lg hover:bg-muted transition-colors">
+          Cancel
+        </button>
+        <button
+          onClick={save}
+          disabled={!hasStrokes || !signerName.trim()}
+          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed font-semibold"
+        >
+          <Check className="w-3.5 h-3.5" /> Accept & Sign
+        </button>
       </div>
     </div>
   );
 }
 
-// ─── Slide types ──────────────────────────────────────────────
-type Slide =
-  | { type: 'cover' }
-  | { type: 'phase'; phaseIndex: number }
-  | { type: 'total' }
-  | { type: 'terms' }
-  | { type: 'sign' };
-
-// ─── MAIN PRESENT SECTION ─────────────────────────────────────
+// ─── Main PresentSection ──────────────────────────────────────
 export default function PresentSection() {
   const { state, setSection, setSignature, clearSignature } = useEstimator();
-  const [slideIndex, setSlideIndex] = useState(0);
-  const [showSignModal, setShowSignModal] = useState(false);
+  const [showSigPad, setShowSigPad] = useState(false);
+  const docRef = useRef<HTMLDivElement>(null);
 
+  const { jobInfo } = state;
+
+  // Compute all phase results
   const phaseResults = useMemo(() =>
     state.phases.map(p => calcPhase(p, state.global)),
     [state.phases, state.global]
@@ -227,355 +189,345 @@ export default function PresentSection() {
     state.customItems.map(ci => calcCustomItem(ci, state.global)),
     [state.customItems, state.global]
   );
-  const totals = useMemo(() =>
-    calcTotals(phaseResults, customResults),
-    [phaseResults, customResults]
-  );
+  const totals = useMemo(() => calcTotals(phaseResults, customResults), [phaseResults, customResults]);
 
-  const activePhaseData = useMemo(() => {
-    return state.phases
-      .map((phase, idx) => {
-        const activeItems = phase.items.filter(i => i.enabled && i.qty > 0);
-        if (activeItems.length === 0) return null;
-        const result = phaseResults[idx];
-        const bullets = buildSowBullets(phase, activeItems);
-        const phaseCustom = customResults.filter(c => c.phaseId === phase.id && c.hasData);
-        const phasePrice = result.price + phaseCustom.reduce((s, c) => s + c.price, 0);
-        return { phase, result, activeItems, bullets, phaseCustom, phasePrice };
-      })
-      .filter((d): d is NonNullable<typeof d> => d !== null);
-  }, [state.phases, phaseResults, customResults]);
+  const activePhases = phaseResults.filter(p => p.hasData);
+  const activeCustom = customResults.filter(c => c.hasData);
 
-  // Build slide deck
-  const slides: Slide[] = useMemo(() => {
-    const s: Slide[] = [{ type: 'cover' }];
-    activePhaseData.forEach((_, i) => s.push({ type: 'phase', phaseIndex: i }));
-    s.push({ type: 'total' });
-    s.push({ type: 'terms' });
-    s.push({ type: 'sign' });
-    return s;
-  }, [activePhaseData]);
-
-  const currentSlide = slides[slideIndex];
-  const canPrev = slideIndex > 0;
-  const canNext = slideIndex < slides.length - 1;
-
-  const slidesRef = useRef(slides);
-  useEffect(() => { slidesRef.current = slides; }, [slides]);
-
-  const prev = useCallback(() => setSlideIndex(i => Math.max(0, i - 1)), []);
-  const next = useCallback(() => setSlideIndex(i => Math.min(slidesRef.current.length - 1, i + 1)), []);
-
-  // Keyboard navigation
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next();
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') prev();
-      if (e.key === 'Escape') setSection('estimate');
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [next, prev, setSection]);
-
-  const handleSign = (dataUrl: string) => {
-    // Get signer name from the canvas modal — we pass it back via a ref trick
-    // For now we'll use the client name from jobInfo as fallback
-    const name = state.jobInfo.client || 'Client';
-    setSignature(dataUrl, name);
-    setShowSignModal(false);
-    toast.success('Estimate accepted and signed!');
-    // Advance to next slide if on sign slide
-    if (currentSlide.type === 'sign') {
-      setTimeout(() => setSection('estimate'), 1500);
+  // Group custom items by phase
+  const customByPhase = useMemo(() => {
+    const map: Record<number, typeof activeCustom> = {};
+    for (const c of activeCustom) {
+      if (!map[c.phaseId]) map[c.phaseId] = [];
+      map[c.phaseId].push(c);
     }
+    return map;
+  }, [activeCustom]);
+
+  const deposit = totals.totalPrice * 0.5;
+
+  const handleSign = (dataUrl: string, name: string) => {
+    setSignature(dataUrl, name);
+    setShowSigPad(false);
+    toast.success(`Estimate accepted and signed by ${name}`);
   };
 
   const handleEmail = () => {
-    const subject = encodeURIComponent(`Handy Pioneers — Project Estimate`);
-    const to = state.jobInfo.email ? encodeURIComponent(state.jobInfo.email) : '';
-    window.open(`mailto:${to}?subject=${subject}`, '_blank');
-  };
-
-  // ── Slide renderers ──────────────────────────────────────────
-
-  const renderCover = () => (
-    <div className="flex flex-col items-center justify-center h-full text-center px-8">
-      <div className="w-24 h-24 rounded-2xl bg-white flex items-center justify-center mb-6 shadow-xl p-2">
-        <img src="https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg" alt="Handy Pioneers" className="w-full h-full object-contain" />
-      </div>
-      <div className="text-4xl sm:text-5xl font-black text-white mb-3 tracking-tight">Handy Pioneers</div>
-      <div className="text-slate-300 text-lg mb-8">Project Estimate</div>
-      {state.jobInfo.client && (
-        <div className="bg-white/10 rounded-2xl px-6 py-4 backdrop-blur-sm">
-          <div className="text-slate-300 text-sm mb-1">Prepared for</div>
-          <div className="text-white text-2xl font-bold">{state.jobInfo.client}</div>
-          {state.jobInfo.address && <div className="text-slate-300 text-sm mt-1">{state.jobInfo.address}{state.jobInfo.city ? `, ${state.jobInfo.city}` : ''}</div>}
-        </div>
-      )}
-      <div className="mt-8 text-slate-400 text-sm">
-        {activePhaseData.length} trade{activePhaseData.length !== 1 ? 's' : ''} · Total investment: <span className="text-white font-bold">{fmtDollar(totals.totalPrice)}</span>
-      </div>
-    </div>
-  );
-
-  const renderPhase = (phaseIndex: number) => {
-    const data = activePhaseData[phaseIndex];
-    if (!data) return null;
-    const { phase, bullets, phaseCustom, phasePrice } = data;
-    return (
-      <div className="flex flex-col h-full px-8 py-6 overflow-y-auto">
-        {/* Phase header */}
-        <div className="flex items-start justify-between mb-6">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-xl bg-white/10 flex items-center justify-center text-2xl shrink-0">
-              {phase.icon}
-            </div>
-            <div>
-              <div className="text-2xl sm:text-3xl font-black text-white">{phase.name}</div>
-              <div className="text-slate-300 text-sm mt-0.5">{phase.description}</div>
-            </div>
-          </div>
-          <div className="text-right shrink-0 ml-4">
-            <div className="text-xs text-slate-400 uppercase tracking-wider mb-1">Investment</div>
-            <div className="text-2xl sm:text-3xl font-black text-white mono">{fmtDollar(phasePrice)}</div>
-          </div>
-        </div>
-
-        {/* SOW bullets */}
-        <div className="flex-1">
-          <div className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-4">Scope of Work</div>
-          <ul className="space-y-3">
-            {bullets.map((b, i) => (
-              <li key={i} className="flex gap-3 text-white">
-                <span className="w-6 h-6 rounded-full bg-primary/30 flex items-center justify-center text-primary text-xs font-bold shrink-0 mt-0.5">{i + 1}</span>
-                <span className="text-base leading-relaxed">{b}</span>
-              </li>
-            ))}
-            {phaseCustom.map(c => (
-              <li key={c.id} className="flex gap-3 text-white">
-                <span className="w-6 h-6 rounded-full bg-blue-500/30 flex items-center justify-center text-blue-300 text-xs font-bold shrink-0 mt-0.5">+</span>
-                <span className="text-base leading-relaxed">{c.description}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        {/* Phase progress */}
-        <div className="mt-6 text-xs text-slate-500 text-center">
-          Trade {phaseIndex + 1} of {activePhaseData.length}
-        </div>
-      </div>
+    const subject = encodeURIComponent(`Handy Pioneers — Project Estimate ${jobInfo.jobNumber}`);
+    const body = encodeURIComponent(
+      `Hi ${jobInfo.client || 'there'},\n\nPlease review your project estimate from Handy Pioneers below.\n\nEstimate: ${jobInfo.jobNumber}\nTotal: ${fmtDollar(totals.totalPrice)}\n\nPlease reply to this email or call (360) 544-9858 to approve.\n\nThank you,\nHandy Pioneers\n${HP_WEB}`
     );
+    window.open(`mailto:${jobInfo.email}?subject=${subject}&body=${body}`);
   };
 
-  const renderTotal = () => (
-    <div className="flex flex-col items-center justify-center h-full text-center px-8">
-      <div className="text-slate-300 text-lg mb-4 uppercase tracking-widest font-bold">Total Investment</div>
-      <div className="text-6xl sm:text-7xl font-black text-white mono mb-6">{fmtDollar(totals.totalPrice)}</div>
-      <div className="grid grid-cols-2 gap-4 w-full max-w-sm mb-8">
-        <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm">
-          <div className="text-slate-400 text-xs mb-1">Materials</div>
-          <div className="text-white font-bold text-lg mono">{fmtDollar(totals.totalMatPrice)}</div>
-        </div>
-        <div className="bg-white/10 rounded-xl p-4 backdrop-blur-sm">
-          <div className="text-slate-400 text-xs mb-1">Labor</div>
-          <div className="text-white font-bold text-lg mono">{fmtDollar(totals.totalLaborPrice)}</div>
-        </div>
-      </div>
-      <div className="space-y-2 text-sm text-slate-300">
-        {activePhaseData.map(({ phase, phasePrice }) => (
-          <div key={phase.id} className="flex items-center justify-between gap-8">
-            <span>{phase.icon} {phase.name}</span>
-            <span className="font-mono font-semibold text-white">{fmtDollar(phasePrice)}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+  const handlePrint = () => window.print();
 
-  const renderTerms = () => (
-    <div className="flex flex-col justify-center h-full px-8 py-6">
-      <div className="text-2xl sm:text-3xl font-black text-white mb-6">Terms &amp; Conditions</div>
-      <ul className="space-y-4">
-        {[
-          '50% deposit required to schedule work; balance due upon project completion.',
-          'This estimate is valid for 30 days from the date above.',
-          'All work is guaranteed — 1-year workmanship warranty on labor.',
-          'Any changes to scope will be documented in a written change order before work proceeds.',
-          'Handy Pioneers is fully licensed and insured in the state of Washington.',
-        ].map((term, i) => (
-          <li key={i} className="flex gap-4 text-slate-200">
-            <span className="w-7 h-7 rounded-full bg-primary/30 flex items-center justify-center text-primary text-xs font-bold shrink-0 mt-0.5">{i + 1}</span>
-            <span className="text-base leading-relaxed">{term}</span>
-          </li>
-        ))}
-      </ul>
-      {state.clientNote && (
-        <div className="mt-6 bg-white/10 rounded-xl p-4">
-          <div className="text-slate-400 text-xs mb-2 uppercase tracking-wider font-bold">Note</div>
-          <div className="text-white text-sm leading-relaxed">{state.clientNote}</div>
-        </div>
-      )}
-    </div>
-  );
+  const handleClose = () => setSection('estimate');
 
-  const renderSign = () => (
-    <div className="flex flex-col items-center justify-center h-full text-center px-8">
-      {state.signature ? (
-        <>
-          <div className="w-16 h-16 rounded-full bg-emerald-500/20 flex items-center justify-center mb-4">
-            <CheckCircle2 size={32} className="text-emerald-400" />
-          </div>
-          <div className="text-3xl font-black text-white mb-2">Accepted!</div>
-          <div className="text-slate-300 mb-6">Signed by {state.signedBy}</div>
-          <div className="bg-white rounded-xl p-3 mb-6 inline-block">
-            <img src={state.signature} alt="Signature" className="max-h-20 object-contain" />
-          </div>
-          <div className="text-slate-400 text-sm mb-6">{state.signedAt ? new Date(state.signedAt).toLocaleString() : ''}</div>
-          <div className="flex gap-3">
-            <button
-              onClick={handleEmail}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/10 text-white text-sm font-semibold hover:bg-white/20 transition-colors"
-            >
-              <Mail size={14} />
-              Send Copy
-            </button>
-            <button
-              onClick={() => window.print()}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/10 text-white text-sm font-semibold hover:bg-white/20 transition-colors"
-            >
-              <Printer size={14} />
-              Print
-            </button>
-            <button
-              onClick={() => setSection('estimate')}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition-colors"
-            >
-              <CheckCircle2 size={14} />
-              Done
-            </button>
-          </div>
-        </>
-      ) : (
-        <>
-          <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center mb-4">
-            <PenLine size={28} className="text-white" />
-          </div>
-          <div className="text-3xl font-black text-white mb-2">Ready to Accept?</div>
-          <div className="text-slate-300 text-lg mb-2 mono">{fmtDollar(totals.totalPrice)}</div>
-          <div className="text-slate-400 text-sm mb-8">Sign below to accept this estimate and authorize Handy Pioneers to proceed.</div>
-          <button
-            onClick={() => setShowSignModal(true)}
-            className="flex items-center gap-3 px-8 py-4 rounded-2xl bg-emerald-600 text-white text-lg font-bold hover:bg-emerald-700 transition-colors shadow-xl"
-          >
-            <PenLine size={20} />
-            Sign &amp; Accept Estimate
-          </button>
-          {state.signature === null && (
-            <button
-              onClick={clearSignature}
-              className="mt-4 text-xs text-slate-500 hover:text-slate-300 transition-colors"
-            >
-              Clear previous signature
-            </button>
-          )}
-        </>
-      )}
-    </div>
-  );
-
-  const renderSlide = () => {
-    switch (currentSlide.type) {
-      case 'cover': return renderCover();
-      case 'phase': return renderPhase(currentSlide.phaseIndex);
-      case 'total': return renderTotal();
-      case 'terms': return renderTerms();
-      case 'sign': return renderSign();
-    }
+  // Format date helper
+  const fmtDate = (iso: string) => {
+    if (!iso) return '—';
+    try {
+      return new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    } catch { return iso; }
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900 z-40 flex flex-col">
-      {/* Top bar */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-            <span className="text-white font-black text-xs">HP</span>
-          </div>
-          <div className="text-white font-semibold text-sm hidden sm:block">
-            {state.jobInfo.client ? `Estimate for ${state.jobInfo.client}` : 'Project Estimate'}
-          </div>
+    <div className="fixed inset-0 z-50 bg-gray-800/95 overflow-y-auto print:bg-white print:overflow-visible">
+      {/* ── Toolbar (hidden on print) ── */}
+      <div className="no-print sticky top-0 z-10 bg-gray-900 text-white px-4 py-2.5 flex items-center gap-3 shadow-lg">
+        <button onClick={handleClose} className="p-1.5 rounded hover:bg-white/10 transition-colors">
+          <X className="w-4 h-4" />
+        </button>
+        <div className="flex-1 text-sm font-semibold">
+          Present Estimate — {jobInfo.client || 'Client'} · {jobInfo.jobNumber}
         </div>
         <div className="flex items-center gap-2">
-          <div className="text-slate-400 text-xs">{slideIndex + 1} / {slides.length}</div>
-          <button
-            onClick={() => setSection('estimate')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 text-white text-xs font-semibold hover:bg-white/20 transition-colors"
-          >
-            <X size={12} />
-            Exit
-          </button>
-        </div>
-      </div>
-
-      {/* Slide content */}
-      <div className="flex-1 overflow-hidden relative">
-        {renderSlide()}
-      </div>
-
-      {/* Bottom navigation */}
-      <div className="flex items-center justify-between px-4 py-3 border-t border-white/10 shrink-0">
-        {/* Slide dots */}
-        <div className="flex items-center gap-1.5">
-          {slides.map((_, i) => (
-            <button
-              key={i}
-              onClick={() => setSlideIndex(i)}
-              className={`rounded-full transition-all ${i === slideIndex ? 'w-6 h-2 bg-primary' : 'w-2 h-2 bg-white/20 hover:bg-white/40'}`}
-            />
-          ))}
-        </div>
-
-        {/* Nav buttons */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={prev}
-            disabled={!canPrev}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white/10 text-white text-sm font-semibold hover:bg-white/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            <ChevronLeft size={16} />
-            Back
-          </button>
-          {canNext ? (
-            <button
-              onClick={next}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary text-white text-sm font-bold hover:bg-primary/90 transition-colors"
-            >
-              Next
-              <ChevronRight size={16} />
-            </button>
+          {state.signature ? (
+            <div className="flex items-center gap-1.5 text-emerald-400 text-xs font-semibold">
+              <CheckCircle2 className="w-4 h-4" />
+              Signed by {state.signedBy}
+            </div>
           ) : (
             <button
-              onClick={() => currentSlide.type === 'sign' && !state.signature ? setShowSignModal(true) : setSection('estimate')}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition-colors"
+              onClick={() => setShowSigPad(s => !s)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 rounded text-xs font-semibold transition-colors"
             >
-              {currentSlide.type === 'sign' && !state.signature ? (
-                <><PenLine size={14} /> Sign</>
-              ) : (
-                <><CheckCircle2 size={14} /> Done</>
-              )}
+              <PenLine className="w-3.5 h-3.5" />
+              Sign Now
             </button>
           )}
+          {state.signature && (
+            <button onClick={() => clearSignature()} className="px-2 py-1.5 text-xs border border-white/20 hover:bg-white/10 rounded transition-colors">
+              Clear Sig
+            </button>
+          )}
+          <button onClick={handleEmail} className="flex items-center gap-1.5 px-3 py-1.5 border border-white/20 hover:bg-white/10 rounded text-xs font-semibold transition-colors">
+            <Mail className="w-3.5 h-3.5" /> Email
+          </button>
+          <button onClick={handlePrint} className="flex items-center gap-1.5 px-3 py-1.5 border border-white/20 hover:bg-white/10 rounded text-xs font-semibold transition-colors">
+            <Printer className="w-3.5 h-3.5" /> Print / PDF
+          </button>
         </div>
       </div>
 
-      {/* Signature modal */}
-      {showSignModal && (
-        <SignatureCanvas
-          onSave={handleSign}
-          onCancel={() => setShowSignModal(false)}
-        />
+      {/* ── Signature Pad (shown when Sign Now clicked) ── */}
+      {showSigPad && !state.signature && (
+        <div className="no-print max-w-2xl mx-auto mt-4 px-4">
+          <SignatureCanvas onSave={handleSign} onCancel={() => setShowSigPad(false)} />
+        </div>
       )}
+
+      {/* ── THE DOCUMENT ── */}
+      <div ref={docRef} className="max-w-[850px] mx-auto my-6 bg-white shadow-2xl print:shadow-none print:my-0 print:max-w-none">
+        <div className="px-12 py-10 print:px-8 print:py-6">
+
+          {/* ── HEADER ROW ── */}
+          <div className="flex items-start justify-between mb-8">
+            {/* Logo + company name */}
+            <div>
+              <img src={HP_LOGO} alt="Handy Pioneers" className="w-24 h-24 object-contain mb-2" />
+              <div className="text-base font-bold text-gray-900">Handy Pioneers</div>
+            </div>
+
+            {/* Estimate info table */}
+            <table className="text-xs border border-gray-300 border-collapse" style={{ minWidth: 260 }}>
+              <tbody>
+                {[
+                  ['ESTIMATE', jobInfo.jobNumber],
+                  ['ESTIMATE DATE', fmtDate(jobInfo.date)],
+                  ['SERVICE DATE', fmtDate(jobInfo.servicedDate)],
+                  ['EXPIRATION DATE', fmtDate(jobInfo.expiresDate)],
+                ].map(([label, val]) => (
+                  <tr key={label}>
+                    <td className="border border-gray-300 px-3 py-1.5 font-semibold text-gray-600 bg-gray-50 whitespace-nowrap">{label}</td>
+                    <td className="border border-gray-300 px-3 py-1.5 text-gray-900 font-medium">{val}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* ── CLIENT + CONTACT BLOCK ── */}
+          <div className="flex gap-12 mb-8">
+            {/* Client info */}
+            <div className="flex-1">
+              <div className="text-sm font-bold text-gray-900 mb-1">{jobInfo.client || 'Client Name'}</div>
+              {jobInfo.companyName && <div className="text-xs text-gray-700 mb-0.5">{jobInfo.companyName}</div>}
+              {jobInfo.address && <div className="text-xs text-gray-700">{jobInfo.address}</div>}
+              {(jobInfo.city || jobInfo.state || jobInfo.zip) && (
+                <div className="text-xs text-gray-700">{[jobInfo.city, jobInfo.state, jobInfo.zip].filter(Boolean).join(', ')}</div>
+              )}
+              {jobInfo.phone && (
+                <div className="flex items-center gap-1 text-xs text-gray-600 mt-1">
+                  <span>📞</span> {jobInfo.phone}
+                </div>
+              )}
+              {jobInfo.email && (
+                <div className="flex items-center gap-1 text-xs text-gray-600">
+                  <span>✉</span> {jobInfo.email}
+                </div>
+              )}
+            </div>
+
+            {/* HP contact */}
+            <div className="flex-1">
+              <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Contact Us</div>
+              {HP_ADDRESS.split('\n').map((line, i) => (
+                <div key={i} className="text-xs text-gray-700">{line}</div>
+              ))}
+              <div className="flex items-center gap-1 text-xs text-gray-600 mt-1">
+                <span>📞</span> {HP_PHONE}
+              </div>
+              <div className="flex items-center gap-1 text-xs text-gray-600">
+                <span>✉</span> {HP_EMAIL}
+              </div>
+            </div>
+          </div>
+
+          {/* ── ESTIMATE LABEL ── */}
+          <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest mb-4 border-b border-gray-200 pb-2">
+            Estimate
+          </div>
+
+          {/* ── PHASE SECTIONS ── */}
+          {activePhases.length === 0 && activeCustom.length === 0 ? (
+            <div className="text-center py-12 text-gray-400 text-sm">
+              No items entered yet. Go to the Calculator tab to add line items.
+            </div>
+          ) : (
+            <>
+              {activePhases.map(phase => {
+                const phaseObj = state.phases.find(p => p.id === phase.phaseId);
+                const activeItems = phase.items.filter(i => i.hasData);
+                const bullets = phaseObj ? buildSowBullets(
+                  activeItems.map(i => {
+                    const orig = phaseObj.items.find(pi => pi.id === i.id);
+                    return orig ? { ...orig, qty: i.qty } : { id: i.id, name: i.name, qty: i.qty, tier: 'good', tiers: { good: { name: i.matName }, better: { name: i.matName }, best: { name: i.matName } }, hasTiers: true, unitType: i.unitType, wastePct: 0 };
+                  })
+                ) : [];
+                const phaseCustom = customByPhase[phase.phaseId] || [];
+
+                return (
+                  <div key={phase.phaseId} className="mb-8">
+                    {/* Phase header */}
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="text-sm font-bold text-gray-900">{phase.phaseName}</div>
+                      {jobInfo.estimator && (
+                        <div className="text-xs text-gray-500 text-right">
+                          Service completed by: {jobInfo.estimator}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Line items table */}
+                    <table className="w-full text-xs border-collapse mb-3">
+                      <thead>
+                        <tr className="bg-gray-100">
+                          <th className="text-left px-3 py-2 font-semibold text-gray-600 border border-gray-200">Services</th>
+                          <th className="text-right px-3 py-2 font-semibold text-gray-600 border border-gray-200 w-12">qty</th>
+                          <th className="text-right px-3 py-2 font-semibold text-gray-600 border border-gray-200 w-24">unit price</th>
+                          <th className="text-right px-3 py-2 font-semibold text-gray-600 border border-gray-200 w-24">amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {activeItems.map((item, idx) => {
+                          const bullet = bullets[idx];
+                          const unitPrice = item.qty > 0 ? item.price / item.qty : 0;
+                          return (
+                            <tr key={item.id}>
+                              <td className="px-3 py-2 border-b border-gray-100 align-top">
+                                <div className="font-semibold text-gray-900 mb-1">{item.name}</div>
+                                <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-0.5">Scope of Work</div>
+                                {bullet && (
+                                  <div className="mb-1">
+                                    <div className="text-xs text-gray-700">— {bullet.title}</div>
+                                    {bullet.desc && <div className="text-xs text-gray-500 ml-3">{bullet.desc}</div>}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 border-b border-gray-100 text-right align-top text-gray-700">{item.qty}</td>
+                              <td className="px-3 py-2 border-b border-gray-100 text-right align-top text-gray-700">{fmtDollarCents(unitPrice)}</td>
+                              <td className="px-3 py-2 border-b border-gray-100 text-right align-top font-semibold text-gray-900">{fmtDollarCents(item.price)}</td>
+                            </tr>
+                          );
+                        })}
+                        {/* Custom items for this phase */}
+                        {phaseCustom.map(ci => (
+                          <tr key={ci.id}>
+                            <td className="px-3 py-2 border-b border-gray-100 align-top">
+                              <div className="font-semibold text-gray-900 mb-1">{ci.description}</div>
+                              <div className="text-xs text-gray-600">— {ci.qty} {ci.unitType}</div>
+                            </td>
+                            <td className="px-3 py-2 border-b border-gray-100 text-right align-top text-gray-700">{ci.qty}</td>
+                            <td className="px-3 py-2 border-b border-gray-100 text-right align-top text-gray-700">{fmtDollarCents(ci.qty > 0 ? ci.price / ci.qty : 0)}</td>
+                            <td className="px-3 py-2 border-b border-gray-100 text-right align-top font-semibold text-gray-900">{fmtDollarCents(ci.price)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+
+                    {/* Phase subtotal */}
+                    <div className="text-right text-xs text-gray-600 mb-1">
+                      Services subtotal: <span className="font-semibold text-gray-900">{fmtDollarCents(phase.price + (phaseCustom.reduce((s, c) => s + c.price, 0)))}</span>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Orphan custom items (no matching phase) */}
+              {activeCustom.filter(c => !activePhases.find(p => p.phaseId === c.phaseId)).length > 0 && (
+                <div className="mb-8">
+                  <div className="text-sm font-bold text-gray-900 mb-2">Additional Services</div>
+                  <table className="w-full text-xs border-collapse mb-3">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="text-left px-3 py-2 font-semibold text-gray-600 border border-gray-200">Services</th>
+                        <th className="text-right px-3 py-2 font-semibold text-gray-600 border border-gray-200 w-12">qty</th>
+                        <th className="text-right px-3 py-2 font-semibold text-gray-600 border border-gray-200 w-24">unit price</th>
+                        <th className="text-right px-3 py-2 font-semibold text-gray-600 border border-gray-200 w-24">amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {activeCustom.filter(c => !activePhases.find(p => p.phaseId === c.phaseId)).map(ci => (
+                        <tr key={ci.id}>
+                          <td className="px-3 py-2 border-b border-gray-100">{ci.description}</td>
+                          <td className="px-3 py-2 border-b border-gray-100 text-right">{ci.qty}</td>
+                          <td className="px-3 py-2 border-b border-gray-100 text-right">{fmtDollarCents(ci.qty > 0 ? ci.price / ci.qty : 0)}</td>
+                          <td className="px-3 py-2 border-b border-gray-100 text-right font-semibold">{fmtDollarCents(ci.price)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* ── TOTALS BLOCK ── */}
+              <div className="flex justify-end mb-8">
+                <div className="w-72">
+                  <div className="flex justify-between py-2 border-b border-gray-200 text-sm">
+                    <span className="text-gray-600">Subtotal</span>
+                    <span className="font-medium text-gray-900">{fmtDollarCents(totals.totalPrice)}</span>
+                  </div>
+                  <div className="flex justify-between py-2 border-b border-gray-200 text-sm">
+                    <span className="text-gray-600">Tax (WA — client to verify)</span>
+                    <span className="text-gray-500 italic text-xs self-center">Not included</span>
+                  </div>
+                  <div className="flex justify-between py-3 border-b-2 border-gray-900 text-base">
+                    <span className="font-bold text-gray-900">Total</span>
+                    <span className="font-bold text-gray-900">{fmtDollarCents(totals.totalPrice)}</span>
+                  </div>
+                  <div className="flex justify-between py-2 text-sm">
+                    <span className="font-semibold text-gray-700">Deposit (50%)</span>
+                    <span className="font-semibold text-gray-700">{fmtDollarCents(deposit)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── CLIENT NOTE / COMMITMENT ── */}
+              {state.clientNote && (
+                <div className="text-sm text-gray-700 mb-6 leading-relaxed border-t border-gray-200 pt-4">
+                  {state.clientNote}
+                </div>
+              )}
+
+              {/* ── SIGNATURE BLOCK ── */}
+              <div className="border-t border-gray-200 pt-6 mt-4">
+                {state.signature ? (
+                  <div className="mb-4">
+                    <div className="text-xs text-gray-500 mb-1">Client Signature</div>
+                    <img src={state.signature} alt="Signature" className="h-16 border-b border-gray-400 mb-1" />
+                    <div className="text-xs text-gray-700 font-semibold">{state.signedBy}</div>
+                    <div className="text-xs text-gray-500">
+                      Signed {state.signedAt ? new Date(state.signedAt).toLocaleString() : ''}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mb-4">
+                    <div className="text-xs text-gray-500 mb-1">Client Signature</div>
+                    <div className="border-b border-gray-400 h-12 mb-1" />
+                    <div className="text-xs text-gray-500">Date: _______________</div>
+                  </div>
+                )}
+                <div className="text-xs text-gray-500 mt-2">
+                  By signing above, client agrees to the scope of work and pricing outlined in this estimate.
+                  Full terms and conditions available at {HP_WEB}.
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* ── FOOTER ── */}
+          <div className="mt-10 pt-4 border-t border-gray-200 flex items-center justify-between text-[10px] text-gray-400">
+            <span>Handy Pioneers | {jobInfo.jobNumber}</span>
+            <span>{HP_WEB}</span>
+            <span>Reliable Renovations, Trusted Results.</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom padding for scroll */}
+      <div className="h-12 no-print" />
     </div>
   );
 }

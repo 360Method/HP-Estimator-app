@@ -144,7 +144,83 @@ export interface EstimatorState {
   signature: string | null;                    // base64 PNG of e-signature
   signedAt: string | null;                     // ISO timestamp of signature
   signedBy: string | null;                     // name of signer
+  // CRM pipeline
+  opportunities: Opportunity[];
+  activePipelineArea: PipelineArea;
 }
+
+// ── CRM Pipeline Types ──────────────────────────────────────
+
+export type PipelineArea = 'lead' | 'estimate' | 'job';
+
+export type LeadStage =
+  | 'New Lead'
+  | 'Return Call Needed'
+  | 'First Contact'
+  | 'Second Contact'
+  | 'Third Contact'
+  | 'On Hold'
+  | 'Won'
+  | 'Lost';
+
+export type EstimateStage =
+  | 'Unscheduled'
+  | 'Scheduled'
+  | 'Return Call Needed'
+  | 'In Progress'
+  | 'Completed'
+  | 'Draft'
+  | 'Ready to Send'
+  | 'Created on Job'
+  | 'Sent'
+  | 'Verbal Acceptance'
+  | 'Approved'
+  | 'Rejected'
+  | 'On Hold';
+
+export type JobStage =
+  | 'New Job'
+  | 'Deposit Needed'
+  | 'Deposit Collected'
+  | 'Need to Order Materials'
+  | 'Waiting on Materials'
+  | 'Materials Received'
+  | 'Unscheduled'
+  | 'Scheduled'
+  | 'In Progress'
+  | 'Completed'
+  | 'Invoice Sent'
+  | 'Invoice Paid';
+
+export type OpportunityStage = LeadStage | EstimateStage | JobStage;
+
+export interface Opportunity {
+  id: string;
+  area: PipelineArea;
+  stage: OpportunityStage;
+  title: string;          // short description of the opportunity
+  value: number;          // estimated dollar value
+  createdAt: string;      // ISO date string
+  updatedAt: string;
+  notes: string;
+}
+
+export const LEAD_STAGES: LeadStage[] = [
+  'New Lead', 'Return Call Needed', 'First Contact', 'Second Contact',
+  'Third Contact', 'On Hold', 'Won', 'Lost',
+];
+
+export const ESTIMATE_STAGES: EstimateStage[] = [
+  'Unscheduled', 'Scheduled', 'Return Call Needed', 'In Progress',
+  'Completed', 'Draft', 'Ready to Send', 'Created on Job',
+  'Sent', 'Verbal Acceptance', 'Approved', 'Rejected', 'On Hold',
+];
+
+export const JOB_STAGES: JobStage[] = [
+  'New Job', 'Deposit Needed', 'Deposit Collected', 'Need to Order Materials',
+  'Waiting on Materials', 'Materials Received', 'Unscheduled', 'Scheduled',
+  'In Progress', 'Completed', 'Invoice Sent', 'Invoice Paid',
+];
 
 export const JOB_TYPES = [
   'Full residential remodel',
