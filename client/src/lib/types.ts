@@ -1,5 +1,5 @@
 // ============================================================
-// HP Field Estimator v2 — Type Definitions
+// HP Field Estimator v3 — Type Definitions
 // ============================================================
 
 export type UnitType =
@@ -29,7 +29,7 @@ export interface TierData {
   rate: number;   // $/unit hard cost
   name: string;   // material name shown to customer
   desc: string;   // short description
-  photo?: string; // Unsplash URL for visual sales card
+  photo?: string; // CDN URL for visual sales card
   specs?: string; // e.g. "4mm wear layer · waterproof core"
 }
 
@@ -57,6 +57,17 @@ export interface LineItem {
   salesDesc: string;       // customer-facing description
   sowTemplate: string;     // template for SOW bullet
   salesSelected: boolean;  // tier chosen in Sales View
+  // v3: per-item markup override (null = use global)
+  markupPct: number | null;
+}
+
+// AI cost analysis result for custom items
+export interface AiCostAnalysis {
+  loading: boolean;
+  lowEstimate: number;
+  highEstimate: number;
+  notes: string;
+  timestamp: number;
 }
 
 // Custom line item added by estimator outside normal scope
@@ -70,6 +81,18 @@ export interface CustomLineItem {
   laborHrsPerUnit: number;
   laborRate: number;
   notes: string;
+  // v3: per-item markup override (null = use global)
+  markupPct: number | null;
+  // v3: AI analysis result
+  aiAnalysis?: AiCostAnalysis;
+}
+
+// Editable estimate line item override (for Estimate stage customization)
+export interface EstimateLineOverride {
+  itemId: string;          // matches LineItem.id or CustomLineItem.id
+  customDescription?: string;  // override the auto-generated SOW line
+  priceOverride?: number;      // override the calculated price
+  hidden: boolean;             // hide from customer estimate
 }
 
 export interface PhaseGroup {
@@ -99,7 +122,7 @@ export interface GlobalSettings {
   paintRate: number;
 }
 
-export type AppSection = 'customer' | 'sales' | 'calculator' | 'estimate';
+export type AppSection = 'customer' | 'sales' | 'calculator' | 'estimate' | 'present';
 
 export interface EstimatorState {
   activeSection: AppSection;
@@ -110,6 +133,12 @@ export interface EstimatorState {
   fieldNotes: string;
   summaryNotes: string;
   estimatorNotes: string;
+  // v3 additions
+  clientNote: string;                          // client-facing note on estimate
+  estimateOverrides: EstimateLineOverride[];   // per-item estimate customizations
+  signature: string | null;                    // base64 PNG of e-signature
+  signedAt: string | null;                     // ISO timestamp of signature
+  signedBy: string | null;                     // name of signer
 }
 
 export const JOB_TYPES = [

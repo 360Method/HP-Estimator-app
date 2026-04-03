@@ -46,6 +46,7 @@ function laborItem(
     salesDesc,
     sowTemplate,
     salesSelected: false,
+    markupPct: null,
   };
 }
 
@@ -79,6 +80,7 @@ function matItem(
     salesDesc,
     sowTemplate,
     salesSelected: false,
+    markupPct: null,
   };
 }
 

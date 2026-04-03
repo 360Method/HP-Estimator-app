@@ -10,6 +10,7 @@ import CustomerSection from '@/components/sections/CustomerSection';
 import SalesSection from '@/components/sections/SalesSection';
 import CalculatorSection from '@/components/sections/CalculatorSection';
 import EstimateSection from '@/components/sections/EstimateSection';
+import PresentSection from '@/components/sections/PresentSection';
 
 export default function Home() {
   const { state } = useEstimator();
@@ -29,6 +30,8 @@ export default function Home() {
         {state.activeSection === 'calculator' && <CalculatorSection />}
         {state.activeSection === 'estimate' && <EstimateSection />}
       </div>
+      {/* Present mode is a full-screen overlay, rendered outside the container */}
+      {state.activeSection === 'present' && <PresentSection />}
     </div>
   );
 }

@@ -9,7 +9,7 @@ import { useEstimator } from '@/contexts/EstimatorContext';
 import { calcPhase, calcCustomItem, calcTotals, fmtDollar, fmtPct, getMarginFlag } from '@/lib/calc';
 import { ALL_PHASES } from '@/lib/phases';
 import { LineItem, PhaseGroup } from '@/lib/types';
-import { Copy, Printer, ChevronDown, ChevronUp, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
+import { Copy, Printer, ChevronDown, ChevronUp, AlertTriangle, CheckCircle2, XCircle, Mail, Presentation } from 'lucide-react';
 import { toast } from 'sonner';
 
 // ─── SOW bullet generator ─────────────────────────────────────
@@ -75,7 +75,7 @@ function buildSowBullets(phase: PhaseGroup, activeItems: LineItem[]): string[] {
 
 // ─── Main component ───────────────────────────────────────────
 export default function EstimateSection() {
-  const { state, setSummaryNotes } = useEstimator();
+  const { state, setSummaryNotes, setClientNote, setSection } = useEstimator();
   const [showMatLabor, setShowMatLabor] = useState(false);
   const [showAudit, setShowAudit] = useState(false);
   const [expandedPhases, setExpandedPhases] = useState<Set<number>>(new Set());
@@ -190,6 +190,13 @@ export default function EstimateSection() {
     toast.success('Estimate copied to clipboard');
   };
 
+  const handleEmail = () => {
+    const subject = encodeURIComponent(`Handy Pioneers — Project Estimate #${estimateNumber}`);
+    const body = encodeURIComponent(generatePlainText());
+    const to = state.jobInfo.email ? encodeURIComponent(state.jobInfo.email) : '';
+    window.open(`mailto:${to}?subject=${subject}&body=${body}`, '_blank');
+  };
+
   // ─── Render ─────────────────────────────────────────────────
   return (
     <div className="space-y-6 pb-16">
@@ -243,14 +250,28 @@ export default function EstimateSection() {
           className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors"
         >
           <Copy className="w-4 h-4" />
-          Copy Estimate
+          Copy
         </button>
         <button
           onClick={() => window.print()}
           className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm font-semibold hover:bg-muted transition-colors"
         >
           <Printer className="w-4 h-4" />
-          Print / PDF
+          Print
+        </button>
+        <button
+          onClick={handleEmail}
+          className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm font-semibold hover:bg-muted transition-colors"
+        >
+          <Mail className="w-4 h-4" />
+          Email
+        </button>
+        <button
+          onClick={() => setSection('present')}
+          className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-semibold hover:bg-slate-700 transition-colors"
+        >
+          <Presentation className="w-4 h-4" />
+          Present
         </button>
         <button
           onClick={() => setShowMatLabor(v => !v)}
@@ -501,21 +522,48 @@ export default function EstimateSection() {
         </div>
 
         {/* Notes for client */}
-        <div className="px-6 py-4 border-t border-border no-print">
-          <div className="text-xs uppercase tracking-widest font-bold text-muted-foreground mb-2">Notes for Client (optional)</div>
+        <div className="px-6 py-4 border-t border-border">
+          <div className="text-xs uppercase tracking-widest font-bold text-muted-foreground mb-2">Note for Client</div>
           <textarea
-            value={state.summaryNotes}
-            onChange={e => setSummaryNotes(e.target.value)}
-            placeholder="Add any project-specific notes, exclusions, or special conditions here…"
+            value={state.clientNote}
+            onChange={e => setClientNote(e.target.value)}
+            placeholder="Add a personalized note — e.g. 'Thank you for the opportunity to work on your home. We look forward to making your vision a reality!'"
             className="w-full text-sm border border-border rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-ring bg-background text-foreground placeholder:text-muted-foreground"
             rows={3}
           />
-          {state.summaryNotes && (
-            <div className="mt-2 text-sm text-foreground hidden print:block">
-              <strong>Notes:</strong> {state.summaryNotes}
-            </div>
-          )}
         </div>
+
+        {/* Additional notes (internal) */}
+        <div className="px-6 py-4 border-t border-border no-print">
+          <div className="text-xs uppercase tracking-widest font-bold text-muted-foreground mb-2">Internal Notes (not shown to client)</div>
+          <textarea
+            value={state.summaryNotes}
+            onChange={e => setSummaryNotes(e.target.value)}
+            placeholder="Scope exclusions, sub notes, material lead times, etc."
+            className="w-full text-sm border border-border rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-ring bg-background text-foreground placeholder:text-muted-foreground"
+            rows={2}
+          />
+        </div>
+
+        {/* Signature block (if signed) */}
+        {state.signature && (
+          <div className="px-6 py-5 border-t border-border bg-emerald-50">
+            <div className="text-xs uppercase tracking-widest font-bold text-emerald-800 mb-3">Client Acceptance</div>
+            <div className="flex items-start gap-6">
+              <div className="flex-1">
+                <div className="border border-emerald-200 rounded-lg p-2 bg-white inline-block">
+                  <img src={state.signature} alt="Client signature" className="max-h-16 object-contain" />
+                </div>
+                <div className="text-xs text-emerald-700 mt-1 font-semibold">{state.signedBy}</div>
+                <div className="text-xs text-muted-foreground">{state.signedAt ? new Date(state.signedAt).toLocaleString() : ''}</div>
+              </div>
+              <div className="flex items-center gap-1.5 text-emerald-700 font-semibold text-sm">
+                <CheckCircle2 className="w-4 h-4" />
+                Accepted — {fmtDollar(totals.totalPrice)}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Internal margin audit — hidden from customer */}

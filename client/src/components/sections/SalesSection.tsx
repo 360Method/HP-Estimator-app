@@ -265,6 +265,7 @@ function CustomItemForm() {
     laborHrsPerUnit: 0,
     laborRate: state.global.laborRate,
     notes: '',
+    markupPct: null,
   });
 
   const handleAdd = () => {

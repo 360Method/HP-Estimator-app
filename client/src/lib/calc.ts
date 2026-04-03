@@ -117,7 +117,9 @@ export function calcLineItem(item: LineItem, global: GlobalSettings): LineItemRe
     : { mat: 0, labor: 0, hrs: 0 };
 
   const hardCost = matCost + laborCost + pp.mat + pp.labor;
-  const { price, gm, flagged: markupFlagged } = applyMarkup(hardCost, global.markupPct);
+  // Use per-item markup override if set, otherwise fall back to global
+  const effectiveMarkup = item.markupPct !== null && item.markupPct !== undefined ? item.markupPct : global.markupPct;
+  const { price, gm, flagged: markupFlagged } = applyMarkup(hardCost, effectiveMarkup);
 
   // Split customer price proportionally between mat and labor
   const matHardFraction = hardCost > 0 ? (matCost + pp.mat) / hardCost : 0;
@@ -192,23 +194,28 @@ export interface CustomItemResult {
   qty: number;
   unitType: string;
   hardCost: number;
+  matCost: number;
+  laborCost: number;
   price: number;
   matPrice: number;
   laborPrice: number;
   gm: number;
   sowLine: string;
+  hasData: boolean;
 }
 
 export function calcCustomItem(ci: CustomLineItem, global: GlobalSettings): CustomItemResult {
   const matCost = ci.qty * ci.matCostPerUnit;
   const laborCost = ci.qty * ci.laborHrsPerUnit * ci.laborRate;
   const hardCost = matCost + laborCost;
-  const { price, gm } = applyMarkup(hardCost, global.markupPct);
+  // Use per-item markup override if set, otherwise fall back to global
+  const effectiveMarkup = ci.markupPct !== null && ci.markupPct !== undefined ? ci.markupPct : global.markupPct;
+  const { price, gm } = applyMarkup(hardCost, effectiveMarkup);
   const matFraction = hardCost > 0 ? matCost / hardCost : 0;
   const matPrice = Math.round(price * matFraction);
   const laborPrice = price - matPrice;
   const sowLine = `${ci.description} — ${ci.qty} ${ci.unitType}`;
-  return { id: ci.id, phaseId: ci.phaseId, description: ci.description, qty: ci.qty, unitType: ci.unitType, hardCost, price, matPrice, laborPrice, gm, sowLine };
+  return { id: ci.id, phaseId: ci.phaseId, description: ci.description, qty: ci.qty, unitType: ci.unitType, hardCost, matCost, laborCost, price, matPrice, laborPrice, gm, sowLine, hasData: hardCost > 0 };
 }
 
 // ─── TOTALS ───────────────────────────────────────────────
@@ -219,6 +226,12 @@ export interface TotalsResult {
   totalLaborPrice: number;
   totalGP: number;
   totalGM: number;
+  // Aliases for convenience
+  hardCost: number;
+  price: number;
+  gm: number;
+  grossProfit: number;
+  hasData: boolean;
 }
 
 export function calcTotals(phases: PhaseResult[], customItems: CustomItemResult[] = []): TotalsResult {
@@ -229,7 +242,8 @@ export function calcTotals(phases: PhaseResult[], customItems: CustomItemResult[
   const totalLaborPrice = activePhases.reduce((s, p) => s + p.laborPrice, 0) + customItems.reduce((s, c) => s + c.laborPrice, 0);
   const totalGP = totalPrice - totalHard;
   const totalGM = totalPrice > 0 ? totalGP / totalPrice : 0;
-  return { totalHard, totalPrice, totalMatPrice, totalLaborPrice, totalGP, totalGM };
+  return { totalHard, totalPrice, totalMatPrice, totalLaborPrice, totalGP, totalGM,
+    hardCost: totalHard, price: totalPrice, gm: totalGM, grossProfit: totalGP, hasData: totalHard > 0 };
 }
 
 // ─── GM FLAGS ─────────────────────────────────────────────────

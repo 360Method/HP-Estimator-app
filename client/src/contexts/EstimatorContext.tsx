@@ -1,9 +1,12 @@
 // ============================================================
-// HP Field Estimator v2 — State Context
+// HP Field Estimator v3 — State Context
 // ============================================================
 
 import React, { createContext, useContext, useReducer, useCallback } from 'react';
-import { EstimatorState, JobInfo, GlobalSettings, AppSection, LineItem, CustomLineItem } from '@/lib/types';
+import {
+  EstimatorState, JobInfo, GlobalSettings, AppSection,
+  LineItem, CustomLineItem, EstimateLineOverride,
+} from '@/lib/types';
 import { ALL_PHASES, DEFAULTS } from '@/lib/phases';
 import { nanoid } from 'nanoid';
 
@@ -31,6 +34,12 @@ const initialState: EstimatorState = {
   fieldNotes: '',
   summaryNotes: '',
   estimatorNotes: '',
+  // v3
+  clientNote: '',
+  estimateOverrides: [],
+  signature: null,
+  signedAt: null,
+  signedBy: null,
 };
 
 type Action =
@@ -44,6 +53,11 @@ type Action =
   | { type: 'SET_FIELD_NOTES'; payload: string }
   | { type: 'SET_SUMMARY_NOTES'; payload: string }
   | { type: 'SET_ESTIMATOR_NOTES'; payload: string }
+  | { type: 'SET_CLIENT_NOTE'; payload: string }
+  | { type: 'UPSERT_ESTIMATE_OVERRIDE'; payload: EstimateLineOverride }
+  | { type: 'REMOVE_ESTIMATE_OVERRIDE'; itemId: string }
+  | { type: 'SET_SIGNATURE'; payload: { signature: string; signedBy: string } }
+  | { type: 'CLEAR_SIGNATURE' }
   | { type: 'RESET' };
 
 function reducer(state: EstimatorState, action: Action): EstimatorState {
@@ -109,15 +123,51 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
       return { ...state, summaryNotes: action.payload };
     case 'SET_ESTIMATOR_NOTES':
       return { ...state, estimatorNotes: action.payload };
+    case 'SET_CLIENT_NOTE':
+      return { ...state, clientNote: action.payload };
+
+    case 'UPSERT_ESTIMATE_OVERRIDE': {
+      const exists = state.estimateOverrides.find(o => o.itemId === action.payload.itemId);
+      if (exists) {
+        return {
+          ...state,
+          estimateOverrides: state.estimateOverrides.map(o =>
+            o.itemId === action.payload.itemId ? action.payload : o
+          ),
+        };
+      }
+      return { ...state, estimateOverrides: [...state.estimateOverrides, action.payload] };
+    }
+
+    case 'REMOVE_ESTIMATE_OVERRIDE':
+      return {
+        ...state,
+        estimateOverrides: state.estimateOverrides.filter(o => o.itemId !== action.itemId),
+      };
+
+    case 'SET_SIGNATURE':
+      return {
+        ...state,
+        signature: action.payload.signature,
+        signedAt: new Date().toISOString(),
+        signedBy: action.payload.signedBy,
+      };
+
+    case 'CLEAR_SIGNATURE':
+      return { ...state, signature: null, signedAt: null, signedBy: null };
 
     case 'RESET':
       return {
         ...initialState,
         phases: ALL_PHASES.map(p => ({
           ...p,
-          items: p.items.map(i => ({ ...i, qty: 0, notes: '', salesSelected: false })),
+          items: p.items.map(i => ({ ...i, qty: 0, notes: '', salesSelected: false, markupPct: null })),
         })),
         customItems: [],
+        estimateOverrides: [],
+        signature: null,
+        signedAt: null,
+        signedBy: null,
       };
 
     default:
@@ -137,6 +187,11 @@ interface EstimatorContextValue {
   setFieldNotes: (v: string) => void;
   setSummaryNotes: (v: string) => void;
   setEstimatorNotes: (v: string) => void;
+  setClientNote: (v: string) => void;
+  upsertEstimateOverride: (override: EstimateLineOverride) => void;
+  removeEstimateOverride: (itemId: string) => void;
+  setSignature: (signature: string, signedBy: string) => void;
+  clearSignature: () => void;
   reset: () => void;
 }
 
@@ -159,13 +214,23 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
   const setFieldNotes = useCallback((v: string) => dispatch({ type: 'SET_FIELD_NOTES', payload: v }), []);
   const setSummaryNotes = useCallback((v: string) => dispatch({ type: 'SET_SUMMARY_NOTES', payload: v }), []);
   const setEstimatorNotes = useCallback((v: string) => dispatch({ type: 'SET_ESTIMATOR_NOTES', payload: v }), []);
+  const setClientNote = useCallback((v: string) => dispatch({ type: 'SET_CLIENT_NOTE', payload: v }), []);
+  const upsertEstimateOverride = useCallback((override: EstimateLineOverride) =>
+    dispatch({ type: 'UPSERT_ESTIMATE_OVERRIDE', payload: override }), []);
+  const removeEstimateOverride = useCallback((itemId: string) =>
+    dispatch({ type: 'REMOVE_ESTIMATE_OVERRIDE', itemId }), []);
+  const setSignature = useCallback((signature: string, signedBy: string) =>
+    dispatch({ type: 'SET_SIGNATURE', payload: { signature, signedBy } }), []);
+  const clearSignature = useCallback(() => dispatch({ type: 'CLEAR_SIGNATURE' }), []);
   const reset = useCallback(() => dispatch({ type: 'RESET' }), []);
 
   return (
     <EstimatorContext.Provider value={{
       state, setSection, setJobInfo, setGlobal, updateItem,
       addCustomItem, updateCustomItem, removeCustomItem,
-      setFieldNotes, setSummaryNotes, setEstimatorNotes, reset,
+      setFieldNotes, setSummaryNotes, setEstimatorNotes, setClientNote,
+      upsertEstimateOverride, removeEstimateOverride,
+      setSignature, clearSignature, reset,
     }}>
       {children}
     </EstimatorContext.Provider>
