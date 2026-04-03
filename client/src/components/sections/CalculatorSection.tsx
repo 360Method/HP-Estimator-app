@@ -70,7 +70,7 @@ function GlobalSettingsPanel() {
   );
 }
 
-// ─── PHASE TAB BAR ────────────────────────────────────────────
+// ─── PHASE SELECTOR GRID ─────────────────────────────────────
 function PhaseTabBar({ phases, activePhaseId, onSelect, phaseResults }: {
   phases: { id: number; name: string; icon: string }[];
   activePhaseId: number;
@@ -78,30 +78,34 @@ function PhaseTabBar({ phases, activePhaseId, onSelect, phaseResults }: {
   phaseResults: Map<number, { hasData: boolean; price: number }>;
 }) {
   return (
-    <div className="flex gap-0.5 overflow-x-auto pb-1 mb-4 border-b border-border">
-      {phases.map(p => {
-        const result = phaseResults.get(p.id);
-        const hasData = result?.hasData ?? false;
-        const isActive = p.id === activePhaseId;
-        return (
-          <button
-            key={p.id}
-            onClick={() => onSelect(p.id)}
-            className={`flex items-center gap-1 px-2.5 py-2 rounded-t-lg text-xs font-semibold whitespace-nowrap transition-colors border-b-2 ${
-              isActive
-                ? 'border-primary text-primary bg-primary/5'
-                : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/50'
-            }`}
-          >
-            <span className="text-sm">{p.icon}</span>
-            <span className="hidden md:inline">{p.name}</span>
-            <span className="md:hidden text-[10px] font-bold">{p.id}</span>
-            {hasData && (
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-            )}
-          </button>
-        );
-      })}
+    <div className="mb-5">
+      <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2 px-0.5">
+        Select Phase
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+        {phases.map(p => {
+          const result = phaseResults.get(p.id);
+          const hasData = result?.hasData ?? false;
+          const isActive = p.id === activePhaseId;
+          return (
+            <button
+              key={p.id}
+              onClick={() => onSelect(p.id)}
+              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-left transition-all ${
+                isActive
+                  ? 'border-primary bg-primary/5 text-primary shadow-sm'
+                  : 'border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground hover:bg-muted/40'
+              }`}
+            >
+              <span className="text-base shrink-0 leading-none">{p.icon}</span>
+              <span className="text-xs font-semibold leading-tight line-clamp-2 flex-1 min-w-0">{p.name}</span>
+              {hasData && (
+                <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+              )}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
