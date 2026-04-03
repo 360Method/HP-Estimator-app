@@ -1,46 +1,21 @@
 // ============================================================
-// HP Field Estimator — State Context
+// HP Field Estimator v2 — State Context
 // ============================================================
 
 import React, { createContext, useContext, useReducer, useCallback } from 'react';
-import { EstimatorState, TradeState, JobInfo, GlobalSettings, TradeKey } from '@/lib/types';
-import { DEFAULTS } from '@/lib/data';
-import { BB, DC, WC } from '@/lib/data';
-
-function defaultTradeState(key: TradeKey): TradeState {
-  const profileSets = { bb: BB, dc: DC, wc: WC };
-  const ps = profileSets[key];
-  const firstStyle = Object.keys(ps)[0];
-  const firstSize = ps[firstStyle].sizes[0];
-
-  const lfPer = key === 'bb' ? 1 : key === 'dc' ? DEFAULTS.dcLfPerOpening : DEFAULTS.wcLfPerUnit;
-  const hrsPerUnit = key === 'bb' ? DEFAULTS.bbHrsPerLf : key === 'dc' ? DEFAULTS.dcHrsPerOpening : DEFAULTS.wcHrsPerUnit;
-
-  return {
-    enabled: true,
-    style: firstStyle,
-    size: firstSize,
-    tier: 'good',
-    lf: 0,
-    count: 0,
-    lfPer,
-    wastePct: 10,
-    laborMode: 'hr',
-    laborRate: DEFAULTS.laborRate,
-    hrsPerUnit,
-    ratePerUnit: key === 'bb' ? 1.50 : key === 'dc' ? 65 : 55,
-    paintPrep: 'none',
-    paintRate: DEFAULTS.paintRate,
-    notes: '',
-  };
-}
+import { EstimatorState, JobInfo, GlobalSettings, AppSection, LineItem } from '@/lib/types';
+import { ALL_PHASES, DEFAULTS } from '@/lib/phases';
 
 const initialState: EstimatorState = {
+  activeSection: 'customer',
   jobInfo: {
     client: '',
     address: '',
+    city: 'Vancouver, WA',
+    phone: '',
+    email: '',
     date: new Date().toISOString().split('T')[0],
-    jobType: 'Trim / finish carpentry only',
+    jobType: 'Full residential remodel',
     estimator: '',
     jobNumber: '',
     scope: '',
@@ -50,71 +25,71 @@ const initialState: EstimatorState = {
     laborRate: DEFAULTS.laborRate,
     paintRate: DEFAULTS.paintRate,
   },
-  bb: defaultTradeState('bb'),
-  dc: defaultTradeState('dc'),
-  wc: defaultTradeState('wc'),
+  phases: ALL_PHASES,
   fieldNotes: '',
   summaryNotes: '',
+  estimatorNotes: '',
 };
 
 type Action =
+  | { type: 'SET_SECTION'; payload: AppSection }
   | { type: 'SET_JOB_INFO'; payload: Partial<JobInfo> }
   | { type: 'SET_GLOBAL'; payload: Partial<GlobalSettings> }
-  | { type: 'SET_TRADE'; key: TradeKey; payload: Partial<TradeState> }
+  | { type: 'UPDATE_ITEM'; phaseId: number; itemId: string; payload: Partial<LineItem> }
   | { type: 'SET_FIELD_NOTES'; payload: string }
   | { type: 'SET_SUMMARY_NOTES'; payload: string }
+  | { type: 'SET_ESTIMATOR_NOTES'; payload: string }
   | { type: 'RESET' };
 
 function reducer(state: EstimatorState, action: Action): EstimatorState {
   switch (action.type) {
+    case 'SET_SECTION':
+      return { ...state, activeSection: action.payload };
+
     case 'SET_JOB_INFO':
       return { ...state, jobInfo: { ...state.jobInfo, ...action.payload } };
+
     case 'SET_GLOBAL': {
       const newGlobal = { ...state.global, ...action.payload };
-      // Sync labor rate to all trades if changed
-      const syncLaborRate = action.payload.laborRate !== undefined;
-      const syncPaintRate = action.payload.paintRate !== undefined;
-      return {
-        ...state,
-        global: newGlobal,
-        bb: {
-          ...state.bb,
-          laborRate: syncLaborRate ? newGlobal.laborRate : state.bb.laborRate,
-          paintRate: syncPaintRate ? newGlobal.paintRate : state.bb.paintRate,
-        },
-        dc: {
-          ...state.dc,
-          laborRate: syncLaborRate ? newGlobal.laborRate : state.dc.laborRate,
-          paintRate: syncPaintRate ? newGlobal.paintRate : state.dc.paintRate,
-        },
-        wc: {
-          ...state.wc,
-          laborRate: syncLaborRate ? newGlobal.laborRate : state.wc.laborRate,
-          paintRate: syncPaintRate ? newGlobal.paintRate : state.wc.paintRate,
-        },
-      };
+      // Sync labor rate and paint rate to all items
+      const syncLabor = action.payload.laborRate !== undefined;
+      const syncPaint = action.payload.paintRate !== undefined;
+      const phases = state.phases.map(phase => ({
+        ...phase,
+        items: phase.items.map(item => ({
+          ...item,
+          laborRate: syncLabor ? newGlobal.laborRate : item.laborRate,
+          paintRate: syncPaint ? newGlobal.paintRate : item.paintRate,
+        })),
+      }));
+      return { ...state, global: newGlobal, phases };
     }
-    case 'SET_TRADE': {
-      const current = state[action.key];
-      const updated = { ...current, ...action.payload };
-      // If style changed, reset size to first available
-      if (action.payload.style && action.payload.style !== current.style) {
-        const profileSets = { bb: BB, dc: DC, wc: WC };
-        const ps = profileSets[action.key];
-        const newStyle = action.payload.style;
-        const sizes = ps[newStyle]?.sizes ?? [];
-        if (!sizes.includes(updated.size)) {
-          updated.size = sizes[0] ?? updated.size;
-        }
-      }
-      return { ...state, [action.key]: updated };
+
+    case 'UPDATE_ITEM': {
+      const phases = state.phases.map(phase => {
+        if (phase.id !== action.phaseId) return phase;
+        return {
+          ...phase,
+          items: phase.items.map(item => {
+            if (item.id !== action.itemId) return item;
+            return { ...item, ...action.payload };
+          }),
+        };
+      });
+      return { ...state, phases };
     }
+
     case 'SET_FIELD_NOTES':
       return { ...state, fieldNotes: action.payload };
     case 'SET_SUMMARY_NOTES':
       return { ...state, summaryNotes: action.payload };
+    case 'SET_ESTIMATOR_NOTES':
+      return { ...state, estimatorNotes: action.payload };
     case 'RESET':
-      return initialState;
+      return { ...initialState, phases: ALL_PHASES.map(p => ({
+        ...p,
+        items: p.items.map(i => ({ ...i, qty: 0, notes: '' })),
+      })) };
     default:
       return state;
   }
@@ -122,11 +97,13 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
 
 interface EstimatorContextValue {
   state: EstimatorState;
+  setSection: (s: AppSection) => void;
   setJobInfo: (payload: Partial<JobInfo>) => void;
   setGlobal: (payload: Partial<GlobalSettings>) => void;
-  setTrade: (key: TradeKey, payload: Partial<TradeState>) => void;
+  updateItem: (phaseId: number, itemId: string, payload: Partial<LineItem>) => void;
   setFieldNotes: (v: string) => void;
   setSummaryNotes: (v: string) => void;
+  setEstimatorNotes: (v: string) => void;
   reset: () => void;
 }
 
@@ -135,15 +112,21 @@ const EstimatorContext = createContext<EstimatorContextValue | null>(null);
 export function EstimatorProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, initialState);
 
+  const setSection = useCallback((s: AppSection) => dispatch({ type: 'SET_SECTION', payload: s }), []);
   const setJobInfo = useCallback((payload: Partial<JobInfo>) => dispatch({ type: 'SET_JOB_INFO', payload }), []);
   const setGlobal = useCallback((payload: Partial<GlobalSettings>) => dispatch({ type: 'SET_GLOBAL', payload }), []);
-  const setTrade = useCallback((key: TradeKey, payload: Partial<TradeState>) => dispatch({ type: 'SET_TRADE', key, payload }), []);
+  const updateItem = useCallback((phaseId: number, itemId: string, payload: Partial<LineItem>) =>
+    dispatch({ type: 'UPDATE_ITEM', phaseId, itemId, payload }), []);
   const setFieldNotes = useCallback((v: string) => dispatch({ type: 'SET_FIELD_NOTES', payload: v }), []);
   const setSummaryNotes = useCallback((v: string) => dispatch({ type: 'SET_SUMMARY_NOTES', payload: v }), []);
+  const setEstimatorNotes = useCallback((v: string) => dispatch({ type: 'SET_ESTIMATOR_NOTES', payload: v }), []);
   const reset = useCallback(() => dispatch({ type: 'RESET' }), []);
 
   return (
-    <EstimatorContext.Provider value={{ state, setJobInfo, setGlobal, setTrade, setFieldNotes, setSummaryNotes, reset }}>
+    <EstimatorContext.Provider value={{
+      state, setSection, setJobInfo, setGlobal, updateItem,
+      setFieldNotes, setSummaryNotes, setEstimatorNotes, reset,
+    }}>
       {children}
     </EstimatorContext.Provider>
   );
