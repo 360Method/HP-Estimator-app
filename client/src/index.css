@@ -1,3 +1,11 @@
+/* ============================================================
+   HP Field Estimator — Design System
+   Philosophy: Contractor Dashboard — Modern SaaS Professional Tool
+   Colors: Warm stone bg, HP blue primary, semantic margin flags
+   Typography: DM Sans (UI) + JetBrains Mono (numbers)
+   Layout: Single-column scrollable, sticky metrics bar
+   ============================================================ */
+
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -27,90 +35,55 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
 }
 
 :root {
-  --primary: var(--color-blue-700);
-  --primary-foreground: var(--color-blue-50);
-  --sidebar-primary: var(--color-blue-600);
-  --sidebar-primary-foreground: var(--color-blue-50);
-  --chart-1: var(--color-blue-300);
-  --chart-2: var(--color-blue-500);
-  --chart-3: var(--color-blue-600);
-  --chart-4: var(--color-blue-700);
-  --chart-5: var(--color-blue-800);
-  --radius: 0.65rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.235 0.015 65);
+  --radius: 0.5rem;
+  --background: oklch(0.975 0.005 75);
+  --foreground: oklch(0.18 0.015 255);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.235 0.015 65);
+  --card-foreground: oklch(0.18 0.015 255);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.235 0.015 65);
-  --secondary: oklch(0.98 0.001 286.375);
-  --secondary-foreground: oklch(0.4 0.015 65);
-  --muted: oklch(0.967 0.001 286.375);
-  --muted-foreground: oklch(0.552 0.016 285.938);
-  --accent: oklch(0.967 0.001 286.375);
-  --accent-foreground: oklch(0.141 0.005 285.823);
+  --popover-foreground: oklch(0.18 0.015 255);
+  --primary: oklch(0.42 0.14 255);
+  --primary-foreground: oklch(0.98 0 0);
+  --secondary: oklch(0.95 0.005 75);
+  --secondary-foreground: oklch(0.35 0.015 255);
+  --muted: oklch(0.95 0.004 75);
+  --muted-foreground: oklch(0.52 0.012 255);
+  --accent: oklch(0.93 0.008 75);
+  --accent-foreground: oklch(0.25 0.015 255);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.92 0.004 286.32);
-  --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.623 0.214 259.815);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.235 0.015 65);
-  --sidebar-accent: oklch(0.967 0.001 286.375);
-  --sidebar-accent-foreground: oklch(0.141 0.005 285.823);
-  --sidebar-border: oklch(0.92 0.004 286.32);
-  --sidebar-ring: oklch(0.623 0.214 259.815);
-}
+  --border: oklch(0.88 0.006 75);
+  --input: oklch(0.92 0.005 75);
+  --ring: oklch(0.42 0.14 255);
 
-.dark {
-  --primary: var(--color-blue-700);
-  --primary-foreground: var(--color-blue-50);
-  --sidebar-primary: var(--color-blue-500);
-  --sidebar-primary-foreground: var(--color-blue-50);
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.85 0.005 65);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.85 0.005 65);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.85 0.005 65);
-  --secondary: oklch(0.24 0.006 286.033);
-  --secondary-foreground: oklch(0.7 0.005 65);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground:  oklch(0.92 0.005 65);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.488 0.243 264.376);
-  --chart-1: var(--color-blue-300);
-  --chart-2: var(--color-blue-500);
-  --chart-3: var(--color-blue-600);
-  --chart-4: var(--color-blue-700);
-  --chart-5: var(--color-blue-800);
-  --sidebar: oklch(0.21 0.006 285.885);
-  --sidebar-foreground: oklch(0.85 0.005 65);
-  --sidebar-accent: oklch(0.274 0.006 286.033);
-  --sidebar-accent-foreground:  oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.488 0.243 264.376);
+  /* HP Brand */
+  --hp-blue: oklch(0.42 0.14 255);
+  --hp-blue-light: oklch(0.92 0.04 255);
+  --hp-blue-dark: oklch(0.32 0.14 255);
+
+  /* Margin flags */
+  --flag-ok-bg: oklch(0.95 0.06 145);
+  --flag-ok-text: oklch(0.35 0.12 145);
+  --flag-warn-bg: oklch(0.96 0.07 75);
+  --flag-warn-text: oklch(0.45 0.13 60);
+  --flag-bad-bg: oklch(0.95 0.06 25);
+  --flag-bad-text: oklch(0.45 0.18 25);
+  --flag-empty-bg: oklch(0.93 0.003 75);
+  --flag-empty-text: oklch(0.55 0.01 75);
+
+  /* Tier colors */
+  --tier-good-bg: oklch(0.95 0.06 145);
+  --tier-good-border: oklch(0.65 0.14 145);
+  --tier-good-text: oklch(0.32 0.12 145);
+  --tier-better-bg: oklch(0.92 0.04 255);
+  --tier-better-border: oklch(0.55 0.14 255);
+  --tier-better-text: oklch(0.32 0.14 255);
+  --tier-best-bg: oklch(0.93 0.05 295);
+  --tier-best-border: oklch(0.55 0.15 295);
+  --tier-best-text: oklch(0.35 0.15 295);
 }
 
 @layer base {
@@ -119,6 +92,7 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: 'DM Sans', system-ui, sans-serif;
   }
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
@@ -134,25 +108,20 @@
 }
 
 @layer components {
-  /**
-   * Custom container utility that centers content and adds responsive padding.
-   *
-   * This overrides Tailwind's default container behavior to:
-   * - Auto-center content (mx-auto)
-   * - Add responsive horizontal padding
-   * - Set max-width for large screens
-   *
-   * Usage: <div className="container">...</div>
-   *
-   * For custom widths, use max-w-* utilities directly:
-   * <div className="max-w-6xl mx-auto px-4">...</div>
-   */
   .container {
     width: 100%;
     margin-left: auto;
     margin-right: auto;
-    padding-left: 1rem; /* 16px - mobile padding */
+    padding-left: 1rem;
     padding-right: 1rem;
+    max-width: 860px;
+  }
+
+  @media (min-width: 640px) {
+    .container {
+      padding-left: 1.5rem;
+      padding-right: 1.5rem;
+    }
   }
 
   .flex {
@@ -160,18 +129,65 @@
     min-width: 0;
   }
 
-  @media (min-width: 640px) {
-    .container {
-      padding-left: 1.5rem; /* 24px - tablet padding */
-      padding-right: 1.5rem;
-    }
+  /* Mono numbers */
+  .mono {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-variant-numeric: tabular-nums;
   }
 
-  @media (min-width: 1024px) {
-    .container {
-      padding-left: 2rem; /* 32px - desktop padding */
-      padding-right: 2rem;
-      max-width: 1280px; /* Standard content width */
-    }
+  /* Step badge */
+  .step-badge {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 800;
+    flex-shrink: 0;
+    background: var(--hp-blue-light);
+    color: var(--hp-blue);
+  }
+
+  /* Tier pill */
+  .tier-good  { background: var(--tier-good-bg);   border-color: var(--tier-good-border);   color: var(--tier-good-text);   }
+  .tier-better{ background: var(--tier-better-bg); border-color: var(--tier-better-border); color: var(--tier-better-text); }
+  .tier-best  { background: var(--tier-best-bg);   border-color: var(--tier-best-border);   color: var(--tier-best-text);   }
+
+  /* Margin flags */
+  .flag-ok    { background: var(--flag-ok-bg);    color: var(--flag-ok-text);    }
+  .flag-warn  { background: var(--flag-warn-bg);  color: var(--flag-warn-text);  }
+  .flag-bad   { background: var(--flag-bad-bg);   color: var(--flag-bad-text);   }
+  .flag-empty { background: var(--flag-empty-bg); color: var(--flag-empty-text); }
+
+  /* Field inputs */
+  .field-input {
+    width: 100%;
+    font-size: 13px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--secondary);
+    color: var(--foreground);
+    font-family: 'DM Sans', system-ui, sans-serif;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .field-input:focus {
+    outline: none;
+    border-color: var(--primary);
+    background: white;
+    box-shadow: 0 0 0 3px oklch(0.42 0.14 255 / 0.12);
+  }
+  select.field-input {
+    appearance: auto;
+  }
+
+  /* Print styles */
+  @media print {
+    .no-print { display: none !important; }
+    .print-only { display: block !important; }
+    body { background: white; }
+    .sticky { position: static; }
   }
 }
