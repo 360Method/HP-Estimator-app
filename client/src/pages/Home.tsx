@@ -12,6 +12,7 @@ import CalculatorSection from '@/components/sections/CalculatorSection';
 import EstimateSection from '@/components/sections/EstimateSection';
 import PresentSection from '@/components/sections/PresentSection';
 import CustomersListPage from '@/pages/CustomersListPage';
+import JobsListPage from '@/pages/JobsListPage';
 
 export default function Home() {
   const { state } = useEstimator();
@@ -28,6 +29,9 @@ export default function Home() {
       {state.activeSection === 'customers' ? (
         /* Customers list is full-width, no container constraint */
         <CustomersListPage />
+      ) : state.activeSection === 'jobs' ? (
+        /* Jobs list is full-width, no container constraint */
+        <JobsListPage />
       ) : (
         <div className="container py-6 max-w-4xl">
           {state.activeSection === 'customer' && <CustomerSection />}

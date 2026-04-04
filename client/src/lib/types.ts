@@ -174,7 +174,7 @@ export interface GlobalSettings {
   paintRate: number;
 }
 
-export type AppSection = 'customer' | 'sales' | 'calculator' | 'estimate' | 'present' | 'customers';
+export type AppSection = 'customer' | 'sales' | 'calculator' | 'estimate' | 'present' | 'customers' | 'jobs';
 
 // ── Customer Record (multi-customer list) ─────────────────
 export type CustomerType = 'homeowner' | 'business';

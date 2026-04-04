@@ -16,7 +16,7 @@
 //   - activeOpportunityId set → estimate builder, all 4 tabs + breadcrumb
 // ============================================================
 
-import { useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { fmtDollar, fmtPct, getMarginFlag, TotalsResult } from '@/lib/calc';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { AppSection, Customer } from '@/lib/types';
@@ -32,7 +32,7 @@ import NewLeadModal from '@/components/intakes/NewLeadModal';
 import {
   Search, LayoutDashboard, Users, Inbox, GitBranch,
   DollarSign, BarChart2, Megaphone, Settings, UserCircle,
-  ChevronDown, ArrowLeft, Plus, Menu, X,
+  ChevronDown, ArrowLeft, Plus, Menu, X, Briefcase,
 } from 'lucide-react';
 
 const HP_LOGO = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg';
@@ -47,14 +47,15 @@ const BUILDER_TABS: { id: AppSection; icon: string; label: string; shortLabel: s
   { id: 'estimate',   icon: '📄', label: 'Estimate',    shortLabel: 'Estimate' },
 ];
 
-const BACKEND_NAV = [
-  { icon: LayoutDashboard, label: 'Dashboard'  },
-  { icon: Users,           label: 'Customers'  },
-  { icon: Inbox,           label: 'Inbox'      },
-  { icon: GitBranch,       label: 'Pipeline'   },
-  { icon: DollarSign,      label: 'Financials' },
-  { icon: BarChart2,       label: 'Reporting'  },
-  { icon: Megaphone,       label: 'Marketing'  },
+const BACKEND_NAV: { icon: React.ElementType; label: string; section: AppSection | null }[] = [
+  { icon: LayoutDashboard, label: 'Dashboard',  section: null        },
+  { icon: Users,           label: 'Customers',  section: 'customers' },
+  { icon: Briefcase,       label: 'Jobs',       section: 'jobs'      },
+  { icon: Inbox,           label: 'Inbox',      section: null        },
+  { icon: GitBranch,       label: 'Pipeline',   section: null        },
+  { icon: DollarSign,      label: 'Financials', section: null        },
+  { icon: BarChart2,       label: 'Reporting',  section: null        },
+  { icon: Megaphone,       label: 'Marketing',  section: null        },
 ];
 
 export default function MetricsBar({ totals }: MetricsBarProps) {
@@ -116,6 +117,19 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
     setActiveOpportunity(null);
     setActiveCustomer(null);
     setShowMobileNav(false);
+  };
+
+  const handleGoToJobs = () => {
+    setSection('jobs');
+    setActiveOpportunity(null);
+    setActiveCustomer(null);
+    setShowMobileNav(false);
+  };
+
+  const handleNavClick = (section: AppSection | null, label: string) => {
+    if (section === 'customers') { handleGoToCustomers(); return; }
+    if (section === 'jobs') { handleGoToJobs(); return; }
+    handleBackendNav(label);
   };
 
   return (
@@ -185,13 +199,13 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
           {/* Backend module nav icons — desktop */}
           {!searchOpen && (
             <nav className="hidden md:flex items-center gap-0.5">
-              {BACKEND_NAV.map(({ icon: Icon, label }) => (
+              {BACKEND_NAV.map(({ icon: Icon, label, section }) => (
                 <button
                   key={label}
-                  onClick={() => label === 'Customers' ? handleGoToCustomers() : handleBackendNav(label)}
+                  onClick={() => handleNavClick(section, label)}
                   title={label}
                   className={`relative flex flex-col items-center gap-0.5 px-2.5 py-1.5 rounded-lg transition-colors group ${
-                    label === 'Customers' && state.activeSection === 'customers'
+                    section && state.activeSection === section
                       ? 'text-primary bg-primary/5'
                       : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                   }`}
@@ -260,16 +274,16 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
         </div>
       </div>
 
-      {/* ── MOBILE NAV DRAWER ──────────────────────────────────── */}
+      {/* ── MOBILE NAV DRAWER ─────────────────────────────────── */}
       {showMobileNav && (
         <div className="md:hidden border-t border-border bg-white">
           <div className="px-3 py-2 grid grid-cols-4 gap-1">
-            {BACKEND_NAV.map(({ icon: Icon, label }) => (
+            {BACKEND_NAV.map(({ icon: Icon, label, section }) => (
               <button
                 key={label}
-                onClick={() => label === 'Customers' ? handleGoToCustomers() : handleBackendNav(label)}
+                onClick={() => handleNavClick(section, label)}
                 className={`flex flex-col items-center gap-1 px-2 py-2.5 rounded-xl text-[10px] font-semibold transition-colors ${
-                  label === 'Customers' && state.activeSection === 'customers'
+                  section && state.activeSection === section
                     ? 'bg-primary/10 text-primary'
                     : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                 }`}
@@ -377,6 +391,14 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
               <span className="text-[11px] font-semibold text-primary flex items-center gap-1.5">
                 <span className="text-sm">👥</span>
                 <span>All Customers</span>
+              </span>
+            </div>
+          ) : state.activeSection === 'jobs' ? (
+            /* ── Jobs list nav ── */
+            <div className="flex items-center py-2 gap-2">
+              <span className="text-[11px] font-semibold text-primary flex items-center gap-1.5">
+                <Briefcase className="w-3.5 h-3.5" />
+                <span>All Jobs</span>
               </span>
             </div>
           ) : (
