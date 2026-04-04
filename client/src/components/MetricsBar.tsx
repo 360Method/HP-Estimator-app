@@ -12,13 +12,19 @@
 //     plus a breadcrumb "← Back to Profile" button.
 // ============================================================
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { fmtDollar, fmtPct, getMarginFlag, TotalsResult } from '@/lib/calc';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { AppSection, Customer } from '@/lib/types';
 import { toast } from 'sonner';
-import { nanoid } from 'nanoid';
 import NewCustomerModal from '@/components/NewCustomerModal';
+import NewMenu, { NewMenuAction } from '@/components/NewMenu';
+import NewJobModal from '@/components/intakes/NewJobModal';
+import NewRecurringJobModal from '@/components/intakes/NewRecurringJobModal';
+import NewEstimateModal from '@/components/intakes/NewEstimateModal';
+import NewEventModal from '@/components/intakes/NewEventModal';
+import NewIntakeModal from '@/components/intakes/NewIntakeModal';
+import NewLeadModal from '@/components/intakes/NewLeadModal';
 import {
   Search, LayoutDashboard, Users, Inbox, GitBranch,
   DollarSign, BarChart2, Megaphone, Settings, UserCircle,
@@ -53,13 +59,22 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
   const { totalHard, totalPrice, totalGP, totalGM } = totals;
   const { state, setSection, setActiveOpportunity, setActiveCustomer, addCustomer, reset } = useEstimator();
   const [searchQuery, setSearchQuery] = useState('');
-  const [showNewCustomer, setShowNewCustomer] = useState(false);
+  const [showNewMenu, setShowNewMenu] = useState(false);
+  const [activeModal, setActiveModal] = useState<NewMenuAction | null>(null);
+  const newBtnRef = useRef<HTMLDivElement>(null);
+
+  const handleNewMenuSelect = (action: NewMenuAction) => {
+    setShowNewMenu(false);
+    setActiveModal(action);
+  };
 
   const handleNewCustomerCreated = (customer: Customer) => {
     addCustomer(customer);
-    setShowNewCustomer(false);
+    setActiveModal(null);
     setActiveCustomer(customer.id);
   };
+
+  const closeModal = () => setActiveModal(null);
 
   const minGM = totalHard < 2000 ? 0.40 : 0.30;
   const gmFlag = getMarginFlag(totalGM, totalHard);
@@ -181,14 +196,22 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
             </button>
           </div>
 
-          {/* New button */}
-          <button
-            onClick={() => setShowNewCustomer(true)}
-            className="shrink-0 flex items-center gap-1.5 text-[12px] font-bold bg-foreground text-background hover:bg-foreground/80 px-3.5 py-1.5 rounded-lg transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            New
-          </button>
+          {/* New button + dropdown */}
+          <div ref={newBtnRef} className="relative shrink-0">
+            <button
+              onClick={() => setShowNewMenu(v => !v)}
+              className="flex items-center gap-1.5 text-[12px] font-bold bg-foreground text-background hover:bg-foreground/80 px-3.5 py-1.5 rounded-lg transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              New
+            </button>
+            {showNewMenu && (
+              <NewMenu
+                onSelect={handleNewMenuSelect}
+                onClose={() => setShowNewMenu(false)}
+              />
+            )}
+          </div>
 
           {/* Reset button */}
           <button
@@ -224,13 +247,14 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
         </div>
       )}
 
-      {/* ── New Customer Modal (triggered from nav) ── */}
-      {showNewCustomer && (
-        <NewCustomerModal
-          onClose={() => setShowNewCustomer(false)}
-          onCreated={handleNewCustomerCreated}
-        />
-      )}
+      {/* ── Intake Modals ── */}
+      {activeModal === 'customer'      && <NewCustomerModal onClose={closeModal} onCreated={handleNewCustomerCreated} />}
+      {activeModal === 'job'           && <NewJobModal onClose={closeModal} />}
+      {activeModal === 'recurring-job' && <NewRecurringJobModal onClose={closeModal} />}
+      {activeModal === 'estimate'      && <NewEstimateModal onClose={closeModal} />}
+      {activeModal === 'event'         && <NewEventModal onClose={closeModal} />}
+      {activeModal === 'intake'        && <NewIntakeModal onClose={closeModal} />}
+      {activeModal === 'lead'          && <NewLeadModal onClose={closeModal} />}
 
       {/* ── NAVIGATION BAR ─────────────────────────────────────── */}
       <div className="border-t border-border bg-white">
