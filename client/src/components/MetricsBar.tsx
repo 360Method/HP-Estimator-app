@@ -1,15 +1,19 @@
 // ============================================================
 // MetricsBar — App header + slim metrics context bar
-// Design: Full app header with logo, search, and backend nav
-//         icons (placeholders for future backend modules).
+// Design: HP Industrial — mobile-first, clean white, slate borders
+//
+// Mobile layout (< sm):
+//   - Logo only (no wordmark), search icon tap-to-expand, New button
+//   - Backend nav icons hidden; hamburger menu placeholder
+//   - Breadcrumb collapses to short labels
+//
+// Desktop layout (≥ md):
+//   - Full logo + wordmark, search bar, all backend nav icons
+//   - Full breadcrumb labels
 //
 // Navigation logic:
-//   - When activeOpportunityId is null → user is on the
-//     customer profile. Only the "Customer Info" tab is shown
-//     (no Sales/Calculator/Estimate tabs).
-//   - When activeOpportunityId is set → user is inside an
-//     opportunity / estimate builder. All 4 tabs are shown
-//     plus a breadcrumb "← Back to Profile" button.
+//   - activeOpportunityId null → customer profile, no builder tabs
+//   - activeOpportunityId set → estimate builder, all 4 tabs + breadcrumb
 // ============================================================
 
 import { useState, useRef } from 'react';
@@ -28,7 +32,7 @@ import NewLeadModal from '@/components/intakes/NewLeadModal';
 import {
   Search, LayoutDashboard, Users, Inbox, GitBranch,
   DollarSign, BarChart2, Megaphone, Settings, UserCircle,
-  ChevronDown, ArrowLeft, Plus,
+  ChevronDown, ArrowLeft, Plus, Menu, X,
 } from 'lucide-react';
 
 const HP_LOGO = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg';
@@ -37,14 +41,12 @@ interface MetricsBarProps {
   totals: TotalsResult;
 }
 
-// All 4 estimator section tabs (only shown when inside an opportunity)
 const BUILDER_TABS: { id: AppSection; icon: string; label: string; shortLabel: string }[] = [
-  { id: 'sales',      icon: '🛍', label: 'Sales View',   shortLabel: 'Sales'    },
-  { id: 'calculator', icon: '🧮', label: 'Calculator',   shortLabel: 'Calc'     },
-  { id: 'estimate',   icon: '📄', label: 'Estimate',     shortLabel: 'Estimate' },
+  { id: 'sales',      icon: '🛍', label: 'Sales View', shortLabel: 'Sales'    },
+  { id: 'calculator', icon: '🧮', label: 'Calculator',  shortLabel: 'Calc'     },
+  { id: 'estimate',   icon: '📄', label: 'Estimate',    shortLabel: 'Estimate' },
 ];
 
-// Backend module nav items — placeholders for future backend
 const BACKEND_NAV = [
   { icon: LayoutDashboard, label: 'Dashboard'  },
   { icon: Users,           label: 'Customers'  },
@@ -59,7 +61,9 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
   const { totalHard, totalPrice, totalGP, totalGM } = totals;
   const { state, setSection, setActiveOpportunity, setActiveCustomer, addCustomer, reset } = useEstimator();
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
   const [showNewMenu, setShowNewMenu] = useState(false);
+  const [showMobileNav, setShowMobileNav] = useState(false);
   const [activeModal, setActiveModal] = useState<NewMenuAction | null>(null);
   const newBtnRef = useRef<HTMLDivElement>(null);
 
@@ -79,15 +83,10 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
   const minGM = totalHard < 2000 ? 0.40 : 0.30;
   const gmFlag = getMarginFlag(totalGM, totalHard);
 
-  // Are we inside an opportunity / estimate builder?
   const insideOpportunity = !!state.activeOpportunityId;
-
-  // Find the active opportunity for the breadcrumb label
   const activeOpp = insideOpportunity
     ? state.opportunities.find(o => o.id === state.activeOpportunityId)
     : null;
-
-  // Hide internal cost data on customer-facing screens
   const isCustomerFacing = state.activeSection === 'sales' || state.activeSection === 'estimate';
 
   const gmColor = {
@@ -110,25 +109,25 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
 
   const handleBackToProfile = () => {
     setActiveOpportunity(null);
-    // activeSection resets to 'customer' automatically in the reducer
   };
 
   const handleGoToCustomers = () => {
     setSection('customers');
     setActiveOpportunity(null);
     setActiveCustomer(null);
+    setShowMobileNav(false);
   };
 
   return (
     <div className="sticky top-0 z-30 bg-white border-b border-border shadow-sm no-print">
 
       {/* ── TOP APP HEADER ─────────────────────────────────────── */}
-      <div className="container">
-        <div className="flex items-center gap-3 h-14">
+      <div className="px-3 sm:px-4 md:px-6">
+        <div className="flex items-center gap-2 h-14">
 
           {/* Logo + wordmark */}
-          <div className="flex items-center gap-2.5 shrink-0 mr-2">
-            <img src={HP_LOGO} alt="Handy Pioneers" className="w-8 h-8 object-contain rounded" />
+          <div className="flex items-center gap-2 shrink-0">
+            <img src={HP_LOGO} alt="HP" className="w-8 h-8 object-contain rounded shrink-0" />
             <div className="hidden sm:block">
               <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest leading-none">Handy Pioneers</div>
               <div className="text-xs font-bold text-foreground leading-tight">Field Estimator</div>
@@ -136,9 +135,9 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
           </div>
 
           {/* Divider */}
-          <div className="h-6 w-px bg-border shrink-0 hidden sm:block" />
+          <div className="h-6 w-px bg-border shrink-0 hidden sm:block mx-1" />
 
-          {/* Search bar */}
+          {/* Search bar — desktop */}
           <div className="flex-1 max-w-xs relative hidden sm:block">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
             <input
@@ -150,98 +149,171 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
             />
           </div>
 
-          {/* Spacer */}
-          <div className="flex-1" />
+          {/* Mobile search expand */}
+          {searchOpen && (
+            <div className="flex-1 flex items-center gap-2 sm:hidden">
+              <div className="flex-1 relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                <input
+                  autoFocus
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Search…"
+                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-muted/60 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              <button onClick={() => setSearchOpen(false)} className="p-1.5 rounded text-muted-foreground hover:text-foreground">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
 
-          {/* Backend module nav icons */}
-          <nav className="hidden md:flex items-center gap-0.5">
+          {/* Spacer */}
+          {!searchOpen && <div className="flex-1" />}
+
+          {/* Search icon — mobile only */}
+          {!searchOpen && (
+            <button
+              onClick={() => setSearchOpen(true)}
+              className="sm:hidden p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            >
+              <Search className="w-4 h-4" />
+            </button>
+          )}
+
+          {/* Backend module nav icons — desktop */}
+          {!searchOpen && (
+            <nav className="hidden md:flex items-center gap-0.5">
+              {BACKEND_NAV.map(({ icon: Icon, label }) => (
+                <button
+                  key={label}
+                  onClick={() => label === 'Customers' ? handleGoToCustomers() : handleBackendNav(label)}
+                  title={label}
+                  className={`relative flex flex-col items-center gap-0.5 px-2.5 py-1.5 rounded-lg transition-colors group ${
+                    label === 'Customers' && state.activeSection === 'customers'
+                      ? 'text-primary bg-primary/5'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  <span className="absolute top-full mt-1 bg-foreground text-background px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50">
+                    {label}
+                  </span>
+                </button>
+              ))}
+            </nav>
+          )}
+
+          {/* Divider */}
+          {!searchOpen && <div className="h-6 w-px bg-border shrink-0 hidden md:block" />}
+
+          {/* Settings + My Account — desktop */}
+          {!searchOpen && (
+            <div className="hidden sm:flex items-center gap-1">
+              <button
+                onClick={() => handleBackendNav('Settings')}
+                title="Settings"
+                className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              >
+                <Settings className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => handleBackendNav('My Account')}
+                title="My Account"
+                className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              >
+                <UserCircle className="w-5 h-5" />
+                <ChevronDown className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+
+          {/* New button + dropdown */}
+          {!searchOpen && (
+            <div ref={newBtnRef} className="relative shrink-0">
+              <button
+                onClick={() => setShowNewMenu(v => !v)}
+                className="flex items-center gap-1.5 text-[12px] font-bold bg-foreground text-background hover:bg-foreground/80 px-3 py-1.5 rounded-lg transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>New</span>
+              </button>
+              {showNewMenu && (
+                <NewMenu
+                  onSelect={handleNewMenuSelect}
+                  onClose={() => setShowNewMenu(false)}
+                />
+              )}
+            </div>
+          )}
+
+          {/* Hamburger — mobile only (shows nav drawer) */}
+          {!searchOpen && (
+            <button
+              onClick={() => setShowMobileNav(v => !v)}
+              className="md:hidden p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            >
+              {showMobileNav ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ── MOBILE NAV DRAWER ──────────────────────────────────── */}
+      {showMobileNav && (
+        <div className="md:hidden border-t border-border bg-white">
+          <div className="px-3 py-2 grid grid-cols-4 gap-1">
             {BACKEND_NAV.map(({ icon: Icon, label }) => (
               <button
                 key={label}
                 onClick={() => label === 'Customers' ? handleGoToCustomers() : handleBackendNav(label)}
-                title={label}
-                className={`flex flex-col items-center gap-0.5 px-2.5 py-1.5 rounded-lg transition-colors group ${
+                className={`flex flex-col items-center gap-1 px-2 py-2.5 rounded-xl text-[10px] font-semibold transition-colors ${
                   label === 'Customers' && state.activeSection === 'customers'
-                    ? 'text-primary bg-primary/5'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                 }`}
               >
-                <Icon className="w-4 h-4" />
-                <span className="text-[9px] font-semibold leading-none opacity-0 group-hover:opacity-100 transition-opacity absolute mt-8 bg-foreground text-background px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap pointer-events-none">
-                  {label}
-                </span>
+                <Icon className="w-5 h-5" />
+                {label}
               </button>
             ))}
-          </nav>
-
-          {/* Divider */}
-          <div className="h-6 w-px bg-border shrink-0 hidden md:block" />
-
-          {/* Settings + My Account */}
-          <div className="flex items-center gap-1">
             <button
-              onClick={() => handleBackendNav('Settings')}
-              title="Settings"
-              className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              onClick={() => { handleBackendNav('Settings'); setShowMobileNav(false); }}
+              className="flex flex-col items-center gap-1 px-2 py-2.5 rounded-xl text-[10px] font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
             >
-              <Settings className="w-4 h-4" />
+              <Settings className="w-5 h-5" />
+              Settings
             </button>
             <button
-              onClick={() => handleBackendNav('My Account')}
-              title="My Account"
-              className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              onClick={handleReset}
+              className="flex flex-col items-center gap-1 px-2 py-2.5 rounded-xl text-[10px] font-semibold text-muted-foreground hover:bg-muted hover:text-destructive transition-colors"
             >
-              <UserCircle className="w-5 h-5" />
-              <ChevronDown className="w-3 h-3 hidden sm:block" />
+              <X className="w-5 h-5" />
+              Reset
             </button>
           </div>
-
-          {/* New button + dropdown */}
-          <div ref={newBtnRef} className="relative shrink-0">
-            <button
-              onClick={() => setShowNewMenu(v => !v)}
-              className="flex items-center gap-1.5 text-[12px] font-bold bg-foreground text-background hover:bg-foreground/80 px-3.5 py-1.5 rounded-lg transition-colors"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              New
-            </button>
-            {showNewMenu && (
-              <NewMenu
-                onSelect={handleNewMenuSelect}
-                onClose={() => setShowNewMenu(false)}
-              />
-            )}
-          </div>
-
-          {/* Reset button */}
-          <button
-            onClick={handleReset}
-            className="shrink-0 text-[11px] font-semibold text-muted-foreground hover:text-destructive border border-border hover:border-destructive/50 px-2.5 py-1 rounded-md transition-colors"
-          >
-            Reset
-          </button>
         </div>
-      </div>
+      )}
 
       {/* ── SLIM METRICS CONTEXT BAR ───────────────────────────── */}
-      {/* Only visible when inside an opportunity, on internal screens, with data */}
       {insideOpportunity && !isCustomerFacing && totalPrice > 0 && (
         <div className="bg-slate-50 border-t border-border">
-          <div className="container">
-            <div className="flex items-center gap-5 py-1.5 text-xs overflow-x-auto">
-              <span className="text-muted-foreground shrink-0">This estimate:</span>
-              <MetricPill label="Hard Cost" value={fmtDollar(totalHard)} sub="internal" />
+          <div className="px-3 sm:px-4 md:px-6">
+            <div className="flex items-center gap-3 sm:gap-5 py-1.5 text-xs overflow-x-auto scrollbar-none">
+              <span className="text-muted-foreground shrink-0 hidden sm:inline">This estimate:</span>
+              <MetricPill label="Cost" value={fmtDollar(totalHard)} sub="internal" />
               <div className="h-4 w-px bg-border shrink-0" />
-              <MetricPill label="Customer Price" value={fmtDollar(totalPrice)} sub="all phases" bold />
+              <MetricPill label="Price" value={fmtDollar(totalPrice)} sub="customer" bold />
               <div className="h-4 w-px bg-border shrink-0" />
               <MetricPill
                 label="GM"
                 value={fmtPct(totalGM)}
-                sub={totalGM >= minGM - 0.001 ? `${Math.round(minGM * 100)}% floor ✓` : `${Math.round(minGM * 100)}% floor ✗`}
+                sub={totalGM >= minGM - 0.001 ? '✓' : '✗'}
                 valueClass={gmColor}
               />
-              <div className="h-4 w-px bg-border shrink-0" />
-              <MetricPill label="Gross Profit" value={fmtDollar(totalGP)} sub="price − cost" />
+              <div className="h-4 w-px bg-border shrink-0 hidden sm:block" />
+              <MetricPill label="GP" value={fmtDollar(totalGP)} sub="profit" />
             </div>
           </div>
         </div>
@@ -258,31 +330,28 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
 
       {/* ── NAVIGATION BAR ─────────────────────────────────────── */}
       <div className="border-t border-border bg-white">
-        <div className="container">
+        <div className="px-3 sm:px-4 md:px-6">
           {insideOpportunity ? (
             /* ── Estimate builder tabs (inside an opportunity) ── */
-            <div className="flex items-stretch -mx-4 px-0">
-              {/* Back to profile button */}
+            <div className="flex items-stretch">
+              {/* Back to profile */}
               <button
                 onClick={handleBackToProfile}
-                className="flex items-center gap-1.5 px-4 py-2 text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:bg-muted/50 border-b-2 border-transparent transition-colors shrink-0"
+                className="flex items-center gap-1.5 pr-2 py-2 text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:bg-muted/50 border-b-2 border-transparent transition-colors shrink-0"
               >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">
-                  {state.jobInfo.client ? state.jobInfo.client : 'Profile'}
+                <ArrowLeft className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden sm:inline truncate max-w-[80px]">
+                  {state.jobInfo.client || 'Profile'}
                 </span>
-                <span className="sm:hidden">Back</span>
               </button>
 
-              {/* Divider */}
               <div className="flex items-center px-1 text-muted-foreground/30 text-sm select-none">/</div>
 
-              {/* Opportunity name (non-clickable breadcrumb) */}
-              <div className="flex items-center px-2 py-2 text-[11px] font-semibold text-foreground truncate max-w-[120px] sm:max-w-xs">
+              {/* Opportunity name */}
+              <div className="flex items-center px-1 py-2 text-[11px] font-semibold text-foreground truncate max-w-[100px] sm:max-w-xs">
                 {activeOpp?.title ?? 'Opportunity'}
               </div>
 
-              {/* Spacer */}
               <div className="flex-1" />
 
               {/* Builder section tabs */}
@@ -290,7 +359,7 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
                 <button
                   key={item.id}
                   onClick={() => setSection(item.id)}
-                  className={`flex flex-col items-center gap-0.5 px-3 sm:px-4 py-2 text-[11px] font-semibold border-b-2 transition-colors min-w-0 ${
+                  className={`flex flex-col items-center gap-0.5 px-2.5 sm:px-4 py-2 text-[11px] font-semibold border-b-2 transition-colors min-w-0 ${
                     state.activeSection === item.id
                       ? 'border-primary text-primary'
                       : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -304,31 +373,29 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
             </div>
           ) : state.activeSection === 'customers' ? (
             /* ── Customers list nav ── */
-            <div className="flex items-center -mx-4 px-4 py-2 gap-2">
+            <div className="flex items-center py-2 gap-2">
               <span className="text-[11px] font-semibold text-primary flex items-center gap-1.5">
                 <span className="text-sm">👥</span>
                 <span>All Customers</span>
               </span>
             </div>
           ) : (
-            /* ── Profile-only nav (not inside an opportunity) ── */
-            <div className="flex items-stretch -mx-4 px-0">
-              {/* Back to customers list */}
+            /* ── Profile-only nav ── */
+            <div className="flex items-stretch">
               <button
                 onClick={handleGoToCustomers}
-                className="flex items-center gap-1.5 px-4 py-2 text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:bg-muted/50 border-b-2 border-transparent transition-colors shrink-0"
+                className="flex items-center gap-1.5 pr-2 py-2 text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:bg-muted/50 border-b-2 border-transparent transition-colors shrink-0"
               >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Customers</span>
-                <span className="sm:hidden">Back</span>
+                <ArrowLeft className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden xs:inline">Customers</span>
               </button>
               <div className="flex items-center px-1 text-muted-foreground/30 text-sm select-none">/</div>
-              <div className="flex items-center px-2 py-2 text-[11px] font-semibold text-foreground">
+              <div className="flex items-center px-1 py-2 text-[11px] font-semibold text-foreground truncate max-w-[140px] sm:max-w-xs">
                 {state.jobInfo.client || 'New Customer'}
               </div>
               <div className="flex-1" />
-              <span className="flex items-center px-4 py-2 text-[11px] text-muted-foreground">
-                Open an opportunity to access the estimate builder →
+              <span className="hidden sm:flex items-center px-4 py-2 text-[11px] text-muted-foreground">
+                Open an opportunity →
               </span>
             </div>
           )}
@@ -342,10 +409,10 @@ function MetricPill({ label, value, sub, bold = false, valueClass = '' }: {
   label: string; value: string; sub: string; bold?: boolean; valueClass?: string;
 }) {
   return (
-    <div className="flex items-baseline gap-1.5 shrink-0">
+    <div className="flex items-baseline gap-1 shrink-0">
       <span className="text-muted-foreground">{label}:</span>
       <span className={`font-bold ${bold ? 'text-primary' : 'text-foreground'} ${valueClass}`}>{value}</span>
-      <span className="text-muted-foreground/70 text-[10px]">{sub}</span>
+      <span className="text-muted-foreground/70 text-[10px] hidden sm:inline">{sub}</span>
     </div>
   );
 }

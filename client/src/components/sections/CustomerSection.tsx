@@ -897,7 +897,7 @@ export default function CustomerSection() {
                   placeholder="1234 Main St" className="field-input w-full pl-9" />
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="col-span-1">
                 <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">City</label>
                 <input type="text" value={jobInfo.city} onChange={e => setJobInfo({ city: e.target.value })}
@@ -1044,8 +1044,8 @@ export default function CustomerSection() {
             Customers / <span className="text-foreground">{displayName}</span>
           </div>
           {/* Name + actions */}
-          <div className="flex items-center justify-between gap-4">
-            <h1 className="text-2xl font-bold text-foreground tracking-tight">{displayName}</h1>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <h1 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">{displayName}</h1>
             <div className="flex items-center gap-2 shrink-0 flex-wrap">
               {/* Lifetime value badge */}
               {customerProfile.lifetimeValue > 0 && (
