@@ -1,76 +1,116 @@
 // ============================================================
 // NewEventModal — New Event / appointment intake
+// Design: two-column full-screen layout
+// Left: Customer, Event details (type, date/time, location, team)
+// Right: Private notes
 // ============================================================
-import { useState } from 'react';
-import { Calendar } from 'lucide-react';
-import { toast } from 'sonner';
-import { IntakeModal } from './NewJobModal';
 
-interface Props { onClose: () => void; }
+import { useState } from 'react';
+import { Calendar, MapPin, Tag, Globe, User } from 'lucide-react';
+import { toast } from 'sonner';
+import IntakeShell, { CustomerSearchBox, SidebarSection } from './IntakeShell';
 
 const EVENT_TYPES = ['Site Visit', 'Estimate Appointment', 'Follow-up Call', 'Job Start', 'Job Completion', 'Team Meeting', 'Other'];
 
-function Label({ children }: { children: React.ReactNode }) {
-  return <label className="block text-xs font-semibold text-muted-foreground mb-1">{children}</label>;
-}
+export default function NewEventModal({ onClose, prefill }: { onClose: () => void; prefill?: any }) {
+  const [customer, setCustomer] = useState(prefill?.displayName ?? '');
+  const [eventType, setEventType] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [startTime, setStartTime] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [endTime, setEndTime] = useState('');
+  const [location, setLocation] = useState('');
+  const [team, setTeam] = useState('');
+  const [notes, setNotes] = useState('');
 
-export default function NewEventModal({ onClose }: Props) {
-  const [form, setForm] = useState({
-    title: '', eventType: '', customer: '', assignedTo: '',
-    date: '', startTime: '', endTime: '', location: '', notes: '',
-  });
-  const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
-
-  const handleSubmit = () => {
-    if (!form.title) { toast.error('Event title is required'); return; }
-    if (!form.date) { toast.error('Date is required'); return; }
-    toast.success(`Event "${form.title}" created`);
+  const handleSave = () => {
+    toast.success('Event saved');
     onClose();
   };
 
-  return (
-    <IntakeModal title="New Event" icon={<Calendar size={17} />} onClose={onClose} onSubmit={handleSubmit} submitLabel="Create Event">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div className="sm:col-span-2">
-          <Label>Event Title *</Label>
-          <input className="intake-field" placeholder="e.g. Site visit — Johnson residence" value={form.title} onChange={e => set('title', e.target.value)} />
+  const leftPanel = (
+    <>
+      <CustomerSearchBox value={customer} onChange={setCustomer} />
+
+      {/* Event details */}
+      <div className="p-4 border-b border-slate-100 space-y-3">
+        <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+          <Calendar size={13} /> Event details
         </div>
         <div>
-          <Label>Event Type</Label>
-          <select className="intake-field" value={form.eventType} onChange={e => set('eventType', e.target.value)}>
+          <label className="block text-xs text-slate-500 mb-1">Event type</label>
+          <select value={eventType} onChange={e => setEventType(e.target.value)}
+            className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-primary/30">
             <option value="">Select type</option>
             {EVENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>
-        <div>
-          <Label>Customer</Label>
-          <input className="intake-field" placeholder="Search or enter customer name" value={form.customer} onChange={e => set('customer', e.target.value)} />
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500 w-8 shrink-0">From</span>
+            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
+              className="flex-1 px-2 py-1.5 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-primary/30" />
+            <input type="time" value={startTime} onChange={e => setStartTime(e.target.value)}
+              className="w-20 px-2 py-1.5 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-primary/30" />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500 w-8 shrink-0">To</span>
+            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
+              className="flex-1 px-2 py-1.5 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-primary/30" />
+            <input type="time" value={endTime} onChange={e => setEndTime(e.target.value)}
+              className="w-20 px-2 py-1.5 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-primary/30" />
+          </div>
         </div>
         <div>
-          <Label>Date *</Label>
-          <input type="date" className="intake-field" value={form.date} onChange={e => set('date', e.target.value)} />
+          <label className="block text-xs text-slate-500 mb-1 flex items-center gap-1">
+            <MapPin size={11} /> Location
+          </label>
+          <input type="text" value={location} onChange={e => setLocation(e.target.value)}
+            placeholder="Address or meeting link"
+            className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-primary/30" />
         </div>
         <div>
-          <Label>Assigned To</Label>
-          <input className="intake-field" placeholder="Team member name" value={form.assignedTo} onChange={e => set('assignedTo', e.target.value)} />
-        </div>
-        <div>
-          <Label>Start Time</Label>
-          <input type="time" className="intake-field" value={form.startTime} onChange={e => set('startTime', e.target.value)} />
-        </div>
-        <div>
-          <Label>End Time</Label>
-          <input type="time" className="intake-field" value={form.endTime} onChange={e => set('endTime', e.target.value)} />
-        </div>
-        <div className="sm:col-span-2">
-          <Label>Location</Label>
-          <input className="intake-field" placeholder="Address or meeting link" value={form.location} onChange={e => set('location', e.target.value)} />
-        </div>
-        <div className="sm:col-span-2">
-          <Label>Notes</Label>
-          <textarea className="intake-field resize-none" rows={2} placeholder="Event notes..." value={form.notes} onChange={e => set('notes', e.target.value)} />
+          <label className="block text-xs text-slate-500 mb-1 flex items-center gap-1">
+            <User size={11} /> Team
+          </label>
+          <select value={team} onChange={e => setTeam(e.target.value)}
+            className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-primary/30">
+            <option value="">Edit team</option>
+            <option value="unassigned">Unassigned</option>
+          </select>
         </div>
       </div>
-    </IntakeModal>
+
+      <SidebarSection label="Tags" icon={<Tag size={13} className="text-slate-400" />} />
+      <SidebarSection label="Lead source" icon={<Globe size={13} className="text-slate-400" />} />
+    </>
+  );
+
+  const rightPanel = (
+    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <div className="px-4 py-3 border-b border-slate-100">
+        <span className="text-base font-semibold text-slate-800">Private notes</span>
+      </div>
+      <div className="p-4">
+        <textarea
+          value={notes}
+          onChange={e => setNotes(e.target.value)}
+          placeholder="Add a private note here"
+          rows={8}
+          className="w-full text-sm text-slate-700 placeholder:text-slate-400 resize-none focus:outline-none"
+        />
+      </div>
+    </div>
+  );
+
+  return (
+    <IntakeShell
+      title="New event"
+      onClose={onClose}
+      onSave={handleSave}
+      saveLabel="Save event"
+      leftPanel={leftPanel}
+      rightPanel={rightPanel}
+    />
   );
 }
