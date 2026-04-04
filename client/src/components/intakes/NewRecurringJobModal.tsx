@@ -8,8 +8,10 @@
 import { useState } from 'react';
 import { Hash, Tag, Globe, User } from 'lucide-react';
 import { toast } from 'sonner';
+import { nanoid } from 'nanoid';
+import { useEstimator } from '@/contexts/EstimatorContext';
 import IntakeShell, {
-  CustomerSearchBox, SidebarSection, PrivateNotesPanel, LineItemsPanel, LineItem,
+  CustomerSearchBox, SidebarSection, PrivateNotesPanel, LineItemsPanel, LineItem, SelectedCustomer,
 } from './IntakeShell';
 
 const FREQUENCIES = [
@@ -23,7 +25,11 @@ const FREQUENCIES = [
 ];
 
 export default function NewRecurringJobModal({ onClose, prefill }: { onClose: () => void; prefill?: any }) {
+  const { addOpportunity, addCustomer, setActiveCustomer } = useEstimator();
   const [customer, setCustomer] = useState(prefill?.displayName ?? '');
+  const [selectedCustomer, setSelectedCustomer] = useState<SelectedCustomer | null>(
+    prefill ? { id: prefill.id ?? '', displayName: prefill.displayName ?? '', phone: prefill.phone ?? '', email: prefill.email ?? '', address: prefill.address ?? '', city: prefill.city ?? '', state: prefill.state ?? '', zip: prefill.zip ?? '' } : null
+  );
   const [notes, setNotes] = useState('');
   const [items, setItems] = useState<LineItem[]>([]);
   const [frequency, setFrequency] = useState('Does not repeat');
@@ -37,13 +43,22 @@ export default function NewRecurringJobModal({ onClose, prefill }: { onClose: ()
   const [notifyCustomer, setNotifyCustomer] = useState(false);
 
   const handleSave = () => {
-    toast.success('Recurring job saved');
+    if (!customer.trim()) { toast.error('Please select or enter a customer'); return; }
+    let customerId = selectedCustomer?.id ?? '';
+    if (!customerId) {
+      customerId = nanoid(8);
+      addCustomer({ id: customerId, displayName: customer.trim(), firstName: '', lastName: '', company: '', mobilePhone: '', homePhone: '', workPhone: '', email: '', role: '', customerType: 'homeowner', doNotService: false, street: '', unit: '', city: '', state: 'WA', zip: '', addressNotes: '', customerNotes: '', billsTo: '', tags: [], leadSource: '', referredBy: '', sendNotifications: true, sendMarketingOptIn: false, createdAt: new Date().toISOString(), lifetimeValue: 0, outstandingBalance: 0 });
+    }
+    const totalValue = items.reduce((s, i) => s + i.qty * i.unitPrice, 0);
+    addOpportunity({ area: 'job', stage: 'New Job', title: `Recurring Job — ${customer.trim()}`, value: totalValue, notes, archived: false, clientSnapshot: { client: customer.trim(), companyName: '', phone: selectedCustomer?.phone ?? '', email: selectedCustomer?.email ?? '', address: selectedCustomer?.address ?? '', city: selectedCustomer?.city ?? '', state: selectedCustomer?.state ?? '', zip: selectedCustomer?.zip ?? '', jobType: 'Recurring', scope: frequency } });
+    setActiveCustomer(customerId);
+    toast.success('Recurring job created');
     onClose();
   };
 
   const leftPanel = (
     <>
-      <CustomerSearchBox value={customer} onChange={setCustomer} />
+      <CustomerSearchBox value={customer} onChange={setCustomer} onSelect={setSelectedCustomer} />
       <SidebarSection label="Checklists" icon={<span className="text-[13px] text-slate-400">☑</span>} />
       <SidebarSection label="Fields" icon={<Hash size={13} className="text-slate-400" />} />
       <SidebarSection label="Tags" icon={<Tag size={13} className="text-slate-400" />} />

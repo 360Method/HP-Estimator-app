@@ -2,7 +2,7 @@
 // Lifecycle: Lead → Estimate → Job → Archive
 // ============================================================
 
-import React, { createContext, useContext, useReducer, useCallback } from 'react';
+import React, { createContext, useContext, useReducer, useCallback, useEffect } from 'react';
 import {
   EstimatorState, JobInfo, GlobalSettings, AppSection,
   LineItem, CustomLineItem, EstimateLineOverride,
@@ -639,8 +639,37 @@ interface EstimatorContextValue {
 
 const EstimatorContext = createContext<EstimatorContextValue | null>(null);
 
+const STORAGE_KEY = 'hp-field-estimator-v1';
+
+function loadPersistedState(): EstimatorState {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return initialState;
+    const parsed = JSON.parse(raw) as Partial<EstimatorState>;
+    // Merge with initialState so new fields added in code are always present
+    return {
+      ...initialState,
+      ...parsed,
+      // Always reset transient UI state on reload
+      activeSection: parsed.activeSection ?? 'customers',
+      activeOpportunityId: null,
+    };
+  } catch {
+    return initialState;
+  }
+}
+
 export function EstimatorProvider({ children }: { children: React.ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, initialState);
+  const [state, dispatch] = useReducer(reducer, undefined, loadPersistedState);
+
+  // Persist state to localStorage on every change
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch {
+      // Ignore quota errors
+    }
+  }, [state]);
 
   const setSection = useCallback((s: AppSection) => dispatch({ type: 'SET_SECTION', payload: s }), []);
   const setJobInfo = useCallback((payload: Partial<JobInfo>) => dispatch({ type: 'SET_JOB_INFO', payload }), []);

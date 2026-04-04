@@ -866,8 +866,15 @@ export default function CalculatorSection() {
     return map;
   }, [state.phases, state.customItems, state.global]);
 
+  // Grand totals across ALL phases (for sticky bar)
+  const grandTotals = useMemo(() => {
+    const allPhaseResults = state.phases.map(p => calcPhase(p, state.global));
+    const allCustomResults = state.customItems.map(ci => calcCustomItem(ci, state.global));
+    return calcTotals(allPhaseResults, allCustomResults);
+  }, [state.phases, state.customItems, state.global]);
+
   return (
-    <div>
+    <div className="pb-24">
       <GlobalSettingsPanel />
       <PhaseTabBar
         phases={state.phases.map(p => ({ id: p.id, name: p.name, icon: p.icon }))}
@@ -876,6 +883,36 @@ export default function CalculatorSection() {
         phaseResults={phaseResults}
       />
       <PhasePanel phaseId={activePhaseId} />
+
+      {/* Sticky total cost summary bar */}
+      {grandTotals.hasData && (
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-sm border-t border-slate-200 shadow-[0_-4px_24px_rgba(0,0,0,0.10)] px-4 py-3">
+          <div className="max-w-4xl mx-auto flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-5 flex-wrap">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Hard Cost</div>
+                <div className="text-sm font-bold font-mono text-slate-700">{fmtDollar(grandTotals.hardCost)}</div>
+              </div>
+              <div className="w-px h-8 bg-slate-200" />
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Gross Profit</div>
+                <div className="text-sm font-bold font-mono text-emerald-600">{fmtDollar(grandTotals.grossProfit)}</div>
+              </div>
+              <div className="w-px h-8 bg-slate-200" />
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Blended GM</div>
+                <div className={`text-sm font-bold font-mono ${
+                  grandTotals.gm >= 0.30 ? 'text-emerald-600' : 'text-red-600'
+                }`}>{Math.round(grandTotals.gm * 100)}%</div>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Customer Price</div>
+              <div className="text-2xl font-bold font-mono text-primary leading-tight">{fmtDollar(grandTotals.price)}</div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

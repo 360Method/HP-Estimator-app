@@ -8,12 +8,18 @@
 import { useState } from 'react';
 import { Calendar, Edit3, Paperclip, Hash, Tag, Globe, User } from 'lucide-react';
 import { toast } from 'sonner';
+import { nanoid } from 'nanoid';
+import { useEstimator } from '@/contexts/EstimatorContext';
 import IntakeShell, {
-  CustomerSearchBox, SidebarSection, PrivateNotesPanel, LineItemsPanel, LineItem,
+  CustomerSearchBox, SidebarSection, PrivateNotesPanel, LineItemsPanel, LineItem, SelectedCustomer,
 } from './IntakeShell';
 
 export default function NewJobModal({ onClose, prefill }: { onClose: () => void; prefill?: any }) {
+  const { addOpportunity, addCustomer, setActiveCustomer } = useEstimator();
   const [customer, setCustomer] = useState(prefill?.displayName ?? '');
+  const [selectedCustomer, setSelectedCustomer] = useState<SelectedCustomer | null>(
+    prefill ? { id: prefill.id ?? '', displayName: prefill.displayName ?? '', phone: prefill.phone ?? '', email: prefill.email ?? '', address: prefill.address ?? '', city: prefill.city ?? '', state: prefill.state ?? '', zip: prefill.zip ?? '' } : null
+  );
   const [fromDate, setFromDate] = useState('');
   const [fromTime, setFromTime] = useState('');
   const [toDate, setToDate] = useState('');
@@ -24,13 +30,31 @@ export default function NewJobModal({ onClose, prefill }: { onClose: () => void;
   const [items, setItems] = useState<LineItem[]>([]);
 
   const handleSave = () => {
-    toast.success('Job saved');
+    if (!customer.trim()) { toast.error('Please select or enter a customer'); return; }
+    let customerId = selectedCustomer?.id ?? '';
+    // If no existing customer was selected, create a new one
+    if (!customerId) {
+      customerId = nanoid(8);
+      addCustomer({ id: customerId, displayName: customer.trim(), firstName: '', lastName: '', company: '', mobilePhone: '', homePhone: '', workPhone: '', email: '', role: '', customerType: 'homeowner', doNotService: false, street: '', unit: '', city: '', state: 'WA', zip: '', addressNotes: '', customerNotes: '', billsTo: '', tags: [], leadSource: '', referredBy: '', sendNotifications: true, sendMarketingOptIn: false, createdAt: new Date().toISOString(), lifetimeValue: 0, outstandingBalance: 0 });
+    }
+    const totalValue = items.reduce((s, i) => s + i.qty * i.unitPrice, 0);
+    addOpportunity({
+      area: 'job',
+      stage: 'New Job',
+      title: `Job — ${customer.trim()}`,
+      value: totalValue,
+      notes,
+      archived: false,
+      clientSnapshot: { client: customer.trim(), companyName: '', phone: selectedCustomer?.phone ?? '', email: selectedCustomer?.email ?? '', address: selectedCustomer?.address ?? '', city: selectedCustomer?.city ?? '', state: selectedCustomer?.state ?? '', zip: selectedCustomer?.zip ?? '', jobType: '', scope: '' },
+    });
+    setActiveCustomer(customerId);
+    toast.success('Job created');
     onClose();
   };
 
   const leftPanel = (
     <>
-      <CustomerSearchBox value={customer} onChange={setCustomer} />
+      <CustomerSearchBox value={customer} onChange={setCustomer} onSelect={setSelectedCustomer} />
 
       {/* Schedule */}
       <div className="p-4 border-b border-slate-100">

@@ -7,8 +7,20 @@
 // Desktop (≥ md): two-column side-by-side layout
 // ============================================================
 
-import { useState, ReactNode } from 'react';
-import { X, Plus, Trash2, GripVertical } from 'lucide-react';
+import { useState, useRef, useEffect, ReactNode } from 'react';
+import { X, Plus, Trash2, GripVertical, Search } from 'lucide-react';
+import { useEstimator } from '@/contexts/EstimatorContext';
+
+export interface SelectedCustomer {
+  id: string;
+  displayName: string;
+  phone: string;
+  email: string;
+  address: string;
+  city: string;
+  state: string;
+  zip: string;
+}
 
 // ─── Types ────────────────────────────────────────────────────
 export interface LineItem {
@@ -74,28 +86,93 @@ export default function IntakeShell({
 
 // ─── Reusable sub-components ──────────────────────────────────
 
-/** Customer search box */
-export function CustomerSearchBox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+/** Customer search box with live autocomplete from state.customers */
+export function CustomerSearchBox({
+  value, onChange, onSelect,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onSelect?: (c: SelectedCustomer) => void;
+}) {
+  const { state } = useEstimator();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const query = value.toLowerCase();
+  const matches = query.length < 1 ? [] : (state.customers ?? []).filter(c => {
+    const name = `${c.firstName ?? ''} ${c.lastName ?? ''} ${c.displayName ?? ''}`.toLowerCase();
+    return (
+      name.includes(query) ||
+      (c.email ?? '').toLowerCase().includes(query) ||
+      (c.mobilePhone ?? '').includes(query) ||
+      (c.street ?? '').toLowerCase().includes(query)
+    );
+  }).slice(0, 8);
+
+  const handleSelect = (c: typeof matches[0]) => {
+    const display = c.displayName || `${c.firstName ?? ''} ${c.lastName ?? ''}`.trim();
+    onChange(display);
+    setOpen(false);
+    onSelect?.({
+      id: c.id,
+      displayName: display,
+      phone: c.mobilePhone ?? '',
+      email: c.email ?? '',
+      address: c.street ?? '',
+      city: c.city ?? '',
+      state: c.state ?? '',
+      zip: c.zip ?? '',
+    });
+  };
+
   return (
-    <div className="p-4 border-b border-slate-100">
+    <div className="p-4 border-b border-slate-100" ref={ref}>
       <div className="flex items-center gap-2 mb-3">
         <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Customer</span>
       </div>
       <div className="relative">
+        <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
         <input
           type="text"
           value={value}
-          onChange={e => onChange(e.target.value)}
+          onChange={e => { onChange(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
           placeholder="Name, email, phone, or address"
-          className="w-full pr-8 pl-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white"
+          className="w-full pr-8 pl-8 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white"
         />
         {value && (
           <button
-            onClick={() => onChange('')}
+            onClick={() => { onChange(''); onSelect?.({ id: '', displayName: '', phone: '', email: '', address: '', city: '', state: '', zip: '' }); }}
             className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
           >
             <X size={14} />
           </button>
+        )}
+        {open && matches.length > 0 && (
+          <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+            {matches.map(c => {
+              const display = c.displayName || `${c.firstName ?? ''} ${c.lastName ?? ''}`.trim();
+              return (
+                <button
+                  key={c.id}
+                  onMouseDown={() => handleSelect(c)}
+                  className="w-full text-left px-3 py-2.5 hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0"
+                >
+                  <div className="text-sm font-medium text-slate-800">{display}</div>
+                  <div className="text-xs text-slate-500">{[c.street, c.city].filter(Boolean).join(', ')} {c.mobilePhone ? '· ' + c.mobilePhone : ''}</div>
+                </button>
+              );
+            })}
+          </div>
         )}
       </div>
       <button className="mt-2 text-xs text-primary font-medium hover:underline flex items-center gap-1">
