@@ -432,43 +432,6 @@ export default function EstimateSection() {
     <div className="space-y-6 pb-16">
       {showTC && <TCModal onClose={() => setShowTC(false)} />}
 
-      {/* Status banner */}
-      <div className={`rounded-xl p-4 border flex items-start gap-3 ${
-        totals.totalPrice === 0 ? 'bg-slate-50 border-slate-200'
-        : isReady ? 'bg-emerald-50 border-emerald-200'
-        : gmFlag === 'warn' ? 'bg-amber-50 border-amber-200'
-        : 'bg-red-50 border-red-200'
-      }`}>
-        {totals.totalPrice === 0
-          ? <AlertTriangle className="w-5 h-5 text-slate-400 mt-0.5 shrink-0" />
-          : isReady ? <CheckCircle2 className="w-5 h-5 text-emerald-600 mt-0.5 shrink-0" />
-          : gmFlag === 'warn' ? <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
-          : <XCircle className="w-5 h-5 text-red-600 mt-0.5 shrink-0" />
-        }
-        <div className="flex-1">
-          <div className={`font-bold text-sm ${
-            totals.totalPrice === 0 ? 'text-slate-600'
-            : isReady ? 'text-emerald-800'
-            : gmFlag === 'warn' ? 'text-amber-800'
-            : 'text-red-800'
-          }`}>
-            {totals.totalPrice === 0
-              ? 'No items entered — add quantities in the Calculator tab'
-              : isReady
-              ? `Estimate ready — ${fmtDollar(totals.totalPrice)} total · ${fmtPct(totals.totalGM)} GM · ${fmtDollar(totals.totalGP)} gross profit`
-              : gmFlag === 'warn'
-              ? `Low margin (${fmtPct(totals.totalGM)}) — floor is ${Math.round(minGM * 100)}%. Review before sending.`
-              : `Below GM floor (${fmtPct(totals.totalGM)}) — raise markup or review costs before sending.`
-            }
-          </div>
-          {isReady && (
-            <div className="text-xs text-emerald-700 mt-0.5">
-              Hard cost: {fmtDollar(totals.totalHard)} · Markup: {Math.round(state.global.markupPct * 100)}%
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* Action buttons */}
       <div className="flex gap-2 flex-wrap no-print">
         <button onClick={handleCopy} className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors">
