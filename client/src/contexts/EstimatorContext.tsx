@@ -7,7 +7,7 @@ import {
   EstimatorState, JobInfo, GlobalSettings, AppSection,
   LineItem, CustomLineItem, EstimateLineOverride,
   Opportunity, PipelineArea, CustomerProfile, ActivityEvent, CustomerProfileTab,
-  OpportunityStage,
+  OpportunityStage, Customer,
 } from '@/lib/types';
 import { ALL_PHASES, DEFAULTS } from '@/lib/phases';
 import { nanoid } from 'nanoid';
@@ -70,6 +70,8 @@ const initialState: EstimatorState = {
   activityFeed: [] as ActivityEvent[],
   activeCustomerTab: 'profile' as CustomerProfileTab,
   activeOpportunityId: null,
+  customers: [] as Customer[],
+  activeCustomerId: null,
 };
 
 // ── Helper: build an ActivityEvent without id/timestamp ──────
@@ -106,6 +108,8 @@ type Action =
   | { type: 'ADD_ACTIVITY_EVENT'; payload: Omit<ActivityEvent, 'id' | 'timestamp'> }
   | { type: 'SET_CUSTOMER_TAB'; payload: CustomerProfileTab }
   | { type: 'SET_ACTIVE_OPPORTUNITY'; payload: string | null }
+  | { type: 'ADD_CUSTOMER'; payload: Customer }
+  | { type: 'SET_ACTIVE_CUSTOMER'; payload: string | null }
   // ── Lifecycle actions ──────────────────────────────────────
   | {
       type: 'CONVERT_LEAD_TO_ESTIMATE';
@@ -307,6 +311,19 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
         activeSection: action.payload ? state.activeSection : 'customer',
       };
 
+    case 'ADD_CUSTOMER':
+      return { ...state, customers: [action.payload, ...state.customers] };
+
+    case 'SET_ACTIVE_CUSTOMER':
+      return {
+        ...state,
+        activeCustomerId: action.payload,
+        // When opening a customer, switch to the customer profile section
+        activeSection: action.payload ? 'customer' : 'customers',
+        // Reset opportunity context when switching customers
+        activeOpportunityId: null,
+      };
+
     // ── Lead → Estimate ───────────────────────────────────────
     case 'CONVERT_LEAD_TO_ESTIMATE': {
       const lead = state.opportunities.find(o => o.id === action.leadId);
@@ -488,6 +505,8 @@ interface EstimatorContextValue {
   convertEstimateToJob: (estimateId: string, jobTitle: string, value: number) => void;
   archiveJob: (jobId: string, value: number) => void;
   setActiveOpportunity: (id: string | null) => void;
+  addCustomer: (customer: Customer) => void;
+  setActiveCustomer: (id: string | null) => void;
   reset: () => void;
 }
 
@@ -562,6 +581,14 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'SET_ACTIVE_OPPORTUNITY', payload: id });
   }, []);
 
+  const addCustomer = useCallback((customer: Customer) => {
+    dispatch({ type: 'ADD_CUSTOMER', payload: customer });
+  }, []);
+
+  const setActiveCustomer = useCallback((id: string | null) => {
+    dispatch({ type: 'SET_ACTIVE_CUSTOMER', payload: id });
+  }, []);
+
   const reset = useCallback(() => dispatch({ type: 'RESET' }), []);
 
   return (
@@ -575,6 +602,7 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
       setCustomerProfile, addActivityEvent, setCustomerTab,
       convertLeadToEstimate, convertEstimateToJob, archiveJob,
       setActiveOpportunity,
+      addCustomer, setActiveCustomer,
       reset,
     }}>
       {children}

@@ -108,6 +108,18 @@
 }
 
 @layer components {
+  /* ── New Customer Intake form fields ── */
+  .intake-field {
+    @apply w-full px-3 py-2 text-sm bg-white border border-border rounded-lg
+           focus:outline-none focus:ring-2 focus:ring-ring
+           placeholder:text-muted-foreground/70
+           transition-shadow;
+  }
+  .intake-add-btn {
+    @apply flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold
+           text-primary border border-primary/30 rounded-lg
+           hover:bg-primary/5 transition-colors;
+  }
   .container {
     width: 100%;
     margin-left: auto;

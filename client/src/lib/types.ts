@@ -174,7 +174,50 @@ export interface GlobalSettings {
   paintRate: number;
 }
 
-export type AppSection = 'customer' | 'sales' | 'calculator' | 'estimate' | 'present';
+export type AppSection = 'customer' | 'sales' | 'calculator' | 'estimate' | 'present' | 'customers';
+
+// ── Customer Record (multi-customer list) ─────────────────
+export type CustomerType = 'homeowner' | 'business';
+
+export interface Customer {
+  id: string;
+  // Contact
+  firstName: string;
+  lastName: string;
+  displayName: string;        // shown on invoices
+  company: string;
+  mobilePhone: string;
+  homePhone: string;
+  workPhone: string;
+  email: string;
+  role: string;               // e.g. Property Manager
+  customerType: CustomerType;
+  doNotService: boolean;
+  // Address
+  street: string;
+  unit: string;
+  city: string;
+  state: string;
+  zip: string;
+  addressNotes: string;
+  // Notes
+  customerNotes: string;
+  billsTo: string;            // billing contact name
+  tags: string[];
+  leadSource: LeadSource | '';
+  referredBy: string;
+  // Preferences
+  sendNotifications: boolean;
+  sendMarketingOptIn: boolean;
+  // Metadata
+  createdAt: string;          // ISO
+  lifetimeValue: number;
+  outstandingBalance: number;
+  // Linked profile data (populated when customer is opened)
+  profile?: CustomerProfile;
+  activityFeed?: ActivityEvent[];
+  opportunities?: Opportunity[];
+}
 
 export interface EstimatorState {
   activeSection: AppSection;
@@ -200,6 +243,9 @@ export interface EstimatorState {
   activeCustomerTab: CustomerProfileTab;
   // Active opportunity (null = viewing customer profile; set = inside estimate builder)
   activeOpportunityId: string | null;
+  // Multi-customer list
+  customers: Customer[];
+  activeCustomerId: string | null;  // which customer is currently open
 }
 
 // ── CRM Pipeline Types ──────────────────────────────────────

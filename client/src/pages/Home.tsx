@@ -11,6 +11,7 @@ import SalesSection from '@/components/sections/SalesSection';
 import CalculatorSection from '@/components/sections/CalculatorSection';
 import EstimateSection from '@/components/sections/EstimateSection';
 import PresentSection from '@/components/sections/PresentSection';
+import CustomersListPage from '@/pages/CustomersListPage';
 
 export default function Home() {
   const { state } = useEstimator();
@@ -24,12 +25,17 @@ export default function Home() {
     <div className="min-h-screen bg-background">
       <MetricsBar totals={totals} />
 
-      <div className="container py-6 max-w-4xl">
-        {state.activeSection === 'customer' && <CustomerSection />}
-        {state.activeSection === 'sales' && <SalesSection />}
-        {state.activeSection === 'calculator' && <CalculatorSection />}
-        {state.activeSection === 'estimate' && <EstimateSection />}
-      </div>
+      {state.activeSection === 'customers' ? (
+        /* Customers list is full-width, no container constraint */
+        <CustomersListPage />
+      ) : (
+        <div className="container py-6 max-w-4xl">
+          {state.activeSection === 'customer' && <CustomerSection />}
+          {state.activeSection === 'sales' && <SalesSection />}
+          {state.activeSection === 'calculator' && <CalculatorSection />}
+          {state.activeSection === 'estimate' && <EstimateSection />}
+        </div>
+      )}
       {/* Present mode is a full-screen overlay, rendered outside the container */}
       {state.activeSection === 'present' && <PresentSection />}
     </div>

@@ -15,12 +15,14 @@
 import { useState } from 'react';
 import { fmtDollar, fmtPct, getMarginFlag, TotalsResult } from '@/lib/calc';
 import { useEstimator } from '@/contexts/EstimatorContext';
-import { AppSection } from '@/lib/types';
+import { AppSection, Customer } from '@/lib/types';
 import { toast } from 'sonner';
+import { nanoid } from 'nanoid';
+import NewCustomerModal from '@/components/NewCustomerModal';
 import {
   Search, LayoutDashboard, Users, Inbox, GitBranch,
   DollarSign, BarChart2, Megaphone, Settings, UserCircle,
-  ChevronDown, ArrowLeft,
+  ChevronDown, ArrowLeft, Plus,
 } from 'lucide-react';
 
 const HP_LOGO = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg';
@@ -49,8 +51,15 @@ const BACKEND_NAV = [
 
 export default function MetricsBar({ totals }: MetricsBarProps) {
   const { totalHard, totalPrice, totalGP, totalGM } = totals;
-  const { state, setSection, setActiveOpportunity, reset } = useEstimator();
+  const { state, setSection, setActiveOpportunity, setActiveCustomer, addCustomer, reset } = useEstimator();
   const [searchQuery, setSearchQuery] = useState('');
+  const [showNewCustomer, setShowNewCustomer] = useState(false);
+
+  const handleNewCustomerCreated = (customer: Customer) => {
+    addCustomer(customer);
+    setShowNewCustomer(false);
+    setActiveCustomer(customer.id);
+  };
 
   const minGM = totalHard < 2000 ? 0.40 : 0.30;
   const gmFlag = getMarginFlag(totalGM, totalHard);
@@ -87,6 +96,12 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
   const handleBackToProfile = () => {
     setActiveOpportunity(null);
     // activeSection resets to 'customer' automatically in the reducer
+  };
+
+  const handleGoToCustomers = () => {
+    setSection('customers');
+    setActiveOpportunity(null);
+    setActiveCustomer(null);
   };
 
   return (
@@ -128,9 +143,13 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
             {BACKEND_NAV.map(({ icon: Icon, label }) => (
               <button
                 key={label}
-                onClick={() => handleBackendNav(label)}
+                onClick={() => label === 'Customers' ? handleGoToCustomers() : handleBackendNav(label)}
                 title={label}
-                className="flex flex-col items-center gap-0.5 px-2.5 py-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors group"
+                className={`flex flex-col items-center gap-0.5 px-2.5 py-1.5 rounded-lg transition-colors group ${
+                  label === 'Customers' && state.activeSection === 'customers'
+                    ? 'text-primary bg-primary/5'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                }`}
               >
                 <Icon className="w-4 h-4" />
                 <span className="text-[9px] font-semibold leading-none opacity-0 group-hover:opacity-100 transition-opacity absolute mt-8 bg-foreground text-background px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap pointer-events-none">
@@ -161,6 +180,15 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
               <ChevronDown className="w-3 h-3 hidden sm:block" />
             </button>
           </div>
+
+          {/* New button */}
+          <button
+            onClick={() => setShowNewCustomer(true)}
+            className="shrink-0 flex items-center gap-1.5 text-[12px] font-bold bg-foreground text-background hover:bg-foreground/80 px-3.5 py-1.5 rounded-lg transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            New
+          </button>
 
           {/* Reset button */}
           <button
@@ -194,6 +222,14 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── New Customer Modal (triggered from nav) ── */}
+      {showNewCustomer && (
+        <NewCustomerModal
+          onClose={() => setShowNewCustomer(false)}
+          onCreated={handleNewCustomerCreated}
+        />
       )}
 
       {/* ── NAVIGATION BAR ─────────────────────────────────────── */}
@@ -242,14 +278,32 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
                 </button>
               ))}
             </div>
-          ) : (
-            /* ── Profile-only nav (not inside an opportunity) ── */
+          ) : state.activeSection === 'customers' ? (
+            /* ── Customers list nav ── */
             <div className="flex items-center -mx-4 px-4 py-2 gap-2">
               <span className="text-[11px] font-semibold text-primary flex items-center gap-1.5">
-                <span className="text-sm">👤</span>
-                <span>Customer Profile</span>
+                <span className="text-sm">👥</span>
+                <span>All Customers</span>
               </span>
-              <span className="text-xs text-muted-foreground ml-2">
+            </div>
+          ) : (
+            /* ── Profile-only nav (not inside an opportunity) ── */
+            <div className="flex items-stretch -mx-4 px-0">
+              {/* Back to customers list */}
+              <button
+                onClick={handleGoToCustomers}
+                className="flex items-center gap-1.5 px-4 py-2 text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:bg-muted/50 border-b-2 border-transparent transition-colors shrink-0"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Customers</span>
+                <span className="sm:hidden">Back</span>
+              </button>
+              <div className="flex items-center px-1 text-muted-foreground/30 text-sm select-none">/</div>
+              <div className="flex items-center px-2 py-2 text-[11px] font-semibold text-foreground">
+                {state.jobInfo.client || 'New Customer'}
+              </div>
+              <div className="flex-1" />
+              <span className="flex items-center px-4 py-2 text-[11px] text-muted-foreground">
                 Open an opportunity to access the estimate builder →
               </span>
             </div>
