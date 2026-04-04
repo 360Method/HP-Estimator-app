@@ -13,6 +13,13 @@
 
 import { useState } from 'react';
 import { useEstimator } from '@/contexts/EstimatorContext';
+import { CustomerPrefill } from '@/components/intakes/types';
+import NewJobModal from '@/components/intakes/NewJobModal';
+import NewRecurringJobModal from '@/components/intakes/NewRecurringJobModal';
+import NewEstimateModal from '@/components/intakes/NewEstimateModal';
+import NewEventModal from '@/components/intakes/NewEventModal';
+import NewIntakeModal from '@/components/intakes/NewIntakeModal';
+import NewLeadModal from '@/components/intakes/NewLeadModal';
 import {
   JOB_TYPES, LEAD_STAGES, ESTIMATE_STAGES, JOB_STAGES,
   PipelineArea, OpportunityStage, LeadStage, EstimateStage, JobStage,
@@ -533,6 +540,24 @@ export default function CustomerSection() {
   const [newTag, setNewTag] = useState('');
   const [editingContact, setEditingContact] = useState(false);
   const [newNote, setNewNote] = useState('');
+  const [activeIntake, setActiveIntake] = useState<'job' | 'recurring-job' | 'estimate' | 'event' | 'intake' | 'lead' | null>(null);
+
+  // Build prefill from current customer's jobInfo
+  const customerPrefill: CustomerPrefill = {
+    displayName: jobInfo.client || '',
+    firstName: (jobInfo.client || '').split(' ')[0] || '',
+    lastName: (jobInfo.client || '').split(' ').slice(1).join(' ') || '',
+    mobilePhone: jobInfo.phone || '',
+    homePhone: '',
+    workPhone: '',
+    email: jobInfo.email || '',
+    street: jobInfo.address || '',
+    unit: '',
+    city: jobInfo.city || '',
+    state: jobInfo.state || '',
+    zip: jobInfo.zip || '',
+    company: jobInfo.companyName || '',
+  };
 
   // ── Derived ──
   const displayName = jobInfo.client || 'New Customer';
@@ -1076,6 +1101,19 @@ export default function CustomerSection() {
                   <span className="hidden sm:inline">Add card</span>
                 </button>
               )}
+              {/* Quick intake buttons */}
+              <button onClick={() => setActiveIntake('lead')}
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-muted-foreground hover:border-primary hover:text-primary transition-colors">
+                <Star size={13} /><span className="hidden sm:inline">New Lead</span>
+              </button>
+              <button onClick={() => setActiveIntake('estimate')}
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-muted-foreground hover:border-primary hover:text-primary transition-colors">
+                <FileText size={13} /><span className="hidden sm:inline">New Estimate</span>
+              </button>
+              <button onClick={() => setActiveIntake('job')}
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-muted-foreground hover:border-primary hover:text-primary transition-colors">
+                <Briefcase size={13} /><span className="hidden sm:inline">New Job</span>
+              </button>
               {/* Call button */}
               <a
                 href={jobInfo.phone ? `tel:${jobInfo.phone}` : '#'}
@@ -1160,6 +1198,14 @@ export default function CustomerSection() {
           </div>
         )}
       </div>
+
+      {/* ── Customer-context intake modals (pre-filled) ── */}
+      {activeIntake === 'job'           && <NewJobModal           onClose={() => setActiveIntake(null)} prefill={customerPrefill} />}
+      {activeIntake === 'recurring-job' && <NewRecurringJobModal  onClose={() => setActiveIntake(null)} prefill={customerPrefill} />}
+      {activeIntake === 'estimate'      && <NewEstimateModal      onClose={() => setActiveIntake(null)} prefill={customerPrefill} />}
+      {activeIntake === 'event'         && <NewEventModal         onClose={() => setActiveIntake(null)} prefill={customerPrefill} />}
+      {activeIntake === 'intake'        && <NewIntakeModal        onClose={() => setActiveIntake(null)} prefill={customerPrefill} />}
+      {activeIntake === 'lead'          && <NewLeadModal          onClose={() => setActiveIntake(null)} prefill={customerPrefill} />}
     </div>
   );
 }

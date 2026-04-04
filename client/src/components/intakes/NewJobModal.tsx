@@ -1,18 +1,35 @@
 // ============================================================
 // NewJobModal — New Job intake form
+// Accepts optional `prefill` to pre-fill customer contact info
+// when opened from within a customer profile.
 // ============================================================
 import { useState } from 'react';
-import { X, Briefcase } from 'lucide-react';
+import { X, Briefcase, UserCheck } from 'lucide-react';
 import { toast } from 'sonner';
+import { CustomerPrefill } from './types';
 
-interface Props { onClose: () => void; }
+interface Props {
+  onClose: () => void;
+  prefill?: CustomerPrefill;
+}
 
 const JOB_TYPES = ['Flooring', 'Painting', 'Carpentry', 'Drywall', 'Plumbing', 'Electrical', 'Landscaping', 'General Handyman', 'Other'];
 
-export default function NewJobModal({ onClose }: Props) {
+export default function NewJobModal({ onClose, prefill }: Props) {
   const [form, setForm] = useState({
-    title: '', customer: '', jobType: '', assignedTo: '',
-    scheduledDate: '', estimatedHours: '', notes: '',
+    title: '',
+    customer: prefill?.displayName || '',
+    phone: prefill?.mobilePhone || prefill?.homePhone || '',
+    email: prefill?.email || '',
+    address: prefill ? [prefill.street, prefill.unit].filter(Boolean).join(' ') : '',
+    city: prefill?.city || '',
+    state: prefill?.state || '',
+    zip: prefill?.zip || '',
+    jobType: '',
+    assignedTo: '',
+    scheduledDate: '',
+    estimatedHours: '',
+    notes: '',
   });
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
 
@@ -23,16 +40,15 @@ export default function NewJobModal({ onClose }: Props) {
   };
 
   return (
-    <IntakeModal title="New Job" icon={<Briefcase size={17} />} onClose={onClose} onSubmit={handleSubmit} submitLabel="Create Job">
+    <IntakeModal title="New Job" icon={<Briefcase size={17} />} onClose={onClose} onSubmit={handleSubmit} submitLabel="Create Job" prefill={prefill}>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="sm:col-span-2">
           <Label>Job Title *</Label>
           <input className="intake-field" placeholder="e.g. Hardwood floor installation" value={form.title} onChange={e => set('title', e.target.value)} />
         </div>
-        <div>
-          <Label>Customer</Label>
-          <input className="intake-field" placeholder="Search or enter customer name" value={form.customer} onChange={e => set('customer', e.target.value)} />
-        </div>
+
+        <CustomerFields form={form} set={set} prefill={prefill} />
+
         <div>
           <Label>Job Type</Label>
           <select className="intake-field" value={form.jobType} onChange={e => set('jobType', e.target.value)}>
@@ -61,13 +77,82 @@ export default function NewJobModal({ onClose }: Props) {
   );
 }
 
-function Label({ children }: { children: React.ReactNode }) {
-  return <label className="block text-xs font-semibold text-muted-foreground mb-1">{children}</label>;
+// ── Shared: customer contact block ──────────────────────────
+export function CustomerFields({
+  form, set, prefill,
+}: {
+  form: Record<string, string>;
+  set: (k: string, v: string) => void;
+  prefill?: CustomerPrefill;
+}) {
+  const locked = !!prefill;
+  const fieldClass = `intake-field ${locked ? 'bg-primary/5 text-foreground cursor-default' : ''}`;
+
+  return (
+    <>
+      <div>
+        <Label>Customer {locked && <PrefillBadge />}</Label>
+        <input className={fieldClass} placeholder="Customer name" value={form.customer}
+          onChange={e => !locked && set('customer', e.target.value)}
+          readOnly={locked} />
+      </div>
+      <div>
+        <Label>Phone {locked && <PrefillBadge />}</Label>
+        <input type="tel" className={fieldClass} placeholder="(360) 555-0100" value={form.phone}
+          onChange={e => !locked && set('phone', e.target.value)}
+          readOnly={locked} />
+      </div>
+      <div>
+        <Label>Email {locked && <PrefillBadge />}</Label>
+        <input type="email" className={fieldClass} placeholder="customer@email.com" value={form.email}
+          onChange={e => !locked && set('email', e.target.value)}
+          readOnly={locked} />
+      </div>
+      <div>
+        <Label>Address {locked && <PrefillBadge />}</Label>
+        <input className={fieldClass} placeholder="Street address" value={form.address}
+          onChange={e => !locked && set('address', e.target.value)}
+          readOnly={locked} />
+      </div>
+      <div>
+        <Label>City {locked && <PrefillBadge />}</Label>
+        <input className={fieldClass} placeholder="City" value={form.city}
+          onChange={e => !locked && set('city', e.target.value)}
+          readOnly={locked} />
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <Label>State {locked && <PrefillBadge />}</Label>
+          <input className={fieldClass} placeholder="WA" value={form.state}
+            onChange={e => !locked && set('state', e.target.value)}
+            readOnly={locked} />
+        </div>
+        <div>
+          <Label>Zip {locked && <PrefillBadge />}</Label>
+          <input className={fieldClass} placeholder="98683" value={form.zip}
+            onChange={e => !locked && set('zip', e.target.value)}
+            readOnly={locked} />
+        </div>
+      </div>
+    </>
+  );
+}
+
+function PrefillBadge() {
+  return (
+    <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-semibold text-primary/70 bg-primary/10 px-1.5 py-0.5 rounded">
+      <UserCheck size={9} /> from profile
+    </span>
+  );
+}
+
+export function Label({ children }: { children: React.ReactNode }) {
+  return <label className="flex items-center text-xs font-semibold text-muted-foreground mb-1">{children}</label>;
 }
 
 // ── Shared modal shell ───────────────────────────────────────
 export function IntakeModal({
-  title, icon, onClose, onSubmit, submitLabel, children,
+  title, icon, onClose, onSubmit, submitLabel, children, prefill,
 }: {
   title: string;
   icon: React.ReactNode;
@@ -75,17 +160,26 @@ export function IntakeModal({
   onSubmit: () => void;
   submitLabel: string;
   children: React.ReactNode;
+  prefill?: CustomerPrefill;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 overflow-y-auto"
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-xl">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-xl my-4">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <h2 className="text-base font-bold text-foreground flex items-center gap-2">
-            <span className="text-primary">{icon}</span>
-            {title}
-          </h2>
+          <div>
+            <h2 className="text-base font-bold text-foreground flex items-center gap-2">
+              <span className="text-primary">{icon}</span>
+              {title}
+            </h2>
+            {prefill && (
+              <p className="text-[11px] text-primary/70 mt-0.5 flex items-center gap-1">
+                <UserCheck size={11} />
+                Contact info pre-filled from {prefill.displayName || [prefill.firstName, prefill.lastName].filter(Boolean).join(' ')}
+              </p>
+            )}
+          </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground">
             <X size={16} />
           </button>

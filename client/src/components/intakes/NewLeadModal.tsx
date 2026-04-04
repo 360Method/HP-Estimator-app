@@ -4,22 +4,29 @@
 import { useState } from 'react';
 import { Star } from 'lucide-react';
 import { toast } from 'sonner';
-import { IntakeModal } from './NewJobModal';
+import { IntakeModal, CustomerFields, Label } from './NewJobModal';
+import { CustomerPrefill } from './types';
 
-interface Props { onClose: () => void; }
+interface Props { onClose: () => void; prefill?: CustomerPrefill; }
 
 const LEAD_SOURCES = ['Google', 'Referral', 'Facebook', 'Instagram', 'Nextdoor', 'Yelp', 'Direct Mail', 'Repeat Customer', 'Other'];
 const JOB_TYPES = ['Flooring', 'Painting', 'Carpentry', 'Drywall', 'Plumbing', 'Electrical', 'Landscaping', 'General Handyman', 'Other'];
 
-function Label({ children }: { children: React.ReactNode }) {
-  return <label className="block text-xs font-semibold text-muted-foreground mb-1">{children}</label>;
-}
-
-export default function NewLeadModal({ onClose }: Props) {
+export default function NewLeadModal({ onClose, prefill }: Props) {
   const [form, setForm] = useState({
-    title: '', customer: '', phone: '', email: '',
-    jobType: '', leadSource: '', estimatedValue: '',
-    followUpDate: '', notes: '',
+    title: '',
+    customer: prefill?.displayName || '',
+    phone: prefill?.mobilePhone || prefill?.homePhone || '',
+    email: prefill?.email || '',
+    address: prefill ? [prefill.street, prefill.unit].filter(Boolean).join(' ') : '',
+    city: prefill?.city || '',
+    state: prefill?.state || '',
+    zip: prefill?.zip || '',
+    jobType: '',
+    leadSource: '',
+    estimatedValue: '',
+    followUpDate: '',
+    notes: '',
   });
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
 
@@ -30,24 +37,15 @@ export default function NewLeadModal({ onClose }: Props) {
   };
 
   return (
-    <IntakeModal title="New Lead" icon={<Star size={17} />} onClose={onClose} onSubmit={handleSubmit} submitLabel="Create Lead">
+    <IntakeModal title="New Lead" icon={<Star size={17} />} onClose={onClose} onSubmit={handleSubmit} submitLabel="Create Lead" prefill={prefill}>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="sm:col-span-2">
           <Label>Lead Title *</Label>
           <input className="intake-field" placeholder="e.g. Kitchen remodel inquiry" value={form.title} onChange={e => set('title', e.target.value)} />
         </div>
-        <div>
-          <Label>Customer Name</Label>
-          <input className="intake-field" placeholder="First and last name" value={form.customer} onChange={e => set('customer', e.target.value)} />
-        </div>
-        <div>
-          <Label>Phone</Label>
-          <input type="tel" className="intake-field" placeholder="(360) 555-0100" value={form.phone} onChange={e => set('phone', e.target.value)} />
-        </div>
-        <div>
-          <Label>Email</Label>
-          <input type="email" className="intake-field" placeholder="customer@email.com" value={form.email} onChange={e => set('email', e.target.value)} />
-        </div>
+
+        <CustomerFields form={form} set={set} prefill={prefill} />
+
         <div>
           <Label>Job Type</Label>
           <select className="intake-field" value={form.jobType} onChange={e => set('jobType', e.target.value)}>
