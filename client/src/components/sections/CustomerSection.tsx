@@ -837,7 +837,8 @@ export default function CustomerSection() {
       {/* ── Right Main ── */}
       <div className="lg:col-span-2 space-y-4">
 
-        {/* Job Details */}
+        {/* Job Details — only shown when inside an open opportunity */}
+        {state.activeOpportunityId && (
         <div className="card-section">
           <div className="card-section-header text-xs font-semibold uppercase tracking-wider">
             <Briefcase size={13} />
@@ -879,6 +880,7 @@ export default function CustomerSection() {
             </div>
           </div>
         </div>
+        )}
 
         {/* Addresses */}
         <div className="card-section">
