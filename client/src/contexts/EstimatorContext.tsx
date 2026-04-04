@@ -109,6 +109,7 @@ type Action =
   | { type: 'SET_CUSTOMER_TAB'; payload: CustomerProfileTab }
   | { type: 'SET_ACTIVE_OPPORTUNITY'; payload: string | null }
   | { type: 'ADD_CUSTOMER'; payload: Customer }
+  | { type: 'UPDATE_CUSTOMER'; id: string; payload: Partial<Customer> }
   | { type: 'SET_ACTIVE_CUSTOMER'; payload: string | null }
   // ── Lifecycle actions ──────────────────────────────────────
   | {
@@ -153,8 +154,34 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
     case 'SET_SECTION':
       return { ...state, activeSection: action.payload };
 
-    case 'SET_JOB_INFO':
-      return { ...state, jobInfo: { ...state.jobInfo, ...action.payload } };
+    case 'SET_JOB_INFO': {
+      const newJobInfo = { ...state.jobInfo, ...action.payload };
+      // Sync contact fields back to the active customer record
+      if (state.activeCustomerId) {
+        const nameParts = newJobInfo.client.trim().split(/\s+/);
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.slice(1).join(' ') || '';
+        const syncedCustomers = state.customers.map(c =>
+          c.id === state.activeCustomerId
+            ? {
+                ...c,
+                firstName,
+                lastName,
+                displayName: newJobInfo.client,
+                company: newJobInfo.companyName,
+                mobilePhone: newJobInfo.phone,
+                email: newJobInfo.email,
+                street: newJobInfo.address,
+                city: newJobInfo.city,
+                state: newJobInfo.state,
+                zip: newJobInfo.zip,
+              }
+            : c
+        );
+        return { ...state, jobInfo: newJobInfo, customers: syncedCustomers };
+      }
+      return { ...state, jobInfo: newJobInfo };
+    }
 
     case 'SET_GLOBAL': {
       const newGlobal = { ...state.global, ...action.payload };
@@ -244,16 +271,22 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
     case 'CLEAR_SIGNATURE':
       return { ...state, signature: null, signedAt: null, signedBy: null };
 
-    case 'ADD_OPPORTUNITY':
-      return {
-        ...state,
-        opportunities: [...state.opportunities, {
-          ...action.payload,
-          id: nanoid(8),
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        }],
+    case 'ADD_OPPORTUNITY': {
+      const newOpp: Opportunity = {
+        ...action.payload,
+        id: nanoid(8),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
+      const newOpps = [...state.opportunities, newOpp];
+      if (state.activeCustomerId) {
+        const syncedCustomers = state.customers.map(c =>
+          c.id === state.activeCustomerId ? { ...c, opportunities: newOpps } : c
+        );
+        return { ...state, opportunities: newOpps, customers: syncedCustomers };
+      }
+      return { ...state, opportunities: newOpps };
+    }
 
     case 'UPDATE_OPPORTUNITY': {
       const prev = state.opportunities.find(o => o.id === action.id);
@@ -261,6 +294,14 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
       const newOpps = state.opportunities.map(o =>
         o.id === action.id ? { ...o, ...action.payload, updatedAt: new Date().toISOString() } : o
       );
+      const syncOpps = (opps: Opportunity[], feed: ActivityEvent[]) => {
+        if (state.activeCustomerId) {
+          return state.customers.map(c =>
+            c.id === state.activeCustomerId ? { ...c, opportunities: opps, activityFeed: feed } : c
+          );
+        }
+        return state.customers;
+      };
       if (stageChanged) {
         const event = makeActivity(
           'stage_changed',
@@ -268,13 +309,15 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
           `${prev!.stage} → ${action.payload.stage}`,
           action.id,
         );
+        const newFeed = [event, ...state.activityFeed];
         return {
           ...state,
           opportunities: newOpps,
-          activityFeed: [event, ...state.activityFeed],
+          activityFeed: newFeed,
+          customers: syncOpps(newOpps, newFeed),
         };
       }
-      return { ...state, opportunities: newOpps };
+      return { ...state, opportunities: newOpps, customers: syncOpps(newOpps, state.activityFeed) };
     }
 
     case 'REMOVE_OPPORTUNITY':
@@ -286,18 +329,34 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
     case 'SET_PIPELINE_AREA':
       return { ...state, activePipelineArea: action.payload };
 
-    case 'SET_CUSTOMER_PROFILE':
-      return { ...state, customerProfile: { ...state.customerProfile, ...action.payload } };
+    case 'SET_CUSTOMER_PROFILE': {
+      const newProfile = { ...state.customerProfile, ...action.payload };
+      if (state.activeCustomerId) {
+        const syncedCustomers = state.customers.map(c =>
+          c.id === state.activeCustomerId
+            ? { ...c, profile: newProfile, lifetimeValue: newProfile.lifetimeValue, outstandingBalance: newProfile.outstandingBalance, tags: newProfile.tags, leadSource: newProfile.leadSource, customerNotes: newProfile.privateNotes }
+            : c
+        );
+        return { ...state, customerProfile: newProfile, customers: syncedCustomers };
+      }
+      return { ...state, customerProfile: newProfile };
+    }
 
-    case 'ADD_ACTIVITY_EVENT':
-      return {
-        ...state,
-        activityFeed: [{
-          ...action.payload,
-          id: nanoid(8),
-          timestamp: new Date().toISOString(),
-        }, ...state.activityFeed],
+    case 'ADD_ACTIVITY_EVENT': {
+      const newEvent: ActivityEvent = {
+        ...action.payload,
+        id: nanoid(8),
+        timestamp: new Date().toISOString(),
       };
+      const newFeed = [newEvent, ...state.activityFeed];
+      if (state.activeCustomerId) {
+        const syncedCustomers = state.customers.map(c =>
+          c.id === state.activeCustomerId ? { ...c, activityFeed: newFeed } : c
+        );
+        return { ...state, activityFeed: newFeed, customers: syncedCustomers };
+      }
+      return { ...state, activityFeed: newFeed };
+    }
 
     case 'SET_CUSTOMER_TAB':
       return { ...state, activeCustomerTab: action.payload };
@@ -314,15 +373,74 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
     case 'ADD_CUSTOMER':
       return { ...state, customers: [action.payload, ...state.customers] };
 
-    case 'SET_ACTIVE_CUSTOMER':
+    case 'UPDATE_CUSTOMER':
+      return {
+        ...state,
+        customers: state.customers.map(c =>
+          c.id === action.id ? { ...c, ...action.payload } : c
+        ),
+      };
+
+    case 'SET_ACTIVE_CUSTOMER': {
+      if (!action.payload) {
+        return {
+          ...state,
+          activeCustomerId: null,
+          activeSection: 'customers',
+          activeOpportunityId: null,
+        };
+      }
+      const customer = state.customers.find(c => c.id === action.payload);
+      if (!customer) {
+        return {
+          ...state,
+          activeCustomerId: action.payload,
+          activeSection: 'customer',
+          activeOpportunityId: null,
+        };
+      }
+      // Load customer data into working state
+      const loadedJobInfo: JobInfo = {
+        ...state.jobInfo,
+        client: [customer.firstName, customer.lastName].filter(Boolean).join(' ') || customer.displayName || '',
+        companyName: customer.company || '',
+        address: customer.street || '',
+        city: customer.city || '',
+        state: customer.state || '',
+        zip: customer.zip || '',
+        phone: customer.mobilePhone || customer.homePhone || customer.workPhone || '',
+        email: customer.email || '',
+      };
+      const loadedProfile: CustomerProfile = customer.profile
+        ? { ...customer.profile }
+        : {
+            ...state.customerProfile,
+            tags: customer.tags || [],
+            leadSource: customer.leadSource || '',
+            createdAt: customer.createdAt || state.customerProfile.createdAt,
+            lifetimeValue: customer.lifetimeValue || 0,
+            outstandingBalance: customer.outstandingBalance || 0,
+            notificationsEnabled: customer.sendNotifications ?? true,
+            smsConsent: false,
+            smsMarketingConsent: customer.sendMarketingOptIn ?? false,
+            emailMarketingConsent: customer.sendMarketingOptIn ?? false,
+            paymentMethodOnFile: false,
+            paymentMethodLast4: '',
+            portalInviteSent: false,
+            portalInvitedAt: null,
+            privateNotes: customer.customerNotes || '',
+          };
       return {
         ...state,
         activeCustomerId: action.payload,
-        // When opening a customer, switch to the customer profile section
-        activeSection: action.payload ? 'customer' : 'customers',
-        // Reset opportunity context when switching customers
+        activeSection: 'customer',
         activeOpportunityId: null,
+        jobInfo: loadedJobInfo,
+        customerProfile: loadedProfile,
+        activityFeed: customer.activityFeed || [],
+        opportunities: customer.opportunities || [],
       };
+    }
 
     // ── Lead → Estimate ───────────────────────────────────────
     case 'CONVERT_LEAD_TO_ESTIMATE': {
@@ -440,14 +558,22 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
         action.jobId,
       );
 
+      const archivedOpps = state.opportunities.map(o => o.id === action.jobId ? archivedJob : o);
+      const archivedFeed = [event, ...state.activityFeed];
+      const newProfile = { ...state.customerProfile, lifetimeValue: newLifetimeValue };
+      const syncedCustomers = state.activeCustomerId
+        ? state.customers.map(c =>
+            c.id === state.activeCustomerId
+              ? { ...c, opportunities: archivedOpps, activityFeed: archivedFeed, profile: newProfile, lifetimeValue: newLifetimeValue }
+              : c
+          )
+        : state.customers;
       return {
         ...state,
-        opportunities: state.opportunities.map(o => o.id === action.jobId ? archivedJob : o),
-        customerProfile: {
-          ...state.customerProfile,
-          lifetimeValue: newLifetimeValue,
-        },
-        activityFeed: [event, ...state.activityFeed],
+        opportunities: archivedOpps,
+        customerProfile: newProfile,
+        activityFeed: archivedFeed,
+        customers: syncedCustomers,
       };
     }
 
@@ -506,6 +632,7 @@ interface EstimatorContextValue {
   archiveJob: (jobId: string, value: number) => void;
   setActiveOpportunity: (id: string | null) => void;
   addCustomer: (customer: Customer) => void;
+  updateCustomer: (id: string, payload: Partial<Customer>) => void;
   setActiveCustomer: (id: string | null) => void;
   reset: () => void;
 }
@@ -585,6 +712,10 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'ADD_CUSTOMER', payload: customer });
   }, []);
 
+  const updateCustomer = useCallback((id: string, payload: Partial<Customer>) => {
+    dispatch({ type: 'UPDATE_CUSTOMER', id, payload });
+  }, []);
+
   const setActiveCustomer = useCallback((id: string | null) => {
     dispatch({ type: 'SET_ACTIVE_CUSTOMER', payload: id });
   }, []);
@@ -602,7 +733,7 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
       setCustomerProfile, addActivityEvent, setCustomerTab,
       convertLeadToEstimate, convertEstimateToJob, archiveJob,
       setActiveOpportunity,
-      addCustomer, setActiveCustomer,
+      addCustomer, updateCustomer, setActiveCustomer,
       reset,
     }}>
       {children}
