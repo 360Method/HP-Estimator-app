@@ -1,5 +1,5 @@
-// ============================================================
-// HP Field Estimator v3 — State Context
+// HP Field Estimator — State Context
+// Lifecycle: Lead → Estimate → Job → Archive
 // ============================================================
 
 import React, { createContext, useContext, useReducer, useCallback } from 'react';
@@ -7,6 +7,7 @@ import {
   EstimatorState, JobInfo, GlobalSettings, AppSection,
   LineItem, CustomLineItem, EstimateLineOverride,
   Opportunity, PipelineArea, CustomerProfile, ActivityEvent, CustomerProfileTab,
+  OpportunityStage,
 } from '@/lib/types';
 import { ALL_PHASES, DEFAULTS } from '@/lib/phases';
 import { nanoid } from 'nanoid';
@@ -70,6 +71,16 @@ const initialState: EstimatorState = {
   activeCustomerTab: 'profile' as CustomerProfileTab,
 };
 
+// ── Helper: build an ActivityEvent without id/timestamp ──────
+function makeEvent(
+  type: ActivityEvent['type'],
+  title: string,
+  description: string,
+  linkedId?: string,
+): Omit<ActivityEvent, 'id' | 'timestamp'> {
+  return { type, title, description, ...(linkedId ? { linkedId } : {}) };
+}
+
 type Action =
   | { type: 'SET_SECTION'; payload: AppSection }
   | { type: 'SET_JOB_INFO'; payload: Partial<JobInfo> }
@@ -93,7 +104,43 @@ type Action =
   | { type: 'SET_CUSTOMER_PROFILE'; payload: Partial<CustomerProfile> }
   | { type: 'ADD_ACTIVITY_EVENT'; payload: Omit<ActivityEvent, 'id' | 'timestamp'> }
   | { type: 'SET_CUSTOMER_TAB'; payload: CustomerProfileTab }
+  // ── Lifecycle actions ──────────────────────────────────────
+  | {
+      type: 'CONVERT_LEAD_TO_ESTIMATE';
+      leadId: string;
+      newEstimateId: string;
+      newEstimateTitle: string;
+      value: number;
+    }
+  | {
+      type: 'CONVERT_ESTIMATE_TO_JOB';
+      estimateId: string;
+      newJobId: string;
+      newJobTitle: string;
+      value: number;
+    }
+  | {
+      type: 'ARCHIVE_JOB';
+      jobId: string;
+      value: number;
+    }
   | { type: 'RESET' };
+
+function makeActivity(
+  type: ActivityEvent['type'],
+  title: string,
+  description: string,
+  linkedId?: string,
+): ActivityEvent {
+  return {
+    id: nanoid(8),
+    type,
+    title,
+    description,
+    timestamp: new Date().toISOString(),
+    ...(linkedId ? { linkedId } : {}),
+  };
+}
 
 function reducer(state: EstimatorState, action: Action): EstimatorState {
   switch (action.type) {
@@ -202,13 +249,27 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
         }],
       };
 
-    case 'UPDATE_OPPORTUNITY':
-      return {
-        ...state,
-        opportunities: state.opportunities.map(o =>
-          o.id === action.id ? { ...o, ...action.payload, updatedAt: new Date().toISOString() } : o
-        ),
-      };
+    case 'UPDATE_OPPORTUNITY': {
+      const prev = state.opportunities.find(o => o.id === action.id);
+      const stageChanged = prev && action.payload.stage && prev.stage !== action.payload.stage;
+      const newOpps = state.opportunities.map(o =>
+        o.id === action.id ? { ...o, ...action.payload, updatedAt: new Date().toISOString() } : o
+      );
+      if (stageChanged) {
+        const event = makeActivity(
+          'stage_changed',
+          `Stage updated: ${prev!.title}`,
+          `${prev!.stage} → ${action.payload.stage}`,
+          action.id,
+        );
+        return {
+          ...state,
+          opportunities: newOpps,
+          activityFeed: [event, ...state.activityFeed],
+        };
+      }
+      return { ...state, opportunities: newOpps };
+    }
 
     case 'REMOVE_OPPORTUNITY':
       return {
@@ -235,6 +296,133 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
     case 'SET_CUSTOMER_TAB':
       return { ...state, activeCustomerTab: action.payload };
 
+    // ── Lead → Estimate ───────────────────────────────────────
+    case 'CONVERT_LEAD_TO_ESTIMATE': {
+      const lead = state.opportunities.find(o => o.id === action.leadId);
+      if (!lead) return state;
+
+      // Mark lead as Won and stamp conversion
+      const updatedLead: Opportunity = {
+        ...lead,
+        stage: 'Won' as OpportunityStage,
+        convertedToEstimateAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Create new Estimate opportunity
+      const newEstimate: Opportunity = {
+        id: action.newEstimateId,
+        area: 'estimate',
+        stage: 'Draft' as OpportunityStage,
+        title: action.newEstimateTitle,
+        value: action.value,
+        notes: lead.notes,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        sourceLeadId: action.leadId,
+        archived: false,
+        clientSnapshot: lead.clientSnapshot,
+      };
+
+      const event = makeActivity(
+        'estimate_created',
+        'Lead converted to Estimate',
+        `"${lead.title}" → Estimate: "${action.newEstimateTitle}"`,
+        action.newEstimateId,
+      );
+
+      return {
+        ...state,
+        opportunities: state.opportunities
+          .map(o => o.id === action.leadId ? updatedLead : o)
+          .concat(newEstimate),
+        activePipelineArea: 'estimate',
+        activeCustomerTab: 'estimates',
+        activeSection: 'calculator',
+        activityFeed: [event, ...state.activityFeed],
+      };
+    }
+
+    // ── Estimate → Job ────────────────────────────────────────
+    case 'CONVERT_ESTIMATE_TO_JOB': {
+      const estimate = state.opportunities.find(o => o.id === action.estimateId);
+      if (!estimate) return state;
+
+      // Mark estimate as Approved and stamp conversion
+      const updatedEstimate: Opportunity = {
+        ...estimate,
+        stage: 'Approved' as OpportunityStage,
+        convertedToJobAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Create new Job opportunity
+      const newJob: Opportunity = {
+        id: action.newJobId,
+        area: 'job',
+        stage: 'New Job' as OpportunityStage,
+        title: action.newJobTitle,
+        value: action.value,
+        notes: estimate.notes,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        sourceEstimateId: action.estimateId,
+        sourceLeadId: estimate.sourceLeadId,
+        archived: false,
+        clientSnapshot: estimate.clientSnapshot,
+      };
+
+      const event = makeActivity(
+        'job_created',
+        'Estimate converted to Job',
+        `"${estimate.title}" → Job: "${action.newJobTitle}"`,
+        action.newJobId,
+      );
+
+      return {
+        ...state,
+        opportunities: state.opportunities
+          .map(o => o.id === action.estimateId ? updatedEstimate : o)
+          .concat(newJob),
+        activePipelineArea: 'job',
+        activeCustomerTab: 'jobs',
+        activityFeed: [event, ...state.activityFeed],
+      };
+    }
+
+    // ── Job → Archive ─────────────────────────────────────────
+    case 'ARCHIVE_JOB': {
+      const job = state.opportunities.find(o => o.id === action.jobId);
+      if (!job) return state;
+
+      const archivedJob: Opportunity = {
+        ...job,
+        stage: 'Invoice Paid' as OpportunityStage,
+        archived: true,
+        archivedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      const newLifetimeValue = state.customerProfile.lifetimeValue + action.value;
+
+      const event = makeActivity(
+        'payment_received',
+        'Job archived — Invoice Paid',
+        `"${job.title}" marked complete. +${fmtDollarSimple(action.value)} added to lifetime value.`,
+        action.jobId,
+      );
+
+      return {
+        ...state,
+        opportunities: state.opportunities.map(o => o.id === action.jobId ? archivedJob : o),
+        customerProfile: {
+          ...state.customerProfile,
+          lifetimeValue: newLifetimeValue,
+        },
+        activityFeed: [event, ...state.activityFeed],
+      };
+    }
+
     case 'RESET':
       return {
         ...initialState,
@@ -252,6 +440,11 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
     default:
       return state;
   }
+}
+
+// Simple dollar formatter used inside reducer (no Intl dependency)
+function fmtDollarSimple(n: number) {
+  return '$' + n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
 interface EstimatorContextValue {
@@ -278,6 +471,10 @@ interface EstimatorContextValue {
   updateOpportunity: (id: string, payload: Partial<Opportunity>) => void;
   removeOpportunity: (id: string) => void;
   setPipelineArea: (area: PipelineArea) => void;
+  // ── Lifecycle ──────────────────────────────────────────────
+  convertLeadToEstimate: (leadId: string, estimateTitle: string, value: number) => void;
+  convertEstimateToJob: (estimateId: string, jobTitle: string, value: number) => void;
+  archiveJob: (jobId: string, value: number) => void;
   reset: () => void;
 }
 
@@ -322,6 +519,32 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'ADD_ACTIVITY_EVENT', payload }), []);
   const setCustomerTab = useCallback((tab: CustomerProfileTab) =>
     dispatch({ type: 'SET_CUSTOMER_TAB', payload: tab }), []);
+
+  // ── Lifecycle callbacks ────────────────────────────────────
+  const convertLeadToEstimate = useCallback((leadId: string, estimateTitle: string, value: number) => {
+    dispatch({
+      type: 'CONVERT_LEAD_TO_ESTIMATE',
+      leadId,
+      newEstimateId: nanoid(8),
+      newEstimateTitle: estimateTitle,
+      value,
+    });
+  }, []);
+
+  const convertEstimateToJob = useCallback((estimateId: string, jobTitle: string, value: number) => {
+    dispatch({
+      type: 'CONVERT_ESTIMATE_TO_JOB',
+      estimateId,
+      newJobId: nanoid(8),
+      newJobTitle: jobTitle,
+      value,
+    });
+  }, []);
+
+  const archiveJob = useCallback((jobId: string, value: number) => {
+    dispatch({ type: 'ARCHIVE_JOB', jobId, value });
+  }, []);
+
   const reset = useCallback(() => dispatch({ type: 'RESET' }), []);
 
   return (
@@ -333,6 +556,7 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
       setSignature, clearSignature,
       addOpportunity, updateOpportunity, removeOpportunity, setPipelineArea,
       setCustomerProfile, addActivityEvent, setCustomerTab,
+      convertLeadToEstimate, convertEstimateToJob, archiveJob,
       reset,
     }}>
       {children}

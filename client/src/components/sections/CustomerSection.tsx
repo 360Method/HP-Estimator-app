@@ -1,15 +1,14 @@
-// ============================================================
 // CustomerSection — HouseCall Pro-style Customer Profile
 // Design: HP Industrial — dark slate, amber accents, DM Sans
 //
 // Layout:
-//   Header: Customer name, Call button, Add Card button
+//   Header: Customer name, Call button, Add Card button, Lifetime Value badge
 //   Top nav tabs: Profile | Leads | Estimates | Jobs | Invoices | Communication | Attachments | Notes
 //   Profile tab:
 //     Left sidebar (1/3): Summary, Contact Info, Payment Method,
 //                         Communication Prefs, Tags, Lead Source
 //     Right main (2/3): Addresses, Private Notes, Activity Feed
-//   Other tabs: Leads/Estimates/Jobs use the existing pipeline tracker
+//   Leads/Estimates/Jobs tabs: Pipeline tracker with Convert/Archive lifecycle buttons
 // ============================================================
 
 import { useState } from 'react';
@@ -24,7 +23,8 @@ import {
   Plus, Trash2, ChevronDown, ChevronUp, DollarSign, Tag, ArrowRight,
   CreditCard, Bell, MessageSquare, AtSign, Star, Paperclip, FileText,
   Activity, Send, CheckCircle2, XCircle, Clock, PhoneCall, Wallet,
-  ExternalLink, Edit3, Save, X, AlertCircle,
+  ExternalLink, Edit3, Save, X, AlertCircle, TrendingUp, Archive,
+  RefreshCw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { nanoid } from 'nanoid';
@@ -209,49 +209,147 @@ function AddOpportunityForm({
 }
 
 // ─── Opportunity Card ─────────────────────────────────────────
-function OpportunityCard({ opp, stages, onUpdate, onRemove }: {
-  opp: { id: string; title: string; stage: OpportunityStage; value: number; notes: string; createdAt: string };
+function OpportunityCard({
+  opp, stages, area, onUpdate, onRemove,
+  onConvertToEstimate, onConvertToJob, onArchive,
+}: {
+  opp: {
+    id: string; title: string; stage: OpportunityStage; value: number;
+    notes: string; createdAt: string; archived: boolean;
+    sourceLeadId?: string; sourceEstimateId?: string;
+    convertedToEstimateAt?: string; convertedToJobAt?: string;
+  };
   stages: OpportunityStage[];
+  area: PipelineArea;
   onUpdate: (id: string, payload: Partial<{ stage: OpportunityStage; title: string; value: number; notes: string }>) => void;
   onRemove: (id: string) => void;
+  onConvertToEstimate?: (id: string, title: string, value: number) => void;
+  onConvertToJob?: (id: string, title: string, value: number) => void;
+  onArchive?: (id: string, value: number) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+
+  const isArchived = opp.archived;
+  const canConvertToEstimate = area === 'lead' && !opp.convertedToEstimateAt;
+  const canConvertToJob = area === 'estimate' && !opp.convertedToJobAt;
+  const canArchive = area === 'job' && opp.stage === 'Invoice Paid' && !isArchived;
+
   return (
-    <div className="bg-white border border-border rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow">
+    <div className={`bg-white border rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow ${
+      isArchived ? 'border-emerald-200 bg-emerald-50/30 opacity-70' : 'border-border'
+    }`}>
       <div className="flex items-start gap-2">
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-semibold text-foreground truncate">{opp.title}</div>
-          <div className="flex items-center gap-2 mt-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <div className="text-sm font-semibold text-foreground truncate">{opp.title}</div>
+            {isArchived && (
+              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">
+                <Archive size={9} /> ARCHIVED
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${stageColor(opp.stage)}`}>
               {opp.stage}
             </span>
             {opp.value > 0 && <span className="text-xs text-muted-foreground font-medium">{fmtDollar(opp.value)}</span>}
+            {opp.sourceLeadId && area !== 'lead' && (
+              <span className="text-[9px] text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded-full">from lead</span>
+            )}
+            {opp.sourceEstimateId && area === 'job' && (
+              <span className="text-[9px] text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded-full">from estimate</span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
           <button onClick={() => setExpanded(e => !e)} className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground">
             {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </button>
-          <button onClick={() => { if (confirm('Remove this opportunity?')) onRemove(opp.id); }}
-            className="p-1 rounded hover:bg-destructive/10 text-destructive/60 hover:text-destructive transition-colors">
-            <Trash2 size={13} />
-          </button>
+          {!isArchived && (
+            <button onClick={() => { if (confirm('Remove this opportunity?')) onRemove(opp.id); }}
+              className="p-1 rounded hover:bg-destructive/10 text-destructive/60 hover:text-destructive transition-colors">
+              <Trash2 size={13} />
+            </button>
+          )}
         </div>
       </div>
+
+      {/* ── Lifecycle action buttons ── */}
+      {!isArchived && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {canConvertToEstimate && onConvertToEstimate && (
+            <button
+              onClick={() => {
+                const title = prompt('Estimate title:', opp.title) ?? opp.title;
+                onConvertToEstimate(opp.id, title, opp.value);
+                toast.success('Lead converted to Estimate — opening Calculator');
+              }}
+              className="flex items-center gap-1 px-2.5 py-1 bg-blue-600 text-white rounded-md text-[11px] font-semibold hover:bg-blue-700 transition-colors"
+            >
+              <RefreshCw size={10} />
+              Convert to Estimate
+            </button>
+          )}
+          {opp.convertedToEstimateAt && area === 'lead' && (
+            <span className="flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md text-[11px] font-medium">
+              <CheckCircle2 size={10} />
+              Converted {fmtDate(opp.convertedToEstimateAt)}
+            </span>
+          )}
+          {canConvertToJob && onConvertToJob && (
+            <button
+              onClick={() => {
+                const title = prompt('Job title:', opp.title) ?? opp.title;
+                onConvertToJob(opp.id, title, opp.value);
+                toast.success('Estimate converted to Job — opening Jobs tab');
+              }}
+              className="flex items-center gap-1 px-2.5 py-1 bg-violet-600 text-white rounded-md text-[11px] font-semibold hover:bg-violet-700 transition-colors"
+            >
+              <RefreshCw size={10} />
+              Convert to Job
+            </button>
+          )}
+          {opp.convertedToJobAt && area === 'estimate' && (
+            <span className="flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-md text-[11px] font-medium">
+              <CheckCircle2 size={10} />
+              Converted {fmtDate(opp.convertedToJobAt)}
+            </span>
+          )}
+          {canArchive && onArchive && (
+            <button
+              onClick={() => {
+                if (confirm(`Archive "${opp.title}" and add ${fmtDollar(opp.value)} to lifetime value?`)) {
+                  onArchive(opp.id, opp.value);
+                  toast.success('Job archived — Lifetime Value updated!');
+                }
+              }}
+              className="flex items-center gap-1 px-2.5 py-1 bg-emerald-600 text-white rounded-md text-[11px] font-semibold hover:bg-emerald-700 transition-colors"
+            >
+              <Archive size={10} />
+              Archive (Invoice Paid)
+            </button>
+          )}
+        </div>
+      )}
+
       {expanded && (
         <div className="mt-3 space-y-2 border-t border-border pt-3">
-          <div>
-            <label className="block text-[10px] text-muted-foreground mb-1">Stage</label>
-            <select value={opp.stage} onChange={e => onUpdate(opp.id, { stage: e.target.value as OpportunityStage })}
-              className="field-input w-full text-xs py-1.5">
-              {stages.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-[10px] text-muted-foreground mb-1">Est. Value ($)</label>
-            <input type="number" value={opp.value || ''} onChange={e => onUpdate(opp.id, { value: parseFloat(e.target.value) || 0 })}
-              placeholder="0.00" className="field-input w-full text-xs py-1.5" />
-          </div>
+          {!isArchived && (
+            <>
+              <div>
+                <label className="block text-[10px] text-muted-foreground mb-1">Stage</label>
+                <select value={opp.stage} onChange={e => onUpdate(opp.id, { stage: e.target.value as OpportunityStage })}
+                  className="field-input w-full text-xs py-1.5">
+                  {stages.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] text-muted-foreground mb-1">Est. Value ($)</label>
+                <input type="number" value={opp.value || ''} onChange={e => onUpdate(opp.id, { value: parseFloat(e.target.value) || 0 })}
+                  placeholder="0.00" className="field-input w-full text-xs py-1.5" />
+              </div>
+            </>
+          )}
           {opp.notes && <div className="text-xs text-muted-foreground bg-muted/50 rounded p-2">{opp.notes}</div>}
           <div className="text-[10px] text-muted-foreground">Added {new Date(opp.createdAt).toLocaleDateString()}</div>
         </div>
@@ -261,33 +359,52 @@ function OpportunityCard({ opp, stages, onUpdate, onRemove }: {
 }
 
 // ─── Pipeline Area Panel ──────────────────────────────────────
-function PipelineAreaPanel({ area, stages, opportunities, onAdd, onUpdate, onRemove }: {
+function PipelineAreaPanel({
+  area, stages, opportunities, onAdd, onUpdate, onRemove,
+  onConvertToEstimate, onConvertToJob, onArchive,
+}: {
   area: PipelineArea;
   stages: OpportunityStage[];
-  opportunities: { id: string; area: PipelineArea; stage: OpportunityStage; title: string; value: number; notes: string; createdAt: string; updatedAt: string }[];
+  opportunities: {
+    id: string; area: PipelineArea; stage: OpportunityStage; title: string; value: number;
+    notes: string; createdAt: string; updatedAt: string; archived: boolean;
+    sourceLeadId?: string; sourceEstimateId?: string;
+    convertedToEstimateAt?: string; convertedToJobAt?: string;
+  }[];
   onAdd: (title: string, stage: OpportunityStage, value: number, notes: string) => void;
   onUpdate: (id: string, payload: Partial<{ stage: OpportunityStage; title: string; value: number; notes: string }>) => void;
   onRemove: (id: string) => void;
+  onConvertToEstimate?: (id: string, title: string, value: number) => void;
+  onConvertToJob?: (id: string, title: string, value: number) => void;
+  onArchive?: (id: string, value: number) => void;
 }) {
   const [showAdd, setShowAdd] = useState(false);
-  const byStage: Record<string, typeof opportunities> = {};
+  const [showArchived, setShowArchived] = useState(false);
+
+  const activeOpps = opportunities.filter(o => !o.archived);
+  const archivedOpps = opportunities.filter(o => o.archived);
+
+  const byStage: Record<string, typeof activeOpps> = {};
   for (const s of stages) byStage[s] = [];
-  for (const opp of opportunities) {
+  for (const opp of activeOpps) {
     if (byStage[opp.stage]) byStage[opp.stage].push(opp);
     else byStage[stages[0]].push(opp);
   }
-  const totalValue = opportunities.reduce((s, o) => s + o.value, 0);
+  const totalValue = activeOpps.reduce((s, o) => s + o.value, 0);
   const activeStages = stages.filter(s => byStage[s].length > 0);
 
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3 text-sm text-muted-foreground">
-          <span><strong className="text-foreground">{opportunities.length}</strong> opportunit{opportunities.length === 1 ? 'y' : 'ies'}</span>
+          <span><strong className="text-foreground">{activeOpps.length}</strong> active</span>
+          {archivedOpps.length > 0 && (
+            <span className="text-emerald-700"><strong>{archivedOpps.length}</strong> archived</span>
+          )}
           {totalValue > 0 && (
             <span className="flex items-center gap-1">
               <DollarSign size={13} />
-              <strong className="text-foreground">{fmtDollar(totalValue)}</strong> total
+              <strong className="text-foreground">{fmtDollar(totalValue)}</strong> pipeline
             </span>
           )}
         </div>
@@ -303,7 +420,7 @@ function PipelineAreaPanel({ area, stages, opportunities, onAdd, onUpdate, onRem
             onCancel={() => setShowAdd(false)} />
         </div>
       )}
-      {opportunities.length === 0 ? (
+      {activeOpps.length === 0 && archivedOpps.length === 0 ? (
         <div className="text-center py-10 text-muted-foreground text-sm border-2 border-dashed border-border rounded-xl">
           No {area === 'lead' ? 'leads' : area === 'estimate' ? 'estimates' : 'jobs'} yet. Click "Add" to get started.
         </div>
@@ -322,12 +439,55 @@ function PipelineAreaPanel({ area, stages, opportunities, onAdd, onUpdate, onRem
                     </span>
                   </div>
                   {byStage[stage].map(opp => (
-                    <OpportunityCard key={opp.id} opp={opp} stages={stages} onUpdate={onUpdate} onRemove={onRemove} />
+                    <OpportunityCard
+                      key={opp.id}
+                      opp={opp}
+                      stages={stages}
+                      area={area}
+                      onUpdate={onUpdate}
+                      onRemove={onRemove}
+                      onConvertToEstimate={onConvertToEstimate}
+                      onConvertToJob={onConvertToJob}
+                      onArchive={onArchive}
+                    />
                   ))}
                 </div>
               ))}
             </div>
           )}
+
+          {/* Archived section */}
+          {archivedOpps.length > 0 && (
+            <div className="mt-4">
+              <button
+                onClick={() => setShowArchived(s => !s)}
+                className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors mb-2"
+              >
+                <Archive size={12} />
+                {showArchived ? 'Hide' : 'Show'} {archivedOpps.length} archived {area === 'job' ? 'job' : area}(s)
+                {!showArchived && (
+                  <span className="text-emerald-700 font-semibold">
+                    · {fmtDollar(archivedOpps.reduce((s, o) => s + o.value, 0))} earned
+                  </span>
+                )}
+              </button>
+              {showArchived && (
+                <div className="space-y-2 pl-2 border-l-2 border-emerald-200">
+                  {archivedOpps.map(opp => (
+                    <OpportunityCard
+                      key={opp.id}
+                      opp={opp}
+                      stages={stages}
+                      area={area}
+                      onUpdate={onUpdate}
+                      onRemove={onRemove}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           <details className="mt-2">
             <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
               View all {stages.length} stages
@@ -336,7 +496,7 @@ function PipelineAreaPanel({ area, stages, opportunities, onAdd, onUpdate, onRem
               {stages.map(stage => (
                 <div key={stage} className="flex items-center justify-between px-3 py-2 rounded-lg bg-muted/50 border border-border">
                   <span className="text-xs text-foreground truncate">{stage}</span>
-                  <span className="text-xs font-semibold text-muted-foreground ml-2 shrink-0">{byStage[stage].length}</span>
+                  <span className="text-xs font-semibold text-muted-foreground ml-2 shrink-0">{byStage[stage]?.length ?? 0}</span>
                 </div>
               ))}
             </div>
@@ -352,6 +512,7 @@ export default function CustomerSection() {
   const {
     state, setJobInfo, setCustomerProfile, addActivityEvent, setCustomerTab,
     addOpportunity, updateOpportunity, removeOpportunity, setPipelineArea,
+    convertLeadToEstimate, convertEstimateToJob, archiveJob,
   } = useEstimator();
   const { jobInfo, customerProfile, activityFeed, activeCustomerTab, opportunities, activePipelineArea } = state;
 
@@ -432,6 +593,20 @@ export default function CustomerSection() {
               <div className={`text-sm font-semibold ${customerProfile.outstandingBalance > 0 ? 'text-destructive' : 'text-muted-foreground'}`}>
                 {fmtDollar(customerProfile.outstandingBalance)}
               </div>
+            </div>
+            {/* Pipeline summary */}
+            <div className="pt-2 border-t border-border space-y-1">
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Pipeline</div>
+              {(['lead', 'estimate', 'job'] as PipelineArea[]).map(area => {
+                const count = opportunities.filter(o => o.area === area && !o.archived).length;
+                const val = opportunities.filter(o => o.area === area && !o.archived).reduce((s, o) => s + o.value, 0);
+                return count > 0 ? (
+                  <div key={area} className="flex items-center justify-between text-xs">
+                    <span className="capitalize text-muted-foreground">{area}s</span>
+                    <span className="font-medium">{count} · {fmtDollar(val)}</span>
+                  </div>
+                ) : null;
+              })}
             </div>
           </div>
         </div>
@@ -662,41 +837,28 @@ export default function CustomerSection() {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">HP Job Number</label>
-              <div className="relative">
-                <Hash size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <input type="text" value={jobInfo.jobNumber} onChange={e => setJobInfo({ jobNumber: e.target.value })}
-                  placeholder="HP-2026-001" className="field-input w-full pl-9" />
-              </div>
+              <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Estimator</label>
+              <input type="text" value={jobInfo.estimator} onChange={e => setJobInfo({ estimator: e.target.value })}
+                placeholder="e.g. Mike, Sarah" className="field-input w-full" />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Created Date</label>
-              <div className="relative">
-                <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <input type="date" value={jobInfo.date} onChange={e => setJobInfo({ date: e.target.value })} className="field-input w-full pl-9" />
-              </div>
+              <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Estimate Date</label>
+              <input type="date" value={jobInfo.date} onChange={e => setJobInfo({ date: e.target.value })} className="field-input w-full" />
             </div>
             <div>
               <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Expires Date</label>
-              <div className="relative">
-                <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <input type="date" value={jobInfo.expiresDate} onChange={e => setJobInfo({ expiresDate: e.target.value })} className="field-input w-full pl-9" />
-              </div>
+              <input type="date" value={jobInfo.expiresDate} onChange={e => setJobInfo({ expiresDate: e.target.value })} className="field-input w-full" />
             </div>
             <div>
               <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Service Date</label>
-              <div className="relative">
-                <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <input type="date" value={jobInfo.servicedDate} onChange={e => setJobInfo({ servicedDate: e.target.value })} className="field-input w-full pl-9" />
-              </div>
+              <input type="date" value={jobInfo.servicedDate} onChange={e => setJobInfo({ servicedDate: e.target.value })} className="field-input w-full" />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Prepared By (Technicians)</label>
-              <input type="text" value={jobInfo.estimator} onChange={e => setJobInfo({ estimator: e.target.value })}
-                placeholder="e.g. John D., Sarah M." className="field-input w-full" />
+              <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Job Number</label>
+              <input type="text" value={jobInfo.jobNumber} onChange={e => setJobInfo({ jobNumber: e.target.value })} className="field-input w-full" />
             </div>
             <div className="sm:col-span-2">
-              <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Scope Summary (Internal)</label>
+              <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Scope of Work</label>
               <textarea value={jobInfo.scope} onChange={e => setJobInfo({ scope: e.target.value })}
                 placeholder="e.g. Full trim package — install new baseboard, door casing, and window casing throughout main floor."
                 rows={3} className="field-input w-full resize-none" />
@@ -828,9 +990,12 @@ export default function CustomerSection() {
         area={area}
         stages={areaStages}
         opportunities={areaOpps as any}
-        onAdd={(title, stage, value, notes) => addOpportunity({ area, stage, title, value, notes })}
+        onAdd={(title, stage, value, notes) => addOpportunity({ area, stage, title, value, notes, archived: false })}
         onUpdate={updateOpportunity}
         onRemove={removeOpportunity}
+        onConvertToEstimate={area === 'lead' ? convertLeadToEstimate : undefined}
+        onConvertToJob={area === 'estimate' ? convertEstimateToJob : undefined}
+        onArchive={area === 'job' ? archiveJob : undefined}
       />
     );
   };
@@ -856,7 +1021,15 @@ export default function CustomerSection() {
           {/* Name + actions */}
           <div className="flex items-center justify-between gap-4">
             <h1 className="text-2xl font-bold text-foreground tracking-tight">{displayName}</h1>
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              {/* Lifetime value badge */}
+              {customerProfile.lifetimeValue > 0 && (
+                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg text-xs font-semibold text-emerald-800">
+                  <TrendingUp size={13} />
+                  <span className="hidden sm:inline">LTV:</span>
+                  {fmtDollar(customerProfile.lifetimeValue)}
+                </div>
+              )}
               {/* Payment method indicator */}
               {customerProfile.paymentMethodOnFile ? (
                 <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg text-xs font-medium text-emerald-800">
@@ -904,9 +1077,9 @@ export default function CustomerSection() {
         <div className="max-w-6xl mx-auto px-4">
           <div className="flex overflow-x-auto scrollbar-hide -mb-px">
             {CUSTOMER_TABS.map(tab => {
-              const count = tab.key === 'leads' ? opportunities.filter(o => o.area === 'lead').length
-                : tab.key === 'estimates' ? opportunities.filter(o => o.area === 'estimate').length
-                : tab.key === 'jobs' ? opportunities.filter(o => o.area === 'job').length
+              const count = tab.key === 'leads' ? opportunities.filter(o => o.area === 'lead' && !o.archived).length
+                : tab.key === 'estimates' ? opportunities.filter(o => o.area === 'estimate' && !o.archived).length
+                : tab.key === 'jobs' ? opportunities.filter(o => o.area === 'job' && !o.archived).length
                 : 0;
               return (
                 <button

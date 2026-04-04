@@ -254,6 +254,26 @@ export interface Opportunity {
   createdAt: string;      // ISO date string
   updatedAt: string;
   notes: string;
+  // Lifecycle tracking
+  sourceLeadId?: string;    // ID of the lead this was converted from
+  sourceEstimateId?: string; // ID of the estimate this job was converted from
+  convertedToEstimateAt?: string;  // ISO timestamp
+  convertedToJobAt?: string;       // ISO timestamp
+  archived: boolean;               // moved to archive after Invoice Paid
+  archivedAt?: string;             // ISO timestamp
+  // Snapshot of customer info at time of conversion
+  clientSnapshot?: {
+    client: string;
+    companyName: string;
+    phone: string;
+    email: string;
+    address: string;
+    city: string;
+    state: string;
+    zip: string;
+    jobType: string;
+    scope: string;
+  };
 }
 
 export const LEAD_STAGES: LeadStage[] = [
