@@ -47,6 +47,12 @@ const BUILDER_TABS: { id: AppSection; icon: string; label: string; shortLabel: s
   { id: 'estimate',   icon: '📄', label: 'Estimate',    shortLabel: 'Estimate' },
 ];
 
+const JOB_BUILDER_TABS: { id: AppSection; icon: string; label: string; shortLabel: string }[] = [
+  { id: 'job-details', icon: '📋', label: 'Job Details', shortLabel: 'Job'     },
+  { id: 'calculator',  icon: '🧮', label: 'Calculator',  shortLabel: 'Calc'    },
+  { id: 'estimate',    icon: '📄', label: 'Estimate',    shortLabel: 'Estimate'},
+];
+
 const BACKEND_NAV: { icon: React.ElementType; label: string; section: AppSection | null }[] = [
   { icon: LayoutDashboard, label: 'Dashboard',  section: null        },
   { icon: Users,           label: 'Customers',  section: 'customers' },
@@ -368,8 +374,8 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
 
               <div className="flex-1" />
 
-              {/* Builder section tabs */}
-              {BUILDER_TABS.map(item => (
+              {/* Builder section tabs — Job opportunities get Job Details tab first */}
+              {(activeOpp?.area === 'job' ? JOB_BUILDER_TABS : BUILDER_TABS).map(item => (
                 <button
                   key={item.id}
                   onClick={() => setSection(item.id)}

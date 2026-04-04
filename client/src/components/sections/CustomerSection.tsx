@@ -1018,7 +1018,8 @@ export default function CustomerSection() {
           if (area === 'lead' || area === 'estimate') {
             setSection('sales');
           } else {
-            setSection('calculator');
+            // Jobs open to the Job Details tab first
+            setSection('job-details');
           }
         }}
       />
