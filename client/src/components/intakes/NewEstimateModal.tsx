@@ -4,29 +4,20 @@
 import { useState } from 'react';
 import { FileText } from 'lucide-react';
 import { toast } from 'sonner';
-import { IntakeModal, CustomerFields, Label } from './NewJobModal';
-import { CustomerPrefill } from './types';
+import { IntakeModal } from './NewJobModal';
 
-interface Props { onClose: () => void; prefill?: CustomerPrefill; onOpenBuilder?: () => void; }
+interface Props { onClose: () => void; onOpenBuilder?: () => void; }
 
 const JOB_TYPES = ['Flooring', 'Painting', 'Carpentry', 'Drywall', 'Plumbing', 'Electrical', 'Landscaping', 'General Handyman', 'Other'];
 
-export default function NewEstimateModal({ onClose, prefill, onOpenBuilder }: Props) {
+function Label({ children }: { children: React.ReactNode }) {
+  return <label className="block text-xs font-semibold text-muted-foreground mb-1">{children}</label>;
+}
+
+export default function NewEstimateModal({ onClose, onOpenBuilder }: Props) {
   const [form, setForm] = useState({
-    title: '',
-    customer: prefill?.displayName || '',
-    phone: prefill?.mobilePhone || prefill?.homePhone || '',
-    email: prefill?.email || '',
-    address: prefill ? [prefill.street, prefill.unit].filter(Boolean).join(' ') : '',
-    city: prefill?.city || '',
-    state: prefill?.state || '',
-    zip: prefill?.zip || '',
-    jobType: '',
-    estimator: '',
-    estimateDate: '',
-    expiresDate: '',
-    estimatedValue: '',
-    notes: '',
+    title: '', customer: '', jobType: '', estimator: '',
+    estimateDate: '', expiresDate: '', estimatedValue: '', notes: '',
   });
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
 
@@ -38,15 +29,16 @@ export default function NewEstimateModal({ onClose, prefill, onOpenBuilder }: Pr
   };
 
   return (
-    <IntakeModal title="New Estimate" icon={<FileText size={17} />} onClose={onClose} onSubmit={handleSubmit} submitLabel="Create Estimate" prefill={prefill}>
+    <IntakeModal title="New Estimate" icon={<FileText size={17} />} onClose={onClose} onSubmit={handleSubmit} submitLabel="Create Estimate">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="sm:col-span-2">
           <Label>Estimate Title *</Label>
           <input className="intake-field" placeholder="e.g. Master bedroom flooring" value={form.title} onChange={e => set('title', e.target.value)} />
         </div>
-
-        <CustomerFields form={form} set={set} prefill={prefill} />
-
+        <div>
+          <Label>Customer</Label>
+          <input className="intake-field" placeholder="Search or enter customer name" value={form.customer} onChange={e => set('customer', e.target.value)} />
+        </div>
         <div>
           <Label>Job Type</Label>
           <select className="intake-field" value={form.jobType} onChange={e => set('jobType', e.target.value)}>

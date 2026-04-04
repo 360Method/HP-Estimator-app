@@ -4,30 +4,20 @@
 import { useState } from 'react';
 import { Calendar } from 'lucide-react';
 import { toast } from 'sonner';
-import { IntakeModal, CustomerFields, Label } from './NewJobModal';
-import { CustomerPrefill } from './types';
+import { IntakeModal } from './NewJobModal';
 
-interface Props { onClose: () => void; prefill?: CustomerPrefill; }
+interface Props { onClose: () => void; }
 
 const EVENT_TYPES = ['Site Visit', 'Estimate Appointment', 'Follow-up Call', 'Job Start', 'Job Completion', 'Team Meeting', 'Other'];
 
-export default function NewEventModal({ onClose, prefill }: Props) {
+function Label({ children }: { children: React.ReactNode }) {
+  return <label className="block text-xs font-semibold text-muted-foreground mb-1">{children}</label>;
+}
+
+export default function NewEventModal({ onClose }: Props) {
   const [form, setForm] = useState({
-    title: '',
-    customer: prefill?.displayName || '',
-    phone: prefill?.mobilePhone || prefill?.homePhone || '',
-    email: prefill?.email || '',
-    address: prefill ? [prefill.street, prefill.unit].filter(Boolean).join(' ') : '',
-    city: prefill?.city || '',
-    state: prefill?.state || '',
-    zip: prefill?.zip || '',
-    eventType: '',
-    assignedTo: '',
-    date: '',
-    startTime: '',
-    endTime: '',
-    location: prefill ? [prefill.street, prefill.unit].filter(Boolean).join(' ') : '',
-    notes: '',
+    title: '', eventType: '', customer: '', assignedTo: '',
+    date: '', startTime: '', endTime: '', location: '', notes: '',
   });
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
 
@@ -39,15 +29,12 @@ export default function NewEventModal({ onClose, prefill }: Props) {
   };
 
   return (
-    <IntakeModal title="New Event" icon={<Calendar size={17} />} onClose={onClose} onSubmit={handleSubmit} submitLabel="Create Event" prefill={prefill}>
+    <IntakeModal title="New Event" icon={<Calendar size={17} />} onClose={onClose} onSubmit={handleSubmit} submitLabel="Create Event">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="sm:col-span-2">
           <Label>Event Title *</Label>
           <input className="intake-field" placeholder="e.g. Site visit — Johnson residence" value={form.title} onChange={e => set('title', e.target.value)} />
         </div>
-
-        <CustomerFields form={form} set={set} prefill={prefill} />
-
         <div>
           <Label>Event Type</Label>
           <select className="intake-field" value={form.eventType} onChange={e => set('eventType', e.target.value)}>
@@ -56,16 +43,16 @@ export default function NewEventModal({ onClose, prefill }: Props) {
           </select>
         </div>
         <div>
-          <Label>Assigned To</Label>
-          <input className="intake-field" placeholder="Team member name" value={form.assignedTo} onChange={e => set('assignedTo', e.target.value)} />
+          <Label>Customer</Label>
+          <input className="intake-field" placeholder="Search or enter customer name" value={form.customer} onChange={e => set('customer', e.target.value)} />
         </div>
         <div>
           <Label>Date *</Label>
           <input type="date" className="intake-field" value={form.date} onChange={e => set('date', e.target.value)} />
         </div>
         <div>
-          <Label>Location</Label>
-          <input className="intake-field" placeholder="Address or meeting link" value={form.location} onChange={e => set('location', e.target.value)} />
+          <Label>Assigned To</Label>
+          <input className="intake-field" placeholder="Team member name" value={form.assignedTo} onChange={e => set('assignedTo', e.target.value)} />
         </div>
         <div>
           <Label>Start Time</Label>
@@ -74,6 +61,10 @@ export default function NewEventModal({ onClose, prefill }: Props) {
         <div>
           <Label>End Time</Label>
           <input type="time" className="intake-field" value={form.endTime} onChange={e => set('endTime', e.target.value)} />
+        </div>
+        <div className="sm:col-span-2">
+          <Label>Location</Label>
+          <input className="intake-field" placeholder="Address or meeting link" value={form.location} onChange={e => set('location', e.target.value)} />
         </div>
         <div className="sm:col-span-2">
           <Label>Notes</Label>
