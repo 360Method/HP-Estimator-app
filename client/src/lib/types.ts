@@ -103,6 +103,53 @@ export interface PhaseGroup {
   items: LineItem[];
 }
 
+// ── Customer Profile (extended) ──────────────────────────
+export type LeadSource =
+  | 'Google'
+  | 'Referral'
+  | 'Facebook'
+  | 'Instagram'
+  | 'Nextdoor'
+  | 'Yelp'
+  | 'Direct Mail'
+  | 'Repeat Customer'
+  | 'Other';
+
+export interface CustomerProfile {
+  // Communication preferences
+  notificationsEnabled: boolean;
+  smsConsent: boolean;          // text message consent
+  smsMarketingConsent: boolean; // text message marketing
+  emailMarketingConsent: boolean;
+  // Payment
+  paymentMethodOnFile: boolean;
+  paymentMethodLast4: string;   // last 4 digits if card on file
+  // Tags
+  tags: string[];               // e.g. ['VIP', 'Repeat', 'Commercial']
+  // Lead source
+  leadSource: LeadSource | '';
+  // Portal
+  portalInviteSent: boolean;
+  portalInvitedAt: string | null;
+  // Private notes
+  privateNotes: string;
+  // Account metadata
+  createdAt: string;            // ISO date
+  lifetimeValue: number;        // total $ of approved jobs
+  outstandingBalance: number;
+}
+
+export interface ActivityEvent {
+  id: string;
+  type: 'estimate_created' | 'estimate_sent' | 'estimate_approved' | 'job_created' | 'note_added' | 'call_logged' | 'payment_received' | 'stage_changed';
+  title: string;
+  description: string;
+  timestamp: string;  // ISO
+  linkedId?: string;  // estimate/job ID
+}
+
+export type CustomerProfileTab = 'profile' | 'leads' | 'estimates' | 'jobs' | 'invoices' | 'communication' | 'attachments' | 'notes';
+
 export interface JobInfo {
   client: string;
   companyName: string;   // customer company name (optional)
@@ -147,6 +194,10 @@ export interface EstimatorState {
   // CRM pipeline
   opportunities: Opportunity[];
   activePipelineArea: PipelineArea;
+  // Customer profile
+  customerProfile: CustomerProfile;
+  activityFeed: ActivityEvent[];
+  activeCustomerTab: CustomerProfileTab;
 }
 
 // ── CRM Pipeline Types ──────────────────────────────────────

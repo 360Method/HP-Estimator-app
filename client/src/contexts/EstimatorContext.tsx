@@ -6,7 +6,7 @@ import React, { createContext, useContext, useReducer, useCallback } from 'react
 import {
   EstimatorState, JobInfo, GlobalSettings, AppSection,
   LineItem, CustomLineItem, EstimateLineOverride,
-  Opportunity, PipelineArea,
+  Opportunity, PipelineArea, CustomerProfile, ActivityEvent, CustomerProfileTab,
 } from '@/lib/types';
 import { ALL_PHASES, DEFAULTS } from '@/lib/phases';
 import { nanoid } from 'nanoid';
@@ -49,6 +49,25 @@ const initialState: EstimatorState = {
   // CRM pipeline
   opportunities: [],
   activePipelineArea: 'lead' as PipelineArea,
+  // Customer profile
+  customerProfile: {
+    notificationsEnabled: true,
+    smsConsent: false,
+    smsMarketingConsent: false,
+    emailMarketingConsent: false,
+    paymentMethodOnFile: false,
+    paymentMethodLast4: '',
+    tags: [],
+    leadSource: '',
+    portalInviteSent: false,
+    portalInvitedAt: null,
+    privateNotes: '',
+    createdAt: new Date().toISOString(),
+    lifetimeValue: 0,
+    outstandingBalance: 0,
+  } as CustomerProfile,
+  activityFeed: [] as ActivityEvent[],
+  activeCustomerTab: 'profile' as CustomerProfileTab,
 };
 
 type Action =
@@ -71,6 +90,9 @@ type Action =
   | { type: 'UPDATE_OPPORTUNITY'; id: string; payload: Partial<Opportunity> }
   | { type: 'REMOVE_OPPORTUNITY'; id: string }
   | { type: 'SET_PIPELINE_AREA'; payload: PipelineArea }
+  | { type: 'SET_CUSTOMER_PROFILE'; payload: Partial<CustomerProfile> }
+  | { type: 'ADD_ACTIVITY_EVENT'; payload: Omit<ActivityEvent, 'id' | 'timestamp'> }
+  | { type: 'SET_CUSTOMER_TAB'; payload: CustomerProfileTab }
   | { type: 'RESET' };
 
 function reducer(state: EstimatorState, action: Action): EstimatorState {
@@ -197,6 +219,22 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
     case 'SET_PIPELINE_AREA':
       return { ...state, activePipelineArea: action.payload };
 
+    case 'SET_CUSTOMER_PROFILE':
+      return { ...state, customerProfile: { ...state.customerProfile, ...action.payload } };
+
+    case 'ADD_ACTIVITY_EVENT':
+      return {
+        ...state,
+        activityFeed: [{
+          ...action.payload,
+          id: nanoid(8),
+          timestamp: new Date().toISOString(),
+        }, ...state.activityFeed],
+      };
+
+    case 'SET_CUSTOMER_TAB':
+      return { ...state, activeCustomerTab: action.payload };
+
     case 'RESET':
       return {
         ...initialState,
@@ -218,6 +256,9 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
 
 interface EstimatorContextValue {
   state: EstimatorState;
+  setCustomerProfile: (payload: Partial<CustomerProfile>) => void;
+  addActivityEvent: (payload: Omit<ActivityEvent, 'id' | 'timestamp'>) => void;
+  setCustomerTab: (tab: CustomerProfileTab) => void;
   setSection: (s: AppSection) => void;
   setJobInfo: (payload: Partial<JobInfo>) => void;
   setGlobal: (payload: Partial<GlobalSettings>) => void;
@@ -275,6 +316,12 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'REMOVE_OPPORTUNITY', id }), []);
   const setPipelineArea = useCallback((area: PipelineArea) =>
     dispatch({ type: 'SET_PIPELINE_AREA', payload: area }), []);
+  const setCustomerProfile = useCallback((payload: Partial<CustomerProfile>) =>
+    dispatch({ type: 'SET_CUSTOMER_PROFILE', payload }), []);
+  const addActivityEvent = useCallback((payload: Omit<ActivityEvent, 'id' | 'timestamp'>) =>
+    dispatch({ type: 'ADD_ACTIVITY_EVENT', payload }), []);
+  const setCustomerTab = useCallback((tab: CustomerProfileTab) =>
+    dispatch({ type: 'SET_CUSTOMER_TAB', payload: tab }), []);
   const reset = useCallback(() => dispatch({ type: 'RESET' }), []);
 
   return (
@@ -285,6 +332,7 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
       upsertEstimateOverride, removeEstimateOverride,
       setSignature, clearSignature,
       addOpportunity, updateOpportunity, removeOpportunity, setPipelineArea,
+      setCustomerProfile, addActivityEvent, setCustomerTab,
       reset,
     }}>
       {children}
