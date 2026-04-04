@@ -24,7 +24,7 @@ import {
   CreditCard, Bell, MessageSquare, AtSign, Star, Paperclip, FileText,
   Activity, Send, CheckCircle2, XCircle, Clock, PhoneCall, Wallet,
   ExternalLink, Edit3, Save, X, AlertCircle, TrendingUp, Archive,
-  RefreshCw,
+  RefreshCw, FolderOpen,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { nanoid } from 'nanoid';
@@ -211,7 +211,7 @@ function AddOpportunityForm({
 // ─── Opportunity Card ─────────────────────────────────────────
 function OpportunityCard({
   opp, stages, area, onUpdate, onRemove,
-  onConvertToEstimate, onConvertToJob, onArchive,
+  onConvertToEstimate, onConvertToJob, onArchive, onOpen,
 }: {
   opp: {
     id: string; title: string; stage: OpportunityStage; value: number;
@@ -226,6 +226,7 @@ function OpportunityCard({
   onConvertToEstimate?: (id: string, title: string, value: number) => void;
   onConvertToJob?: (id: string, title: string, value: number) => void;
   onArchive?: (id: string, value: number) => void;
+  onOpen?: (id: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -262,6 +263,17 @@ function OpportunityCard({
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
+          {/* Open in estimate builder */}
+          {!isArchived && onOpen && (
+            <button
+              onClick={() => onOpen(opp.id)}
+              title="Open in estimate builder"
+              className="flex items-center gap-1 px-2 py-1 bg-slate-800 text-white rounded-md text-[11px] font-semibold hover:bg-slate-700 transition-colors"
+            >
+              <FolderOpen size={11} />
+              <span className="hidden sm:inline">Open</span>
+            </button>
+          )}
           <button onClick={() => setExpanded(e => !e)} className="p-1 rounded hover:bg-muted transition-colors text-muted-foreground">
             {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </button>
@@ -357,11 +369,10 @@ function OpportunityCard({
     </div>
   );
 }
-
-// ─── Pipeline Area Panel ──────────────────────────────────────
+// ─── Pipeline Area Panel ─────────────────────────────────────────
 function PipelineAreaPanel({
   area, stages, opportunities, onAdd, onUpdate, onRemove,
-  onConvertToEstimate, onConvertToJob, onArchive,
+  onConvertToEstimate, onConvertToJob, onArchive, onOpen,
 }: {
   area: PipelineArea;
   stages: OpportunityStage[];
@@ -377,6 +388,7 @@ function PipelineAreaPanel({
   onConvertToEstimate?: (id: string, title: string, value: number) => void;
   onConvertToJob?: (id: string, title: string, value: number) => void;
   onArchive?: (id: string, value: number) => void;
+  onOpen?: (id: string) => void;
 }) {
   const [showAdd, setShowAdd] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
@@ -449,6 +461,7 @@ function PipelineAreaPanel({
                       onConvertToEstimate={onConvertToEstimate}
                       onConvertToJob={onConvertToJob}
                       onArchive={onArchive}
+                      onOpen={onOpen}
                     />
                   ))}
                 </div>
@@ -513,6 +526,7 @@ export default function CustomerSection() {
     state, setJobInfo, setCustomerProfile, addActivityEvent, setCustomerTab,
     addOpportunity, updateOpportunity, removeOpportunity, setPipelineArea,
     convertLeadToEstimate, convertEstimateToJob, archiveJob,
+    setActiveOpportunity, setSection,
   } = useEstimator();
   const { jobInfo, customerProfile, activityFeed, activeCustomerTab, opportunities, activePipelineArea } = state;
 
@@ -996,6 +1010,15 @@ export default function CustomerSection() {
         onConvertToEstimate={area === 'lead' ? convertLeadToEstimate : undefined}
         onConvertToJob={area === 'estimate' ? convertEstimateToJob : undefined}
         onArchive={area === 'job' ? archiveJob : undefined}
+        onOpen={(id) => {
+          setActiveOpportunity(id);
+          // Navigate to the appropriate section based on area
+          if (area === 'lead' || area === 'estimate') {
+            setSection('sales');
+          } else {
+            setSection('calculator');
+          }
+        }}
       />
     );
   };

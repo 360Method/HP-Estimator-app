@@ -198,6 +198,8 @@ export interface EstimatorState {
   customerProfile: CustomerProfile;
   activityFeed: ActivityEvent[];
   activeCustomerTab: CustomerProfileTab;
+  // Active opportunity (null = viewing customer profile; set = inside estimate builder)
+  activeOpportunityId: string | null;
 }
 
 // ── CRM Pipeline Types ──────────────────────────────────────

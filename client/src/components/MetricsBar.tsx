@@ -2,8 +2,14 @@
 // MetricsBar — App header + slim metrics context bar
 // Design: Full app header with logo, search, and backend nav
 //         icons (placeholders for future backend modules).
-//         Financial metrics (hard cost, price, GM, GP) live in
-//         a slim context bar above the estimator section tabs.
+//
+// Navigation logic:
+//   - When activeOpportunityId is null → user is on the
+//     customer profile. Only the "Customer Info" tab is shown
+//     (no Sales/Calculator/Estimate tabs).
+//   - When activeOpportunityId is set → user is inside an
+//     opportunity / estimate builder. All 4 tabs are shown
+//     plus a breadcrumb "← Back to Profile" button.
 // ============================================================
 
 import { useState } from 'react';
@@ -14,7 +20,7 @@ import { toast } from 'sonner';
 import {
   Search, LayoutDashboard, Users, Inbox, GitBranch,
   DollarSign, BarChart2, Megaphone, Settings, UserCircle,
-  ChevronDown,
+  ChevronDown, ArrowLeft,
 } from 'lucide-react';
 
 const HP_LOGO = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg';
@@ -23,8 +29,8 @@ interface MetricsBarProps {
   totals: TotalsResult;
 }
 
-const NAV_ITEMS: { id: AppSection; icon: string; label: string; shortLabel: string }[] = [
-  { id: 'customer',   icon: '👤', label: 'Customer Info', shortLabel: 'Client'   },
+// All 4 estimator section tabs (only shown when inside an opportunity)
+const BUILDER_TABS: { id: AppSection; icon: string; label: string; shortLabel: string }[] = [
   { id: 'sales',      icon: '🛍', label: 'Sales View',   shortLabel: 'Sales'    },
   { id: 'calculator', icon: '🧮', label: 'Calculator',   shortLabel: 'Calc'     },
   { id: 'estimate',   icon: '📄', label: 'Estimate',     shortLabel: 'Estimate' },
@@ -43,11 +49,19 @@ const BACKEND_NAV = [
 
 export default function MetricsBar({ totals }: MetricsBarProps) {
   const { totalHard, totalPrice, totalGP, totalGM } = totals;
-  const { state, setSection, reset } = useEstimator();
+  const { state, setSection, setActiveOpportunity, reset } = useEstimator();
   const [searchQuery, setSearchQuery] = useState('');
 
   const minGM = totalHard < 2000 ? 0.40 : 0.30;
   const gmFlag = getMarginFlag(totalGM, totalHard);
+
+  // Are we inside an opportunity / estimate builder?
+  const insideOpportunity = !!state.activeOpportunityId;
+
+  // Find the active opportunity for the breadcrumb label
+  const activeOpp = insideOpportunity
+    ? state.opportunities.find(o => o.id === state.activeOpportunityId)
+    : null;
 
   // Hide internal cost data on customer-facing screens
   const isCustomerFacing = state.activeSection === 'sales' || state.activeSection === 'estimate';
@@ -68,6 +82,11 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
 
   const handleBackendNav = (label: string) => {
     toast.info(`${label} — coming soon`, { description: 'This module is part of the upcoming HP backend.' });
+  };
+
+  const handleBackToProfile = () => {
+    setActiveOpportunity(null);
+    // activeSection resets to 'customer' automatically in the reducer
   };
 
   return (
@@ -154,8 +173,8 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
       </div>
 
       {/* ── SLIM METRICS CONTEXT BAR ───────────────────────────── */}
-      {/* Hidden on customer-facing screens; shows financial summary for estimator */}
-      {!isCustomerFacing && totalPrice > 0 && (
+      {/* Only visible when inside an opportunity, on internal screens, with data */}
+      {insideOpportunity && !isCustomerFacing && totalPrice > 0 && (
         <div className="bg-slate-50 border-t border-border">
           <div className="container">
             <div className="flex items-center gap-5 py-1.5 text-xs overflow-x-auto">
@@ -177,26 +196,64 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
         </div>
       )}
 
-      {/* ── ESTIMATOR SECTION TABS ─────────────────────────────── */}
+      {/* ── NAVIGATION BAR ─────────────────────────────────────── */}
       <div className="border-t border-border bg-white">
         <div className="container">
-          <div className="flex -mx-4 px-0">
-            {NAV_ITEMS.map(item => (
+          {insideOpportunity ? (
+            /* ── Estimate builder tabs (inside an opportunity) ── */
+            <div className="flex items-stretch -mx-4 px-0">
+              {/* Back to profile button */}
               <button
-                key={item.id}
-                onClick={() => setSection(item.id)}
-                className={`flex-1 flex flex-col items-center gap-0.5 py-2 text-[11px] font-semibold border-b-2 transition-colors min-w-0 ${
-                  state.activeSection === item.id
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-muted-foreground hover:text-foreground'
-                }`}
+                onClick={handleBackToProfile}
+                className="flex items-center gap-1.5 px-4 py-2 text-[11px] font-semibold text-muted-foreground hover:text-foreground hover:bg-muted/50 border-b-2 border-transparent transition-colors shrink-0"
               >
-                <span className="text-sm leading-none">{item.icon}</span>
-                <span className="leading-none hidden sm:inline">{item.label}</span>
-                <span className="leading-none sm:hidden">{item.shortLabel}</span>
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">
+                  {state.jobInfo.client ? state.jobInfo.client : 'Profile'}
+                </span>
+                <span className="sm:hidden">Back</span>
               </button>
-            ))}
-          </div>
+
+              {/* Divider */}
+              <div className="flex items-center px-1 text-muted-foreground/30 text-sm select-none">/</div>
+
+              {/* Opportunity name (non-clickable breadcrumb) */}
+              <div className="flex items-center px-2 py-2 text-[11px] font-semibold text-foreground truncate max-w-[120px] sm:max-w-xs">
+                {activeOpp?.title ?? 'Opportunity'}
+              </div>
+
+              {/* Spacer */}
+              <div className="flex-1" />
+
+              {/* Builder section tabs */}
+              {BUILDER_TABS.map(item => (
+                <button
+                  key={item.id}
+                  onClick={() => setSection(item.id)}
+                  className={`flex flex-col items-center gap-0.5 px-3 sm:px-4 py-2 text-[11px] font-semibold border-b-2 transition-colors min-w-0 ${
+                    state.activeSection === item.id
+                      ? 'border-primary text-primary'
+                      : 'border-transparent text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <span className="text-sm leading-none">{item.icon}</span>
+                  <span className="leading-none hidden sm:inline">{item.label}</span>
+                  <span className="leading-none sm:hidden">{item.shortLabel}</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            /* ── Profile-only nav (not inside an opportunity) ── */
+            <div className="flex items-center -mx-4 px-4 py-2 gap-2">
+              <span className="text-[11px] font-semibold text-primary flex items-center gap-1.5">
+                <span className="text-sm">👤</span>
+                <span>Customer Profile</span>
+              </span>
+              <span className="text-xs text-muted-foreground ml-2">
+                Open an opportunity to access the estimate builder →
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </div>
