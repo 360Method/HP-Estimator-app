@@ -1100,7 +1100,7 @@ export default function CustomerSection() {
       {/* ── Tab Nav ── */}
       <div className="bg-white border-b border-border sticky top-[var(--header-h,112px)] z-10">
         <div className="max-w-6xl mx-auto px-4">
-          <div className="flex overflow-x-auto scrollbar-hide -mb-px">
+          <div className="flex overflow-x-auto scrollbar-hide -mb-px gap-0">
             {CUSTOMER_TABS.map(tab => {
               const count = tab.key === 'leads' ? opportunities.filter(o => o.area === 'lead' && !o.archived).length
                 : tab.key === 'estimates' ? opportunities.filter(o => o.area === 'estimate' && !o.archived).length
@@ -1110,13 +1110,13 @@ export default function CustomerSection() {
                 <button
                   key={tab.key}
                   onClick={() => handleTabClick(tab.key)}
-                  className={`flex items-center gap-1.5 px-4 py-3 text-xs font-semibold whitespace-nowrap border-b-2 transition-colors ${
+                  className={`shrink-0 flex items-center gap-1 px-3 sm:px-4 py-3 text-xs font-semibold whitespace-nowrap border-b-2 transition-colors ${
                     activeCustomerTab === tab.key
                       ? 'border-primary text-primary'
                       : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
                   }`}
                 >
-                  {tab.icon}
+                  <span className="hidden sm:inline-flex">{tab.icon}</span>
                   {tab.label}
                   {count > 0 && (
                     <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold ${
