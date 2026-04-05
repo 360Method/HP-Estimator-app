@@ -2,12 +2,7 @@
 // PipelineBoard — Shared Kanban + Table view for Leads / Estimates / Jobs
 //
 // Design: HP Industrial — clean white cards, amber accents
-// Features:
-//   - View toggle: Kanban (drag-and-drop) | Table
-//   - Kanban: one column per stage, drag cards between columns
-//   - Table: sortable rows with inline stage dropdown
-//   - Works in customer profile tabs AND global Pipeline page
-//   - Compact mode for customer profile (fewer columns visible)
+// Drag-and-drop: @dnd-kit with useDroppable columns + useSortable cards
 // ============================================================
 
 import { useState, useCallback } from 'react';
@@ -18,9 +13,11 @@ import {
   DragOverlay,
   DragStartEvent,
   PointerSensor,
+  TouchSensor,
   useSensor,
   useSensors,
-  closestCorners,
+  closestCenter,
+  useDroppable,
 } from '@dnd-kit/core';
 import {
   SortableContext,
@@ -31,7 +28,7 @@ import { CSS } from '@dnd-kit/utilities';
 import {
   LayoutGrid, List, Plus, GripVertical, ExternalLink,
   DollarSign, Archive, ArrowRight, ChevronDown, Trash2,
-  ArrowUpDown, Calendar, Hash,
+  ArrowUpDown,
 } from 'lucide-react';
 import { Opportunity, PipelineArea, OpportunityStage } from '@/lib/types';
 import { toast } from 'sonner';
@@ -93,9 +90,7 @@ export interface PipelineBoardProps {
   onConvertToJob?: (id: string, title: string, value: number) => void;
   onArchive?: (id: string, value: number) => void;
   onOpen?: (id: string) => void;
-  /** Customer name for display in global pipeline */
   customerName?: string;
-  /** If true, show a compact single-column layout (customer profile) */
   compact?: boolean;
 }
 
@@ -103,7 +98,7 @@ export interface PipelineBoardProps {
 function KanbanCard({
   opp, area, stages, onUpdate, onRemove,
   onConvertToEstimate, onConvertToJob, onArchive, onOpen,
-  customerName, isDragging,
+  customerName,
 }: {
   opp: Opportunity;
   area: PipelineArea;
@@ -115,16 +110,14 @@ function KanbanCard({
   onArchive?: (id: string, value: number) => void;
   onOpen?: (id: string) => void;
   customerName?: string;
-  isDragging?: boolean;
 }) {
   const {
-    attributes, listeners, setNodeRef, transform, transition, isDragging: isSortableDragging,
+    attributes, listeners, setNodeRef, transform, transition, isDragging,
   } = useSortable({ id: opp.id });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isSortableDragging ? 0.4 : 1,
   };
 
   const [showActions, setShowActions] = useState(false);
@@ -140,7 +133,7 @@ function KanbanCard({
     <div
       ref={setNodeRef}
       style={style}
-      className={`bg-white border border-border rounded-xl shadow-sm hover:shadow-md transition-shadow group ${isDragging ? 'shadow-xl ring-2 ring-primary/30' : ''}`}
+      className={`bg-white border border-border rounded-xl shadow-sm hover:shadow-md transition-shadow group ${isDragging ? 'opacity-30' : ''}`}
     >
       {/* Card header */}
       <div className="flex items-start gap-2 p-3">
@@ -148,29 +141,26 @@ function KanbanCard({
         <button
           {...attributes}
           {...listeners}
-          className="mt-0.5 shrink-0 text-muted-foreground/40 hover:text-muted-foreground cursor-grab active:cursor-grabbing touch-none"
+          className="mt-0.5 shrink-0 text-muted-foreground/40 hover:text-muted-foreground cursor-grab active:cursor-grabbing touch-none select-none"
           aria-label="Drag to reorder"
+          onPointerDown={e => e.stopPropagation()}
         >
           <GripVertical size={14} />
         </button>
 
         <div className="flex-1 min-w-0">
-          {/* Customer name (global pipeline) */}
           {customerName && (
             <div className="text-[10px] font-semibold text-primary uppercase tracking-wider mb-0.5 truncate">
               {customerName}
             </div>
           )}
-          {/* Title */}
           <div className="text-sm font-semibold text-foreground truncate">{opp.title}</div>
-          {/* Value */}
           {opp.value > 0 && (
             <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
               <DollarSign size={10} />
               {fmtDollar(opp.value)}
             </div>
           )}
-          {/* Notes preview */}
           {opp.notes && (
             <div className="text-[11px] text-muted-foreground mt-1 line-clamp-2 leading-relaxed">
               {opp.notes}
@@ -178,7 +168,6 @@ function KanbanCard({
           )}
         </div>
 
-        {/* Actions toggle */}
         <button
           onClick={() => setShowActions(s => !s)}
           className="shrink-0 p-1 rounded text-muted-foreground/50 hover:text-foreground hover:bg-muted/50 transition-colors opacity-0 group-hover:opacity-100"
@@ -190,7 +179,6 @@ function KanbanCard({
       {/* Expanded actions */}
       {showActions && (
         <div className="border-t border-border px-3 py-2 space-y-1.5 bg-slate-50/80 rounded-b-xl">
-          {/* Stage selector */}
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-muted-foreground w-12 shrink-0">Stage</span>
             <div className="relative flex-1">
@@ -208,7 +196,6 @@ function KanbanCard({
             </div>
           </div>
 
-          {/* Action buttons */}
           <div className="flex flex-wrap gap-1.5 pt-1">
             {onOpen && (
               <button
@@ -258,11 +245,12 @@ function KanbanCard({
   );
 }
 
-// ── Kanban Column ─────────────────────────────────────────────
+// ── Droppable Kanban Column ───────────────────────────────────
+// Each column is registered as a droppable target with its stage name as the id.
 function KanbanColumn({
   stage, opps, area, stages, onUpdate, onRemove,
   onConvertToEstimate, onConvertToJob, onArchive, onOpen,
-  customerName, isOver,
+  customerName,
 }: {
   stage: string;
   opps: Opportunity[];
@@ -275,8 +263,9 @@ function KanbanColumn({
   onArchive?: (id: string, value: number) => void;
   onOpen?: (id: string) => void;
   customerName?: string;
-  isOver?: boolean;
 }) {
+  // Register this column as a droppable target using the stage name as id
+  const { setNodeRef, isOver } = useDroppable({ id: stage });
   const colValue = opps.reduce((s, o) => s + o.value, 0);
 
   return (
@@ -284,7 +273,6 @@ function KanbanColumn({
       className={`flex flex-col min-w-[220px] w-[220px] sm:min-w-[240px] sm:w-[240px] shrink-0 rounded-xl border transition-colors ${
         isOver ? 'border-primary/50 bg-primary/5' : 'border-border bg-slate-50/60'
       }`}
-      data-column-id={stage}
     >
       {/* Column header */}
       <div className="flex items-center justify-between px-3 py-2.5 border-b border-border">
@@ -299,8 +287,8 @@ function KanbanColumn({
         )}
       </div>
 
-      {/* Cards */}
-      <div className="flex-1 p-2 space-y-2 min-h-[80px]">
+      {/* Cards — ref is on the cards container so the whole column body is the drop zone */}
+      <div ref={setNodeRef} className="flex-1 p-2 space-y-2 min-h-[80px]">
         <SortableContext items={opps.map(o => o.id)} strategy={verticalListSortingStrategy}>
           {opps.map(opp => (
             <KanbanCard
@@ -319,7 +307,9 @@ function KanbanColumn({
           ))}
         </SortableContext>
         {opps.length === 0 && (
-          <div className="text-center py-4 text-[10px] text-muted-foreground/50 border border-dashed border-border/50 rounded-lg">
+          <div className={`text-center py-4 text-[10px] rounded-lg border border-dashed transition-colors ${
+            isOver ? 'border-primary/40 text-primary bg-primary/5' : 'border-border/50 text-muted-foreground/50'
+          }`}>
             Drop here
           </div>
         )}
@@ -345,99 +335,92 @@ function TableRow({
   onOpen?: (id: string) => void;
   customerName?: string;
 }) {
-  const [showActions, setShowActions] = useState(false);
-
   return (
-    <>
-      <tr
-        className="hover:bg-slate-50 transition-colors group cursor-pointer"
-        onClick={() => setShowActions(s => !s)}
-      >
-        {customerName && (
-          <td className="px-4 py-3 text-xs font-semibold text-primary truncate max-w-[120px]">
-            {customerName}
-          </td>
+    <tr className="hover:bg-slate-50 transition-colors group">
+      {customerName !== undefined && (
+        <td className="px-4 py-3 text-xs font-semibold text-primary truncate max-w-[120px]">
+          {customerName}
+        </td>
+      )}
+      <td className="px-4 py-3">
+        <div className="font-medium text-sm text-foreground">{opp.title}</div>
+        {opp.notes && (
+          <div className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{opp.notes}</div>
         )}
-        <td className="px-4 py-3">
-          <div className="font-medium text-sm text-foreground">{opp.title}</div>
-          {opp.notes && (
-            <div className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{opp.notes}</div>
-          )}
-        </td>
-        <td className="px-4 py-3">
-          <div className="relative inline-block" onClick={e => e.stopPropagation()}>
-            <select
-              value={opp.stage}
-              onChange={e => {
-                onUpdate(opp.id, { stage: e.target.value as OpportunityStage });
-                toast.success(`Moved to "${e.target.value}"`);
-              }}
-              className={`appearance-none pl-2 pr-6 py-1 text-[11px] font-semibold border rounded-full cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring ${stageColor(opp.stage)}`}
-            >
-              {stages.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-            <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-          </div>
-        </td>
-        <td className="px-4 py-3 text-right font-mono text-sm hidden md:table-cell">
-          {opp.value > 0 ? (
-            <span className="font-semibold text-foreground">{fmtDollar(opp.value)}</span>
-          ) : (
-            <span className="text-muted-foreground">—</span>
-          )}
-        </td>
-        <td className="px-4 py-3 text-xs text-muted-foreground hidden lg:table-cell">
-          {fmtDate(opp.createdAt)}
-        </td>
-        <td className="px-4 py-3 text-right">
-          <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
-            {onOpen && (
-              <button
-                onClick={() => onOpen(opp.id)}
-                className="px-2 py-1 text-[10px] font-semibold border border-border rounded-lg text-muted-foreground hover:text-primary hover:border-primary transition-colors"
-              >
-                Open
-              </button>
-            )}
-            {onConvertToEstimate && (
-              <button
-                onClick={() => onConvertToEstimate(opp.id, opp.title, opp.value)}
-                className="px-2 py-1 text-[10px] font-semibold border border-border rounded-lg text-muted-foreground hover:text-primary hover:border-primary transition-colors hidden sm:inline-flex"
-              >
-                → Est
-              </button>
-            )}
-            {onConvertToJob && (
-              <button
-                onClick={() => onConvertToJob(opp.id, opp.title, opp.value)}
-                className="px-2 py-1 text-[10px] font-semibold border border-border rounded-lg text-muted-foreground hover:text-primary hover:border-primary transition-colors hidden sm:inline-flex"
-              >
-                → Job
-              </button>
-            )}
-            {onArchive && !opp.archived && (
-              <button
-                onClick={() => onArchive(opp.id, opp.value)}
-                className="px-2 py-1 text-[10px] font-semibold border border-border rounded-lg text-muted-foreground hover:text-emerald-700 hover:border-emerald-300 transition-colors hidden sm:inline-flex"
-              >
-                Archive
-              </button>
-            )}
+      </td>
+      <td className="px-4 py-3">
+        <div className="relative inline-block">
+          <select
+            value={opp.stage}
+            onChange={e => {
+              onUpdate(opp.id, { stage: e.target.value as OpportunityStage });
+              toast.success(`Moved to "${e.target.value}"`);
+            }}
+            className={`appearance-none pl-2 pr-6 py-1 text-[11px] font-semibold border rounded-full cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring ${stageColor(opp.stage)}`}
+          >
+            {stages.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+        </div>
+      </td>
+      <td className="px-4 py-3 text-right font-mono text-sm hidden md:table-cell">
+        {opp.value > 0 ? (
+          <span className="font-semibold text-foreground">{fmtDollar(opp.value)}</span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </td>
+      <td className="px-4 py-3 text-xs text-muted-foreground hidden lg:table-cell">
+        {fmtDate(opp.createdAt)}
+      </td>
+      <td className="px-4 py-3 text-right">
+        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          {onOpen && (
             <button
-              onClick={() => {
-                if (window.confirm(`Delete "${opp.title}"?`)) {
-                  onRemove(opp.id);
-                  toast.success('Removed');
-                }
-              }}
-              className="p-1 text-muted-foreground/50 hover:text-destructive transition-colors"
+              onClick={() => onOpen(opp.id)}
+              className="px-2 py-1 text-[10px] font-semibold border border-border rounded-lg text-muted-foreground hover:text-primary hover:border-primary transition-colors"
             >
-              <Trash2 size={12} />
+              Open
             </button>
-          </div>
-        </td>
-      </tr>
-    </>
+          )}
+          {onConvertToEstimate && (
+            <button
+              onClick={() => onConvertToEstimate(opp.id, opp.title, opp.value)}
+              className="px-2 py-1 text-[10px] font-semibold border border-border rounded-lg text-muted-foreground hover:text-primary hover:border-primary transition-colors hidden sm:inline-flex"
+            >
+              → Est
+            </button>
+          )}
+          {onConvertToJob && (
+            <button
+              onClick={() => onConvertToJob(opp.id, opp.title, opp.value)}
+              className="px-2 py-1 text-[10px] font-semibold border border-border rounded-lg text-muted-foreground hover:text-primary hover:border-primary transition-colors hidden sm:inline-flex"
+            >
+              → Job
+            </button>
+          )}
+          {onArchive && !opp.archived && (
+            <button
+              onClick={() => onArchive(opp.id, opp.value)}
+              className="px-2 py-1 text-[10px] font-semibold border border-border rounded-lg text-muted-foreground hover:text-emerald-700 hover:border-emerald-300 transition-colors hidden sm:inline-flex"
+            >
+              Archive
+            </button>
+          )}
+          <button
+            onClick={() => {
+              if (window.confirm(`Delete "${opp.title}"?`)) {
+                onRemove(opp.id);
+                toast.success('Removed');
+              }
+            }}
+            className="p-1 text-muted-foreground/50 hover:text-destructive transition-colors"
+          >
+            <Trash2 size={12} />
+          </button>
+        </div>
+      </td>
+    </tr>
   );
 }
 
@@ -459,7 +442,6 @@ function AddForm({
     e.preventDefault();
     if (!title.trim()) return;
     onAdd(title.trim(), stage, parseFloat(value) || 0, notes.trim());
-    toast.success(`${area === 'lead' ? 'Lead' : area === 'estimate' ? 'Estimate' : 'Job'} added`);
   };
 
   return (
@@ -533,12 +515,13 @@ export default function PipelineBoard({
   const [showAdd, setShowAdd] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [overColumnId, setOverColumnId] = useState<string | null>(null);
   const [sortField, setSortField] = useState<'title' | 'stage' | 'value' | 'created'>('created');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
+  // PointerSensor with a small movement threshold + TouchSensor for mobile
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
   );
 
   const activeOpps = opportunities.filter(o => !o.archived);
@@ -549,39 +532,24 @@ export default function PipelineBoard({
   const byStage: Record<string, Opportunity[]> = {};
   for (const s of stages) byStage[s] = [];
   for (const opp of activeOpps) {
-    if (byStage[opp.stage]) byStage[opp.stage].push(opp);
+    if (byStage[opp.stage] !== undefined) byStage[opp.stage].push(opp);
     else byStage[stages[0]].push(opp);
   }
 
-  // Active drag card
+  // Active drag card for DragOverlay
   const activeOpp = activeId ? opportunities.find(o => o.id === activeId) : null;
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
     setActiveId(event.active.id as string);
   }, []);
 
-  const handleDragOver = useCallback((event: DragOverEvent) => {
-    const { over } = event;
-    if (!over) { setOverColumnId(null); return; }
-
-    // Check if hovering over a column header (data-column-id) or a card
-    const overId = over.id as string;
-    // If overId is a stage name, it's a column
-    if (stages.includes(overId as OpportunityStage)) {
-      setOverColumnId(overId);
-      return;
-    }
-    // Otherwise find which column the card belongs to
-    const overOpp = opportunities.find(o => o.id === overId);
-    if (overOpp) setOverColumnId(overOpp.stage);
-    else setOverColumnId(null);
-  }, [stages, opportunities]);
+  const handleDragOver = useCallback((_event: DragOverEvent) => {
+    // Visual feedback is handled by useDroppable's isOver in each column
+  }, []);
 
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
     setActiveId(null);
-    setOverColumnId(null);
-
     if (!over) return;
 
     const draggedOpp = opportunities.find(o => o.id === active.id);
@@ -589,7 +557,7 @@ export default function PipelineBoard({
 
     const overId = over.id as string;
 
-    // Dropped on a stage column
+    // Case 1: Dropped directly on a column (over.id === stage name from useDroppable)
     if (stages.includes(overId as OpportunityStage)) {
       if (draggedOpp.stage !== overId) {
         onUpdate(draggedOpp.id, { stage: overId as OpportunityStage });
@@ -598,7 +566,7 @@ export default function PipelineBoard({
       return;
     }
 
-    // Dropped on another card — move to that card's stage
+    // Case 2: Dropped on another card — move to that card's column
     const overOpp = opportunities.find(o => o.id === overId);
     if (overOpp && draggedOpp.stage !== overOpp.stage) {
       onUpdate(draggedOpp.id, { stage: overOpp.stage });
@@ -631,7 +599,6 @@ export default function PipelineBoard({
     <div className="space-y-4">
       {/* ── Toolbar ── */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        {/* Stats */}
         <div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap">
           <span><strong className="text-foreground">{activeOpps.length}</strong> active</span>
           {archivedOpps.length > 0 && (
@@ -645,7 +612,6 @@ export default function PipelineBoard({
           )}
         </div>
 
-        {/* Right controls */}
         <div className="flex items-center gap-2">
           {/* View toggle */}
           <div className="flex items-center border border-border rounded-lg overflow-hidden">
@@ -669,7 +635,6 @@ export default function PipelineBoard({
             </button>
           </div>
 
-          {/* Add button */}
           <button
             onClick={() => setShowAdd(s => !s)}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-semibold hover:bg-primary/90 transition-colors"
@@ -703,7 +668,7 @@ export default function PipelineBoard({
       {view === 'kanban' && activeOpps.length > 0 && (
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCorners}
+          collisionDetection={closestCenter}
           onDragStart={handleDragStart}
           onDragOver={handleDragOver}
           onDragEnd={handleDragEnd}
@@ -724,16 +689,15 @@ export default function PipelineBoard({
                   onArchive={onArchive}
                   onOpen={onOpen}
                   customerName={customerName}
-                  isOver={overColumnId === stage}
                 />
               ))}
             </div>
           </div>
 
-          {/* Drag overlay */}
-          <DragOverlay>
+          {/* Drag overlay — ghost card that follows the cursor */}
+          <DragOverlay dropAnimation={null}>
             {activeOpp ? (
-              <div className="bg-white border border-primary/30 rounded-xl shadow-2xl p-3 w-[220px] opacity-95">
+              <div className="bg-white border-2 border-primary/40 rounded-xl shadow-2xl p-3 w-[220px] rotate-1 opacity-95">
                 <div className="text-sm font-semibold text-foreground">{activeOpp.title}</div>
                 {activeOpp.value > 0 && (
                   <div className="text-xs text-muted-foreground mt-0.5">{fmtDollar(activeOpp.value)}</div>

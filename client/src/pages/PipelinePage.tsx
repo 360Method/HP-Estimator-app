@@ -1,7 +1,7 @@
 // ============================================================
 // PipelinePage — Global pipeline view across ALL customers
-// Shows Leads / Estimates / Jobs tabs, each with the
-// shared PipelineBoard (Kanban + Table views)
+// Reads from state.customers[*].opportunities (persisted source)
+// so it always shows the latest data regardless of active customer.
 // ============================================================
 
 import { useState, useMemo } from 'react';
@@ -36,33 +36,43 @@ export default function PipelinePage() {
 
   const [activeTab, setActiveTab] = useState<PipelineTab>('lead');
 
-  // Aggregate all opportunities from all customers + current working context
+  // ── Aggregate all opportunities from ALL customers ──────────
+  // We read directly from state.customers[*].opportunities which is always
+  // kept in sync by the reducer (ADD/UPDATE/ARCHIVE all sync back to customers).
+  // We also include any opportunities in state.opportunities that don't belong
+  // to a known customer (edge case: no active customer when opp was created).
   const allOpportunities = useMemo(() => {
     const seen = new Set<string>();
     const opps: (Opportunity & { customerName: string; customerId: string | null })[] = [];
 
-    // From customers list
-    state.customers.forEach(customer => {
-      const name = customer.displayName || [customer.firstName, customer.lastName].filter(Boolean).join(' ') || 'Unknown';
-      (customer.opportunities || []).forEach(opp => {
+    // Primary source: persisted customer records
+    for (const customer of state.customers) {
+      const name =
+        [customer.firstName, customer.lastName].filter(Boolean).join(' ') ||
+        customer.displayName ||
+        'Unknown';
+      for (const opp of customer.opportunities ?? []) {
         if (!seen.has(opp.id)) {
           seen.add(opp.id);
           opps.push({ ...opp, customerName: name, customerId: customer.id });
         }
-      });
-    });
+      }
+    }
 
-    // From current working context (if no active customer)
-    state.opportunities.forEach(opp => {
+    // Fallback: working-context opportunities not yet matched to a customer record
+    for (const opp of state.opportunities) {
       if (!seen.has(opp.id)) {
         seen.add(opp.id);
         opps.push({
           ...opp,
-          customerName: opp.clientSnapshot?.client || state.jobInfo.client || 'Unknown',
+          customerName:
+            (opp as any).clientSnapshot?.client ||
+            state.jobInfo.client ||
+            'Unknown',
           customerId: state.activeCustomerId,
         });
       }
-    });
+    }
 
     return opps;
   }, [state.customers, state.opportunities, state.activeCustomerId, state.jobInfo.client]);
@@ -72,19 +82,19 @@ export default function PipelinePage() {
     [allOpportunities, activeTab],
   );
 
-  // Stats per tab
+  // Stats per tab (active only)
   const stats = useMemo(() => {
     const result: Record<PipelineTab, { count: number; value: number }> = {
       lead:     { count: 0, value: 0 },
       estimate: { count: 0, value: 0 },
       job:      { count: 0, value: 0 },
     };
-    allOpportunities.forEach(o => {
+    for (const o of allOpportunities) {
       if (!o.archived) {
         result[o.area as PipelineTab].count++;
         result[o.area as PipelineTab].value += o.value;
       }
-    });
+    }
     return result;
   }, [allOpportunities]);
 
@@ -93,57 +103,26 @@ export default function PipelinePage() {
     activeTab === 'estimate' ? ESTIMATE_STAGES :
     JOB_STAGES;
 
-  // Handlers — route to correct customer context
+  // ── Handlers ────────────────────────────────────────────────
   const handleOpen = (id: string) => {
     const opp = allOpportunities.find(o => o.id === id);
     if (!opp) return;
     if (opp.customerId) {
       setActiveCustomer(opp.customerId);
+      // Small delay to let the customer load into working state
       setTimeout(() => {
         setActiveOpportunity(id);
-        if (opp.area === 'job') setSection('job-details');
-        else setSection('sales');
-      }, 50);
+        setSection(opp.area === 'job' ? 'job-details' : 'sales');
+      }, 60);
     } else {
       setActiveOpportunity(id);
-      if (opp.area === 'job') setSection('job-details');
-      else setSection('sales');
+      setSection(opp.area === 'job' ? 'job-details' : 'sales');
     }
-  };
-
-  const handleUpdate = (id: string, payload: Partial<Opportunity>) => {
-    updateOpportunity(id, payload);
-  };
-
-  const handleRemove = (id: string) => {
-    removeOpportunity(id);
   };
 
   const handleAdd = (title: string, stage: OpportunityStage, value: number, notes: string) => {
     addOpportunity({ area: activeTab, stage, title, value, notes, archived: false });
   };
-
-  const handleConvertToEstimate = (id: string, title: string, value: number) => {
-    convertLeadToEstimate(id, title, value);
-  };
-
-  const handleConvertToJob = (id: string, title: string, value: number) => {
-    convertEstimateToJob(id, title, value);
-  };
-
-  const handleArchive = (id: string, value: number) => {
-    archiveJob(id, value);
-  };
-
-  // Build a lookup for customer names to pass to PipelineBoard
-  const customerNameById = useMemo(() => {
-    const map: Record<string, string> = {};
-    allOpportunities.forEach(o => { map[o.id] = o.customerName; });
-    return map;
-  }, [allOpportunities]);
-
-  // Enrich opportunities with customer name for display
-  const enrichedOpps: Opportunity[] = tabOpps;
 
   return (
     <div className="min-h-screen bg-background">
@@ -163,7 +142,7 @@ export default function PipelinePage() {
             </div>
           </div>
 
-          {/* ── Summary stats ── */}
+          {/* ── Summary stat cards ── */}
           <div className="grid grid-cols-3 gap-3 mt-4">
             {TABS.map(tab => (
               <button
@@ -223,13 +202,13 @@ export default function PipelinePage() {
         <PipelineBoard
           area={activeTab}
           stages={stages}
-          opportunities={enrichedOpps}
+          opportunities={tabOpps}
           onAdd={handleAdd}
-          onUpdate={handleUpdate}
-          onRemove={handleRemove}
-          onConvertToEstimate={activeTab === 'lead' ? handleConvertToEstimate : undefined}
-          onConvertToJob={activeTab === 'estimate' ? handleConvertToJob : undefined}
-          onArchive={activeTab === 'job' ? handleArchive : undefined}
+          onUpdate={(id, payload) => updateOpportunity(id, payload)}
+          onRemove={(id) => removeOpportunity(id)}
+          onConvertToEstimate={activeTab === 'lead' ? (id, title, value) => convertLeadToEstimate(id, title, value) : undefined}
+          onConvertToJob={activeTab === 'estimate' ? (id, title, value) => convertEstimateToJob(id, title, value) : undefined}
+          onArchive={activeTab === 'job' ? (id, value) => archiveJob(id, value) : undefined}
           onOpen={handleOpen}
         />
       </div>
