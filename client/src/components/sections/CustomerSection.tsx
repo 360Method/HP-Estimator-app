@@ -26,6 +26,7 @@ import {
   ExternalLink, Edit3, Save, X, AlertCircle, TrendingUp, Archive,
   RefreshCw, FolderOpen,
 } from 'lucide-react';
+import PipelineBoard from '@/components/PipelineBoard';
 import { toast } from 'sonner';
 import { nanoid } from 'nanoid';
 
@@ -1002,10 +1003,10 @@ export default function CustomerSection() {
       JOB_STAGES;
     const areaOpps = opportunities.filter(o => o.area === area);
     return (
-      <PipelineAreaPanel
+      <PipelineBoard
         area={area}
         stages={areaStages}
-        opportunities={areaOpps as any}
+        opportunities={areaOpps}
         onAdd={(title, stage, value, notes) => addOpportunity({ area, stage, title, value, notes, archived: false })}
         onUpdate={updateOpportunity}
         onRemove={removeOpportunity}
@@ -1014,14 +1015,13 @@ export default function CustomerSection() {
         onArchive={area === 'job' ? archiveJob : undefined}
         onOpen={(id) => {
           setActiveOpportunity(id);
-          // Navigate to the appropriate section based on area
           if (area === 'lead' || area === 'estimate') {
             setSection('sales');
           } else {
-            // Jobs open to the Job Details tab first
             setSection('job-details');
           }
         }}
+        compact
       />
     );
   };

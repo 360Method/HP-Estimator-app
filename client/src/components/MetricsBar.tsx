@@ -58,7 +58,7 @@ const BACKEND_NAV: { icon: React.ElementType; label: string; section: AppSection
   { icon: Users,           label: 'Customers',  section: 'customers' },
   { icon: Briefcase,       label: 'Jobs',       section: 'jobs'      },
   { icon: Inbox,           label: 'Inbox',      section: null        },
-  { icon: GitBranch,       label: 'Pipeline',   section: null        },
+  { icon: GitBranch,       label: 'Pipeline',   section: 'pipeline'  },
   { icon: DollarSign,      label: 'Financials', section: null        },
   { icon: BarChart2,       label: 'Reporting',  section: null        },
   { icon: Megaphone,       label: 'Marketing',  section: null        },
@@ -132,9 +132,17 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
     setShowMobileNav(false);
   };
 
+  const handleGoToPipeline = () => {
+    setSection('pipeline');
+    setActiveOpportunity(null);
+    setActiveCustomer(null);
+    setShowMobileNav(false);
+  };
+
   const handleNavClick = (section: AppSection | null, label: string) => {
     if (section === 'customers') { handleGoToCustomers(); return; }
     if (section === 'jobs') { handleGoToJobs(); return; }
+    if (section === 'pipeline') { handleGoToPipeline(); return; }
     handleBackendNav(label);
   };
 
@@ -405,6 +413,14 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
               <span className="text-[11px] font-semibold text-primary flex items-center gap-1.5">
                 <Briefcase className="w-3.5 h-3.5" />
                 <span>All Jobs</span>
+              </span>
+            </div>
+          ) : state.activeSection === 'pipeline' ? (
+            /* ── Pipeline nav ── */
+            <div className="flex items-center py-2 gap-2">
+              <span className="text-[11px] font-semibold text-primary flex items-center gap-1.5">
+                <GitBranch className="w-3.5 h-3.5" />
+                <span>Pipeline</span>
               </span>
             </div>
           ) : (
