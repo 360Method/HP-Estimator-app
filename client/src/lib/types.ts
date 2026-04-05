@@ -222,6 +222,10 @@ export interface Invoice {
   stripePaymentIntentId?: string;
   stripeClientSecret?: string;
   paypalOrderId?: string;
+  // Job completion sign-off
+  completionSignature?: string;   // base64 PNG of customer e-signature
+  completionSignedBy?: string;    // name of signer
+  completionSignedAt?: string;    // ISO timestamp
 }
 
 export interface InvoiceLineItem {
@@ -360,6 +364,7 @@ export interface Opportunity {
   stage: OpportunityStage;
   title: string;          // short description of the opportunity
   value: number;          // estimated dollar value
+  jobNumber?: string;     // e.g. "JOB-2026-001", set when converted to a job
   createdAt: string;      // ISO date string
   updatedAt: string;
   notes: string;

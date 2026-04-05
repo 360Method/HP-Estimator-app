@@ -8,7 +8,8 @@ import { loadStripe, StripeElementsOptions } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { trpc } from '@/lib/trpc';
 import { useEstimator } from '@/contexts/EstimatorContext';
-import { Invoice, PaymentRecord, PaymentMethod, InvoiceStatus } from '@/lib/types';
+import { Invoice, PaymentRecord, PaymentMethod, InvoiceStatus, Customer, Opportunity } from '@/lib/types';
+import InvoicePrintView from './InvoicePrintView';
 import { nanoid } from 'nanoid';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -228,12 +229,17 @@ function InvoiceCard({
   onUpdate,
   publishableKey,
   paypalClientId,
+  customer,
+  opportunity,
 }: {
   invoice: Invoice;
   onUpdate: (updated: Invoice) => void;
   publishableKey: string | null;
   paypalClientId: string | null;
+  customer: Customer | undefined;
+  opportunity: Opportunity | null;
 }) {
+  const [showPrintView, setShowPrintView] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [showStripe, setShowStripe] = useState(false);
   const [showPayPal, setShowPayPal] = useState(false);
@@ -547,13 +553,40 @@ function InvoiceCard({
 
           {/* Actions */}
           <div className="flex gap-2 pt-1">
-            <Button size="sm" variant="ghost" className="text-xs gap-1">
-              <Printer className="w-3 h-3" /> Print
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-xs gap-1"
+              onClick={() => setShowPrintView(true)}
+            >
+              <Printer className="w-3 h-3" /> Print / PDF
             </Button>
             <Button size="sm" variant="ghost" className="text-xs gap-1">
               <Send className="w-3 h-3" /> Send to Customer
             </Button>
           </div>
+
+          {/* Invoice PDF overlay */}
+          {showPrintView && customer && (
+            <InvoicePrintView
+              invoice={invoice}
+              customer={customer}
+              opportunity={opportunity}
+              onClose={() => setShowPrintView(false)}
+              onSaveSignature={(sig, name, invId) => {
+                const now = new Date().toISOString();
+                onUpdate({
+                  ...invoice,
+                  completionSignature: sig,
+                  completionSignedBy: name,
+                  completionSignedAt: now,
+                  status: 'paid' as InvoiceStatus,
+                  paidAt: invoice.paidAt ?? now,
+                });
+                toast.success('Job completion signature saved');
+              }}
+            />
+          )}
         </CardContent>
       )}
 
@@ -740,11 +773,13 @@ export default function InvoiceSection() {
   const publishableKey = stripeData?.publishableKey ?? null;
   const paypalClientId = paypalData?.clientId ?? null;
 
-  // Invoice counter
+  // Invoice counter — global across all customers to avoid duplicates
   const nextInvoiceNumber = () => {
     const year = new Date().getFullYear();
-    const count = allInvoices.length + 1;
-    return `INV-${year}-${String(count).padStart(3, '0')}`;
+    const globalCount = state.customers.reduce(
+      (sum, c) => sum + (c.invoices?.length ?? 0), 0
+    );
+    return `INV-${year}-${String(globalCount + 1).padStart(3, '0')}`;
   };
 
   const handleCreate = (invoice: Invoice) => {
@@ -844,6 +879,8 @@ export default function InvoiceSection() {
               onUpdate={handleUpdate}
               publishableKey={publishableKey}
               paypalClientId={paypalClientId}
+              customer={customer}
+              opportunity={activeOpp ?? null}
             />
           ))}
         </div>

@@ -47,3 +47,16 @@
 
 - [x] Fix: job/estimate value not flowing through to deposit invoice amount (CalculatorSection now syncs grandTotals.price to opportunity.value via useEffect)
 - [x] Add Clark County WA tax rates as selectable options in invoice creation dialog (WA DOR Q2 2026 rates)
+
+## Invoice PDF Feature
+
+- [x] Build InvoicePrintView component (mirrors estimate PDF layout)
+- [x] Unique INV number per invoice (auto-incremented, e.g. INV-2026-001)
+- [x] Job reference on invoice (customer name, job title, address, job number)
+- [x] Line items from opportunity phases on invoice PDF
+- [x] Tax breakdown on invoice PDF
+- [x] Payment history summary on invoice PDF
+- [x] Balance due prominently displayed
+- [x] Customer signature block for job completion sign-off
+- [x] Signature capture canvas on final invoice
+- [x] Print/PDF button on InvoiceCard and InvoiceSection

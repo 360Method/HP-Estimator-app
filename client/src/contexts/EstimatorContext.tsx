@@ -505,12 +505,17 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
       };
 
       // Create new Job opportunity
+      const allJobsSoFar = state.opportunities.filter(o => o.area === 'job').length;
+      const jobYear = new Date().getFullYear();
+      const generatedJobNumber = `JOB-${jobYear}-${String(allJobsSoFar + 1).padStart(3, '0')}`;
+
       const newJob: Opportunity = {
         id: action.newJobId,
         area: 'job',
         stage: 'New Job' as OpportunityStage,
         title: action.newJobTitle,
         value: action.value,
+        jobNumber: generatedJobNumber,
         notes: estimate.notes,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -532,7 +537,11 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
       const existingInvoices = state.activeCustomerId
         ? (state.customers.find(c => c.id === state.activeCustomerId)?.invoices ?? [])
         : [];
-      const invoiceNum = `INV-${year}-${String(existingInvoices.length + 1).padStart(3, '0')}`;
+      // Use a global invoice counter across all customers to avoid duplicates
+      const globalInvoiceCount = state.customers.reduce(
+        (sum, c) => sum + (c.invoices?.length ?? 0), 0
+      );
+      const invoiceNum = `INV-${year}-${String(globalInvoiceCount + 1).padStart(3, '0')}`;
       const subtotal = action.value * 0.5;
       const depositLineItem: InvoiceLineItem = {
         id: nanoid(8),
