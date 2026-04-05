@@ -220,7 +220,7 @@ export default function InvoicePrintView({
   const scopeOfWork = (opportunity as any)?.scopeOfWork ?? opportunity?.notes ?? '';
 
   return (
-    <div className="fixed inset-0 z-40 bg-black/50 overflow-y-auto no-print-overlay">
+    <div className="fixed inset-0 z-40 bg-black/50 overflow-y-auto no-print-overlay invoice-print-root">
       {/* Action bar */}
       <div className="sticky top-0 z-50 bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between no-print shadow-sm">
         <div className="flex items-center gap-3">
@@ -558,15 +558,20 @@ export default function InvoicePrintView({
         />
       )}
 
-      {/* Print styles */}
+      {/* Print styles — isolate only the invoice document */}
       <style>{`
         @media print {
-          .no-print, .no-print-overlay > .no-print { display: none !important; }
-          .print-area { margin: 0 !important; padding: 0 !important; max-width: 100% !important; }
-          body { background: white !important; }
-          .fixed { position: static !important; }
-          .overflow-y-auto { overflow: visible !important; }
-          .shadow-sm { box-shadow: none !important; }
+          /* Hide everything on the page */
+          body > * { display: none !important; }
+          /* Show only the invoice document inside the overlay */
+          body .invoice-print-root { display: block !important; position: static !important; background: white !important; overflow: visible !important; }
+          body .invoice-print-root .no-print { display: none !important; }
+          body .invoice-print-root .print-area { display: block !important; margin: 0 !important; padding: 0 !important; max-width: 100% !important; }
+          /* Reset overlay chrome */
+          body .invoice-print-root { position: fixed !important; inset: 0 !important; z-index: 9999 !important; background: white !important; }
+          .shadow-sm, .shadow { box-shadow: none !important; }
+          .rounded-xl { border-radius: 0 !important; }
+          .border { border: none !important; }
         }
       `}</style>
     </div>
