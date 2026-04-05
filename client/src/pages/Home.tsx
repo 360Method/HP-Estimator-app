@@ -11,6 +11,7 @@ import SalesSection from '@/components/sections/SalesSection';
 import CalculatorSection from '@/components/sections/CalculatorSection';
 import EstimateSection from '@/components/sections/EstimateSection';
 import JobDetailsSection from '@/components/sections/JobDetailsSection';
+import InvoiceSection from '@/components/sections/InvoiceSection';
 import PresentSection from '@/components/sections/PresentSection';
 import CustomersListPage from '@/pages/CustomersListPage';
 import JobsListPage from '@/pages/JobsListPage';
@@ -44,6 +45,7 @@ export default function Home() {
           {state.activeSection === 'calculator' && <CalculatorSection />}
           {state.activeSection === 'estimate' && <EstimateSection />}
           {state.activeSection === 'job-details' && <JobDetailsSection />}
+          {state.activeSection === 'invoice' && <InvoiceSection />}
         </div>
       )}
       {/* Present mode is a full-screen overlay, rendered outside the container */}

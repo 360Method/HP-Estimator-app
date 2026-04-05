@@ -7,7 +7,7 @@ import {
   EstimatorState, JobInfo, GlobalSettings, AppSection,
   LineItem, CustomLineItem, EstimateLineOverride,
   Opportunity, PipelineArea, CustomerProfile, ActivityEvent, CustomerProfileTab,
-  OpportunityStage, Customer,
+  OpportunityStage, Customer, Invoice, InvoiceLineItem,
 } from '@/lib/types';
 import { ALL_PHASES, DEFAULTS } from '@/lib/phases';
 import { nanoid } from 'nanoid';
@@ -72,6 +72,8 @@ const initialState: EstimatorState = {
   activeOpportunityId: null,
   customers: [] as Customer[],
   activeCustomerId: null,
+  invoices: [],
+  invoiceCounter: 1,
 };
 
 // ── Helper: build an ActivityEvent without id/timestamp ──────
@@ -525,6 +527,50 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
         action.newJobId,
       );
 
+      // Auto-create a deposit invoice (50% default) linked to the new job
+      const year = new Date().getFullYear();
+      const existingInvoices = state.activeCustomerId
+        ? (state.customers.find(c => c.id === state.activeCustomerId)?.invoices ?? [])
+        : [];
+      const invoiceNum = `INV-${year}-${String(existingInvoices.length + 1).padStart(3, '0')}`;
+      const subtotal = action.value * 0.5;
+      const depositLineItem: InvoiceLineItem = {
+        id: nanoid(8),
+        description: '50% Deposit',
+        qty: 1,
+        unitPrice: subtotal,
+        total: subtotal,
+      };
+      const depositInvoice: Invoice = {
+        id: nanoid(8),
+        type: 'deposit',
+        status: 'draft',
+        invoiceNumber: invoiceNum,
+        customerId: state.activeCustomerId ?? '',
+        opportunityId: action.newJobId,
+        sourceEstimateId: action.estimateId,
+        subtotal,
+        taxRate: 0,
+        taxAmount: 0,
+        total: subtotal,
+        depositPercent: 50,
+        issuedAt: new Date().toISOString(),
+        dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        payments: [],
+        amountPaid: 0,
+        balance: subtotal,
+        lineItems: [depositLineItem],
+        notes: 'Deposit required to schedule work.',
+        internalNotes: '',
+      };
+
+      const updatedInvoices = [...existingInvoices, depositInvoice];
+      const syncedCustomers = state.activeCustomerId
+        ? state.customers.map(c =>
+            c.id === state.activeCustomerId ? { ...c, invoices: updatedInvoices } : c
+          )
+        : state.customers;
+
       return {
         ...state,
         opportunities: state.opportunities
@@ -533,6 +579,7 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
         activePipelineArea: 'job',
         activeCustomerTab: 'jobs',
         activityFeed: [event, ...state.activityFeed],
+        customers: syncedCustomers,
       };
     }
 

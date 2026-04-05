@@ -174,7 +174,63 @@ export interface GlobalSettings {
   paintRate: number;
 }
 
-export type AppSection = 'customer' | 'sales' | 'calculator' | 'estimate' | 'present' | 'customers' | 'jobs' | 'job-details' | 'pipeline';
+export type AppSection = 'customer' | 'sales' | 'calculator' | 'estimate' | 'present' | 'customers' | 'jobs' | 'job-details' | 'pipeline' | 'invoice';
+
+// ── Invoice / Payment Types ──────────────────────────────────
+
+export type InvoiceType = 'deposit' | 'final';
+export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'void' | 'partial';
+export type PaymentMethod = 'stripe' | 'paypal' | 'cash' | 'check' | 'zelle' | 'venmo' | 'other';
+
+export interface PaymentRecord {
+  id: string;
+  method: PaymentMethod;
+  amount: number;
+  paidAt: string;          // ISO
+  reference: string;       // Stripe PaymentIntent ID, PayPal order ID, or manual note
+  note: string;
+}
+
+export interface Invoice {
+  id: string;
+  type: InvoiceType;
+  status: InvoiceStatus;
+  invoiceNumber: string;   // e.g. "INV-2024-001"
+  // Linked entities
+  customerId: string;
+  opportunityId: string;   // the job opportunity
+  sourceEstimateId?: string; // the approved estimate that triggered this
+  // Amounts
+  subtotal: number;        // pre-tax
+  taxRate: number;         // e.g. 0.085 for 8.5%
+  taxAmount: number;
+  total: number;           // subtotal + taxAmount
+  depositPercent?: number; // e.g. 50 for 50% deposit
+  // Dates
+  issuedAt: string;        // ISO
+  dueDate: string;         // ISO
+  paidAt?: string;         // ISO, set when fully paid
+  // Payments
+  payments: PaymentRecord[];
+  amountPaid: number;      // sum of payments
+  balance: number;         // total - amountPaid
+  // Content
+  lineItems: InvoiceLineItem[];
+  notes: string;           // customer-visible notes
+  internalNotes: string;   // internal only
+  // Stripe / PayPal
+  stripePaymentIntentId?: string;
+  stripeClientSecret?: string;
+  paypalOrderId?: string;
+}
+
+export interface InvoiceLineItem {
+  id: string;
+  description: string;
+  qty: number;
+  unitPrice: number;
+  total: number;
+}
 
 // ── Customer Record (multi-customer list) ─────────────────
 export type CustomerType = 'homeowner' | 'business';
@@ -217,6 +273,7 @@ export interface Customer {
   profile?: CustomerProfile;
   activityFeed?: ActivityEvent[];
   opportunities?: Opportunity[];
+  invoices?: Invoice[];
 }
 
 export interface EstimatorState {
@@ -246,6 +303,10 @@ export interface EstimatorState {
   // Multi-customer list
   customers: Customer[];
   activeCustomerId: string | null;  // which customer is currently open
+  // Invoices (working set for active customer)
+  invoices: Invoice[];
+  // Invoice counter for sequential numbering
+  invoiceCounter: number;
 }
 
 // ── CRM Pipeline Types ──────────────────────────────────────

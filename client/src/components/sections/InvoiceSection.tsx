@@ -1,0 +1,835 @@
+// ============================================================
+// InvoiceSection — Full invoice lifecycle UI
+// Deposit invoice + Final invoice, Stripe + PayPal + manual payments
+// ============================================================
+
+import React, { useState, useEffect, useCallback } from 'react';
+import { loadStripe, StripeElementsOptions } from '@stripe/stripe-js';
+import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import { trpc } from '@/lib/trpc';
+import { useEstimator } from '@/contexts/EstimatorContext';
+import { Invoice, PaymentRecord, PaymentMethod, InvoiceStatus } from '@/lib/types';
+import { nanoid } from 'nanoid';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  CreditCard, DollarSign, CheckCircle2, Clock, AlertCircle,
+  Plus, Printer, Send, ChevronRight, Banknote, Smartphone,
+} from 'lucide-react';
+
+// ── Stripe loader (lazy, keyed on publishable key) ─────────────
+let stripePromise: ReturnType<typeof loadStripe> | null = null;
+
+function getStripePromise(publishableKey: string) {
+  if (!stripePromise) {
+    stripePromise = loadStripe(publishableKey);
+  }
+  return stripePromise;
+}
+
+// ── Helpers ────────────────────────────────────────────────────
+function fmt(n: number) {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n);
+}
+
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+const STATUS_COLORS: Record<InvoiceStatus, string> = {
+  draft: 'bg-gray-100 text-gray-700',
+  sent: 'bg-blue-100 text-blue-700',
+  partial: 'bg-yellow-100 text-yellow-700',
+  paid: 'bg-green-100 text-green-700',
+  void: 'bg-red-100 text-red-700',
+};
+
+const METHOD_ICONS: Record<PaymentMethod, React.ReactNode> = {
+  stripe: <CreditCard className="w-4 h-4" />,
+  paypal: <span className="text-xs font-bold text-blue-600">PP</span>,
+  cash: <Banknote className="w-4 h-4" />,
+  check: <DollarSign className="w-4 h-4" />,
+  zelle: <Smartphone className="w-4 h-4" />,
+  venmo: <Smartphone className="w-4 h-4" />,
+  other: <DollarSign className="w-4 h-4" />,
+};
+
+// ── Stripe Payment Form ────────────────────────────────────────
+function StripePaymentForm({
+  clientSecret,
+  amount,
+  onSuccess,
+  onCancel,
+}: {
+  clientSecret: string;
+  amount: number;
+  onSuccess: (paymentIntentId: string) => void;
+  onCancel: () => void;
+}) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [processing, setProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!stripe || !elements) return;
+    setProcessing(true);
+    setError(null);
+
+    const { error: submitError } = await elements.submit();
+    if (submitError) {
+      setError(submitError.message ?? 'Payment failed');
+      setProcessing(false);
+      return;
+    }
+
+    const { error: confirmError, paymentIntent } = await stripe.confirmPayment({
+      elements,
+      confirmParams: { return_url: window.location.href },
+      redirect: 'if_required',
+    });
+
+    if (confirmError) {
+      setError(confirmError.message ?? 'Payment failed');
+      setProcessing(false);
+    } else if (paymentIntent?.status === 'succeeded') {
+      onSuccess(paymentIntent.id);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="p-3 bg-blue-50 rounded-lg text-sm text-blue-800">
+        <strong>Amount due:</strong> {fmt(amount)}
+      </div>
+      <PaymentElement />
+      {error && (
+        <div className="flex items-center gap-2 text-red-600 text-sm">
+          <AlertCircle className="w-4 h-4" /> {error}
+        </div>
+      )}
+      <div className="flex gap-2 pt-2">
+        <Button type="submit" disabled={!stripe || processing} className="flex-1">
+          {processing ? 'Processing…' : `Pay ${fmt(amount)}`}
+        </Button>
+        <Button type="button" variant="outline" onClick={onCancel}>Cancel</Button>
+      </div>
+      <p className="text-xs text-muted-foreground text-center">
+        Test card: 4242 4242 4242 4242 · Any future date · Any CVC
+      </p>
+    </form>
+  );
+}
+
+// ── Manual Payment Dialog ──────────────────────────────────────
+function ManualPaymentDialog({
+  open,
+  maxAmount,
+  onClose,
+  onRecord,
+}: {
+  open: boolean;
+  maxAmount: number;
+  onClose: () => void;
+  onRecord: (payment: Omit<PaymentRecord, 'id'>) => void;
+}) {
+  const [method, setMethod] = useState<PaymentMethod>('cash');
+  const [amount, setAmount] = useState(maxAmount.toFixed(2));
+  const [reference, setReference] = useState('');
+  const [note, setNote] = useState('');
+
+  useEffect(() => {
+    if (open) setAmount(maxAmount.toFixed(2));
+  }, [open, maxAmount]);
+
+  const handleSubmit = () => {
+    const amt = parseFloat(amount);
+    if (isNaN(amt) || amt <= 0) { toast.error('Enter a valid amount'); return; }
+    onRecord({ method, amount: amt, paidAt: new Date().toISOString(), reference, note });
+    onClose();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader><DialogTitle>Record Manual Payment</DialogTitle></DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <Label>Payment Method</Label>
+            <Select value={method} onValueChange={v => setMethod(v as PaymentMethod)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {(['cash','check','zelle','venmo','other'] as PaymentMethod[]).map(m => (
+                  <SelectItem key={m} value={m}>{m.charAt(0).toUpperCase() + m.slice(1)}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Amount ($)</Label>
+            <Input type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} />
+          </div>
+          <div>
+            <Label>Reference / Check #</Label>
+            <Input value={reference} onChange={e => setReference(e.target.value)} placeholder="Optional" />
+          </div>
+          <div>
+            <Label>Note</Label>
+            <Textarea value={note} onChange={e => setNote(e.target.value)} rows={2} placeholder="Optional" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSubmit}>Record Payment</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Invoice Card ───────────────────────────────────────────────
+function InvoiceCard({
+  invoice,
+  onUpdate,
+  publishableKey,
+  paypalClientId,
+}: {
+  invoice: Invoice;
+  onUpdate: (updated: Invoice) => void;
+  publishableKey: string | null;
+  paypalClientId: string | null;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [showStripe, setShowStripe] = useState(false);
+  const [showPayPal, setShowPayPal] = useState(false);
+  const [showManual, setShowManual] = useState(false);
+  const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
+
+  const createIntent = trpc.payments.createStripeIntent.useMutation();
+  const createPaypalOrder = trpc.payments.createPaypalOrder.useMutation();
+  const capturePaypalOrder = trpc.payments.capturePaypalOrder.useMutation();
+
+  const balance = invoice.balance;
+  const isPaid = invoice.status === 'paid';
+
+  // ── Stripe flow ──────────────────────────────────────────────
+  const handleStripeClick = async () => {
+    if (!publishableKey) { toast.error('Stripe not configured'); return; }
+    try {
+      const amountCents = Math.round(balance * 100);
+      const result = await createIntent.mutateAsync({
+        amountCents,
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        customerName: invoice.customerId,
+        description: `${invoice.type === 'deposit' ? 'Deposit' : 'Final'} Invoice ${invoice.invoiceNumber}`,
+      });
+      setClientSecret(result.clientSecret);
+      setPaymentIntentId(result.paymentIntentId);
+      setShowStripe(true);
+    } catch (e) {
+      toast.error('Failed to create payment intent');
+    }
+  };
+
+  const handleStripeSuccess = (intentId: string) => {
+    const payment: PaymentRecord = {
+      id: nanoid(8),
+      method: 'stripe',
+      amount: balance,
+      paidAt: new Date().toISOString(),
+      reference: intentId,
+      note: 'Stripe card payment',
+    };
+    applyPayment(payment);
+    setShowStripe(false);
+    setClientSecret(null);
+    toast.success('Payment received via Stripe!');
+  };
+
+  // ── PayPal flow ──────────────────────────────────────────────
+  const handlePayPalClick = async () => {
+    if (!paypalClientId) { toast.error('PayPal not configured'); return; }
+    try {
+      const result = await createPaypalOrder.mutateAsync({
+        amountUsd: balance.toFixed(2),
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+      });
+      // Open PayPal approval URL in new tab
+      const base = 'https://www.sandbox.paypal.com/checkoutnow?token=';
+      window.open(`${base}${result.orderId}`, '_blank');
+      // Poll for capture (simplified — in production use PayPal JS SDK)
+      const orderId = result.orderId;
+      toast.info('Complete payment in the PayPal window, then click "Confirm PayPal Payment" below.');
+      onUpdate({ ...invoice, paypalOrderId: orderId });
+    } catch {
+      toast.error('Failed to create PayPal order');
+    }
+  };
+
+  const handlePayPalConfirm = async () => {
+    if (!invoice.paypalOrderId) return;
+    try {
+      const result = await capturePaypalOrder.mutateAsync({ orderId: invoice.paypalOrderId });
+      if (result.status === 'COMPLETED') {
+        const payment: PaymentRecord = {
+          id: nanoid(8),
+          method: 'paypal',
+          amount: balance,
+          paidAt: new Date().toISOString(),
+          reference: result.orderId,
+          note: 'PayPal payment',
+        };
+        applyPayment(payment);
+        toast.success('PayPal payment captured!');
+      } else {
+        toast.error(`PayPal status: ${result.status}`);
+      }
+    } catch {
+      toast.error('Failed to capture PayPal payment');
+    }
+  };
+
+  // ── Apply payment to invoice ──────────────────────────────────
+  const applyPayment = useCallback((payment: PaymentRecord) => {
+    const newPayments = [...invoice.payments, payment];
+    const newAmountPaid = newPayments.reduce((s, p) => s + p.amount, 0);
+    const newBalance = Math.max(0, invoice.total - newAmountPaid);
+    const newStatus: InvoiceStatus =
+      newBalance <= 0 ? 'paid' : newAmountPaid > 0 ? 'partial' : invoice.status;
+    onUpdate({
+      ...invoice,
+      payments: newPayments,
+      amountPaid: newAmountPaid,
+      balance: newBalance,
+      status: newStatus,
+      paidAt: newBalance <= 0 ? new Date().toISOString() : invoice.paidAt,
+    });
+  }, [invoice, onUpdate]);
+
+  const handleManualPayment = (p: Omit<PaymentRecord, 'id'>) => {
+    applyPayment({ ...p, id: nanoid(8) });
+    toast.success(`${p.method.charAt(0).toUpperCase() + p.method.slice(1)} payment recorded`);
+  };
+
+  const stripeOptions: StripeElementsOptions | undefined = clientSecret
+    ? { clientSecret, appearance: { theme: 'stripe' } }
+    : undefined;
+
+  return (
+    <Card className="border border-border">
+      {/* Header */}
+      <CardHeader
+        className="cursor-pointer select-none"
+        onClick={() => setExpanded(e => !e)}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className={`w-2 h-2 rounded-full ${isPaid ? 'bg-green-500' : 'bg-yellow-500'}`} />
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-sm">{invoice.invoiceNumber}</span>
+                <Badge className={`text-xs ${STATUS_COLORS[invoice.status]}`}>
+                  {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
+                </Badge>
+                <Badge variant="outline" className="text-xs">
+                  {invoice.type === 'deposit' ? 'Deposit Invoice' : 'Final Invoice'}
+                </Badge>
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                Issued {fmtDate(invoice.issuedAt)} · Due {fmtDate(invoice.dueDate)}
+              </div>
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="font-bold">{fmt(invoice.total)}</div>
+            {invoice.balance > 0 && (
+              <div className="text-xs text-yellow-600">Balance: {fmt(invoice.balance)}</div>
+            )}
+            {isPaid && (
+              <div className="text-xs text-green-600 flex items-center gap-1 justify-end">
+                <CheckCircle2 className="w-3 h-3" /> Paid
+              </div>
+            )}
+          </div>
+        </div>
+      </CardHeader>
+
+      {expanded && (
+        <CardContent className="pt-0 space-y-4">
+          {/* Line items */}
+          <div className="rounded-lg border overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="text-left p-2 font-medium">Description</th>
+                  <th className="text-right p-2 font-medium w-16">Qty</th>
+                  <th className="text-right p-2 font-medium w-24">Unit</th>
+                  <th className="text-right p-2 font-medium w-24">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {invoice.lineItems.map(item => (
+                  <tr key={item.id} className="border-t">
+                    <td className="p-2">{item.description}</td>
+                    <td className="p-2 text-right">{item.qty}</td>
+                    <td className="p-2 text-right">{fmt(item.unitPrice)}</td>
+                    <td className="p-2 text-right font-medium">{fmt(item.total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Totals */}
+          <div className="space-y-1 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Subtotal</span>
+              <span>{fmt(invoice.subtotal)}</span>
+            </div>
+            {invoice.taxRate > 0 && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Tax ({(invoice.taxRate * 100).toFixed(1)}%)</span>
+                <span>{fmt(invoice.taxAmount)}</span>
+              </div>
+            )}
+            <Separator />
+            <div className="flex justify-between font-bold">
+              <span>Total</span>
+              <span>{fmt(invoice.total)}</span>
+            </div>
+            {invoice.amountPaid > 0 && (
+              <>
+                <div className="flex justify-between text-green-600">
+                  <span>Paid</span>
+                  <span>-{fmt(invoice.amountPaid)}</span>
+                </div>
+                <div className="flex justify-between font-bold text-yellow-700">
+                  <span>Balance Due</span>
+                  <span>{fmt(invoice.balance)}</span>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Notes */}
+          {invoice.notes && (
+            <div className="text-sm text-muted-foreground bg-muted/30 rounded p-2">
+              {invoice.notes}
+            </div>
+          )}
+
+          {/* Payment history */}
+          {invoice.payments.length > 0 && (
+            <div>
+              <div className="text-xs font-semibold text-muted-foreground uppercase mb-2">Payment History</div>
+              <div className="space-y-1">
+                {invoice.payments.map(p => (
+                  <div key={p.id} className="flex items-center justify-between text-sm bg-green-50 rounded p-2">
+                    <div className="flex items-center gap-2">
+                      {METHOD_ICONS[p.method]}
+                      <span className="capitalize">{p.method}</span>
+                      {p.reference && <span className="text-xs text-muted-foreground">#{p.reference.slice(-8)}</span>}
+                    </div>
+                    <div className="text-right">
+                      <div className="font-medium text-green-700">{fmt(p.amount)}</div>
+                      <div className="text-xs text-muted-foreground">{fmtDate(p.paidAt)}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Payment actions */}
+          {!isPaid && (
+            <div className="space-y-3">
+              <div className="text-xs font-semibold text-muted-foreground uppercase">Collect Payment</div>
+
+              {/* Stripe */}
+              {showStripe && clientSecret && publishableKey && stripeOptions ? (
+                <div className="border rounded-lg p-4">
+                  <Elements stripe={getStripePromise(publishableKey)} options={stripeOptions}>
+                    <StripePaymentForm
+                      clientSecret={clientSecret}
+                      amount={balance}
+                      onSuccess={handleStripeSuccess}
+                      onCancel={() => { setShowStripe(false); setClientSecret(null); }}
+                    />
+                  </Elements>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {publishableKey && (
+                    <Button
+                      variant="outline"
+                      className="flex items-center gap-2 justify-start"
+                      onClick={handleStripeClick}
+                      disabled={createIntent.isPending}
+                    >
+                      <CreditCard className="w-4 h-4" />
+                      {createIntent.isPending ? 'Loading…' : 'Pay with Card'}
+                    </Button>
+                  )}
+                  {paypalClientId && (
+                    <>
+                      <Button
+                        variant="outline"
+                        className="flex items-center gap-2 justify-start text-blue-700 border-blue-300"
+                        onClick={handlePayPalClick}
+                        disabled={createPaypalOrder.isPending}
+                      >
+                        <span className="font-bold text-sm">PP</span>
+                        {createPaypalOrder.isPending ? 'Loading…' : 'Pay with PayPal'}
+                      </Button>
+                      {invoice.paypalOrderId && (
+                        <Button
+                          variant="outline"
+                          className="flex items-center gap-2 justify-start text-green-700 border-green-300"
+                          onClick={handlePayPalConfirm}
+                          disabled={capturePaypalOrder.isPending}
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                          Confirm PayPal
+                        </Button>
+                      )}
+                    </>
+                  )}
+                  <Button
+                    variant="outline"
+                    className="flex items-center gap-2 justify-start"
+                    onClick={() => setShowManual(true)}
+                  >
+                    <Banknote className="w-4 h-4" />
+                    Record Payment
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex gap-2 pt-1">
+            <Button size="sm" variant="ghost" className="text-xs gap-1">
+              <Printer className="w-3 h-3" /> Print
+            </Button>
+            <Button size="sm" variant="ghost" className="text-xs gap-1">
+              <Send className="w-3 h-3" /> Send to Customer
+            </Button>
+          </div>
+        </CardContent>
+      )}
+
+      <ManualPaymentDialog
+        open={showManual}
+        maxAmount={balance}
+        onClose={() => setShowManual(false)}
+        onRecord={handleManualPayment}
+      />
+    </Card>
+  );
+}
+
+// ── Create Invoice Dialog ──────────────────────────────────────
+function CreateInvoiceDialog({
+  open,
+  onClose,
+  onCreate,
+  defaultTotal,
+  defaultType,
+  invoiceNumber,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onCreate: (invoice: Invoice) => void;
+  defaultTotal: number;
+  defaultType: 'deposit' | 'final';
+  invoiceNumber: string;
+}) {
+  const [type, setType] = useState<'deposit' | 'final'>(defaultType);
+  const [depositPct, setDepositPct] = useState(50);
+  const [taxRate, setTaxRate] = useState(0);
+  const [notes, setNotes] = useState('');
+  const [dueDate, setDueDate] = useState(
+    new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+  );
+
+  const subtotal = type === 'deposit' ? defaultTotal * (depositPct / 100) : defaultTotal;
+  const taxAmount = subtotal * taxRate;
+  const total = subtotal + taxAmount;
+
+  const handleCreate = () => {
+    const invoice: Invoice = {
+      id: nanoid(8),
+      type,
+      status: 'draft',
+      invoiceNumber,
+      customerId: '',
+      opportunityId: '',
+      subtotal,
+      taxRate,
+      taxAmount,
+      total,
+      depositPercent: type === 'deposit' ? depositPct : undefined,
+      issuedAt: new Date().toISOString(),
+      dueDate: new Date(dueDate).toISOString(),
+      payments: [],
+      amountPaid: 0,
+      balance: total,
+      lineItems: [{
+        id: nanoid(8),
+        description: type === 'deposit' ? `${depositPct}% Deposit` : 'Project Balance',
+        qty: 1,
+        unitPrice: subtotal,
+        total: subtotal,
+      }],
+      notes,
+      internalNotes: '',
+    };
+    onCreate(invoice);
+    onClose();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader><DialogTitle>Create Invoice</DialogTitle></DialogHeader>
+        <div className="space-y-4">
+          <div>
+            <Label>Invoice Type</Label>
+            <Select value={type} onValueChange={v => setType(v as 'deposit' | 'final')}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="deposit">Deposit Invoice</SelectItem>
+                <SelectItem value="final">Final Invoice</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          {type === 'deposit' && (
+            <div>
+              <Label>Deposit Percentage</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number" min={1} max={100} value={depositPct}
+                  onChange={e => setDepositPct(Number(e.target.value))}
+                  className="w-24"
+                />
+                <span className="text-sm text-muted-foreground">% of {fmt(defaultTotal)}</span>
+              </div>
+            </div>
+          )}
+          <div>
+            <Label>Tax Rate (%)</Label>
+            <Input
+              type="number" min={0} max={30} step={0.1} value={(taxRate * 100).toFixed(1)}
+              onChange={e => setTaxRate(Number(e.target.value) / 100)}
+            />
+          </div>
+          <div>
+            <Label>Due Date</Label>
+            <Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
+          </div>
+          <div>
+            <Label>Notes (customer-visible)</Label>
+            <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} />
+          </div>
+          <div className="bg-muted/40 rounded-lg p-3 text-sm space-y-1">
+            <div className="flex justify-between"><span>Subtotal</span><span>{fmt(subtotal)}</span></div>
+            {taxRate > 0 && <div className="flex justify-between"><span>Tax</span><span>{fmt(taxAmount)}</span></div>}
+            <Separator />
+            <div className="flex justify-between font-bold"><span>Total</span><span>{fmt(total)}</span></div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleCreate}>Create Invoice</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Main InvoiceSection ────────────────────────────────────────
+export default function InvoiceSection() {
+  const { state, updateCustomer } = useEstimator();
+
+  // Get active customer and opportunity
+  const customer = state.customers.find(c => c.id === state.activeCustomerId);
+  const activeOpp = state.activeOpportunityId
+    ? state.opportunities.find(o => o.id === state.activeOpportunityId)
+    : null;
+
+  // Invoices for this opportunity (stored on customer)
+  const allInvoices: Invoice[] = (customer?.invoices ?? []);
+  const invoices = activeOpp
+    ? allInvoices.filter(inv => inv.opportunityId === activeOpp.id)
+    : allInvoices;
+
+  const [showCreate, setShowCreate] = useState(false);
+  const [createType, setCreateType] = useState<'deposit' | 'final'>('deposit');
+
+  // Fetch Stripe publishable key + PayPal client ID
+  const { data: stripeData } = trpc.payments.getStripePublishableKey.useQuery(undefined, {
+    retry: false,
+    staleTime: Infinity,
+  });
+  const { data: paypalData } = trpc.payments.getPaypalClientId.useQuery(undefined, {
+    retry: false,
+    staleTime: Infinity,
+  });
+
+  const publishableKey = stripeData?.publishableKey ?? null;
+  const paypalClientId = paypalData?.clientId ?? null;
+
+  // Invoice counter
+  const nextInvoiceNumber = () => {
+    const year = new Date().getFullYear();
+    const count = allInvoices.length + 1;
+    return `INV-${year}-${String(count).padStart(3, '0')}`;
+  };
+
+  const handleCreate = (invoice: Invoice) => {
+    if (!customer) return;
+    const filled: Invoice = {
+      ...invoice,
+      customerId: customer.id,
+      opportunityId: activeOpp?.id ?? '',
+      sourceEstimateId: activeOpp?.sourceEstimateId,
+    };
+    const updated = [...allInvoices, filled];
+    updateCustomer(customer.id, { invoices: updated });
+    toast.success(`Invoice ${invoice.invoiceNumber} created`);
+  };
+
+  const handleUpdate = (updated: Invoice) => {
+    if (!customer) return;
+    const newInvoices = allInvoices.map(inv => inv.id === updated.id ? updated : inv);
+    updateCustomer(customer.id, { invoices: newInvoices });
+  };
+
+  const estimateValue = activeOpp?.value ?? 0;
+
+  // Summary stats
+  const totalBilled = invoices.reduce((s, inv) => s + inv.total, 0);
+  const totalPaid = invoices.reduce((s, inv) => s + inv.amountPaid, 0);
+  const totalBalance = invoices.reduce((s, inv) => s + inv.balance, 0);
+  const hasDeposit = invoices.some(inv => inv.type === 'deposit');
+  const hasFinal = invoices.some(inv => inv.type === 'final');
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">Invoices</h2>
+          {activeOpp && (
+            <p className="text-sm text-muted-foreground">
+              {activeOpp.title} · {fmt(estimateValue)} project value
+            </p>
+          )}
+        </div>
+        <div className="flex gap-2">
+          {!hasDeposit && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => { setCreateType('deposit'); setShowCreate(true); }}
+            >
+              <Plus className="w-3 h-3 mr-1" /> Deposit Invoice
+            </Button>
+          )}
+          {!hasFinal && (
+            <Button
+              size="sm"
+              onClick={() => { setCreateType('final'); setShowCreate(true); }}
+            >
+              <Plus className="w-3 h-3 mr-1" /> Final Invoice
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Summary bar */}
+      {invoices.length > 0 && (
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { label: 'Total Billed', value: totalBilled, icon: <DollarSign className="w-4 h-4 text-blue-500" /> },
+            { label: 'Total Paid', value: totalPaid, icon: <CheckCircle2 className="w-4 h-4 text-green-500" /> },
+            { label: 'Balance Due', value: totalBalance, icon: <Clock className="w-4 h-4 text-yellow-500" /> },
+          ].map(stat => (
+            <Card key={stat.label} className="p-3">
+              <div className="flex items-center gap-2 mb-1">{stat.icon}<span className="text-xs text-muted-foreground">{stat.label}</span></div>
+              <div className="font-bold">{fmt(stat.value)}</div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Invoice list */}
+      {invoices.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground">
+          <DollarSign className="w-10 h-10 mx-auto mb-3 opacity-30" />
+          <p className="font-medium">No invoices yet</p>
+          <p className="text-sm mt-1">
+            {activeOpp
+              ? 'Create a deposit invoice when the estimate is approved, or a final invoice when the job is complete.'
+              : 'Open a job opportunity to create invoices linked to it.'}
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {invoices.map(inv => (
+            <InvoiceCard
+              key={inv.id}
+              invoice={inv}
+              onUpdate={handleUpdate}
+              publishableKey={publishableKey}
+              paypalClientId={paypalClientId}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Payment processor info */}
+      <div className="text-xs text-muted-foreground border rounded-lg p-3 space-y-1">
+        <div className="font-medium text-foreground">Payment Processors</div>
+        <div className="flex items-center gap-2">
+          <span className={publishableKey ? 'text-green-600' : 'text-red-500'}>
+            {publishableKey ? '✓' : '✗'} Stripe
+          </span>
+          {!publishableKey && <span>— configure in Settings → Payment</span>}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className={paypalClientId ? 'text-green-600' : 'text-yellow-600'}>
+            {paypalClientId ? '✓' : '○'} PayPal
+          </span>
+          {!paypalClientId && <span>— add PAYPAL_CLIENT_ID + PAYPAL_SECRET in Secrets</span>}
+        </div>
+      </div>
+
+      <CreateInvoiceDialog
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        onCreate={handleCreate}
+        defaultTotal={estimateValue}
+        defaultType={createType}
+        invoiceNumber={nextInvoiceNumber()}
+      />
+    </div>
+  );
+}

@@ -27,6 +27,7 @@ import {
   RefreshCw, FolderOpen,
 } from 'lucide-react';
 import PipelineBoard from '@/components/PipelineBoard';
+import InvoiceSection from '@/components/sections/InvoiceSection';
 import { toast } from 'sonner';
 import { nanoid } from 'nanoid';
 
@@ -1137,7 +1138,7 @@ export default function CustomerSection() {
       <div className="max-w-6xl mx-auto px-4 py-6">
         {activeCustomerTab === 'profile' && <ProfileTab />}
         {(activeCustomerTab === 'leads' || activeCustomerTab === 'estimates' || activeCustomerTab === 'jobs') && <PipelineTab />}
-        {activeCustomerTab === 'invoices' && <PlaceholderTab label="Invoices" />}
+        {activeCustomerTab === 'invoices' && <InvoiceSection />}
         {activeCustomerTab === 'communication' && <PlaceholderTab label="Communication" />}
         {activeCustomerTab === 'attachments' && <PlaceholderTab label="Attachments" />}
         {activeCustomerTab === 'notes' && (
