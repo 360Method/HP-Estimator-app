@@ -31,7 +31,7 @@
 ## Pending / Future
 
 - [ ] Final invoice auto-generation on job completion (Archive Job)
-- [ ] Invoice PDF export / print
+- [x] Invoice PDF export / print (InvoicePrintView with print-only isolation)
 - [ ] Send invoice to customer via email
 - [ ] Stripe webhook → update invoice status in DB (currently client-side only)
 - [ ] PayPal JS SDK integration (replace redirect flow with in-page approval)
@@ -41,7 +41,7 @@
 - [ ] Attachments tab (photo uploads)
 - [ ] Reporting / analytics page
 - [ ] Marketing tab
-- [ ] Dashboard overview page
+- [x] Dashboard overview page (world-class EstimatorDashboard with KPIs, funnel, charts, activity)
 
 ## In Progress
 
@@ -61,3 +61,8 @@
 - [x] Signature capture canvas on final invoice
 - [x] Print/PDF button on InvoiceCard and InvoiceSection
 - [x] Replace HouseCall Pro T&C link in invoice footer with HP-owned Terms & Conditions popup/page
+
+## Dashboard Routing Fix
+
+- [x] Fix: Dashboard nav click shows empty customer page instead of EstimatorDashboard
+- [x] Set Dashboard as the default landing section when the app first opens

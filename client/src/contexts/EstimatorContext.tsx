@@ -13,7 +13,7 @@ import { ALL_PHASES, DEFAULTS } from '@/lib/phases';
 import { nanoid } from 'nanoid';
 
 const initialState: EstimatorState = {
-  activeSection: 'customer',
+  activeSection: 'dashboard',
   jobInfo: {
     client: '',
     companyName: '',
@@ -707,7 +707,7 @@ function loadPersistedState(): EstimatorState {
       ...initialState,
       ...parsed,
       // Always reset transient UI state on reload
-      activeSection: parsed.activeSection ?? 'customers',
+      activeSection: parsed.activeSection ?? 'dashboard',
       activeOpportunityId: null,
     };
   } catch {

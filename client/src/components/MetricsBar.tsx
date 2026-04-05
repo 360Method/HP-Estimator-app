@@ -433,6 +433,14 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
                 <span>Pipeline</span>
               </span>
             </div>
+          ) : state.activeSection === 'dashboard' ? (
+            /* ── Dashboard nav ── */
+            <div className="flex items-center py-2 gap-2">
+              <span className="text-[11px] font-semibold text-primary flex items-center gap-1.5">
+                <LayoutDashboard className="w-3.5 h-3.5" />
+                <span>Dashboard</span>
+              </span>
+            </div>
           ) : (
             /* ── Profile-only nav ── */
             <div className="flex items-stretch">
