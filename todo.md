@@ -60,3 +60,4 @@
 - [x] Customer signature block for job completion sign-off
 - [x] Signature capture canvas on final invoice
 - [x] Print/PDF button on InvoiceCard and InvoiceSection
+- [x] Replace HouseCall Pro T&C link in invoice footer with HP-owned Terms & Conditions popup/page

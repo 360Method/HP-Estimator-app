@@ -8,6 +8,7 @@ import React, { useRef, useState } from 'react';
 import { Invoice, Customer, Opportunity } from '@/lib/types';
 import { CheckCircle2, Printer, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import TermsAndConditions from '@/components/TermsAndConditions';
 
 // ── Brand constants ─────────────────────────────────────────
 const HP_LOGO = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg';
@@ -194,6 +195,7 @@ export default function InvoicePrintView({
   onSaveSignature,
 }: InvoicePrintViewProps) {
   const [showSignatureCanvas, setShowSignatureCanvas] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
   const [completionSig, setCompletionSig] = useState<string | null>(invoice.completionSignature ?? null);
   const [completionName, setCompletionName] = useState<string | null>(invoice.completionSignedBy ?? null);
   const [completionDate, setCompletionDate] = useState<string | null>(invoice.completionSignedAt ?? null);
@@ -493,7 +495,17 @@ export default function InvoicePrintView({
 
           {/* ── Terms & Conditions ────────────────────────────── */}
           <div style={{ fontSize: '12px', color: '#555', marginBottom: '24px' }}>
-            See our Terms &amp; Conditions ({HP_COMPANY.terms})
+            See our{' '}
+            <button
+              onClick={() => setShowTerms(true)}
+              className="no-print"
+              style={{ color: '#2563eb', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px', padding: 0 }}
+            >
+              Terms &amp; Conditions
+            </button>
+            <span className="print-only" style={{ color: '#555' }}>
+              Terms &amp; Conditions — handypioneers.com/terms
+            </span>
           </div>
         </div>
 
@@ -503,6 +515,9 @@ export default function InvoicePrintView({
           <span>{HP_COMPANY.website}</span>
         </div>
       </div>
+
+      {/* ── Terms & Conditions modal ─────────────────────────── */}
+      {showTerms && <TermsAndConditions onClose={() => setShowTerms(false)} />}
 
       {/* ── Signature canvas modal ───────────────────────────── */}
       {showSignatureCanvas && (
@@ -514,6 +529,8 @@ export default function InvoicePrintView({
 
       {/* ── Print styles ─────────────────────────────────────── */}
       <style>{`
+        /* Hide print-only elements on screen */
+        .print-only { display: none; }
         @media print {
           /* Hide everything on the page */
           body > * { display: none !important; }
@@ -528,6 +545,8 @@ export default function InvoicePrintView({
           }
           /* Hide the action bar and gray overlay bg */
           body .invoice-print-root .no-print { display: none !important; }
+          /* Show print-only elements when printing */
+          body .invoice-print-root .print-only { display: inline !important; }
           body .invoice-print-root { background: white !important; }
           /* Print area: remove screen margin/shadow */
           body .invoice-print-root .print-area {
