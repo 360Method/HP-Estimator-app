@@ -56,7 +56,7 @@ const JOB_BUILDER_TABS: { id: AppSection; icon: string; label: string; shortLabe
 ];
 
 const BACKEND_NAV: { icon: React.ElementType; label: string; section: AppSection | null }[] = [
-  { icon: LayoutDashboard, label: 'Dashboard',  section: null        },
+  { icon: LayoutDashboard, label: 'Dashboard',  section: 'dashboard' as AppSection },
   { icon: Users,           label: 'Customers',  section: 'customers' },
   { icon: Briefcase,       label: 'Jobs',       section: 'jobs'      },
   { icon: Inbox,           label: 'Inbox',      section: null        },
@@ -141,10 +141,18 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
     setShowMobileNav(false);
   };
 
+  const handleGoToDashboard = () => {
+    setSection('dashboard');
+    setActiveOpportunity(null);
+    setActiveCustomer(null);
+    setShowMobileNav(false);
+  };
+
   const handleNavClick = (section: AppSection | null, label: string) => {
     if (section === 'customers') { handleGoToCustomers(); return; }
     if (section === 'jobs') { handleGoToJobs(); return; }
     if (section === 'pipeline') { handleGoToPipeline(); return; }
+    if (section === 'dashboard') { handleGoToDashboard(); return; }
     handleBackendNav(label);
   };
 
