@@ -210,6 +210,7 @@ export interface Invoice {
   issuedAt: string;        // ISO
   dueDate: string;         // ISO
   paidAt?: string;         // ISO, set when fully paid
+  serviceDate?: string;    // ISO, date work was performed
   // Payments
   payments: PaymentRecord[];
   amountPaid: number;      // sum of payments
@@ -218,6 +219,8 @@ export interface Invoice {
   lineItems: InvoiceLineItem[];
   notes: string;           // customer-visible notes
   internalNotes: string;   // internal only
+  paymentTerms?: string;   // e.g. 'Upon receipt', 'Net 30'
+  taxLabel?: string;       // e.g. 'Vancouver (8.9%)'
   // Stripe / PayPal
   stripePaymentIntentId?: string;
   stripeClientSecret?: string;
@@ -234,6 +237,7 @@ export interface InvoiceLineItem {
   qty: number;
   unitPrice: number;
   total: number;
+  notes?: string;          // additional description/scope text
 }
 
 // ── Customer Record (multi-customer list) ─────────────────

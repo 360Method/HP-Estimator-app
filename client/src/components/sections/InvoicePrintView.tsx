@@ -1,13 +1,11 @@
 // ============================================================
-// InvoicePrintView — HP-branded invoice document
-// Mirrors the EstimateSection print layout.
-// Includes: header, job reference, line items, tax breakdown,
-//           payment history, balance due, and job-completion
-//           signature block (canvas-based e-signature).
+// InvoicePrintView — matches the reference Handy Pioneers invoice layout
+// White background, two-column header, bordered meta table,
+// customer/contact blocks, line items, totals, payment history, footer.
 // ============================================================
 
-import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { Invoice, PaymentRecord, Customer, Opportunity } from '@/lib/types';
+import React, { useRef, useState } from 'react';
+import { Invoice, Customer, Opportunity } from '@/lib/types';
 import { CheckCircle2, Printer, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -15,32 +13,38 @@ import { Button } from '@/components/ui/button';
 const HP_LOGO = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg';
 const HP_COMPANY = {
   name: 'Handy Pioneers',
-  fullName: 'Handy Pioneers, LLC',
-  address: '808 SE Chkalov Dr 3-433',
+  address: '808 SE Chkalov Dr, 3-433',
   city: 'Vancouver, WA 98683',
   phone: '(360) 544-9858',
   email: 'help@handypioneers.com',
-  website: 'www.HandyPioneers.com',
+  website: 'http://handypioneers.com',
   license: 'HANDYP*761NH',
+  terms: 'https://pro.housecallpro.com/HandyPioneers/701055/terms',
 };
 
 // ── Helpers ─────────────────────────────────────────────────
 function fmt(n: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n);
 }
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', {
-    month: 'long', day: 'numeric', year: 'numeric',
-  });
+function fmtDate(iso: string | undefined) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' });
 }
-function fmtShort(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric',
-  });
+function fmtPaymentDate(iso: string) {
+  const d = new Date(iso);
+  const month = d.toLocaleDateString('en-US', { month: 'short' });
+  const day = d.getDate().toString().padStart(2, '0');
+  return `${month} ${day}`;
+}
+function fmtPaymentTime(iso: string) {
+  const d = new Date(iso);
+  const day = d.toLocaleDateString('en-US', { weekday: 'short' });
+  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  return `${day} ${time}`;
 }
 
 const METHOD_LABEL: Record<string, string> = {
-  stripe: 'Credit Card (Stripe)',
+  stripe: 'Credit Card',
   paypal: 'PayPal',
   cash: 'Cash',
   check: 'Check',
@@ -204,32 +208,40 @@ export default function InvoicePrintView({
   };
 
   const isFinal = invoice.type === 'final';
-  const isFullyPaid = invoice.balance <= 0;
 
   // Customer display info
-  const clientName = customer.displayName || `${customer.firstName} ${customer.lastName}`.trim() || 'Customer';
+  const clientName = customer.displayName || `${customer.firstName ?? ''} ${customer.lastName ?? ''}`.trim() || 'Customer';
   const clientAddress = [customer.street, customer.unit].filter(Boolean).join(' ');
   const clientCityStateZip = [customer.city, customer.state, customer.zip].filter(Boolean).join(', ');
+  const clientPhone = customer.mobilePhone || customer.homePhone || customer.workPhone || '';
+  const clientEmail = customer.email ?? '';
 
   // Job info from opportunity
-  const jobTitle = opportunity?.title ?? 'Project';
   const jobNumber = (opportunity as any)?.jobNumber ?? '';
-  const jobType = (opportunity as any)?.jobType ?? '';
-  const serviceAddress = (opportunity as any)?.serviceAddress ?? clientAddress;
-  const serviceCity = (opportunity as any)?.serviceCity ?? clientCityStateZip;
   const scopeOfWork = (opportunity as any)?.scopeOfWork ?? opportunity?.notes ?? '';
 
+  // Invoice number — strip INV- prefix for display like reference (#167)
+  const invDisplay = invoice.invoiceNumber.replace(/^INV-\d{4}-/, '#');
+  const jobDisplay = jobNumber ? jobNumber.replace(/^JOB-\d{4}-/, '#') : '—';
+
+  // Tax label
+  const taxLabel = invoice.taxLabel ?? (invoice.taxRate > 0 ? `${(invoice.taxRate * 100).toFixed(1)}%` : null);
+
+  // Amount due = balance (what's still owed)
+  const amountDue = Math.max(0, invoice.balance);
+
   return (
-    <div className="fixed inset-0 z-40 bg-black/50 overflow-y-auto no-print-overlay invoice-print-root">
-      {/* Action bar */}
-      <div className="sticky top-0 z-50 bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between no-print shadow-sm">
+    <div className="fixed inset-0 z-40 bg-gray-100 overflow-y-auto invoice-print-root">
+
+      {/* ── Action bar (screen only) ─────────────────────────── */}
+      <div className="no-print sticky top-0 z-50 bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-3">
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-700">
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700">
             <X className="w-5 h-5" />
           </button>
-          <span className="font-semibold text-slate-800">{invoice.invoiceNumber}</span>
-          <span className="text-sm text-slate-500">
-            {invoice.type === 'deposit' ? 'Deposit Invoice' : 'Final Invoice'}
+          <span className="font-semibold text-gray-800">{invoice.invoiceNumber}</span>
+          <span className="text-sm text-gray-500">
+            {isFinal ? 'Final Invoice' : 'Deposit Invoice'}
           </span>
         </div>
         <div className="flex gap-2">
@@ -250,307 +262,249 @@ export default function InvoicePrintView({
         </div>
       </div>
 
-      {/* Invoice document */}
-      <div className="max-w-3xl mx-auto my-8 px-4 print-area">
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+      {/* ── Invoice document ─────────────────────────────────── */}
+      <div className="print-area max-w-3xl mx-auto my-8 bg-white shadow-sm" style={{ fontFamily: 'Arial, Helvetica, sans-serif', fontSize: '13px', color: '#222' }}>
+        <div style={{ padding: '48px 52px 32px' }}>
 
-          {/* ── Header ─────────────────────────────────────── */}
-          <div className="bg-slate-900 text-white px-8 py-6">
-            <div className="flex items-start justify-between gap-6">
-              {/* Logo + company */}
-              <div className="flex items-center gap-4">
-                <img src={HP_LOGO} alt="Handy Pioneers" className="h-14 w-14 rounded-xl object-cover" />
-                <div>
-                  <div className="text-xl font-black tracking-tight">{HP_COMPANY.name}</div>
-                  <div className="text-xs text-slate-400 mt-0.5">{HP_COMPANY.address}</div>
-                  <div className="text-xs text-slate-400">{HP_COMPANY.city}</div>
-                  <div className="text-xs text-slate-400 mt-0.5">{HP_COMPANY.phone} · {HP_COMPANY.email}</div>
-                </div>
+          {/* ── TOP SECTION: Logo/Company + Meta table ─────────── */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
+
+            {/* Left: Logo + company */}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
+              <img src={HP_LOGO} alt="Handy Pioneers" style={{ width: '64px', height: '64px', borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+              <div>
+                <div style={{ fontWeight: 'bold', fontSize: '18px', lineHeight: '1.2' }}>{HP_COMPANY.name}</div>
+                <div style={{ color: '#555', fontSize: '12px', marginTop: '4px' }}>{HP_COMPANY.address}</div>
+                <div style={{ color: '#555', fontSize: '12px' }}>{HP_COMPANY.city}</div>
               </div>
-              {/* Invoice meta */}
-              <div className="text-right shrink-0">
-                <div className="text-3xl font-black tracking-tight text-white mb-1">
-                  {invoice.type === 'deposit' ? 'DEPOSIT' : 'INVOICE'}
+            </div>
+
+            {/* Right: Meta table */}
+            <div style={{ border: '1px solid #ccc', minWidth: '280px', fontSize: '12px' }}>
+              {[
+                { label: 'JOB', value: jobDisplay },
+                { label: 'INVOICE', value: invDisplay },
+                { label: 'SERVICE DATE', value: fmtDate(invoice.serviceDate ?? invoice.issuedAt) },
+                { label: 'INVOICE DATE', value: fmtDate(invoice.issuedAt) },
+                { label: 'PAYMENT TERMS', value: invoice.paymentTerms ?? 'Upon receipt' },
+              ].map(row => (
+                <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 10px', borderBottom: '1px solid #e5e5e5' }}>
+                  <span style={{ color: '#888', textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: '11px' }}>{row.label}</span>
+                  <span style={{ fontWeight: '500' }}>{row.value}</span>
                 </div>
-                <div className="text-lg font-bold text-blue-300">{invoice.invoiceNumber}</div>
-                <div className="text-xs text-slate-400 mt-2 space-y-0.5">
-                  <div>Issued: {fmtDate(invoice.issuedAt)}</div>
-                  <div>Due: {fmtDate(invoice.dueDate)}</div>
+              ))}
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 10px', borderTop: '1px solid #ccc' }}>
+                <span style={{ color: '#888', textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: '11px' }}>AMOUNT DUE</span>
+                <span style={{ fontWeight: 'bold', fontSize: '16px' }}>{fmt(amountDue)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* ── CUSTOMER + CONTACT block ─────────────────────── */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '28px' }}>
+
+            {/* Left: Bill To */}
+            <div>
+              <div style={{ fontWeight: '500', marginBottom: '2px' }}>{clientName}</div>
+              {clientAddress && <div style={{ color: '#444' }}>{clientAddress}</div>}
+              {clientCityStateZip && <div style={{ color: '#444' }}>{clientCityStateZip}</div>}
+              {(clientPhone || clientEmail) && <div style={{ marginTop: '12px' }} />}
+              {clientPhone && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#444', fontSize: '12px' }}>
+                  <span>📞</span> {clientPhone}
                 </div>
-                <div className={`mt-2 inline-block px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${
-                  isFullyPaid
-                    ? 'bg-emerald-500 text-white'
-                    : invoice.status === 'partial'
-                    ? 'bg-yellow-400 text-yellow-900'
-                    : invoice.status === 'sent'
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-slate-600 text-slate-200'
-                }`}>
-                  {isFullyPaid ? 'PAID' : invoice.status.toUpperCase()}
+              )}
+              {clientEmail && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#444', fontSize: '12px' }}>
+                  <span>✉️</span> {clientEmail}
+                </div>
+              )}
+            </div>
+
+            {/* Right: Contact Us */}
+            <div style={{ minWidth: '220px' }}>
+              <div style={{ color: '#888', textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: '11px', marginBottom: '6px' }}>CONTACT US</div>
+              <div style={{ borderTop: '1px solid #ddd', paddingTop: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#444', fontSize: '12px', marginBottom: '4px' }}>
+                  <span>📞</span> {HP_COMPANY.phone}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#444', fontSize: '12px' }}>
+                  <span>✉️</span> {HP_COMPANY.email}
                 </div>
               </div>
             </div>
           </div>
 
-          {/* ── Bill To / Job Reference ─────────────────────── */}
-          <div className="grid grid-cols-2 gap-0 border-b border-slate-200">
-            {/* Bill To */}
-            <div className="px-8 py-5 border-r border-slate-200">
-              <div className="text-xs uppercase tracking-widest font-bold text-slate-400 mb-2">Bill To</div>
-              <div className="font-bold text-slate-900 text-sm">{clientName}</div>
-              {customer.company && <div className="text-sm text-slate-600">{customer.company}</div>}
-              {clientAddress && <div className="text-sm text-slate-600 mt-1">{clientAddress}</div>}
-              {clientCityStateZip && <div className="text-sm text-slate-600">{clientCityStateZip}</div>}
-              {customer.email && <div className="text-sm text-slate-500 mt-1">{customer.email}</div>}
-              {customer.mobilePhone && <div className="text-sm text-slate-500">{customer.mobilePhone}</div>}
-            </div>
-            {/* Job Reference */}
-            <div className="px-8 py-5">
-              <div className="text-xs uppercase tracking-widest font-bold text-slate-400 mb-2">Job Reference</div>
-              <div className="font-bold text-slate-900 text-sm">{jobTitle}</div>
-              {jobNumber && <div className="text-sm text-slate-600">Job #{jobNumber}</div>}
-              {jobType && <div className="text-sm text-slate-600">{jobType}</div>}
-              {serviceAddress && serviceAddress !== clientAddress && (
-                <>
-                  <div className="text-xs font-semibold text-slate-400 uppercase tracking-widest mt-2 mb-0.5">Service Address</div>
-                  <div className="text-sm text-slate-600">{serviceAddress}</div>
-                  {serviceCity && <div className="text-sm text-slate-600">{serviceCity}</div>}
-                </>
-              )}
-              {opportunity?.convertedToJobAt && (
-                <div className="text-xs text-slate-400 mt-2">
-                  Job started: {fmtShort(opportunity.convertedToJobAt)}
-                </div>
-              )}
-            </div>
+          {/* ── INVOICE heading ───────────────────────────────── */}
+          <div style={{ fontSize: '16px', fontWeight: '400', marginBottom: '10px', letterSpacing: '0.02em' }}>
+            INVOICE
           </div>
 
-          {/* ── Scope of Work ───────────────────────────────── */}
-          {scopeOfWork && (
-            <div className="px-8 py-4 border-b border-slate-200 bg-slate-50">
-              <div className="text-xs uppercase tracking-widest font-bold text-slate-400 mb-1">Scope of Work</div>
-              <p className="text-sm text-slate-700 leading-relaxed">{scopeOfWork}</p>
-            </div>
-          )}
-
-          {/* ── Line Items ──────────────────────────────────── */}
-          <div className="px-8 py-5 border-b border-slate-200">
-            <div className="text-xs uppercase tracking-widest font-bold text-slate-400 mb-3">Services</div>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200">
-                  <th className="text-left py-2 font-semibold text-slate-600">Description</th>
-                  <th className="text-right py-2 font-semibold text-slate-600 w-16">Qty</th>
-                  <th className="text-right py-2 font-semibold text-slate-600 w-28">Unit Price</th>
-                  <th className="text-right py-2 font-semibold text-slate-600 w-28">Amount</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {invoice.lineItems.map(item => (
-                  <tr key={item.id}>
-                    <td className="py-2.5 text-slate-800">{item.description}</td>
-                    <td className="py-2.5 text-right text-slate-600">{item.qty}</td>
-                    <td className="py-2.5 text-right text-slate-600">{fmt(item.unitPrice)}</td>
-                    <td className="py-2.5 text-right font-semibold text-slate-900">{fmt(item.total)}</td>
+          {/* ── Line items table ──────────────────────────────── */}
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '24px' }}>
+            <thead>
+              <tr style={{ backgroundColor: '#f0f0f0' }}>
+                <th style={{ textAlign: 'left', padding: '7px 10px', fontWeight: '500', fontSize: '12px', color: '#444' }}>Services</th>
+                <th style={{ textAlign: 'right', padding: '7px 10px', fontWeight: '500', fontSize: '12px', color: '#444', width: '60px' }}>qty</th>
+                <th style={{ textAlign: 'right', padding: '7px 10px', fontWeight: '500', fontSize: '12px', color: '#444', width: '90px' }}>unit price</th>
+                <th style={{ textAlign: 'right', padding: '7px 10px', fontWeight: '500', fontSize: '12px', color: '#444', width: '90px' }}>amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {invoice.lineItems && invoice.lineItems.length > 0 ? (
+                invoice.lineItems.map((item, i) => (
+                  <tr key={item.id ?? i} style={{ borderBottom: '1px solid #e8e8e8' }}>
+                    <td style={{ padding: '8px 10px', verticalAlign: 'top' }}>
+                      <div style={{ fontWeight: '500' }}>{item.description}</div>
+                      {item.notes && (
+                        <div style={{ color: '#666', fontSize: '11px', marginTop: '3px', lineHeight: '1.5' }}>
+                          {item.notes}
+                        </div>
+                      )}
+                    </td>
+                    <td style={{ padding: '8px 10px', textAlign: 'right', verticalAlign: 'top' }}>{item.qty}</td>
+                    <td style={{ padding: '8px 10px', textAlign: 'right', verticalAlign: 'top' }}>{fmt(item.unitPrice)}</td>
+                    <td style={{ padding: '8px 10px', textAlign: 'right', verticalAlign: 'top' }}>{fmt(item.total)}</td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                ))
+              ) : (
+                <tr style={{ borderBottom: '1px solid #e8e8e8' }}>
+                  <td style={{ padding: '8px 10px', verticalAlign: 'top' }}>
+                    <div style={{ fontWeight: '500' }}>
+                      {isFinal ? 'Final Invoice' : 'Deposit Invoice'} — {opportunity?.title ?? 'Project'}
+                    </div>
+                    {scopeOfWork && (
+                      <div style={{ color: '#666', fontSize: '11px', marginTop: '4px', lineHeight: '1.6' }}>
+                        SCOPE OF WORK
+                        <br />
+                        {scopeOfWork}
+                      </div>
+                    )}
+                  </td>
+                  <td style={{ padding: '8px 10px', textAlign: 'right', verticalAlign: 'top' }}>1.0</td>
+                  <td style={{ padding: '8px 10px', textAlign: 'right', verticalAlign: 'top' }}>{fmt(invoice.subtotal)}</td>
+                  <td style={{ padding: '8px 10px', textAlign: 'right', verticalAlign: 'top' }}>{fmt(invoice.subtotal)}</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
 
-          {/* ── Totals ──────────────────────────────────────── */}
-          <div className="px-8 py-5 border-b border-slate-200">
-            <div className="ml-auto max-w-xs space-y-1.5 text-sm">
-              <div className="flex justify-between text-slate-600">
-                <span>Subtotal</span>
+          {/* ── Totals (right-aligned) ────────────────────────── */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '32px' }}>
+            <div style={{ minWidth: '280px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid #e8e8e8' }}>
+                <span style={{ color: '#444' }}>Subtotal</span>
                 <span>{fmt(invoice.subtotal)}</span>
               </div>
-              {invoice.taxRate > 0 && (
-                <div className="flex justify-between text-slate-600">
-                  <span>Sales Tax ({(invoice.taxRate * 100).toFixed(1)}%)</span>
-                  <span>{fmt(invoice.taxAmount)}</span>
+              {invoice.taxAmount > 0 && (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid #e8e8e8' }}>
+                    <span style={{ color: '#444' }}>Total Tax</span>
+                    <span>{fmt(invoice.taxAmount)}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0 4px 16px', borderBottom: '1px solid #e8e8e8', color: '#666', fontSize: '12px' }}>
+                    <span>{taxLabel ?? `${(invoice.taxRate * 100).toFixed(1)}%`}</span>
+                    <span>{fmt(invoice.taxAmount)}</span>
+                  </div>
+                </>
+              )}
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid #ccc' }}>
+                <span style={{ fontWeight: 'bold' }}>Job Total</span>
+                <span style={{ fontWeight: 'bold' }}>{fmt(invoice.total)}</span>
+              </div>
+              {invoice.amountPaid > 0 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid #e8e8e8', color: '#444' }}>
+                  <span>Amount Paid</span>
+                  <span>−{fmt(invoice.amountPaid)}</span>
                 </div>
               )}
-              {invoice.type === 'deposit' && invoice.depositPercent && (
-                <div className="flex justify-between text-slate-500 text-xs">
-                  <span>{invoice.depositPercent}% deposit of project total</span>
-                  <span></span>
-                </div>
-              )}
-              <div className="flex justify-between font-black text-base text-slate-900 border-t border-slate-200 pt-2 mt-2">
-                <span>Total Due</span>
-                <span>{fmt(invoice.total)}</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', marginTop: '2px' }}>
+                <span style={{ fontWeight: 'bold', fontSize: '15px' }}>
+                  {invoice.amountPaid > 0 ? 'Amount Due' : 'Invoice Amount'}
+                </span>
+                <span style={{ fontWeight: 'bold', fontSize: '15px' }}>{fmt(amountDue)}</span>
               </div>
             </div>
           </div>
 
-          {/* ── Payment History ─────────────────────────────── */}
-          {invoice.payments.length > 0 && (
-            <div className="px-8 py-5 border-b border-slate-200 bg-slate-50">
-              <div className="text-xs uppercase tracking-widest font-bold text-slate-400 mb-3">Payment History</div>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200">
-                    <th className="text-left py-1.5 font-semibold text-slate-500">Date</th>
-                    <th className="text-left py-1.5 font-semibold text-slate-500">Method</th>
-                    <th className="text-left py-1.5 font-semibold text-slate-500">Reference</th>
-                    <th className="text-right py-1.5 font-semibold text-slate-500">Amount</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {invoice.payments.map((p: PaymentRecord) => (
-                    <tr key={p.id}>
-                      <td className="py-2 text-slate-700">{fmtShort(p.paidAt)}</td>
-                      <td className="py-2 text-slate-700">{METHOD_LABEL[p.method] ?? p.method}</td>
-                      <td className="py-2 text-slate-500 text-xs">{p.reference || p.note || '—'}</td>
-                      <td className="py-2 text-right font-semibold text-emerald-700">{fmt(p.amount)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div className="flex justify-between text-sm font-bold text-slate-900 border-t border-slate-200 pt-2 mt-2">
-                <span>Total Paid</span>
-                <span className="text-emerald-700">{fmt(invoice.amountPaid)}</span>
-              </div>
+          {/* ── Payment History ───────────────────────────────── */}
+          {invoice.payments && invoice.payments.length > 0 && (
+            <div style={{ marginBottom: '28px' }}>
+              <div style={{ fontWeight: '400', marginBottom: '8px', color: '#444' }}>Payment History</div>
+              {invoice.payments.map((p, i) => (
+                <div key={p.id ?? i} style={{ display: 'flex', gap: '24px', fontSize: '12px', color: '#444', padding: '3px 0' }}>
+                  <span style={{ minWidth: '50px' }}>{fmtPaymentDate(p.paidAt)}</span>
+                  <span style={{ minWidth: '100px' }}>{fmtPaymentTime(p.paidAt)}</span>
+                  <span style={{ minWidth: '80px' }}>{METHOD_LABEL[p.method] ?? p.method}</span>
+                  <span>{fmt(p.amount)}</span>
+                </div>
+              ))}
             </div>
           )}
 
-          {/* ── Balance Due ─────────────────────────────────── */}
-          <div className={`px-8 py-5 ${isFullyPaid ? 'bg-emerald-50' : 'bg-slate-900 text-white'}`}>
-            <div className="flex items-center justify-between">
-              <div>
-                <div className={`text-xs uppercase tracking-widest font-bold mb-1 ${isFullyPaid ? 'text-emerald-600' : 'text-slate-400'}`}>
-                  {isFullyPaid ? 'Paid in Full' : 'Balance Due'}
-                </div>
-                <div className={`text-3xl font-black ${isFullyPaid ? 'text-emerald-700' : 'text-white'}`}>
-                  {fmt(Math.max(0, invoice.balance))}
-                </div>
-              </div>
-              {isFullyPaid && (
-                <div className="flex items-center gap-2 text-emerald-700 font-bold">
-                  <CheckCircle2 className="w-8 h-8" />
-                  <span className="text-lg">PAID</span>
-                </div>
-              )}
-              {!isFullyPaid && (
-                <div className="text-right text-xs text-slate-400 space-y-1">
-                  <div>Due: {fmtDate(invoice.dueDate)}</div>
-                  <div>Pay by card, PayPal, cash, or check</div>
-                  <div className="text-slate-500">3% processing fee applies to cards</div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* ── Customer Notes ──────────────────────────────── */}
-          {invoice.notes && (
-            <div className="px-8 py-4 border-t border-slate-200">
-              <div className="text-xs uppercase tracking-widest font-bold text-slate-400 mb-1">Notes</div>
-              <p className="text-sm text-slate-700 leading-relaxed">{invoice.notes}</p>
-            </div>
-          )}
-
-          {/* ── Job Completion Sign-Off ──────────────────────── */}
+          {/* ── Job completion sign-off (final invoices) ─────── */}
           {isFinal && (
-            <div className={`px-8 py-6 border-t border-slate-200 ${completionSig ? 'bg-emerald-50' : 'bg-slate-50'}`}>
-              <div className="text-xs uppercase tracking-widest font-bold text-slate-400 mb-3">
-                Job Completion Sign-Off
-              </div>
+            <div style={{ marginBottom: '28px', borderTop: '1px solid #e8e8e8', paddingTop: '20px' }}>
               {completionSig ? (
-                <div className="space-y-3">
-                  <p className="text-sm text-slate-700">
-                    By signing below, the customer confirms that all work described in this invoice has been
-                    completed to their satisfaction and authorizes final payment.
-                  </p>
-                  <div className="flex items-start gap-8">
+                <div>
+                  <div style={{ fontWeight: '500', marginBottom: '8px', color: '#444' }}>Job Completion Confirmed</div>
+                  <div style={{ display: 'flex', gap: '32px', alignItems: 'flex-start' }}>
                     <div>
-                      <div className="text-xs text-slate-500 mb-1 font-semibold">Customer Signature</div>
-                      <div className="border border-emerald-300 rounded-lg p-2 bg-white inline-block">
-                        <img src={completionSig} alt="Customer signature" className="max-h-16 object-contain" />
-                      </div>
-                      <div className="text-sm font-bold text-slate-800 mt-1">{completionName}</div>
-                      <div className="text-xs text-slate-500">
-                        {completionDate ? new Date(completionDate).toLocaleString() : ''}
-                      </div>
+                      <div style={{ fontSize: '11px', color: '#888', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Signature</div>
+                      <img src={completionSig} alt="Customer signature" style={{ height: '60px', border: '1px solid #ddd', padding: '4px', background: '#fafafa' }} />
                     </div>
-                    <div className="flex items-center gap-2 text-emerald-700 font-bold text-sm mt-4">
-                      <CheckCircle2 className="w-5 h-5" />
-                      Job Accepted &amp; Complete
+                    <div>
+                      <div style={{ fontSize: '11px', color: '#888', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Printed Name</div>
+                      <div style={{ fontWeight: '500' }}>{completionName}</div>
+                      {completionDate && (
+                        <div style={{ fontSize: '11px', color: '#888', marginTop: '4px' }}>{fmtDate(completionDate)}</div>
+                      )}
                     </div>
                   </div>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  <p className="text-sm text-slate-600">
-                    Customer signature required to confirm job completion. Click "Sign Job Complete" above
-                    to capture the customer's e-signature.
-                  </p>
-                  {/* Print placeholder */}
-                  <div className="grid grid-cols-2 gap-8 mt-4">
-                    <div>
-                      <div className="text-xs text-slate-500 mb-1">Customer Signature</div>
-                      <div className="border-b-2 border-slate-400 h-12 w-full"></div>
-                      <div className="text-xs text-slate-400 mt-1">Signature</div>
+                <div>
+                  <div style={{ fontWeight: '500', marginBottom: '12px', color: '#444' }}>Customer Sign-Off — Job Completion</div>
+                  <div style={{ display: 'flex', gap: '32px' }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '11px', color: '#888', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Signature</div>
+                      <div style={{ height: '60px', borderBottom: '1px solid #999', width: '100%' }} />
                     </div>
-                    <div>
-                      <div className="text-xs text-slate-500 mb-1">Date</div>
-                      <div className="border-b-2 border-slate-400 h-12 w-full"></div>
-                      <div className="text-xs text-slate-400 mt-1">Date</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '11px', color: '#888', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Printed Name</div>
+                      <div style={{ height: '60px', borderBottom: '1px solid #999', width: '100%' }} />
+                    </div>
+                    <div style={{ width: '120px' }}>
+                      <div style={{ fontSize: '11px', color: '#888', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Date</div>
+                      <div style={{ height: '60px', borderBottom: '1px solid #999', width: '100%' }} />
                     </div>
                   </div>
-                  <p className="text-xs text-slate-500 mt-2">
-                    "I confirm that all work described in this invoice has been completed to my satisfaction
-                    and authorize final payment of {fmt(Math.max(0, invoice.balance))}."
-                  </p>
                 </div>
               )}
             </div>
           )}
 
-          {/* ── Payment Terms ────────────────────────────────── */}
-          <div className="px-8 py-5 border-t border-slate-200 bg-slate-50">
-            <div className="text-xs uppercase tracking-widest font-bold text-slate-400 mb-2">Payment Terms</div>
-            <ul className="space-y-1 text-xs text-slate-600">
-              <li className="flex items-start gap-2">
-                <span className="text-blue-500 font-bold shrink-0">•</span>
-                Payment is due by {fmtDate(invoice.dueDate)}. Late payments may incur a 1.5% monthly finance charge (18% APR).
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-blue-500 font-bold shrink-0">•</span>
-                A 3% processing fee applies to all credit card payments for non-360° HomeCare Members.
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-blue-500 font-bold shrink-0">•</span>
-                All work is guaranteed — 1-year workmanship warranty on labor.
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-blue-500 font-bold shrink-0">•</span>
-                {HP_COMPANY.fullName} is fully licensed and insured in the State of Washington (License: {HP_COMPANY.license}).
-              </li>
-            </ul>
-          </div>
+          {/* ── Customer notes ────────────────────────────────── */}
+          {invoice.notes && (
+            <div style={{ marginBottom: '20px', fontSize: '12px', color: '#555' }}>
+              {invoice.notes}
+            </div>
+          )}
 
-          {/* ── Footer ──────────────────────────────────────── */}
-          <div className="px-8 py-4 border-t border-slate-200 flex items-center justify-between gap-4 flex-wrap bg-white">
-            <div className="flex items-center gap-3">
-              <img src={HP_LOGO} alt="Handy Pioneers" className="h-8 w-8 object-contain rounded" />
-              <div className="text-xs text-slate-500">
-                <span className="font-semibold text-slate-800">{HP_COMPANY.fullName}</span>
-                {' · '}Vancouver, WA · Licensed &amp; Insured
-              </div>
-            </div>
-            <div className="text-xs text-slate-500 text-right">
-              <a href={`tel:${HP_COMPANY.phone}`} className="hover:text-blue-600">{HP_COMPANY.phone}</a>
-              {' · '}
-              <a href={`mailto:${HP_COMPANY.email}`} className="hover:text-blue-600">{HP_COMPANY.email}</a>
-              {' · '}
-              {HP_COMPANY.website}
-            </div>
+          {/* ── Terms & Conditions ────────────────────────────── */}
+          <div style={{ fontSize: '12px', color: '#555', marginBottom: '24px' }}>
+            See our Terms &amp; Conditions ({HP_COMPANY.terms})
           </div>
+        </div>
+
+        {/* ── Footer ───────────────────────────────────────────── */}
+        <div style={{ borderTop: '1px solid #ddd', padding: '10px 52px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px', color: '#888' }}>
+          <span>{HP_COMPANY.name} | {HP_COMPANY.license}</span>
+          <span>{HP_COMPANY.website}</span>
         </div>
       </div>
 
-      {/* Signature modal */}
+      {/* ── Signature canvas modal ───────────────────────────── */}
       {showSignatureCanvas && (
         <SignatureCanvas
           onSave={handleSaveSignature}
@@ -558,20 +512,30 @@ export default function InvoicePrintView({
         />
       )}
 
-      {/* Print styles — isolate only the invoice document */}
+      {/* ── Print styles ─────────────────────────────────────── */}
       <style>{`
         @media print {
           /* Hide everything on the page */
           body > * { display: none !important; }
-          /* Show only the invoice document inside the overlay */
-          body .invoice-print-root { display: block !important; position: static !important; background: white !important; overflow: visible !important; }
+          /* Show only the invoice root */
+          body .invoice-print-root {
+            display: block !important;
+            position: fixed !important;
+            inset: 0 !important;
+            z-index: 9999 !important;
+            background: white !important;
+            overflow: visible !important;
+          }
+          /* Hide the action bar and gray overlay bg */
           body .invoice-print-root .no-print { display: none !important; }
-          body .invoice-print-root .print-area { display: block !important; margin: 0 !important; padding: 0 !important; max-width: 100% !important; }
-          /* Reset overlay chrome */
-          body .invoice-print-root { position: fixed !important; inset: 0 !important; z-index: 9999 !important; background: white !important; }
-          .shadow-sm, .shadow { box-shadow: none !important; }
-          .rounded-xl { border-radius: 0 !important; }
-          .border { border: none !important; }
+          body .invoice-print-root { background: white !important; }
+          /* Print area: remove screen margin/shadow */
+          body .invoice-print-root .print-area {
+            margin: 0 !important;
+            max-width: 100% !important;
+            box-shadow: none !important;
+          }
+          @page { margin: 0; }
         }
       `}</style>
     </div>
