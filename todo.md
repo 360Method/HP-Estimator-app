@@ -42,3 +42,8 @@
 - [ ] Reporting / analytics page
 - [ ] Marketing tab
 - [ ] Dashboard overview page
+
+## In Progress
+
+- [x] Fix: job/estimate value not flowing through to deposit invoice amount (CalculatorSection now syncs grandTotals.price to opportunity.value via useEffect)
+- [x] Add Clark County WA tax rates as selectable options in invoice creation dialog (WA DOR Q2 2026 rates)

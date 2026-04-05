@@ -29,6 +29,28 @@ import {
   Plus, Printer, Send, ChevronRight, Banknote, Smartphone,
 } from 'lucide-react';
 
+// ── Clark County WA Tax Rates (WA DOR Q2 2026) ───────────────────
+const CLARK_COUNTY_TAX_RATES: { label: string; rate: number; code: string }[] = [
+  { label: 'No Tax (0%)', rate: 0, code: 'none' },
+  // Unincorporated areas
+  { label: 'Clark County Unincorp. Areas (8.0%)', rate: 0.0800, code: '0600' },
+  { label: 'Clark County Unincorp. PTBA (8.7%)', rate: 0.0870, code: '0666' },
+  // Cities — alphabetical
+  { label: 'Battle Ground (8.9%)', rate: 0.0890, code: '0601' },
+  { label: 'Camas (8.8%)', rate: 0.0880, code: '0602' },
+  { label: 'La Center (8.8%)', rate: 0.0880, code: '0611' },
+  { label: 'Ridgefield (8.8%)', rate: 0.0880, code: '0604' },
+  { label: 'Vancouver (8.9%)', rate: 0.0890, code: '0603' },
+  { label: 'Washougal (8.6%)', rate: 0.0860, code: '0605' },
+  { label: 'Woodland (7.9%)', rate: 0.0790, code: '0607' },
+  { label: 'Yacolt (8.5%)', rate: 0.0850, code: '0606' },
+  // Tribal areas
+  { label: 'Cowlitz Tribe – Clark Unincorp. (8.0%)', rate: 0.0800, code: '0609' },
+  { label: 'Cowlitz Tribe – La Center (8.8%)', rate: 0.0880, code: '0611' },
+  // Manual entry
+  { label: 'Custom rate…', rate: -1, code: 'custom' },
+];
+
 // ── Stripe loader (lazy, keyed on publishable key) ─────────────
 let stripePromise: ReturnType<typeof loadStripe> | null = null;
 
@@ -563,7 +585,12 @@ function CreateInvoiceDialog({
 }) {
   const [type, setType] = useState<'deposit' | 'final'>(defaultType);
   const [depositPct, setDepositPct] = useState(50);
-  const [taxRate, setTaxRate] = useState(0);
+  const [taxRateCode, setTaxRateCode] = useState('0603'); // default: Vancouver 8.9%
+  const [customTaxPct, setCustomTaxPct] = useState(8.9);
+  const selectedPreset = CLARK_COUNTY_TAX_RATES.find(r => r.code === taxRateCode);
+  const taxRate = taxRateCode === 'custom'
+    ? customTaxPct / 100
+    : (selectedPreset?.rate ?? 0);
   const [notes, setNotes] = useState('');
   const [dueDate, setDueDate] = useState(
     new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
@@ -634,11 +661,28 @@ function CreateInvoiceDialog({
             </div>
           )}
           <div>
-            <Label>Tax Rate (%)</Label>
-            <Input
-              type="number" min={0} max={30} step={0.1} value={(taxRate * 100).toFixed(1)}
-              onChange={e => setTaxRate(Number(e.target.value) / 100)}
-            />
+            <Label>Sales Tax Location (Clark County WA)</Label>
+            <Select value={taxRateCode} onValueChange={setTaxRateCode}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select location" />
+              </SelectTrigger>
+              <SelectContent>
+                {CLARK_COUNTY_TAX_RATES.map(r => (
+                  <SelectItem key={r.code + r.label} value={r.code}>{r.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {taxRateCode === 'custom' && (
+              <div className="mt-2 flex items-center gap-2">
+                <Input
+                  type="number" min={0} max={30} step={0.1}
+                  value={customTaxPct}
+                  onChange={e => setCustomTaxPct(Number(e.target.value))}
+                  className="w-24"
+                />
+                <span className="text-sm text-muted-foreground">%</span>
+              </div>
+            )}
           </div>
           <div>
             <Label>Due Date</Label>

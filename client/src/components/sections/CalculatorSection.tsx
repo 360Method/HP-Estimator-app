@@ -3,7 +3,7 @@
 // Per-line-item markup, per-phase custom items, AI cost analysis
 // ============================================================
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { calcPhase, calcLineItem, calcCustomItem, calcTotals, fmtDollar, fmtDollarCents, getMarginFlag, getMarginLabel } from '@/lib/calc';
 import { LineItem, CustomLineItem, Tier, UNIT_LABELS, UnitType } from '@/lib/types';
@@ -853,7 +853,7 @@ function PhasePanel({ phaseId }: { phaseId: number }) {
 
 // ─── MAIN CALCULATOR SECTION ──────────────────────────────────
 export default function CalculatorSection() {
-  const { state } = useEstimator();
+  const { state, updateOpportunity } = useEstimator();
   const [activePhaseId, setActivePhaseId] = useState(1);
 
   const phaseResults = useMemo(() => {
@@ -872,6 +872,15 @@ export default function CalculatorSection() {
     const allCustomResults = state.customItems.map(ci => calcCustomItem(ci, state.global));
     return calcTotals(allPhaseResults, allCustomResults);
   }, [state.phases, state.customItems, state.global]);
+
+  // Sync the calculated price back to the active opportunity so the pipeline
+  // card value, convert-to-job, and invoice all reflect the real total.
+  useEffect(() => {
+    if (state.activeOpportunityId && grandTotals.hasData && grandTotals.price > 0) {
+      updateOpportunity(state.activeOpportunityId, { value: grandTotals.price });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [grandTotals.price, state.activeOpportunityId]);
 
   return (
     <div className="pb-24">
