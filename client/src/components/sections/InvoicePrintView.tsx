@@ -6,9 +6,10 @@
 
 import React, { useRef, useState } from 'react';
 import { Invoice, Customer, Opportunity } from '@/lib/types';
-import { CheckCircle2, Printer, X } from 'lucide-react';
+import { CheckCircle2, Download, Printer, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import TermsAndConditions from '@/components/TermsAndConditions';
+import { toast } from 'sonner';
 
 // ── Brand constants ─────────────────────────────────────────
 const HP_LOGO = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg';
@@ -326,6 +327,79 @@ export default function InvoicePrintView({
   const [completionSig, setCompletionSig] = useState<string | null>(invoice.completionSignature ?? null);
   const [completionName, setCompletionName] = useState<string | null>(invoice.completionSignedBy ?? null);
   const [completionDate, setCompletionDate] = useState<string | null>(invoice.completionSignedAt ?? null);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+  const printAreaRef = useRef<HTMLDivElement>(null);
+
+  const handleDownloadFullPdf = async () => {
+    setGeneratingPdf(true);
+    try {
+      const [{ jsPDF }, html2canvas] = await Promise.all([
+        import('jspdf'),
+        import('html2canvas').then(m => m.default),
+      ]);
+      const el = printAreaRef.current;
+      if (!el) throw new Error('Invoice element not found');
+      // Capture the invoice document as a canvas
+      const canvas = await html2canvas(el, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+      });
+      const imgW = canvas.width;
+      const imgH = canvas.height;
+      // A4 dimensions in mm
+      const pageW = 210;
+      const pageH = 297;
+      const ratio = pageW / imgW;
+      const drawH = imgH * ratio;
+      // Create PDF — may need multiple pages if invoice is tall
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      let yOffset = 0;
+      let remainingH = drawH;
+      let firstPage = true;
+      while (remainingH > 0) {
+        if (!firstPage) pdf.addPage();
+        const sliceH = Math.min(pageH, remainingH);
+        // Clip source canvas slice
+        const srcY = (yOffset / drawH) * imgH;
+        const srcH = (sliceH / drawH) * imgH;
+        const sliceCanvas = document.createElement('canvas');
+        sliceCanvas.width = imgW;
+        sliceCanvas.height = srcH;
+        const sliceCtx = sliceCanvas.getContext('2d')!;
+        sliceCtx.drawImage(canvas, 0, srcY, imgW, srcH, 0, 0, imgW, srcH);
+        pdf.addImage(sliceCanvas.toDataURL('image/png'), 'PNG', 0, 0, pageW, sliceH);
+        yOffset += sliceH;
+        remainingH -= sliceH;
+        firstPage = false;
+      }
+      // Append signed estimate as appendix page (final invoices only)
+      const signedEstUrl = opportunity?.jobSignedEstimateDataUrl ?? (opportunity as any)?.signedEstimateDataUrl;
+      if (isFinal && signedEstUrl) {
+        pdf.addPage();
+        pdf.setFontSize(10);
+        pdf.setTextColor(100);
+        pdf.text('APPENDIX — Signed Estimate', 14, 14);
+        const estImg = new Image();
+        estImg.src = signedEstUrl;
+        await new Promise<void>((res, rej) => { estImg.onload = () => res(); estImg.onerror = rej; });
+        const eW = estImg.naturalWidth || 1240;
+        const eH = estImg.naturalHeight || 1754;
+        const eRatio = Math.min((pageW - 28) / eW, (pageH - 28) / eH);
+        const eDrawW = eW * eRatio;
+        const eDrawH = eH * eRatio;
+        pdf.addImage(signedEstUrl, 'PNG', 14, 20, eDrawW, eDrawH);
+      }
+      const base = invoice.invoiceNumber.replace(/[^a-zA-Z0-9-]/g, '_');
+      pdf.save(`${base}_Full.pdf`);
+    } catch (err) {
+      console.error('PDF generation failed', err);
+      toast.error('Could not generate PDF. Try using Print / Save PDF instead.');
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
 
   const handleSaveSignature = (dataUrl: string, name: string) => {
     const now = new Date().toISOString();
@@ -384,15 +458,22 @@ export default function InvoicePrintView({
               Sign Job Complete
             </Button>
           )}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleDownloadFullPdf}
+            disabled={generatingPdf}
+          >
+            <Download className="w-4 h-4 mr-1.5" />
+            {generatingPdf ? 'Generating...' : 'Download Full PDF'}
+          </Button>
           <Button size="sm" variant="outline" onClick={() => window.print()}>
             <Printer className="w-4 h-4 mr-1.5" />
-            Print / Save PDF
+            Print
           </Button>
         </div>
-      </div>
-
-      {/* ── Invoice document ─────────────────────────────────── */}
-      <div className="print-area max-w-3xl mx-auto my-8 bg-white shadow-sm" style={{ fontFamily: 'Arial, Helvetica, sans-serif', fontSize: '13px', color: '#222' }}>
+      </div>      {/* ── Invoice document ────────────────────────────────────── */}
+      <div ref={printAreaRef} className="print-area max-w-3xl mx-auto my-8 bg-white shadow-sm" style={{ fontFamily: 'Arial, Helvetica, sans-serif', fontSize: '13px', color: '#222' }}>
         <div style={{ padding: '48px 52px 32px' }}>
 
           {/* ── TOP SECTION: Logo/Company + Meta table ─────────── */}
@@ -588,7 +669,87 @@ export default function InvoicePrintView({
                 <span style={{ fontWeight: 'bold', fontSize: '15px' }}>{fmt(amountDue)}</span>
               </div>
             </div>
-          </div>          {/* ── Payment History ──────────────────────────────────── */}
+          </div>          {/* ── Final Payment Status Stamp ─────────────────────── */}
+          {isFinal && allJobInvoices.length > 0 && (() => {
+            const totalContract = allJobInvoices.reduce((s, inv) => s + inv.total, 0);
+            const totalPaid = allJobInvoices.reduce((s, inv) => s + inv.amountPaid, 0);
+            const totalBalance = allJobInvoices.reduce((s, inv) => s + inv.balance, 0);
+            const isPaidInFull = totalBalance <= 0;
+            return (
+              <div style={{
+                marginBottom: '28px',
+                border: `2px solid ${isPaidInFull ? '#059669' : '#d97706'}`,
+                borderRadius: '6px',
+                padding: '16px 20px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                backgroundColor: isPaidInFull ? '#f0fdf4' : '#fffbeb',
+              }}>
+                <div>
+                  <div style={{ fontSize: '18px', fontWeight: '700', color: isPaidInFull ? '#065f46' : '#92400e', letterSpacing: '0.04em' }}>
+                    {isPaidInFull ? '✓ PAID IN FULL' : 'BALANCE DUE'}
+                  </div>
+                  <div style={{ fontSize: '11px', color: isPaidInFull ? '#047857' : '#b45309', marginTop: '3px' }}>
+                    {isPaidInFull
+                      ? `Total collected: ${fmt(totalPaid)} — Thank you!`
+                      : `${fmt(totalPaid)} collected of ${fmt(totalContract)} contract`}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: '26px', fontWeight: '800', color: isPaidInFull ? '#065f46' : '#92400e' }}>
+                    {isPaidInFull ? fmt(0) : fmt(totalBalance)}
+                  </div>
+                  <div style={{ fontSize: '10px', color: '#888', marginTop: '2px' }}>
+                    {isPaidInFull ? 'Outstanding balance' : 'Remaining balance'}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* ── Job Expenses Breakdown (all invoices, line items) ── */}
+          {allJobInvoices.length > 1 && (
+            <div style={{ marginBottom: '28px', borderTop: '1px solid #e8e8e8', paddingTop: '20px' }}>
+              <div style={{ fontWeight: '500', marginBottom: '12px', color: '#444', fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Job Expenses Breakdown
+              </div>
+              {[...allJobInvoices].sort((a, b) => {
+                const order: Record<string, number> = { deposit: 0, final: 1 };
+                return (order[a.type] ?? 2) - (order[b.type] ?? 2);
+              }).map((inv, invIdx) => (
+                <div key={inv.id ?? invIdx} style={{ marginBottom: '16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f5f5f5', padding: '6px 10px', borderRadius: '3px', marginBottom: '4px' }}>
+                    <span style={{ fontWeight: '600', fontSize: '12px', color: '#333' }}>
+                      {inv.invoiceNumber.replace(/^INV-\d{4}-/, '#')} — {inv.type === 'deposit' ? 'Deposit Invoice' : 'Final Invoice'}
+                    </span>
+                    <span style={{ fontSize: '11px', color: '#666' }}>
+                      {fmt(inv.amountPaid)} paid of {fmt(inv.total)}
+                    </span>
+                  </div>
+                  {inv.lineItems && inv.lineItems.length > 0 ? (
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+                      <tbody>
+                        {inv.lineItems.map((item, itemIdx) => (
+                          <tr key={item.id ?? itemIdx} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                            <td style={{ padding: '4px 10px', color: '#444' }}>{item.description}</td>
+                            <td style={{ padding: '4px 10px', textAlign: 'right', color: '#666', width: '50px' }}>{item.qty}</td>
+                            <td style={{ padding: '4px 10px', textAlign: 'right', color: '#444', width: '90px' }}>{fmt(item.total)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div style={{ padding: '4px 10px', fontSize: '11px', color: '#666' }}>
+                      {inv.type === 'deposit' ? 'Deposit' : 'Final balance'} — {opportunity?.title ?? 'Project'}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ── Payment History ──────────────────────────────────── */}
           {invoice.payments && invoice.payments.length > 0 && (
             <div style={{ marginBottom: '28px' }}>
               <div style={{ fontWeight: '400', marginBottom: '8px', color: '#444' }}>Payment History</div>

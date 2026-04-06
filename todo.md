@@ -217,6 +217,13 @@
 - [x] Final invoice PDF (InvoicePrintView) shows all payments already made (date, method, amount) before the balance due (Payment History section already present)
 - [x] Final invoice PDF includes the SOW from the linked job opportunity (opportunity.sowDocument, shown between line items and totals)
 
+## Enhancement: Final Invoice PDF — Full Package
+
+- [x] Final invoice PDF includes a Job Expenses Breakdown section showing all invoices for the job (deposit + final) with their line items, amounts, and payment status
+- [x] Final invoice PDF includes a Payment Status Summary stamp: green PAID IN FULL or amber BALANCE DUE with total collected and remaining balance
+- [x] "Download Full PDF" button generates a multi-page PDF using html2canvas + jsPDF: invoice pages + signed estimate appendix page (final invoices only)
+- [x] The download button is available on all invoices; signed estimate appendix only appears on final invoices when a signed estimate exists
+
 ## Enhancement: Signed Estimate Download as PDF
 
 - [x] CustomerSection signed estimate download link generates and downloads a PDF instead of a PNG (uses jsPDF to wrap the PNG canvas image in an A4 PDF, auto-oriented portrait/landscape)
