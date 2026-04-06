@@ -36,6 +36,7 @@ import {
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { Opportunity } from '@/lib/types';
 import { generateProjectSchedule, GeneratedPhaseEvent } from '@/lib/generateProjectSchedule';
+import { generateSOW } from '@/lib/generateSOW';
 
 interface Props {
   open: boolean;
@@ -131,6 +132,23 @@ export default function EstimateApprovedModal({
   }
 
   function handleFinish() {
+    // Generate SOW from current estimate snapshot
+    const sowDocument = generateSOW({
+      jobInfo: state.jobInfo,
+      global: state.global,
+      phases: state.phases,
+      customItems: state.customItems,
+      fieldNotes: state.fieldNotes,
+      summaryNotes: state.summaryNotes,
+      estimatorNotes: state.estimatorNotes,
+      clientNote: state.clientNote,
+      estimateOverrides: state.estimateOverrides,
+      signature: state.signature,
+      signedAt: state.signedAt,
+      signedBy: state.signedBy,
+      depositType: state.depositType,
+      depositValue: state.depositValue,
+    });
     approveEstimate({
       estimateId,
       jobMode,
@@ -142,6 +160,7 @@ export default function EstimateApprovedModal({
       balanceAmount,
       signedEstimateDataUrl,
       signedEstimateFilename,
+      sowDocument,
       jobStartDate: jobStartDateStr,
     });
     onClose();

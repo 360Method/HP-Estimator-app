@@ -1087,18 +1087,48 @@ function PhasePanel({ phaseId }: { phaseId: number }) {
             Step {buildOrderPos}: {phase.name}
           </h2>
           <div className="text-xs text-muted-foreground">
-            {phase.items.length} standard items · {phaseCustomItems.length} custom
+            {phase.items.length} standard items
+            {phaseCustomItems.length > 0 && (
+              <span className="ml-1 text-violet-600 font-medium">· {phaseCustomItems.length} additional material{phaseCustomItems.length !== 1 ? 's' : ''}</span>
+            )}
             {showPaintPrep && <span className="ml-2 text-amber-600 font-medium">· Paint prep available</span>}
           </div>
         </div>
       </div>
+
+      {/* Standard line items */}
       {phase.items.map(item => (
         <LineItemRow key={item.id} item={item} phaseId={phase.id} showPaintPrep={showPaintPrep} />
       ))}
+
+      {/* ── Additional Materials section ───────────────────────────────────── */}
+      <div className="mt-6">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="flex-1 h-px bg-violet-200 dark:bg-violet-800" />
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-violet-700 dark:text-violet-400">
+              Additional Materials
+            </span>
+            {phaseCustomItems.length > 0 && (
+              <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1 rounded-full bg-violet-600 text-white text-[10px] font-bold">
+                {phaseCustomItems.length}
+              </span>
+            )}
+          </div>
+          <div className="flex-1 h-px bg-violet-200 dark:bg-violet-800" />
+        </div>
+        {phaseCustomItems.length === 0 && (
+          <p className="text-xs text-muted-foreground text-center mb-3">
+            Add multiple materials for this phase — e.g. different trim profiles, door styles, tile sizes, hardware types, etc.
+          </p>
+        )}
+      </div>
+
       {/* Custom items for this phase */}
       {phaseCustomItems.map(ci => (
         <CustomItemRow key={ci.id} ci={ci} />
       ))}
+
       {/* Per-trade custom material entry */}
       <AddCustomMaterialRow phaseId={phaseId} />
     </div>

@@ -27,7 +27,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
   CreditCard, DollarSign, CheckCircle2, Clock, AlertCircle,
-  Plus, Printer, Send, ChevronRight, Banknote, Smartphone,
+  Plus, Printer, Send, ChevronRight, Banknote, Smartphone, PenLine, ShieldCheck,
 } from 'lucide-react';
 
 // ── Clark County WA Tax Rates (WA DOR Q2 2026) ───────────────────
@@ -77,6 +77,7 @@ const STATUS_COLORS: Record<InvoiceStatus, string> = {
   partial: 'bg-yellow-100 text-yellow-700',
   paid: 'bg-green-100 text-green-700',
   void: 'bg-red-100 text-red-700',
+  pending_signoff: 'bg-amber-100 text-amber-700',
 };
 
 const METHOD_ICONS: Record<PaymentMethod, React.ReactNode> = {
@@ -484,8 +485,49 @@ function InvoiceCard({
             </div>
           )}
 
+          {/* ── Completion Sign-Off Gate (final invoices only) ── */}
+          {invoice.type === 'final' && !isPaid && !invoice.completionSignature && (
+            <div className="rounded-lg border-2 border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30 p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <ShieldCheck className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                    Client Sign-Off Required Before Payment
+                  </p>
+                  <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                    The client must confirm all work has been completed to their satisfaction before
+                    this final invoice can be collected. Open the Print / PDF view to capture their
+                    signature.
+                  </p>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                className="bg-amber-600 hover:bg-amber-700 text-white gap-2 w-full sm:w-auto"
+                onClick={() => setShowPrintView(true)}
+              >
+                <PenLine className="w-4 h-4" />
+                Get Client Sign-Off
+              </Button>
+            </div>
+          )}
+
+          {/* Completion confirmed banner */}
+          {invoice.type === 'final' && !isPaid && invoice.completionSignature && (
+            <div className="rounded-lg border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/30 p-3 flex items-center gap-3">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <div className="text-xs text-emerald-800 dark:text-emerald-300">
+                <span className="font-semibold">Work confirmed complete</span> — signed by{' '}
+                <span className="font-medium">{invoice.completionSignedBy || 'client'}</span>
+                {invoice.completionSignedAt && (
+                  <> on {fmtDate(invoice.completionSignedAt)}</>
+                )}. Payment may now be collected.
+              </div>
+            </div>
+          )}
+
           {/* Payment actions */}
-          {!isPaid && (
+          {!isPaid && (invoice.type !== 'final' || !!invoice.completionSignature) && (
             <div className="space-y-3">
               <div className="text-xs font-semibold text-muted-foreground uppercase">Collect Payment</div>
 

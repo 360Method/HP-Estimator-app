@@ -7,15 +7,18 @@
 //   - Scope of Work
 //   - Address (service location)
 //   - Internal notes
+//   - Signed Estimate attachment
+//   - Statement of Work (SOW) viewer
 // ============================================================
 
+import { useState } from 'react';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import {
   JOB_TYPES, JOB_STAGES, OpportunityStage,
 } from '@/lib/types';
 import {
   Briefcase, MapPin, Hash, Calendar, User, FileText,
-  ExternalLink, Edit3, ChevronDown, CalendarDays,
+  ExternalLink, Edit3, ChevronDown, CalendarDays, ClipboardList, Download, ImageIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -56,6 +59,8 @@ export default function JobDetailsSection() {
   };
 
   const stageColor = STAGE_COLORS[activeOpp.stage] ?? 'bg-slate-100 text-slate-700';
+  const signedEstimateUrl = activeOpp.jobSignedEstimateDataUrl || activeOpp.signedEstimateDataUrl;
+  const signedEstimateFilename = activeOpp.jobSignedEstimateFilename || activeOpp.signedEstimateFilename || 'signed-estimate.png';
 
   return (
     <div className="space-y-5 pb-10">
@@ -287,12 +292,12 @@ export default function JobDetailsSection() {
               />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Zip</label>
+              <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">ZIP</label>
               <input
                 type="text"
                 value={jobInfo.zip}
                 onChange={e => setJobInfo({ zip: e.target.value })}
-                placeholder="98683"
+                placeholder="98660"
                 className="field-input w-full"
               />
             </div>
@@ -329,6 +334,99 @@ export default function JobDetailsSection() {
         </div>
       </div>
 
+      {/* ── Signed Estimate card ── */}
+      {signedEstimateUrl && (
+        <div className="card-section">
+          <div className="card-section-header text-xs font-semibold uppercase tracking-wider">
+            <ImageIcon size={13} />
+            <span>Signed Estimate</span>
+            <span className="ml-auto text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
+              ✓ Attached
+            </span>
+          </div>
+          <div className="card-section-body space-y-3">
+            <p className="text-xs text-muted-foreground">
+              The customer-signed estimate is attached to this job for reference.
+            </p>
+            <div className="rounded-lg border overflow-hidden bg-muted/20">
+              <img
+                src={signedEstimateUrl}
+                alt="Signed Estimate"
+                className="w-full object-contain max-h-72"
+              />
+            </div>
+            <a
+              href={signedEstimateUrl}
+              download={signedEstimateFilename}
+              className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+            >
+              <Download size={11} />
+              Download signed estimate
+            </a>
+          </div>
+        </div>
+      )}
+
+      {/* ── Statement of Work card ── */}
+      {activeOpp.sowDocument && (
+        <div className="card-section">
+          <div className="card-section-header text-xs font-semibold uppercase tracking-wider">
+            <ClipboardList size={13} />
+            <span>Statement of Work (SOW)</span>
+            {activeOpp.sowGeneratedAt && (
+              <span className="ml-auto text-[10px] text-muted-foreground font-normal">
+                Generated {new Date(activeOpp.sowGeneratedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              </span>
+            )}
+          </div>
+          <div className="card-section-body">
+            <SowViewer
+              sow={activeOpp.sowDocument}
+              filename={`SOW-${activeOpp.jobNumber || activeOpp.id}.txt`}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── SOW Viewer sub-component ──────────────────────────────────
+function SowViewer({ sow, filename }: { sow: string; filename: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const lines = sow.split('\n');
+  const preview = lines.slice(0, 25).join('\n');
+
+  const handleDownload = () => {
+    const blob = new Blob([sow], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="space-y-2">
+      <pre className="text-[11px] font-mono bg-muted/40 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap leading-relaxed max-h-72 overflow-y-auto">
+        {expanded ? sow : preview + (lines.length > 25 ? '\n…' : '')}
+      </pre>
+      <div className="flex items-center gap-4">
+        <button
+          onClick={() => setExpanded(v => !v)}
+          className="text-xs text-primary hover:underline"
+        >
+          {expanded ? 'Show less' : 'Show full SOW'}
+        </button>
+        <button
+          onClick={handleDownload}
+          className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+        >
+          <Download size={11} />
+          Download .txt
+        </button>
+      </div>
     </div>
   );
 }

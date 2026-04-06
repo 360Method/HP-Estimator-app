@@ -188,3 +188,34 @@
 - [x] Fix: removed !state.signature guard so SignaturePanel always renders when showSigPad is true
 - [x] Fix: added "Approve Estimate" amber button in toolbar when estimate is already signed, directly opens modal
 - [x] Trophy icon imported and TypeScript clean (0 errors, 54 tests passing)
+
+## Enhancement: Multiple Materials Per Phase
+
+- [x] Allow multiple material line items per phase — each phase can have N rows of different materials (e.g., two trim types, three door styles)
+- [x] Add "Add Another Material" button per phase in CalculatorSection ("Additional Materials" section with count badge and instructional text)
+- [x] Each additional material row has its own: description, dimension/size, unit type, qty, mat cost/unit, labor hrs/unit, labor rate, markup, AI cost analysis, live price preview
+- [x] Phase totals aggregate all material rows (customByPhase grouping in PresentSection already handles this)
+- [x] Phase header shows count badge: "N additional materials" in violet
+
+## Enhancement: Signed Estimate Attached to Job
+
+- [x] When estimate is approved, store signedEstimateDataUrl in the job opportunity record (APPROVE_ESTIMATE passes signedEstimateDataUrl to job)
+- [x] JobDetailsSection Attachments tab shows the signed estimate with download link
+- [x] Signed estimate filename includes job number and date
+
+## Enhancement: Auto-Generate Detailed SOW
+
+- [x] On estimate approval, generate a structured SOW document per job (generateSOW utility in lib/generateSOW.ts)
+- [x] SOW sections: Project Overview, Materials to Source, Pickup/Delivery Schedule, Site Preparation, Client Brief, Phase-by-Phase Labor Steps (with sub-steps), Daily Cleanup, Job Walk / Punch List, Final Walkthrough
+- [x] Each active phase maps to a SOW section with its line items as tasks
+- [x] SOW viewable in JobDetailsSection ("SOW" card section with copy-to-clipboard and print)
+- [x] SOW exportable as plain text / printable
+
+## Enhancement: Client Completion Sign-Off Before Final Payment
+
+- [x] Add completionSignature, completionSignedBy, completionSignedAt fields to Invoice type
+- [x] pending_signoff added to InvoiceStatus type and STATUS_COLORS record
+- [x] Final invoice shows amber "Client Sign-Off Required" gate before payment buttons are shown
+- [x] Gate includes "Get Client Sign-Off" button that opens InvoicePrintView
+- [x] After sign-off: green confirmation banner shows signer name and date; payment buttons unlock
+- [x] Sign-off captured via existing SignatureCanvas in InvoicePrintView ("Sign Job Complete" button)

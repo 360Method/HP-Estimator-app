@@ -164,6 +164,7 @@ type Action =
       balanceAmount: number;        // totalPrice - depositAmount
       signedEstimateDataUrl?: string;
       signedEstimateFilename?: string;
+      sowDocument?: string;           // generated SOW text to attach to job
       jobStartDate?: string;          // ISO date string for project start (defaults to today+7)
     };
 
@@ -836,6 +837,10 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
           sourceLeadId: estimate.sourceLeadId,
           archived: false,
           clientSnapshot: estimate.clientSnapshot,
+          // Attach signed estimate and SOW to the new job
+          ...(action.signedEstimateDataUrl ? { jobSignedEstimateDataUrl: action.signedEstimateDataUrl } : {}),
+          ...(action.signedEstimateFilename ? { jobSignedEstimateFilename: action.signedEstimateFilename } : {}),
+          ...(action.sowDocument ? { sowDocument: action.sowDocument, sowGeneratedAt: now } : {}),
         };
       }
 
@@ -1118,6 +1123,7 @@ interface EstimatorContextValue {
     balanceAmount: number;
     signedEstimateDataUrl?: string;
     signedEstimateFilename?: string;
+    sowDocument?: string;
     jobStartDate?: string;
   }) => void;
 }
@@ -1272,6 +1278,7 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
     balanceAmount: number;
     signedEstimateDataUrl?: string;
     signedEstimateFilename?: string;
+    sowDocument?: string;
     jobStartDate?: string;
   }) => {
     dispatch({

@@ -233,7 +233,7 @@ export interface ScheduleEvent {
 // ── Invoice / Payment Types ──────────────────────────────────
 
 export type InvoiceType = 'deposit' | 'final';
-export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'void' | 'partial';
+export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'void' | 'partial' | 'pending_signoff';
 export type PaymentMethod = 'stripe' | 'paypal' | 'cash' | 'check' | 'zelle' | 'venmo' | 'other';
 
 export interface PaymentRecord {
@@ -469,6 +469,16 @@ export interface Opportunity {
   scheduledDuration?: number;      // minutes
   assignedTo?: string;             // comma-separated crew names
   scheduleNotes?: string;
+  // SOW document generated on estimate approval
+  sowDocument?: string;          // full plain-text SOW generated from approved estimate
+  sowGeneratedAt?: string;       // ISO timestamp
+  // Job completion sign-off
+  completionSignature?: string;  // base64 PNG of customer e-signature on job completion
+  completionSignedBy?: string;   // name of signer
+  completionSignedAt?: string;   // ISO timestamp
+  // Signed estimate attached to job
+  jobSignedEstimateDataUrl?: string;   // copy of signed estimate on the job record
+  jobSignedEstimateFilename?: string;
   // Per-opportunity calculator/estimate data snapshot
   estimateSnapshot?: EstimateSnapshot;
   // Snapshot of customer info at time of conversion
