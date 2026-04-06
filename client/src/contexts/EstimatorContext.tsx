@@ -88,6 +88,7 @@ function makeEvent(
 
 type Action =
   | { type: 'SET_SECTION'; payload: AppSection }
+  | { type: 'NAVIGATE_TO_TOP_LEVEL'; payload: AppSection }  // Atomically navigates to a top-level section, clearing customer/opportunity
   | { type: 'SET_JOB_INFO'; payload: Partial<JobInfo> }
   | { type: 'SET_GLOBAL'; payload: Partial<GlobalSettings> }
   | { type: 'UPDATE_ITEM'; phaseId: number; itemId: string; payload: Partial<LineItem> }
@@ -155,6 +156,15 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
   switch (action.type) {
     case 'SET_SECTION':
       return { ...state, activeSection: action.payload };
+
+    case 'NAVIGATE_TO_TOP_LEVEL':
+      // Single atomic action: clear customer/opportunity and set the top-level section
+      return {
+        ...state,
+        activeSection: action.payload,
+        activeCustomerId: null,
+        activeOpportunityId: null,
+      };
 
     case 'SET_JOB_INFO': {
       const newJobInfo = { ...state.jobInfo, ...action.payload };
@@ -697,6 +707,7 @@ interface EstimatorContextValue {
   updateCustomer: (id: string, payload: Partial<Customer>) => void;
   setActiveCustomer: (id: string | null) => void;
   reset: () => void;
+  navigateToTopLevel: (section: AppSection) => void;
 }
 
 const EstimatorContext = createContext<EstimatorContextValue | null>(null);
@@ -811,6 +822,10 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'SET_ACTIVE_CUSTOMER', payload: id });
   }, []);
 
+  const navigateToTopLevel = useCallback((section: AppSection) => {
+    dispatch({ type: 'NAVIGATE_TO_TOP_LEVEL', payload: section });
+  }, []);
+
   const reset = useCallback(() => dispatch({ type: 'RESET' }), []);
 
   return (
@@ -825,6 +840,7 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
       convertLeadToEstimate, convertEstimateToJob, archiveJob,
       setActiveOpportunity,
       addCustomer, updateCustomer, setActiveCustomer,
+      navigateToTopLevel,
       reset,
     }}>
       {children}

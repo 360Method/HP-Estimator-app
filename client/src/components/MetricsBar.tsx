@@ -68,7 +68,7 @@ const BACKEND_NAV: { icon: React.ElementType; label: string; section: AppSection
 
 export default function MetricsBar({ totals }: MetricsBarProps) {
   const { totalHard, totalPrice, totalGP, totalGM } = totals;
-  const { state, setSection, setActiveOpportunity, setActiveCustomer, addCustomer, reset } = useEstimator();
+  const { state, setSection, setActiveOpportunity, setActiveCustomer, addCustomer, reset, navigateToTopLevel } = useEstimator();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [showNewMenu, setShowNewMenu] = useState(false);
@@ -121,30 +121,22 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
   };
 
   const handleGoToCustomers = () => {
-    setSection('customers');
-    setActiveOpportunity(null);
-    setActiveCustomer(null);
+    navigateToTopLevel('customers');
     setShowMobileNav(false);
   };
 
   const handleGoToJobs = () => {
-    setSection('jobs');
-    setActiveOpportunity(null);
-    setActiveCustomer(null);
+    navigateToTopLevel('jobs');
     setShowMobileNav(false);
   };
 
   const handleGoToPipeline = () => {
-    setSection('pipeline');
-    setActiveOpportunity(null);
-    setActiveCustomer(null);
+    navigateToTopLevel('pipeline');
     setShowMobileNav(false);
   };
 
   const handleGoToDashboard = () => {
-    setActiveOpportunity(null);
-    setActiveCustomer(null);
-    setSection('dashboard');  // Must fire LAST — SET_ACTIVE_CUSTOMER(null) can override activeSection
+    navigateToTopLevel('dashboard');
     setShowMobileNav(false);
   };
 

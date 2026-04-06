@@ -66,3 +66,8 @@
 
 - [x] Fix: Dashboard nav click shows empty customer page instead of EstimatorDashboard
 - [x] Set Dashboard as the default landing section when the app first opens
+
+## Nav Routing Fixes
+
+- [x] Fix: Jobs nav tab not navigating to JobsListPage
+- [x] Fix: Pipeline nav tab not navigating to PipelinePage
