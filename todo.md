@@ -112,3 +112,10 @@
 - [x] Dimension picker added to SalesSection (pill buttons below tier cards)
 - [x] Dimension picker added to CalculatorSection header row (quick dropdown) and expanded detail (button grid)
 - [x] Vitest dimension rate multiplier tests (8 tests passing)
+
+## Phase Order Correction — Construction Sequence
+
+- [x] Audit current phase order vs correct construction sequence
+- [x] Reorder ALL_PHASES array in phases.ts to match real-world build sequence
+- [x] Verify phase IDs are stable (referenced by ID not array index) across all components
+- [x] Run all tests after reorder (38 tests passing, 20 new phase order assertions)

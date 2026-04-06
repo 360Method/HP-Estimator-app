@@ -1385,11 +1385,42 @@ const phase17: PhaseGroup = {
 };
 
 // ─── EXPORT ALL PHASES ────────────────────────────────────────
+// Correct construction sequence:
+//  1  Pre-Construction       (permits, scheduling, procurement)
+//  2  Demo & Rough Work      (selective demo, rough framing prep)
+//  8  Framing & Carpentry    (structural framing, sheathing, subfloor)
+//  9  Exterior Work          (roofing, siding, windows rough, waterproofing)
+// 10  Doors & Windows        (door/window installation)
+//  3  Mechanical Rough-In    (plumbing, electrical, HVAC rough-in)
+//  4  Insulation & Weather.  (batt, spray foam, vapor barrier)
+//  5  Drywall                (hang, tape, mud, texture)
+//  7  Tile Work              (wet areas: shower, bath floor, backsplash)
+// 12  Cabinetry & Counters   (cabinet install before trim/paint)
+// 15  Painting               (prime + paint walls/ceilings before trim/floor)
+// 11  Trim & Finish Carp.    (baseboard, casing, crown after paint)
+//  6  Flooring               (hardwood/LVP last — after paint and trim)
+// 13  Plumbing Finish        (fixtures, trim-out)
+// 14  Electrical Finish      (devices, fixtures, panels)
+// 16  Appliances & Special.  (appliances, specialties)
+// 17  Final Cleaning & Close (punch list, cleaning, walkthrough)
 export const ALL_PHASES: PhaseGroup[] = [
-  phase1, phase2, phase3, phase4, phase5,
-  phase6, phase7, phase8, phase9, phase10,
-  phase11, phase12, phase13, phase14, phase15,
-  phase16, phase17,
+  phase1,   // 1  Pre-Construction
+  phase2,   // 2  Demo & Rough Work
+  phase8,   // 3  Framing & Carpentry  ← moved up (was 8)
+  phase9,   // 4  Exterior Work        ← moved up (was 9)
+  phase10,  // 5  Doors & Windows      ← moved up (was 10)
+  phase3,   // 6  Mechanical Rough-In  ← moved down (was 3)
+  phase4,   // 7  Insulation           ← moved down (was 4)
+  phase5,   // 8  Drywall              ← moved down (was 5)
+  phase7,   // 9  Tile Work            ← moved down (was 7)
+  phase12,  // 10 Cabinetry & Counters ← moved up (was 12)
+  phase15,  // 11 Painting             ← moved up (was 15)
+  phase11,  // 12 Trim & Finish Carp.  ← moved down (was 11)
+  phase6,   // 13 Flooring             ← moved down (was 6)
+  phase13,  // 14 Plumbing Finish      (unchanged)
+  phase14,  // 15 Electrical Finish    (unchanged)
+  phase16,  // 16 Appliances & Special (unchanged)
+  phase17,  // 17 Final Cleaning       (unchanged)
 ];
 
 export const DEFAULTS = {
