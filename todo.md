@@ -210,6 +210,12 @@
 - [x] Each active phase maps to a SOW section with its line items as tasks
 - [x] SOW viewable in JobDetailsSection ("SOW" card section with copy-to-clipboard and print)
 - [x] SOW exportable as plain text / printable
+- [x] SOW included in final invoice PDF (InvoicePrintView shows SOW between line items and totals when available)
+
+## Enhancement: Invoice PDF — Payment History + SOW
+
+- [x] Final invoice PDF (InvoicePrintView) shows all payments already made (date, method, amount) before the balance due (Payment History section already present)
+- [x] Final invoice PDF includes the SOW from the linked job opportunity (opportunity.sowDocument, shown between line items and totals)
 
 ## Enhancement: Client Completion Sign-Off Before Final Payment
 

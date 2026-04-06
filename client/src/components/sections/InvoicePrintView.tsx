@@ -391,6 +391,31 @@ export default function InvoicePrintView({
             </tbody>
           </table>
 
+          {/* ── Statement of Work (final invoices, when available) ── */}
+          {isFinal && opportunity?.sowDocument && (
+            <div style={{ marginBottom: '28px', borderTop: '2px solid #e8e8e8', paddingTop: '16px' }}>
+              <div style={{ fontWeight: '600', fontSize: '13px', marginBottom: '10px', color: '#222', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                Statement of Work
+              </div>
+              <pre style={{
+                fontFamily: 'inherit',
+                fontSize: '11px',
+                color: '#444',
+                whiteSpace: 'pre-wrap',
+                lineHeight: '1.65',
+                margin: 0,
+                padding: '12px 14px',
+                background: '#f9f9f9',
+                border: '1px solid #e8e8e8',
+                borderRadius: '4px',
+                maxHeight: '480px',
+                overflow: 'auto',
+              }}>
+                {opportunity.sowDocument}
+              </pre>
+            </div>
+          )}
+
           {/* ── Totals (right-aligned) ────────────────────────── */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '32px' }}>
             <div style={{ minWidth: '280px' }}>
@@ -441,6 +466,26 @@ export default function InvoicePrintView({
                   <span>{fmt(p.amount)}</span>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* ── Statement of Work (final invoices only) ──────── */}
+          {isFinal && opportunity?.sowDocument && (
+            <div style={{ marginBottom: '28px', borderTop: '1px solid #e8e8e8', paddingTop: '20px' }}>
+              <div style={{ fontWeight: '500', marginBottom: '10px', color: '#444', fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Statement of Work</div>
+              <pre style={{
+                fontFamily: 'Arial, Helvetica, sans-serif',
+                fontSize: '11px',
+                color: '#444',
+                lineHeight: '1.65',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                margin: 0,
+                padding: '12px 14px',
+                background: '#fafafa',
+                border: '1px solid #e5e5e5',
+                borderRadius: '4px',
+              }}>{opportunity.sowDocument}</pre>
             </div>
           )}
 
