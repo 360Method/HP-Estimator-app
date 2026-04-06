@@ -439,6 +439,10 @@ export interface Opportunity {
   convertedToJobAt?: string;       // ISO timestamp
   archived: boolean;               // moved to archive after Invoice Paid
   archivedAt?: string;             // ISO timestamp
+  // Approval / Won tracking
+  wonAt?: string;                  // ISO timestamp when estimate was signed/approved
+  signedEstimateDataUrl?: string;  // base64 PNG snapshot of the signed estimate document
+  signedEstimateFilename?: string; // e.g. "Estimate-HP-2026-042-Signed-2026-04-06.png"
   // Schedule fields
   scheduledDate?: string;          // ISO — start of scheduled window
   scheduledEndDate?: string;       // ISO — end of scheduled window

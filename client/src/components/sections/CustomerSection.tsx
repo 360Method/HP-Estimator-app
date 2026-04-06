@@ -24,8 +24,9 @@ import {
   CreditCard, Bell, MessageSquare, AtSign, Star, Paperclip, FileText,
   Activity, Send, CheckCircle2, XCircle, Clock, PhoneCall, Wallet,
   ExternalLink, Edit3, Save, X, AlertCircle, TrendingUp, Archive,
-  RefreshCw, FolderOpen,
+  RefreshCw, FolderOpen, Download,
 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import PipelineBoard from '@/components/PipelineBoard';
 import InvoiceSection from '@/components/sections/InvoiceSection';
 import { toast } from 'sonner';
@@ -1140,7 +1141,63 @@ export default function CustomerSection() {
         {(activeCustomerTab === 'leads' || activeCustomerTab === 'estimates' || activeCustomerTab === 'jobs') && <PipelineTab />}
         {activeCustomerTab === 'invoices' && <InvoiceSection />}
         {activeCustomerTab === 'communication' && <PlaceholderTab label="Communication" />}
-        {activeCustomerTab === 'attachments' && <PlaceholderTab label="Attachments" />}
+        {activeCustomerTab === 'attachments' && (
+          <div className="space-y-4">
+            {/* Signed Estimate Copies */}
+            {(() => {
+              const signedEstimates = opportunities.filter(
+                o => o.area === 'estimate' && (o.wonAt || o.signedEstimateDataUrl)
+              );
+              if (signedEstimates.length === 0) {
+                return (
+                  <div className="text-center py-16 text-muted-foreground border-2 border-dashed border-border rounded-xl">
+                    <Paperclip className="w-8 h-8 mx-auto mb-3 opacity-30" />
+                    <div className="text-base font-semibold mb-1">No Attachments Yet</div>
+                    <div className="text-sm">Signed estimate copies will appear here once an estimate is approved.</div>
+                  </div>
+                );
+              }
+              return (
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Signed Estimates</h3>
+                  {signedEstimates.map(est => (
+                    <div key={est.id} className="rounded-xl border bg-card p-4 flex items-start gap-4">
+                      {/* Thumbnail or icon */}
+                      <div className="w-12 h-14 rounded border bg-muted flex items-center justify-center shrink-0 overflow-hidden">
+                        {est.signedEstimateDataUrl ? (
+                          <img src={est.signedEstimateDataUrl} alt="Signed estimate" className="w-full h-full object-cover" />
+                        ) : (
+                          <FileText className="w-5 h-5 text-muted-foreground" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-sm truncate">{est.signedEstimateFilename ?? `Estimate-${est.id}-Signed.pdf`}</span>
+                          <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 text-xs">Approved</Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Signed {est.wonAt ? new Date(est.wonAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'recently'}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Contract value: {est.value.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 })}
+                        </p>
+                      </div>
+                      {est.signedEstimateDataUrl && (
+                        <a
+                          href={est.signedEstimateDataUrl}
+                          download={est.signedEstimateFilename ?? `Estimate-Signed.png`}
+                          className="shrink-0 text-xs text-primary hover:underline flex items-center gap-1"
+                        >
+                          <Download className="w-3.5 h-3.5" /> Download
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
+        )}
         {activeCustomerTab === 'notes' && (
           <div className="card-section">
             <div className="card-section-header">

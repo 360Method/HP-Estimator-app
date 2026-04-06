@@ -17,6 +17,7 @@ import { useEstimator } from '@/contexts/EstimatorContext';
 import { calcPhase, calcCustomItem, calcTotals, fmtDollar, fmtDollarCents } from '@/lib/calc';
 import { X, Printer, Mail, PenLine, RotateCcw, Check, CheckCircle2, Settings2, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
+import EstimateApprovedModal from '@/components/EstimateApprovedModal';
 
 const HP_LOGO = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg';
 const HP_ADDRESS = '808 SE Chkalov Dr, 3-433\nVancouver, WA 98683';
@@ -370,6 +371,8 @@ export default function PresentSection() {
   const [showSigPad, setShowSigPad] = useState(false);
   const [showColPanel, setShowColPanel] = useState(false);
   const [cols, setCols] = useState<Record<ColKey, boolean>>(DEFAULT_COLS);
+  const [showApprovedModal, setShowApprovedModal] = useState(false);
+  const [pendingSignatureDataUrl, setPendingSignatureDataUrl] = useState<string | undefined>(undefined);
   const docRef = useRef<HTMLDivElement>(null);
 
   const { jobInfo } = state;
@@ -413,7 +416,10 @@ export default function PresentSection() {
   const handleSign = (dataUrl: string, name: string) => {
     setSignature(dataUrl, name);
     setShowSigPad(false);
-    toast.success(`Estimate accepted and signed by ${name}`);
+    // Store the signature data URL so the modal can pass it to approveEstimate
+    setPendingSignatureDataUrl(dataUrl);
+    // Open the approval workflow modal
+    setShowApprovedModal(true);
   };
 
   const handleEmail = () => {
@@ -775,6 +781,28 @@ export default function PresentSection() {
 
       {/* Bottom padding for scroll */}
       <div className="h-12 no-print" />
+
+      {/* Estimate Approved Modal — fires after signature */}
+      <EstimateApprovedModal
+        open={showApprovedModal}
+        onClose={() => { setShowApprovedModal(false); setPendingSignatureDataUrl(undefined); }}
+        estimateId={state.activeOpportunityId ?? ''}
+        estimateTitle={state.jobInfo.jobNumber
+          ? `Estimate ${state.jobInfo.jobNumber} — ${state.jobInfo.client || 'Project'}`
+          : `Estimate — ${state.jobInfo.client || 'Project'}`
+        }
+        totalPrice={totals.totalPrice}
+        depositAmount={deposit}
+        depositLabel={depositLabel}
+        balanceAmount={Math.max(0, totals.totalPrice - deposit)}
+        signedBy={state.signedBy ?? ''}
+        signedAt={state.signedAt ?? ''}
+        signedEstimateDataUrl={pendingSignatureDataUrl}
+        signedEstimateFilename={state.jobInfo.jobNumber
+          ? `Estimate-${state.jobInfo.jobNumber}-Signed-${new Date().toISOString().slice(0,10)}.png`
+          : `Estimate-Signed-${new Date().toISOString().slice(0,10)}.png`
+        }
+      />
     </div>
   );
 }

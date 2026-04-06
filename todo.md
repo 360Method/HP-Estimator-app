@@ -142,3 +142,18 @@
 - [x] Update PresentSection to use configured deposit (depositLabel + computed amount)
 - [x] Update EstimateSection terms list and plain-text export to use configured deposit label
 - [ ] Update auto-deposit invoice generation to use configured deposit amount (currently defaults to 50%)
+
+## Estimate Approval Workflow (Post-Signature)
+
+- [x] On signature/adoption: show EstimateApprovedModal (Trophy icon + "Estimate Won!" header)
+- [x] Modal step 1: confirm Won status — mark opportunity.wonAt timestamp, stage = 'won'
+- [x] Modal step 2: job prompt — "Create new job #" or "Add to existing job" (dropdown of customer's open jobs)
+- [x] If new job: auto-generate job number, create new opportunity with area='job', link to estimate
+- [x] If existing job: select from customer's job list, link estimate to that job
+- [x] Save signed estimate attachment record in customer folder (Attachments tab shows signed estimate with download link)
+- [x] Auto-create deposit invoice from signed estimate (using configured depositType/depositValue)
+- [x] Auto-create balance invoice from signed estimate (total minus deposit, status='pending')
+- [x] Both invoices linked to the new/selected job and the signed estimate number
+- [x] APPROVE_ESTIMATE reducer action handles all state transitions atomically
+- [x] CustomerSection Attachments tab: shows signed estimate copies with Approved badge and download link
+- [x] EstimateApprovedModal: 3-step flow (Celebration → Job Selection → Invoice Summary)

@@ -145,7 +145,21 @@ type Action =
   | { type: 'UPDATE_SCHEDULE_EVENT'; id: string; payload: Partial<ScheduleEvent> }
   | { type: 'REMOVE_SCHEDULE_EVENT'; id: string }
   | { type: 'UPDATE_OPPORTUNITY_SCHEDULE'; id: string; scheduledDate?: string; scheduledEndDate?: string; scheduledDuration?: number; assignedTo?: string; scheduleNotes?: string }
-  | { type: 'SET_DEPOSIT'; depositType: 'pct' | 'flat'; depositValue: number };
+  | { type: 'SET_DEPOSIT'; depositType: 'pct' | 'flat'; depositValue: number }
+  | {
+      type: 'APPROVE_ESTIMATE';
+      estimateId: string;           // the estimate opportunity being approved
+      jobMode: 'new' | 'existing';  // create new job or link to existing
+      existingJobId?: string;       // set when jobMode = 'existing'
+      newJobTitle: string;          // title for new job (ignored if existing)
+      newJobId: string;             // pre-generated ID for new job
+      totalPrice: number;           // signed estimate total
+      depositAmount: number;        // computed deposit amount
+      depositLabel: string;         // e.g. "50% Deposit" or "Fixed Deposit"
+      balanceAmount: number;        // totalPrice - depositAmount
+      signedEstimateDataUrl?: string;
+      signedEstimateFilename?: string;
+    };
 
 function makeActivity(
   type: ActivityEvent['type'],
@@ -660,6 +674,183 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
       };
     }
 
+    // ── Approve Estimate → Won + Job + Invoices ─────────────
+    case 'APPROVE_ESTIMATE': {
+      const estimate = state.opportunities.find(o => o.id === action.estimateId);
+      if (!estimate) return state;
+
+      const now = new Date().toISOString();
+      const year = new Date().getFullYear();
+
+      // 1. Mark estimate as Won
+      const wonEstimate: Opportunity = {
+        ...estimate,
+        stage: 'Approved' as OpportunityStage,
+        wonAt: now,
+        convertedToJobAt: now,
+        updatedAt: now,
+        ...(action.signedEstimateDataUrl ? { signedEstimateDataUrl: action.signedEstimateDataUrl } : {}),
+        ...(action.signedEstimateFilename ? { signedEstimateFilename: action.signedEstimateFilename } : {}),
+      };
+
+      // 2. Determine job opportunity
+      let jobOpp: Opportunity;
+      if (action.jobMode === 'existing' && action.existingJobId) {
+        // Link estimate to existing job — update the existing job to reference this estimate
+        const existingJob = state.opportunities.find(o => o.id === action.existingJobId);
+        if (!existingJob) return state;
+        jobOpp = {
+          ...existingJob,
+          sourceEstimateId: action.estimateId,
+          value: action.totalPrice,
+          updatedAt: now,
+        };
+      } else {
+        // Create new job
+        const allJobsSoFar = state.opportunities.filter(o => o.area === 'job').length;
+        const generatedJobNumber = `JOB-${year}-${String(allJobsSoFar + 1).padStart(3, '0')}`;
+        jobOpp = {
+          id: action.newJobId,
+          area: 'job',
+          stage: 'Deposit Needed' as OpportunityStage,
+          title: action.newJobTitle,
+          value: action.totalPrice,
+          jobNumber: generatedJobNumber,
+          notes: estimate.notes || '',
+          createdAt: now,
+          updatedAt: now,
+          sourceEstimateId: action.estimateId,
+          sourceLeadId: estimate.sourceLeadId,
+          archived: false,
+          clientSnapshot: estimate.clientSnapshot,
+        };
+      }
+
+      // 3. Build invoices
+      const existingInvoices = state.activeCustomerId
+        ? (state.customers.find(c => c.id === state.activeCustomerId)?.invoices ?? [])
+        : [];
+      const globalInvoiceCount = state.customers.reduce(
+        (sum, c) => sum + (c.invoices?.length ?? 0), 0
+      );
+
+      // Deposit invoice
+      const depositInvNum = `INV-${year}-${String(globalInvoiceCount + 1).padStart(3, '0')}`;
+      const depositInvoice: Invoice = {
+        id: nanoid(8),
+        type: 'deposit',
+        status: 'draft',
+        invoiceNumber: depositInvNum,
+        customerId: state.activeCustomerId ?? '',
+        opportunityId: jobOpp.id,
+        sourceEstimateId: action.estimateId,
+        subtotal: action.depositAmount,
+        taxRate: 0,
+        taxAmount: 0,
+        total: action.depositAmount,
+        depositPercent: state.depositType === 'pct' ? state.depositValue : undefined,
+        issuedAt: now,
+        dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        payments: [],
+        amountPaid: 0,
+        balance: action.depositAmount,
+        lineItems: [{
+          id: nanoid(8),
+          description: action.depositLabel,
+          qty: 1,
+          unitPrice: action.depositAmount,
+          total: action.depositAmount,
+          notes: `Deposit required to schedule work. Estimate #${state.jobInfo.jobNumber}`,
+        }],
+        notes: 'Deposit required to schedule work.',
+        internalNotes: `Auto-generated from approved Estimate #${state.jobInfo.jobNumber}`,
+        paymentTerms: 'Due upon receipt',
+      };
+
+      // Balance invoice (only if there is a remaining balance)
+      const balanceInvoices: Invoice[] = [];
+      if (action.balanceAmount > 0) {
+        const balanceInvNum = `INV-${year}-${String(globalInvoiceCount + 2).padStart(3, '0')}`;
+        const balanceInvoice: Invoice = {
+          id: nanoid(8),
+          type: 'final',
+          status: 'draft',
+          invoiceNumber: balanceInvNum,
+          customerId: state.activeCustomerId ?? '',
+          opportunityId: jobOpp.id,
+          sourceEstimateId: action.estimateId,
+          subtotal: action.balanceAmount,
+          taxRate: 0,
+          taxAmount: 0,
+          total: action.balanceAmount,
+          issuedAt: now,
+          dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          payments: [],
+          amountPaid: 0,
+          balance: action.balanceAmount,
+          lineItems: [{
+            id: nanoid(8),
+            description: `Balance Due — ${estimate.title || 'Project'}`,
+            qty: 1,
+            unitPrice: action.balanceAmount,
+            total: action.balanceAmount,
+            notes: `Remaining balance after deposit. Estimate #${state.jobInfo.jobNumber}`,
+          }],
+          notes: 'Balance due upon project completion.',
+          internalNotes: `Auto-generated from approved Estimate #${state.jobInfo.jobNumber}`,
+          paymentTerms: 'Due upon project completion',
+        };
+        balanceInvoices.push(balanceInvoice);
+      }
+
+      const updatedInvoices = [...existingInvoices, depositInvoice, ...balanceInvoices];
+
+      // 4. Build activity events
+      const approvalEvent = makeActivity(
+        'estimate_approved',
+        'Estimate Approved — Won!',
+        `"${estimate.title}" signed by ${state.signedBy || 'client'}. ${action.jobMode === 'new' ? `Job ${jobOpp.jobNumber} created.` : `Linked to existing job.`}`,
+        action.estimateId,
+      );
+      const jobEvent = makeActivity(
+        'job_created',
+        action.jobMode === 'new' ? 'New Job Created' : 'Estimate Linked to Job',
+        `"${jobOpp.title}" — ${fmtDollarSimple(action.totalPrice)}`,
+        jobOpp.id,
+      );
+      const newFeed = [jobEvent, approvalEvent, ...state.activityFeed];
+
+      // 5. Update opportunities list
+      let updatedOpps: Opportunity[];
+      if (action.jobMode === 'existing' && action.existingJobId) {
+        updatedOpps = state.opportunities
+          .map(o => o.id === action.estimateId ? wonEstimate : o)
+          .map(o => o.id === action.existingJobId ? jobOpp : o);
+      } else {
+        updatedOpps = state.opportunities
+          .map(o => o.id === action.estimateId ? wonEstimate : o)
+          .concat(jobOpp);
+      }
+
+      // 6. Sync to customer record
+      const syncedCustomers = state.activeCustomerId
+        ? state.customers.map(c =>
+            c.id === state.activeCustomerId
+              ? { ...c, opportunities: updatedOpps, activityFeed: newFeed, invoices: updatedInvoices }
+              : c
+          )
+        : state.customers;
+
+      return {
+        ...state,
+        opportunities: updatedOpps,
+        activityFeed: newFeed,
+        customers: syncedCustomers,
+        activePipelineArea: 'job',
+        activeCustomerTab: 'jobs',
+      };
+    }
+
     case 'RESET':
       return {
         ...initialState,
@@ -776,6 +967,19 @@ interface EstimatorContextValue {
   updateOpportunitySchedule: (id: string, fields: { scheduledDate?: string; scheduledEndDate?: string; scheduledDuration?: number; assignedTo?: string; scheduleNotes?: string }) => void;
   // Deposit
   setDeposit: (depositType: 'pct' | 'flat', depositValue: number) => void;
+  // Approve Estimate
+  approveEstimate: (params: {
+    estimateId: string;
+    jobMode: 'new' | 'existing';
+    existingJobId?: string;
+    newJobTitle: string;
+    totalPrice: number;
+    depositAmount: number;
+    depositLabel: string;
+    balanceAmount: number;
+    signedEstimateDataUrl?: string;
+    signedEstimateFilename?: string;
+  }) => void;
 }
 
 const EstimatorContext = createContext<EstimatorContextValue | null>(null);
@@ -917,6 +1121,25 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'SET_DEPOSIT', depositType, depositValue });
   }, []);
 
+  const approveEstimate = useCallback((params: {
+    estimateId: string;
+    jobMode: 'new' | 'existing';
+    existingJobId?: string;
+    newJobTitle: string;
+    totalPrice: number;
+    depositAmount: number;
+    depositLabel: string;
+    balanceAmount: number;
+    signedEstimateDataUrl?: string;
+    signedEstimateFilename?: string;
+  }) => {
+    dispatch({
+      type: 'APPROVE_ESTIMATE',
+      newJobId: nanoid(8),
+      ...params,
+    });
+  }, []);
+
   return (
     <EstimatorContext.Provider value={{
       state, setSection, setJobInfo, setGlobal, updateItem,
@@ -933,6 +1156,7 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
       reset,
       addScheduleEvent, updateScheduleEvent, removeScheduleEvent, updateOpportunitySchedule,
       setDeposit,
+      approveEstimate,
     }}>
       {children}
     </EstimatorContext.Provider>
