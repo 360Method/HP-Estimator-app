@@ -375,6 +375,8 @@ export interface EstimatorState {
   // Deposit configuration
   depositType: 'pct' | 'flat';  // 'pct' = percentage of total, 'flat' = fixed dollar amount
   depositValue: number;          // percent (0-100) when pct, dollar amount when flat
+  // Schedule deep-link: when set, SchedulePage pre-filters to this opportunityId
+  scheduleFilterJobId: string | null;
 }
 
 // ── CRM Pipeline Types ──────────────────────────────────────

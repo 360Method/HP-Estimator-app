@@ -168,3 +168,16 @@
 - [x] New estimates start with a clean default snapshot pre-filled with customer contact info
 - [x] Isolated fields: jobInfo, phases, customItems, global, fieldNotes, summaryNotes, estimatorNotes, clientNote, estimateOverrides, signature, signedAt, signedBy, depositType, depositValue
 - [x] 7 vitest isolation tests passing (switching Bath ↔ Remodel preserves independent data, deposit settings isolated, signature isolated)
+
+## Auto-Schedule Generation (Post-Won) — COMPLETE
+
+- [x] Build generateProjectSchedule(phases, jobStartDate, jobId, customerId, estimateId) utility
+- [x] Each active phase (has at least one enabled line item) becomes one ScheduleEvent of type 'job'
+- [x] Phase duration estimated from total labor hours / 8 hrs per day (min 0.5 day, max 14 days per phase)
+- [x] Phases sequenced in construction order with 0-day gap (end of one = start of next), weekends skipped
+- [x] ScheduleEvents color-coded by phase category (rough/structural = slate, MEP = blue, finish = green, etc.)
+- [x] Wire into APPROVE_ESTIMATE reducer: generate schedule events and append to state.scheduleEvents
+- [x] EstimateApprovedModal step 3: project start date picker + phase timeline preview (color bars, dates, durations)
+- [x] Schedule tab: filter by jobId to show only that job's phases
+- [x] Add "View Schedule" deep-link button in JobDetailsSection (shows phase count badge)
+- [x] 9 vitest tests for generateProjectSchedule utility (54 total tests passing)

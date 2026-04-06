@@ -6,7 +6,7 @@
 //   3. Invoice summary + finish
 // ============================================================
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -30,9 +30,12 @@ import {
   ChevronRight,
   Sparkles,
   ClipboardList,
+  CalendarDays,
+  Clock,
 } from 'lucide-react';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { Opportunity } from '@/lib/types';
+import { generateProjectSchedule, GeneratedPhaseEvent } from '@/lib/generateProjectSchedule';
 
 interface Props {
   open: boolean;
@@ -73,6 +76,42 @@ export default function EstimateApprovedModal({
   );
   const [existingJobId, setExistingJobId] = useState<string>('');
 
+  // Project start date (default: 1 week from today, skip weekends)
+  const defaultStart = useMemo(() => {
+    const d = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+    return d.toISOString().split('T')[0];
+  }, []);
+  const [jobStartDateStr, setJobStartDateStr] = useState(defaultStart);
+
+  // Preview the generated schedule whenever start date or phases change
+  const schedulePreview = useMemo<GeneratedPhaseEvent[]>(() => {
+    try {
+      const result = generateProjectSchedule({
+        phases: state.phases,
+        jobStartDate: new Date(jobStartDateStr),
+        jobId: 'preview',
+        customerId: '',
+        estimateId,
+        estimateTitle,
+        assignedTo: [],
+      });
+      return result.phaseEvents;
+    } catch {
+      return [];
+    }
+  }, [state.phases, jobStartDateStr, estimateId, estimateTitle]);
+
+  const totalWorkingDays = useMemo(
+    () => schedulePreview.reduce((s, pe) => s + pe.workingDays, 0),
+    [schedulePreview]
+  );
+
+  const estimatedEndDate = useMemo(() => {
+    if (schedulePreview.length === 0) return null;
+    return new Date(schedulePreview[schedulePreview.length - 1].event.end);
+  }, [schedulePreview]);
+
   // Existing jobs for this customer
   const existingJobs: Opportunity[] = useMemo(
     () => state.opportunities.filter(o => o.area === 'job' && !o.archived),
@@ -103,6 +142,7 @@ export default function EstimateApprovedModal({
       balanceAmount,
       signedEstimateDataUrl,
       signedEstimateFilename,
+      jobStartDate: jobStartDateStr,
     });
     onClose();
     // Navigate to the jobs tab
@@ -174,6 +214,7 @@ export default function EstimateApprovedModal({
                       <li>• Signed copy saved to client folder</li>
                       <li>• Deposit &amp; balance invoices auto-generated</li>
                       <li>• Opportunity moves to the Jobs pipeline</li>
+                      <li>• <strong>Project schedule auto-generated</strong> (one event per phase)</li>
                     </ul>
                   </div>
                 </div>
@@ -298,16 +339,16 @@ export default function EstimateApprovedModal({
           </>
         )}
 
-        {/* ── Step 3: Invoice Summary ─────────────────────────── */}
+        {/* ── Step 3: Invoice Summary + Schedule Preview ────── */}
         {step === 3 && (
           <>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <FileText className="w-5 h-5 text-primary" />
-                Invoices Ready to Generate
+                Invoices &amp; Project Schedule
               </DialogTitle>
               <DialogDescription>
-                Two invoices will be created and saved to the client's invoice folder.
+                Two invoices will be created and a project schedule auto-generated from your estimate phases.
               </DialogDescription>
             </DialogHeader>
 
@@ -397,6 +438,65 @@ export default function EstimateApprovedModal({
                   </div>
                 </div>
               </div>
+
+              <Separator />
+
+              {/* Project start date + schedule preview */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CalendarDays className="w-4 h-4 text-primary" />
+                    <span className="text-sm font-semibold">Project Schedule</span>
+                  </div>
+                  {schedulePreview.length > 0 && (
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Clock className="w-3 h-3" />
+                      <span>{totalWorkingDays} working days</span>
+                      {estimatedEndDate && (
+                        <span>· Est. end {estimatedEndDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Start date picker */}
+                <div className="flex items-center gap-3">
+                  <Label htmlFor="job-start" className="text-xs text-muted-foreground whitespace-nowrap">Project start</Label>
+                  <Input
+                    id="job-start"
+                    type="date"
+                    value={jobStartDateStr}
+                    onChange={e => setJobStartDateStr(e.target.value)}
+                    className="h-8 text-xs flex-1"
+                  />
+                </div>
+
+                {/* Phase timeline */}
+                {schedulePreview.length > 0 ? (
+                  <div className="rounded-lg border bg-muted/20 p-2 max-h-44 overflow-y-auto space-y-1">
+                    {schedulePreview.map((pe, i) => (
+                      <div key={i} className="flex items-center gap-2 text-xs">
+                        <div
+                          className="w-2.5 h-2.5 rounded-sm shrink-0"
+                          style={{ backgroundColor: pe.event.color ?? '#22c55e' }}
+                        />
+                        <span className="font-medium truncate flex-1" title={pe.phaseName}>{pe.phaseName}</span>
+                        <span className="text-muted-foreground shrink-0">
+                          {new Date(pe.event.start).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                          {pe.workingDays > 0.5 && (
+                            <> – {new Date(pe.event.end).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</>
+                          )}
+                        </span>
+                        <span className="text-muted-foreground shrink-0 w-16 text-right">
+                          {pe.workingDays < 1 ? '½ day' : `${pe.workingDays}d`}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground italic">No active phases with items found — add quantities to phases to generate a schedule.</p>
+                )}
+              </div>
             </div>
 
             <div className="flex justify-between pt-2">
@@ -406,7 +506,7 @@ export default function EstimateApprovedModal({
                 className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
               >
                 <DollarSign className="w-4 h-4" />
-                Confirm &amp; Generate Invoices
+                Confirm &amp; Generate
               </Button>
             </div>
           </>

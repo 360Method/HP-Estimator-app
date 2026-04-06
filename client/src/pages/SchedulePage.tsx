@@ -3,7 +3,7 @@
 // filters, and deep links to opportunities/jobs.
 // ============================================================
 
-import React, { useState, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import {
   ChevronLeft, ChevronRight, Plus, Calendar, List, Grid3X3,
   Briefcase, ClipboardList, RefreshCw, CheckSquare, Phone,
@@ -525,7 +525,7 @@ function EventFormModal({ initial, customers, onSave, onClose }: EventFormModalP
 type CalendarView = 'month' | 'week' | 'day' | 'agenda';
 
 export default function SchedulePage() {
-  const { state, addScheduleEvent, updateScheduleEvent, removeScheduleEvent, navigateToTopLevel, setActiveCustomer, setActiveOpportunity, setSection } = useEstimator();
+  const { state, addScheduleEvent, updateScheduleEvent, removeScheduleEvent, navigateToTopLevel, setActiveCustomer, setActiveOpportunity, setSection, setScheduleFilter } = useEstimator();
 
   const [view, setView] = useState<CalendarView>('week');
   const [currentDate, setCurrentDate] = useState(() => new Date());
@@ -537,7 +537,19 @@ export default function SchedulePage() {
   // Filters
   const [filterTypes, setFilterTypes] = useState<Set<ScheduleEventType>>(new Set());
   const [filterCustomerId, setFilterCustomerId] = useState('');
+  const [filterOpportunityId, setFilterOpportunityId] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+
+  // Deep-link: pre-apply job filter from state.scheduleFilterJobId on mount
+  useEffect(() => {
+    if (state.scheduleFilterJobId) {
+      setFilterOpportunityId(state.scheduleFilterJobId);
+      setShowFilters(true);
+      // Clear the deep-link after applying so navigating away and back doesn't re-apply
+      setScheduleFilter(null);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Drag state
   const dragEventRef = useRef<ScheduleEvent | null>(null);
@@ -586,8 +598,11 @@ export default function SchedulePage() {
     if (filterCustomerId) {
       events = events.filter(e => e.customerId === filterCustomerId);
     }
+    if (filterOpportunityId) {
+      events = events.filter(e => e.opportunityId === filterOpportunityId);
+    }
     return events;
-  }, [state.scheduleEvents, state.customers, filterTypes, filterCustomerId]);
+  }, [state.scheduleEvents, state.customers, filterTypes, filterCustomerId, filterOpportunityId]);
 
   const getEventsForDay = useCallback((day: Date) => {
     return allEvents.filter(e => isSameDay(new Date(e.start), day));
@@ -699,7 +714,7 @@ export default function SchedulePage() {
     });
   }
 
-  const activeFilterCount = filterTypes.size + (filterCustomerId ? 1 : 0);
+  const activeFilterCount = filterTypes.size + (filterCustomerId ? 1 : 0) + (filterOpportunityId ? 1 : 0);
 
   // ── Render ────────────────────────────────────────────────
   const weekStart = startOfWeek(currentDate);
@@ -800,7 +815,7 @@ export default function SchedulePage() {
           </select>
           {activeFilterCount > 0 && (
             <button
-              onClick={() => { setFilterTypes(new Set()); setFilterCustomerId(''); }}
+              onClick={() => { setFilterTypes(new Set()); setFilterCustomerId(''); setFilterOpportunityId(null); }}
               className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 transition-colors"
             >
               <X className="w-3 h-3" /> Clear all

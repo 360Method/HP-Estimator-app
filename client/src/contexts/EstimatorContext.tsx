@@ -11,6 +11,7 @@ import {
   EstimateSnapshot,
 } from '@/lib/types';
 import { ALL_PHASES, DEFAULTS } from '@/lib/phases';
+import { generateProjectSchedule } from '@/lib/generateProjectSchedule';
 import { nanoid } from 'nanoid';
 
 const initialState: EstimatorState = {
@@ -80,6 +81,8 @@ const initialState: EstimatorState = {
   // Deposit configuration (default: 50%)
   depositType: 'pct' as const,
   depositValue: 50,
+  // Schedule deep-link filter
+  scheduleFilterJobId: null,
 };
 
 // ── Helper: build an ActivityEvent without id/timestamp ──────
@@ -147,6 +150,7 @@ type Action =
   | { type: 'REMOVE_SCHEDULE_EVENT'; id: string }
   | { type: 'UPDATE_OPPORTUNITY_SCHEDULE'; id: string; scheduledDate?: string; scheduledEndDate?: string; scheduledDuration?: number; assignedTo?: string; scheduleNotes?: string }
   | { type: 'SET_DEPOSIT'; depositType: 'pct' | 'flat'; depositValue: number }
+  | { type: 'SET_SCHEDULE_FILTER'; jobId: string | null }
   | {
       type: 'APPROVE_ESTIMATE';
       estimateId: string;           // the estimate opportunity being approved
@@ -160,6 +164,7 @@ type Action =
       balanceAmount: number;        // totalPrice - depositAmount
       signedEstimateDataUrl?: string;
       signedEstimateFilename?: string;
+      jobStartDate?: string;          // ISO date string for project start (defaults to today+7)
     };
 
 function makeActivity(
@@ -913,7 +918,27 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
 
       const updatedInvoices = [...existingInvoices, depositInvoice, ...balanceInvoices];
 
-      // 4. Build activity events
+      // 4. Generate project schedule from estimate phases
+      const projectStartDate = action.jobStartDate
+        ? new Date(action.jobStartDate)
+        : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // default: 1 week from now
+
+      const scheduleResult = generateProjectSchedule({
+        phases: state.phases,
+        jobStartDate: projectStartDate,
+        jobId: jobOpp.id,
+        customerId: state.activeCustomerId ?? '',
+        estimateId: action.estimateId,
+        estimateTitle: estimate.title || 'Project',
+        assignedTo: [],
+      });
+
+      const newScheduleEvents: ScheduleEvent[] = [
+        ...state.scheduleEvents,
+        ...scheduleResult.events,
+      ];
+
+      // 5. Build activity events
       const approvalEvent = makeActivity(
         'estimate_approved',
         'Estimate Approved — Won!',
@@ -954,6 +979,7 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
         opportunities: updatedOpps,
         activityFeed: newFeed,
         customers: syncedCustomers,
+        scheduleEvents: newScheduleEvents,
         activePipelineArea: 'job',
         activeCustomerTab: 'jobs',
       };
@@ -1000,6 +1026,9 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
 
     case 'SET_DEPOSIT':
       return { ...state, depositType: action.depositType, depositValue: action.depositValue };
+
+    case 'SET_SCHEDULE_FILTER':
+      return { ...state, scheduleFilterJobId: action.jobId };
 
     case 'UPDATE_OPPORTUNITY_SCHEDULE': {
       const now = new Date().toISOString();
@@ -1075,6 +1104,8 @@ interface EstimatorContextValue {
   updateOpportunitySchedule: (id: string, fields: { scheduledDate?: string; scheduledEndDate?: string; scheduledDuration?: number; assignedTo?: string; scheduleNotes?: string }) => void;
   // Deposit
   setDeposit: (depositType: 'pct' | 'flat', depositValue: number) => void;
+  // Schedule deep-link filter
+  setScheduleFilter: (jobId: string | null) => void;
   // Approve Estimate
   approveEstimate: (params: {
     estimateId: string;
@@ -1087,6 +1118,7 @@ interface EstimatorContextValue {
     balanceAmount: number;
     signedEstimateDataUrl?: string;
     signedEstimateFilename?: string;
+    jobStartDate?: string;
   }) => void;
 }
 
@@ -1240,12 +1272,17 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
     balanceAmount: number;
     signedEstimateDataUrl?: string;
     signedEstimateFilename?: string;
+    jobStartDate?: string;
   }) => {
     dispatch({
       type: 'APPROVE_ESTIMATE',
       newJobId: nanoid(8),
       ...params,
     });
+  }, []);
+
+  const setScheduleFilter = useCallback((jobId: string | null) => {
+    dispatch({ type: 'SET_SCHEDULE_FILTER', jobId });
   }, []);
 
   return (
@@ -1264,6 +1301,7 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
       reset,
       addScheduleEvent, updateScheduleEvent, removeScheduleEvent, updateOpportunitySchedule,
       setDeposit,
+      setScheduleFilter,
       approveEstimate,
     }}>
       {children}

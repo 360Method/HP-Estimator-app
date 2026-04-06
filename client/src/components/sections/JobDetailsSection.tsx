@@ -15,7 +15,7 @@ import {
 } from '@/lib/types';
 import {
   Briefcase, MapPin, Hash, Calendar, User, FileText,
-  ExternalLink, Edit3, ChevronDown,
+  ExternalLink, Edit3, ChevronDown, CalendarDays,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -35,7 +35,7 @@ const STAGE_COLORS: Record<string, string> = {
 };
 
 export default function JobDetailsSection() {
-  const { state, setJobInfo, updateOpportunity } = useEstimator();
+  const { state, setJobInfo, updateOpportunity, setSection, setScheduleFilter } = useEstimator();
   const { jobInfo, activeOpportunityId, opportunities } = state;
 
   const activeOpp = activeOpportunityId
@@ -92,6 +92,32 @@ export default function JobDetailsSection() {
               </span>
             </p>
           )}
+          {/* Schedule deep-link */}
+          {(() => {
+            const linkedEvents = state.scheduleEvents.filter(
+              e => e.opportunityId === activeOpp.id
+            );
+            return (
+              <button
+                onClick={() => {
+                  setScheduleFilter(activeOpp.id);
+                  setSection('schedule');
+                }}
+                className="mt-3 w-full flex items-center justify-between rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/30 px-3 py-2 text-xs hover:bg-sky-100 dark:hover:bg-sky-900/40 transition-colors"
+              >
+                <div className="flex items-center gap-2 text-sky-700 dark:text-sky-400">
+                  <CalendarDays size={14} />
+                  <span className="font-semibold">Project Schedule</span>
+                  {linkedEvents.length > 0 && (
+                    <span className="bg-sky-200 dark:bg-sky-800 text-sky-800 dark:text-sky-200 px-1.5 py-0.5 rounded-full text-[10px] font-bold">
+                      {linkedEvents.length} phase{linkedEvents.length !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                </div>
+                <ExternalLink size={12} className="text-sky-500" />
+              </button>
+            );
+          })()}
         </div>
       </div>
 
