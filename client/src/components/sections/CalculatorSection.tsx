@@ -1,17 +1,23 @@
 // ============================================================
-// HP Field Estimator v3 — Calculator Section
-// Per-line-item markup, per-phase custom items, AI cost analysis
+// HP Field Estimator v4 — Calculator Section
+// Field order: Dimension → Style → Tier → Qty → Labor → Markup → Final Price
+// Paint prep restricted to Drywall (phase 5) and Trim (phase 11) only
+// Per-trade custom material row inside every phase accordion
 // ============================================================
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { calcPhase, calcLineItem, calcCustomItem, calcTotals, fmtDollar, fmtDollarCents, getMarginFlag, getMarginLabel } from '@/lib/calc';
-import { LineItem, CustomLineItem, Tier, UNIT_LABELS, UnitType, DimensionOption } from '@/lib/types';
+import { LineItem, CustomLineItem, Tier, UNIT_LABELS, UnitType } from '@/lib/types';
 import { ChevronDown, AlertTriangle, CheckCircle2, XCircle, Sparkles, Plus, Trash2, Loader2, Ruler } from 'lucide-react';
 import { toast } from 'sonner';
+import { ALL_PHASES } from '@/lib/phases';
 
 const FORGE_API_URL = import.meta.env.VITE_FRONTEND_FORGE_API_URL as string;
 const FORGE_API_KEY = import.meta.env.VITE_FRONTEND_FORGE_API_KEY as string;
+
+// Paint prep is only relevant for these two phases
+const PAINT_PREP_PHASE_IDS = new Set([5, 11]); // Drywall, Trim & Finish Carpentry
 
 // ─── AI COST ANALYSIS ────────────────────────────────────────
 async function analyzeCustomItemCost(description: string, qty: number, unitType: string): Promise<{ low: number; high: number; notes: string }> {
@@ -101,7 +107,7 @@ function GlobalSettingsPanel() {
             />
             <span className="text-sm font-bold mono w-16 text-right">${global.paintRate}/hr</span>
           </div>
-          <div className="text-xs text-muted-foreground mt-0.5">paint prep labor</div>
+          <div className="text-xs text-muted-foreground mt-0.5">paint prep labor (Drywall &amp; Trim phases)</div>
         </div>
       </div>
       {/* Overall margin summary */}
@@ -137,6 +143,7 @@ function GlobalSettingsPanel() {
 }
 
 // ─── PHASE SELECTOR GRID ─────────────────────────────────────
+// Renders phases in the correct construction sequence (ALL_PHASES order)
 function PhaseTabBar({ phases, activePhaseId, onSelect, phaseResults }: {
   phases: { id: number; name: string; icon: string }[];
   activePhaseId: number;
@@ -146,10 +153,10 @@ function PhaseTabBar({ phases, activePhaseId, onSelect, phaseResults }: {
   return (
     <div className="mb-5">
       <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-2 px-0.5">
-        Select Phase
+        Select Phase — Construction Sequence
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-        {phases.map(p => {
+        {phases.map((p, idx) => {
           const result = phaseResults.get(p.id);
           const hasData = result?.hasData ?? false;
           const isActive = p.id === activePhaseId;
@@ -163,6 +170,7 @@ function PhaseTabBar({ phases, activePhaseId, onSelect, phaseResults }: {
                   : 'border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground hover:bg-muted/40'
               }`}
             >
+              <span className="text-[10px] font-bold text-muted-foreground/60 w-4 shrink-0">{idx + 1}</span>
               <span className="text-base shrink-0 leading-none">{p.icon}</span>
               <span className="text-xs font-semibold leading-tight line-clamp-2 flex-1 min-w-0">{p.name}</span>
               {hasData && (
@@ -177,7 +185,8 @@ function PhaseTabBar({ phases, activePhaseId, onSelect, phaseResults }: {
 }
 
 // ─── LINE ITEM ROW ────────────────────────────────────────────
-function LineItemRow({ item, phaseId }: { item: LineItem; phaseId: number }) {
+// Field order: Dimension → Style/Notes → Tier → Qty → Labor → Markup → Final Price
+function LineItemRow({ item, phaseId, showPaintPrep }: { item: LineItem; phaseId: number; showPaintPrep: boolean }) {
   const { state, updateItem } = useEstimator();
   const [expanded, setExpanded] = useState(false);
 
@@ -185,9 +194,6 @@ function LineItemRow({ item, phaseId }: { item: LineItem; phaseId: number }) {
   const flag = getMarginFlag(result.gm, result.hardCost);
   const flagLabel = getMarginLabel(result.gm, result.hardCost, result.price);
   const unitLabel = UNIT_LABELS[item.unitType];
-  const effectiveMarkup = item.markupPct !== null && item.markupPct !== undefined
-    ? item.markupPct
-    : state.global.markupPct;
 
   const update = (payload: Partial<LineItem>) => updateItem(phaseId, item.id, payload);
 
@@ -215,18 +221,14 @@ function LineItemRow({ item, phaseId }: { item: LineItem; phaseId: number }) {
           {item.flagged && item.flagNote && (
             <div className="text-xs text-amber-600 mt-0.5">{item.flagNote}</div>
           )}
-        </div>
-
-        {/* Quick qty input + dimension badge */}
-        <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
-          {/* Dimension quick-select badge */}
+          {/* Dimension quick badge in header */}
           {item.dimensionOptions && item.dimensionOptions.length > 0 && (
-            <div className="flex items-center gap-1">
-              <Ruler size={11} className="text-muted-foreground shrink-0" />
+            <div className="flex items-center gap-1 mt-0.5" onClick={e => e.stopPropagation()}>
+              <Ruler size={10} className="text-muted-foreground shrink-0" />
               <select
                 value={item.selectedDimension || item.dimensionOptions[0].value}
                 onChange={e => update({ selectedDimension: e.target.value })}
-                className="text-xs border border-border rounded-md px-1.5 py-1 bg-background text-foreground h-8 max-w-[130px] cursor-pointer"
+                className="text-xs border border-border rounded px-1 py-0.5 bg-background text-foreground max-w-[160px] cursor-pointer"
               >
                 {item.dimensionOptions.map(d => (
                   <option key={d.value} value={d.value}>{d.label}</option>
@@ -234,6 +236,10 @@ function LineItemRow({ item, phaseId }: { item: LineItem; phaseId: number }) {
               </select>
             </div>
           )}
+        </div>
+
+        {/* Quick qty input */}
+        <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
           <input
             type="number"
             min={0}
@@ -242,8 +248,7 @@ function LineItemRow({ item, phaseId }: { item: LineItem; phaseId: number }) {
             placeholder="0"
             className="field-input w-20 text-right"
           />
-       
-  <span className="text-xs text-muted-foreground">{unitLabel}</span>
+          <span className="text-xs text-muted-foreground">{unitLabel}</span>
         </div>
 
         {/* Price badge */}
@@ -264,13 +269,118 @@ function LineItemRow({ item, phaseId }: { item: LineItem; phaseId: number }) {
         <ChevronDown size={14} className={`text-muted-foreground shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`} />
       </div>
 
-      {/* Expanded detail */}
+      {/* ── Expanded detail — field order: Dimension → Style → Tier → Qty → Labor → Markup → Final Price ── */}
       {expanded && (
         <div className="border-t border-border p-4 space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {/* Quantity */}
+
+          {/* 1. DIMENSION — full button grid */}
+          {item.dimensionOptions && item.dimensionOptions.length > 0 && (
             <div>
-              <label className="field-label">Quantity ({unitLabel})</label>
+              <label className="field-label flex items-center gap-1.5">
+                <Ruler size={12} /> 1. Size / Dimension
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                {item.dimensionOptions.map(dim => {
+                  const isSelected = (item.selectedDimension || item.dimensionOptions![0].value) === dim.value;
+                  const tierRate = item.tiers[item.tier as Tier]?.rate ?? 0;
+                  const effectiveRate = dim.rateOverride !== undefined
+                    ? dim.rateOverride
+                    : dim.rateMultiplier !== undefined
+                      ? tierRate * dim.rateMultiplier
+                      : tierRate;
+                  return (
+                    <button
+                      key={dim.value}
+                      onClick={() => update({ selectedDimension: dim.value })}
+                      className={`text-left p-2 rounded-lg border-2 transition-all ${
+                        isSelected ? 'border-primary bg-primary/5' : 'border-border hover:border-muted-foreground/40'
+                      }`}
+                    >
+                      <div className={`text-xs font-semibold leading-tight ${isSelected ? 'text-primary' : 'text-foreground'}`}>
+                        {dim.label}
+                      </div>
+                      {dim.note && (
+                        <div className="text-[10px] text-muted-foreground mt-0.5">{dim.note}</div>
+                      )}
+                      {item.hasTiers && (
+                        <div className="text-[10px] font-bold mono text-muted-foreground mt-1">
+                          {fmtDollarCents(effectiveRate)}/{UNIT_LABELS[item.unitType]}
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* 2. STYLE / NOTES */}
+          <div>
+            <label className="field-label">2. Style / Notes (internal)</label>
+            <input
+              type="text"
+              value={item.notes}
+              onChange={e => update({ notes: e.target.value })}
+              placeholder="e.g. herringbone pattern, custom color, special finish…"
+              className="field-input w-full"
+            />
+          </div>
+
+          {/* 3. TIER — Good / Better / Best */}
+          {item.hasTiers && (
+            <div>
+              <label className="field-label">3. Material Tier</label>
+              <div className="grid grid-cols-3 gap-2">
+                {(['good', 'better', 'best'] as Tier[]).map(tier => {
+                  const td = item.tiers[tier];
+                  const isSelected = item.tier === tier;
+                  let displayRate = td.rate;
+                  if (item.dimensionOptions && item.selectedDimension) {
+                    const dim = item.dimensionOptions.find(d => d.value === item.selectedDimension);
+                    if (dim) {
+                      if (dim.rateOverride !== undefined) displayRate = dim.rateOverride;
+                      else if (dim.rateMultiplier !== undefined) displayRate = td.rate * dim.rateMultiplier;
+                    }
+                  }
+                  return (
+                    <button
+                      key={tier}
+                      onClick={() => update({ tier })}
+                      className={`text-left p-2.5 rounded-lg border-2 transition-all ${
+                        isSelected ? 'border-primary bg-primary/5' : 'border-border hover:border-muted-foreground/40'
+                      }`}
+                    >
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">
+                        {tier.toUpperCase()}
+                      </div>
+                      <div className="text-xs font-semibold text-foreground leading-tight">{td.name}</div>
+                      <div className="text-xs text-muted-foreground leading-tight mt-0.5 line-clamp-2">{td.desc}</div>
+                      <div className="text-xs font-bold mono text-primary mt-1.5">
+                        {fmtDollarCents(displayRate)}/{unitLabel}
+                        {item.dimensionOptions && item.selectedDimension && displayRate !== td.rate && (
+                          <span className="text-[10px] text-muted-foreground font-normal ml-1">(adj.)</span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              {item.dimensionOptions && item.selectedDimension && (() => {
+                const dim = item.dimensionOptions.find(d => d.value === item.selectedDimension);
+                return dim ? (
+                  <div className="text-xs text-muted-foreground mt-1.5">
+                    {item.tiers[item.tier].name} — {item.tiers[item.tier].desc}
+                    <span className="ml-1 text-primary font-medium">· {dim.label}</span>
+                  </div>
+                ) : null;
+              })()}
+            </div>
+          )}
+
+          {/* 4. QUANTITY + WASTE */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="field-label">4. Quantity ({unitLabel})</label>
               <input
                 type="number" min={0}
                 value={item.qty || ''}
@@ -279,50 +389,6 @@ function LineItemRow({ item, phaseId }: { item: LineItem; phaseId: number }) {
                 className="field-input w-full"
               />
             </div>
-
-            {/* Dimension selector (expanded detail) */}
-            {item.dimensionOptions && item.dimensionOptions.length > 0 && (
-              <div className="sm:col-span-2 lg:col-span-3">
-                <label className="field-label flex items-center gap-1.5">
-                  <Ruler size={12} /> Size / Dimension
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-                  {item.dimensionOptions.map(dim => {
-                    const isSelected = (item.selectedDimension || item.dimensionOptions![0].value) === dim.value;
-                    // Compute effective rate for this dimension
-                    const tierRate = item.tiers[item.tier as Tier]?.rate ?? 0;
-                    const effectiveRate = dim.rateOverride !== undefined
-                      ? dim.rateOverride
-                      : dim.rateMultiplier !== undefined
-                        ? tierRate * dim.rateMultiplier
-                        : tierRate;
-                    return (
-                      <button
-                        key={dim.value}
-                        onClick={() => update({ selectedDimension: dim.value })}
-                        className={`text-left p-2 rounded-lg border-2 transition-all ${
-                          isSelected ? 'border-primary bg-primary/5' : 'border-border hover:border-muted-foreground/40'
-                        }`}
-                      >
-                        <div className={`text-xs font-semibold leading-tight ${
-                          isSelected ? 'text-primary' : 'text-foreground'
-                        }`}>{dim.label}</div>
-                        {dim.note && (
-                          <div className="text-[10px] text-muted-foreground mt-0.5">{dim.note}</div>
-                        )}
-                        {item.hasTiers && (
-                          <div className="text-[10px] font-bold mono text-muted-foreground mt-1">
-                            {fmtDollarCents(effectiveRate)}/{UNIT_LABELS[item.unitType]}
-                          </div>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Waste factor */}
             {item.wastePct > 0 && (
               <div>
                 <label className="field-label">Waste Factor (%)</label>
@@ -339,60 +405,12 @@ function LineItemRow({ item, phaseId }: { item: LineItem; phaseId: number }) {
                 )}
               </div>
             )}
+          </div>
 
-            {/* Material tier */}
-            {item.hasTiers && (
-              <div className="sm:col-span-2 lg:col-span-3">
-                <label className="field-label">Material Tier (Good / Better / Best)</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {(['good', 'better', 'best'] as Tier[]).map(tier => {
-                    const td = item.tiers[tier];
-                    const isSelected = item.tier === tier;
-                    // Compute dimension-adjusted rate for display
-                    let displayRate = td.rate;
-                    if (item.dimensionOptions && item.selectedDimension) {
-                      const dim = item.dimensionOptions.find(d => d.value === item.selectedDimension);
-                      if (dim) {
-                        if (dim.rateOverride !== undefined) displayRate = dim.rateOverride;
-                        else if (dim.rateMultiplier !== undefined) displayRate = td.rate * dim.rateMultiplier;
-                      }
-                    }
-                    return (
-                      <button
-                        key={tier}
-                        onClick={() => update({ tier })}
-                        className={`text-left p-2.5 rounded-lg border-2 transition-all ${
-                          isSelected ? 'border-primary bg-primary/5' : 'border-border hover:border-muted-foreground/40'
-                        }`}
-                      >
-                        <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-0.5">
-                          {tier.toUpperCase()}
-                        </div>
-                        <div className="text-xs font-semibold text-foreground leading-tight">{td.name}</div>
-                        <div className="text-xs text-muted-foreground leading-tight mt-0.5 line-clamp-2">{td.desc}</div>
-                        <div className="text-xs font-bold mono text-primary mt-1.5">
-                          {fmtDollarCents(displayRate)}/{unitLabel}
-                          {item.dimensionOptions && item.selectedDimension && displayRate !== td.rate && (
-                            <span className="text-[10px] text-muted-foreground font-normal ml-1">(adj.)</span>
-                          )}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-                <div className="text-xs text-muted-foreground mt-1.5">
-                  {item.tiers[item.tier].name} — {item.tiers[item.tier].desc}
-                  {item.dimensionOptions && item.selectedDimension && (() => {
-                    const dim = item.dimensionOptions.find(d => d.value === item.selectedDimension);
-                    return dim ? <span className="ml-1 text-primary font-medium">· {dim.label}</span> : null;
-                  })()}
-                </div>
-              </div>
-            )}
-
-            {/* Labor mode */}
+          {/* 5. LABOR */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="field-label">Labor Mode</label>
+              <label className="field-label">5. Labor Mode</label>
               <div className="flex gap-2">
                 {(['hr', 'flat'] as const).map(mode => (
                   <button
@@ -407,8 +425,6 @@ function LineItemRow({ item, phaseId }: { item: LineItem; phaseId: number }) {
                 ))}
               </div>
             </div>
-
-            {/* Labor rate */}
             <div>
               <label className="field-label">Labor Rate ($/hr)</label>
               <input
@@ -418,8 +434,6 @@ function LineItemRow({ item, phaseId }: { item: LineItem; phaseId: number }) {
                 className="field-input w-full"
               />
             </div>
-
-            {/* Hrs per unit or flat rate */}
             {item.laborMode === 'hr' ? (
               <div>
                 <label className="field-label">Hrs / {unitLabel}</label>
@@ -446,78 +460,66 @@ function LineItemRow({ item, phaseId }: { item: LineItem; phaseId: number }) {
                 />
               </div>
             )}
-
-            {/* Paint prep */}
-            {item.hasPaintPrep && (
-              <div className="sm:col-span-2 lg:col-span-3">
-                <label className="field-label">Paint Prep</label>
-                <div className="flex gap-2">
-                  {(['none', 'caulk', 'full'] as const).map(prep => (
-                    <button
-                      key={prep}
-                      onClick={() => update({ paintPrep: prep })}
-                      className={`flex-1 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${
-                        item.paintPrep === prep ? 'border-primary bg-primary text-white' : 'border-border text-muted-foreground hover:border-foreground'
-                      }`}
-                    >
-                      {prep === 'none' ? 'None' : prep === 'caulk' ? 'Caulk Only' : 'Full Prep'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* ── Per-item markup override ── */}
-            <div className="sm:col-span-2 lg:col-span-3">
-              <div className="flex items-center justify-between mb-1">
-                <label className="field-label mb-0">Markup Override</label>
-                <button
-                  onClick={() => update({ markupPct: item.markupPct !== null ? null : state.global.markupPct })}
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded border transition-colors ${
-                    item.markupPct !== null
-                      ? 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100'
-                      : 'border-border text-muted-foreground hover:border-foreground'
-                  }`}
-                >
-                  {item.markupPct !== null ? 'Using override — click to reset' : 'Using global — click to override'}
-                </button>
-              </div>
-              {item.markupPct !== null ? (
-                <div className="flex items-center gap-2">
-                  <input
-                    type="range" min={15} max={70} step={1}
-                    value={Math.round(item.markupPct * 100)}
-                    onChange={e => update({ markupPct: parseInt(e.target.value) / 100 })}
-                    className="flex-1"
-                  />
-                  <span className="text-sm font-bold mono w-10 text-right text-blue-700">
-                    {Math.round(item.markupPct * 100)}%
-                  </span>
-                </div>
-              ) : (
-                <div className="text-xs text-muted-foreground">
-                  Using global default: {Math.round(state.global.markupPct * 100)}% GM
-                </div>
-              )}
-            </div>
-
-            {/* Notes */}
-            <div className="sm:col-span-2 lg:col-span-3">
-              <label className="field-label">Notes (internal)</label>
-              <input
-                type="text"
-                value={item.notes}
-                onChange={e => update({ notes: e.target.value })}
-                placeholder="Optional notes for this line item"
-                className="field-input w-full"
-              />
-            </div>
           </div>
 
-          {/* Cost breakdown */}
+          {/* Paint prep — only shown in Drywall (5) and Trim (11) phases */}
+          {item.hasPaintPrep && showPaintPrep && (
+            <div>
+              <label className="field-label">Paint Prep</label>
+              <div className="flex gap-2">
+                {(['none', 'caulk', 'full'] as const).map(prep => (
+                  <button
+                    key={prep}
+                    onClick={() => update({ paintPrep: prep })}
+                    className={`flex-1 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${
+                      item.paintPrep === prep ? 'border-primary bg-primary text-white' : 'border-border text-muted-foreground hover:border-foreground'
+                    }`}
+                  >
+                    {prep === 'none' ? 'None' : prep === 'caulk' ? 'Caulk Only' : 'Full Prep'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 6. MARKUP OVERRIDE */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="field-label mb-0">6. Markup Override</label>
+              <button
+                onClick={() => update({ markupPct: item.markupPct !== null ? null : state.global.markupPct })}
+                className={`text-[10px] font-bold px-2 py-0.5 rounded border transition-colors ${
+                  item.markupPct !== null
+                    ? 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100'
+                    : 'border-border text-muted-foreground hover:border-foreground'
+                }`}
+              >
+                {item.markupPct !== null ? 'Using override — click to reset' : 'Using global — click to override'}
+              </button>
+            </div>
+            {item.markupPct !== null ? (
+              <div className="flex items-center gap-2">
+                <input
+                  type="range" min={15} max={70} step={1}
+                  value={Math.round(item.markupPct * 100)}
+                  onChange={e => update({ markupPct: parseInt(e.target.value) / 100 })}
+                  className="flex-1"
+                />
+                <span className="text-sm font-bold mono w-10 text-right text-blue-700">
+                  {Math.round(item.markupPct * 100)}%
+                </span>
+              </div>
+            ) : (
+              <div className="text-xs text-muted-foreground">
+                Using global default: {Math.round(state.global.markupPct * 100)}% GM
+              </div>
+            )}
+          </div>
+
+          {/* 7. FINAL PRICE — cost breakdown */}
           {result.hasData && (
             <div className="rounded-lg bg-muted/40 border border-border p-3">
-              <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Cost Breakdown</div>
+              <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">7. Final Price Breakdown</div>
               <div className="space-y-1 text-xs">
                 {item.hasTiers && (
                   <div className="flex justify-between">
@@ -525,7 +527,7 @@ function LineItemRow({ item, phaseId }: { item: LineItem; phaseId: number }) {
                       Material ({fmtDollarCents(result.matRate)}/{unitLabel} × {result.purchaseQty.toFixed(1)} {unitLabel})
                       {item.dimensionOptions && item.selectedDimension && (() => {
                         const dim = item.dimensionOptions.find(d => d.value === item.selectedDimension);
-                        return dim ? <span className="ml-1 text-primary font-medium">[ {dim.label} ]</span> : null;
+                        return dim ? <span className="ml-1 text-primary font-medium">[ {dim.label} ]</span> : null;
                       })()}
                     </span>
                     <span className="font-mono">{fmtDollar(result.matCost)}</span>
@@ -555,7 +557,7 @@ function LineItemRow({ item, phaseId }: { item: LineItem; phaseId: number }) {
                   <span>Hard cost (internal)</span>
                   <span className="font-mono">{fmtDollar(result.hardCost)}</span>
                 </div>
-                <div className="flex justify-between font-bold text-primary">
+                <div className="flex justify-between font-bold text-primary text-sm">
                   <span>Customer price ({Math.round(result.gm * 100)}% GM · {item.markupPct !== null ? 'override' : 'global'})</span>
                   <span className="font-mono">{fmtDollar(result.price)}</span>
                 </div>
@@ -578,16 +580,13 @@ function LineItemRow({ item, phaseId }: { item: LineItem; phaseId: number }) {
   );
 }
 
-// ─── CUSTOM ITEM ROW (per-phase) ──────────────────────────────
+// ─── CUSTOM ITEM ROW (existing global custom items) ───────────
 function CustomItemRow({ ci }: { ci: CustomLineItem }) {
   const { state, updateCustomItem, removeCustomItem } = useEstimator();
   const [expanded, setExpanded] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
 
   const result = useMemo(() => calcCustomItem(ci, state.global), [ci, state.global]);
-  const effectiveMarkup = ci.markupPct !== null && ci.markupPct !== undefined
-    ? ci.markupPct
-    : state.global.markupPct;
 
   const handleAiAnalyze = useCallback(async () => {
     if (!ci.description.trim()) {
@@ -725,7 +724,7 @@ function CustomItemRow({ ci }: { ci: CustomLineItem }) {
               />
             </div>
 
-            {/* Per-item markup override */}
+            {/* Markup override */}
             <div className="sm:col-span-2">
               <div className="flex items-center justify-between mb-1">
                 <label className="field-label mb-0">Markup Override</label>
@@ -737,7 +736,7 @@ function CustomItemRow({ ci }: { ci: CustomLineItem }) {
                       : 'border-border text-muted-foreground hover:border-foreground'
                   }`}
                 >
-                  {ci.markupPct !== null ? 'Override active — click to reset' : 'Using global — click to override'}
+                  {ci.markupPct !== null ? 'Using override — click to reset' : 'Using global — click to override'}
                 </button>
               </div>
               {ci.markupPct !== null ? (
@@ -753,56 +752,43 @@ function CustomItemRow({ ci }: { ci: CustomLineItem }) {
                   </span>
                 </div>
               ) : (
-                <div className="text-xs text-muted-foreground">Using global: {Math.round(state.global.markupPct * 100)}% GM</div>
+                <div className="text-xs text-muted-foreground">
+                  Using global default: {Math.round(state.global.markupPct * 100)}% GM
+                </div>
               )}
             </div>
 
+            {/* Notes */}
             <div className="sm:col-span-2">
-              <label className="field-label">Internal Notes</label>
+              <label className="field-label">Notes (internal)</label>
               <input
                 type="text"
                 value={ci.notes}
                 onChange={e => updateCustomItem(ci.id, { notes: e.target.value })}
-                placeholder="Notes for estimator / sub"
+                placeholder="Optional notes"
                 className="field-input w-full"
               />
             </div>
           </div>
 
-          {/* AI Analysis */}
-          <div className="rounded-lg border border-blue-200 bg-blue-50/50 p-3">
-            <div className="flex items-center justify-between mb-2">
-              <div className="text-xs font-bold text-blue-800 flex items-center gap-1.5">
-                <Sparkles size={12} />
-                AI Scope Analysis
-              </div>
-              <button
-                onClick={handleAiAnalyze}
-                disabled={analyzing || !ci.description.trim()}
-                className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                {analyzing ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
-                {analyzing ? 'Analyzing...' : 'Analyze Scope'}
-              </button>
-            </div>
-            {ci.aiAnalysis ? (
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-blue-700 font-medium">Estimated hard cost range:</span>
-                  <span className="text-sm font-bold mono text-blue-900">
-                    {fmtDollar(ci.aiAnalysis.lowEstimate)} – {fmtDollar(ci.aiAnalysis.highEstimate)}
-                  </span>
+          {/* AI analysis */}
+          <div>
+            <button
+              onClick={handleAiAnalyze}
+              disabled={analyzing || !ci.description.trim()}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-blue-300 bg-blue-50 text-blue-700 text-xs font-semibold hover:bg-blue-100 disabled:opacity-50 transition-colors"
+            >
+              {analyzing ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+              {analyzing ? 'Analyzing…' : 'Analyze Scope (AI)'}
+            </button>
+            {ci.aiAnalysis && (
+              <div className="mt-2 rounded-lg bg-blue-50 border border-blue-200 p-3 text-xs">
+                <div className="font-bold text-blue-700 mb-1">AI Cost Range</div>
+                <div className="flex gap-4 mb-1">
+                  <span>Low: <strong>{fmtDollar(ci.aiAnalysis.lowEstimate)}</strong></span>
+                  <span>High: <strong>{fmtDollar(ci.aiAnalysis.highEstimate)}</strong></span>
                 </div>
-                <div className="text-xs text-blue-700 leading-relaxed">{ci.aiAnalysis.notes}</div>
-                {ci.matCostPerUnit === 0 && ci.laborHrsPerUnit === 0 && (
-                  <div className="text-[10px] text-blue-600 italic">
-                    Tip: Use the AI range to fill in material cost and labor hours above.
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="text-xs text-blue-600">
-                Enter a description and click "Analyze Scope" — AI will estimate a realistic cost range for this item based on Pacific Northwest contractor pricing.
+                <div className="text-blue-600">{ci.aiAnalysis.notes}</div>
               </div>
             )}
           </div>
@@ -810,7 +796,7 @@ function CustomItemRow({ ci }: { ci: CustomLineItem }) {
           {/* Cost breakdown */}
           {result.hasData && (
             <div className="rounded-lg bg-muted/40 border border-border p-3">
-              <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Cost Breakdown</div>
+              <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Final Price Breakdown</div>
               <div className="space-y-1 text-xs">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Material ({ci.qty} × ${ci.matCostPerUnit})</span>
@@ -824,7 +810,7 @@ function CustomItemRow({ ci }: { ci: CustomLineItem }) {
                   <span>Hard cost</span>
                   <span className="font-mono">{fmtDollar(result.hardCost)}</span>
                 </div>
-                <div className="flex justify-between font-bold text-primary">
+                <div className="flex justify-between font-bold text-primary text-sm">
                   <span>Customer price ({Math.round(result.gm * 100)}% GM · {ci.markupPct !== null ? 'override' : 'global'})</span>
                   <span className="font-mono">{fmtDollar(result.price)}</span>
                 </div>
@@ -837,68 +823,165 @@ function CustomItemRow({ ci }: { ci: CustomLineItem }) {
   );
 }
 
-// ─── ADD CUSTOM ITEM FORM ─────────────────────────────────────
-function AddCustomItemButton({ phaseId }: { phaseId: number }) {
+// ─── ADD CUSTOM MATERIAL ROW (per-trade, inline) ──────────────
+// Shown at the bottom of every phase accordion for quick custom material entry
+function AddCustomMaterialRow({ phaseId }: { phaseId: number }) {
   const { state, addCustomItem } = useEstimator();
   const [open, setOpen] = useState(false);
-  const [desc, setDesc] = useState('');
+  const [form, setForm] = useState({
+    description: '',
+    unitType: 'unit' as UnitType,
+    dimension: '',
+    qty: 1,
+    matCostPerUnit: 0,
+    laborHrsPerUnit: 0,
+    laborRate: state.global.laborRate,
+  });
+
+  const hardCost = form.qty * form.matCostPerUnit + form.qty * form.laborHrsPerUnit * form.laborRate;
+  const customerPrice = hardCost > 0 ? hardCost / (1 - state.global.markupPct) : 0;
 
   const handleAdd = () => {
-    if (!desc.trim()) return;
+    if (!form.description.trim()) return;
     addCustomItem({
       phaseId,
-      description: desc.trim(),
+      description: form.dimension
+        ? `${form.description} [${form.dimension}]`
+        : form.description,
+      unitType: form.unitType,
+      qty: form.qty,
+      matCostPerUnit: form.matCostPerUnit,
+      laborHrsPerUnit: form.laborHrsPerUnit,
+      laborRate: form.laborRate,
+      notes: '',
+      markupPct: null,
+    });
+    setForm({
+      description: '',
       unitType: 'unit',
+      dimension: '',
       qty: 1,
       matCostPerUnit: 0,
       laborHrsPerUnit: 0,
       laborRate: state.global.laborRate,
-      notes: '',
-      markupPct: null,
     });
-    setDesc('');
     setOpen(false);
+    toast.success('Custom material added');
   };
 
   if (!open) {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-dashed border-blue-300 text-blue-600 hover:border-blue-400 hover:bg-blue-50/50 transition-all text-sm font-semibold mt-2"
+        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-dashed border-violet-300 text-violet-600 hover:border-violet-400 hover:bg-violet-50/50 transition-all text-sm font-semibold mt-2"
       >
         <Plus size={15} />
-        Add Custom Item
+        Add Custom Material / Scope Item
       </button>
     );
   }
 
   return (
-    <div className="border-2 border-dashed border-blue-300 rounded-xl p-4 mt-2 bg-blue-50/30">
-      <div className="text-xs font-bold text-blue-700 mb-2">New Custom Item</div>
-      <div className="flex gap-2">
-        <input
-          type="text"
-          value={desc}
-          onChange={e => setDesc(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && handleAdd()}
-          placeholder="e.g. Custom built-in bookshelf, 8 ft wide"
-          className="field-input flex-1"
-          autoFocus
-        />
-        <button
-          onClick={handleAdd}
-          disabled={!desc.trim()}
-          className="px-4 py-1.5 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors"
-        >
-          Add
-        </button>
-        <button
-          onClick={() => { setOpen(false); setDesc(''); }}
-          className="px-3 py-1.5 rounded-lg border border-border text-sm text-muted-foreground hover:bg-muted transition-colors"
-        >
-          Cancel
-        </button>
+    <div className="border-2 border-dashed border-violet-300 rounded-xl p-4 mt-2 bg-violet-50/20">
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-xs font-bold text-violet-700 uppercase tracking-wider">Custom Material / Scope</div>
+        <button onClick={() => setOpen(false)} className="text-xs text-muted-foreground hover:text-foreground">Cancel</button>
       </div>
+
+      {/* Row 1: Description + Dimension + Unit */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+        <div className="sm:col-span-1">
+          <label className="field-label">Description</label>
+          <input
+            type="text"
+            value={form.description}
+            onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+            placeholder="e.g. Custom tile accent wall"
+            className="field-input w-full"
+            autoFocus
+          />
+        </div>
+        <div>
+          <label className="field-label">Dimension / Size (optional)</label>
+          <input
+            type="text"
+            value={form.dimension}
+            onChange={e => setForm(f => ({ ...f, dimension: e.target.value }))}
+            placeholder="e.g. 12x24, 3/4 inch, 2x6"
+            className="field-input w-full"
+          />
+        </div>
+        <div>
+          <label className="field-label">Unit Type</label>
+          <select
+            value={form.unitType}
+            onChange={e => setForm(f => ({ ...f, unitType: e.target.value as UnitType }))}
+            className="field-input w-full"
+          >
+            {Object.entries(UNIT_LABELS).map(([k, v]) => (
+              <option key={k} value={k}>{v}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Row 2: Qty + Mat Cost + Labor Hrs + Labor Rate */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+        <div>
+          <label className="field-label">Qty</label>
+          <input
+            type="number" min={0}
+            value={form.qty || ''}
+            onChange={e => setForm(f => ({ ...f, qty: parseFloat(e.target.value) || 0 }))}
+            className="field-input w-full"
+          />
+        </div>
+        <div>
+          <label className="field-label">Mat Cost / Unit ($)</label>
+          <input
+            type="number" min={0} step={0.01}
+            value={form.matCostPerUnit || ''}
+            onChange={e => setForm(f => ({ ...f, matCostPerUnit: parseFloat(e.target.value) || 0 }))}
+            placeholder="0.00"
+            className="field-input w-full"
+          />
+        </div>
+        <div>
+          <label className="field-label">Labor Hrs / Unit</label>
+          <input
+            type="number" min={0} step={0.25}
+            value={form.laborHrsPerUnit || ''}
+            onChange={e => setForm(f => ({ ...f, laborHrsPerUnit: parseFloat(e.target.value) || 0 }))}
+            placeholder="0"
+            className="field-input w-full"
+          />
+        </div>
+        <div>
+          <label className="field-label">Labor Rate ($/hr)</label>
+          <input
+            type="number" min={0}
+            value={form.laborRate}
+            onChange={e => setForm(f => ({ ...f, laborRate: parseFloat(e.target.value) || 0 }))}
+            className="field-input w-full"
+          />
+        </div>
+      </div>
+
+      {/* Live price preview */}
+      {hardCost > 0 && (
+        <div className="flex items-center gap-4 text-xs mb-3 px-3 py-2 rounded-lg bg-violet-50 border border-violet-200">
+          <span className="text-muted-foreground">Hard cost: <strong className="font-mono text-foreground">{fmtDollar(hardCost)}</strong></span>
+          <span className="text-violet-700">→ Customer price: <strong className="font-mono">{fmtDollar(customerPrice)}</strong> ({Math.round(state.global.markupPct * 100)}% GM)</span>
+        </div>
+      )}
+
+      <button
+        onClick={handleAdd}
+        disabled={!form.description.trim()}
+        className="px-5 py-2 rounded-lg bg-violet-600 text-white text-sm font-semibold hover:bg-violet-700 disabled:opacity-50 transition-colors"
+      >
+        Add to Estimate
+      </button>
     </div>
   );
 }
@@ -909,6 +992,12 @@ function PhasePanel({ phaseId }: { phaseId: number }) {
   const phase = state.phases.find(p => p.id === phaseId);
   if (!phase) return null;
 
+  // Paint prep UI is only shown for Drywall (5) and Trim & Finish Carpentry (11)
+  const showPaintPrep = PAINT_PREP_PHASE_IDS.has(phaseId);
+
+  // Find the sequential build-order position of this phase
+  const buildOrderPos = ALL_PHASES.findIndex(p => p.id === phaseId) + 1;
+
   const phaseCustomItems = state.customItems.filter(ci => ci.phaseId === phaseId);
 
   return (
@@ -916,18 +1005,24 @@ function PhasePanel({ phaseId }: { phaseId: number }) {
       <div className="flex items-center gap-2 mb-4">
         <span className="text-2xl">{phase.icon}</span>
         <div>
-          <h2 className="font-bold text-foreground">Phase {phase.id}: {phase.name}</h2>
-          <div className="text-xs text-muted-foreground">{phase.items.length} standard items · {phaseCustomItems.length} custom</div>
+          <h2 className="font-bold text-foreground">
+            Step {buildOrderPos}: {phase.name}
+          </h2>
+          <div className="text-xs text-muted-foreground">
+            {phase.items.length} standard items · {phaseCustomItems.length} custom
+            {showPaintPrep && <span className="ml-2 text-amber-600 font-medium">· Paint prep available</span>}
+          </div>
         </div>
       </div>
       {phase.items.map(item => (
-        <LineItemRow key={item.id} item={item} phaseId={phase.id} />
+        <LineItemRow key={item.id} item={item} phaseId={phase.id} showPaintPrep={showPaintPrep} />
       ))}
       {/* Custom items for this phase */}
       {phaseCustomItems.map(ci => (
         <CustomItemRow key={ci.id} ci={ci} />
       ))}
-      <AddCustomItemButton phaseId={phaseId} />
+      {/* Per-trade custom material entry */}
+      <AddCustomMaterialRow phaseId={phaseId} />
     </div>
   );
 }
@@ -935,8 +1030,9 @@ function PhasePanel({ phaseId }: { phaseId: number }) {
 // ─── MAIN CALCULATOR SECTION ──────────────────────────────────
 export default function CalculatorSection() {
   const { state, updateOpportunity } = useEstimator();
-  const [activePhaseId, setActivePhaseId] = useState(1);
+  const [activePhaseId, setActivePhaseId] = useState<number>(ALL_PHASES[0].id);
 
+  // Phase results keyed by phase ID
   const phaseResults = useMemo(() => {
     const map = new Map<number, { hasData: boolean; price: number }>();
     state.phases.forEach(phase => {
@@ -947,15 +1043,14 @@ export default function CalculatorSection() {
     return map;
   }, [state.phases, state.customItems, state.global]);
 
-  // Grand totals across ALL phases (for sticky bar)
+  // Grand totals across ALL phases
   const grandTotals = useMemo(() => {
     const allPhaseResults = state.phases.map(p => calcPhase(p, state.global));
     const allCustomResults = state.customItems.map(ci => calcCustomItem(ci, state.global));
     return calcTotals(allPhaseResults, allCustomResults);
   }, [state.phases, state.customItems, state.global]);
 
-  // Sync the calculated price back to the active opportunity so the pipeline
-  // card value, convert-to-job, and invoice all reflect the real total.
+  // Sync calculated price back to the active opportunity
   useEffect(() => {
     if (state.activeOpportunityId && grandTotals.hasData && grandTotals.price > 0) {
       updateOpportunity(state.activeOpportunityId, { value: grandTotals.price });
@@ -963,11 +1058,17 @@ export default function CalculatorSection() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [grandTotals.price, state.activeOpportunityId]);
 
+  // Render phases in correct construction sequence (ALL_PHASES order)
+  const orderedPhases = useMemo(
+    () => ALL_PHASES.map(ap => state.phases.find(p => p.id === ap.id)!).filter(Boolean),
+    [state.phases]
+  );
+
   return (
     <div className="pb-24">
       <GlobalSettingsPanel />
       <PhaseTabBar
-        phases={state.phases.map(p => ({ id: p.id, name: p.name, icon: p.icon }))}
+        phases={orderedPhases.map(p => ({ id: p.id, name: p.name, icon: p.icon }))}
         activePhaseId={activePhaseId}
         onSelect={setActivePhaseId}
         phaseResults={phaseResults}

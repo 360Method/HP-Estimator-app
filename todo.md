@@ -119,3 +119,11 @@
 - [x] Reorder ALL_PHASES array in phases.ts to match real-world build sequence
 - [x] Verify phase IDs are stable (referenced by ID not array index) across all components
 - [x] Run all tests after reorder (38 tests passing, 20 new phase order assertions)
+
+## CalculatorSection Visual-Editor Feedback
+
+- [x] Reorder expanded line-item fields: Dimension → Style/Notes → Tier → Qty → Labor Rate → Markup → Final Price (labeled 1–7)
+- [x] Phase tab grid renders in correct construction sequence with Step N label
+- [x] Restrict "Paint Prep" toggle/field to Drywall (phase 5) and Trim & Finish Carpentry (phase 11) phases only
+- [x] Add "Custom Material / Scope" inline form at bottom of every phase accordion (per-trade)
+- [x] Custom material row fields: description, dimension/size, unit type, qty, mat cost/unit, labor hrs/unit, labor rate, live price preview, Add to Estimate button
