@@ -181,3 +181,10 @@
 - [x] Schedule tab: filter by jobId to show only that job's phases
 - [x] Add "View Schedule" deep-link button in JobDetailsSection (shows phase count badge)
 - [x] 9 vitest tests for generateProjectSchedule utility (54 total tests passing)
+
+## Bug: Estimate Approval Flow Not Triggering (FIXED)
+
+- [x] Root cause: {showSigPad && !state.signature} guard blocked SignaturePanel render when estimate already had a signature
+- [x] Fix: removed !state.signature guard so SignaturePanel always renders when showSigPad is true
+- [x] Fix: added "Approve Estimate" amber button in toolbar when estimate is already signed, directly opens modal
+- [x] Trophy icon imported and TypeScript clean (0 errors, 54 tests passing)

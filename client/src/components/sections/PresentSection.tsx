@@ -15,7 +15,7 @@
 import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { calcPhase, calcCustomItem, calcTotals, fmtDollar, fmtDollarCents } from '@/lib/calc';
-import { X, Printer, Mail, PenLine, RotateCcw, Check, CheckCircle2, Settings2, Eye, EyeOff } from 'lucide-react';
+import { X, Printer, Mail, PenLine, RotateCcw, Check, CheckCircle2, Settings2, Eye, EyeOff, Trophy } from 'lucide-react';
 import { toast } from 'sonner';
 import EstimateApprovedModal from '@/components/EstimateApprovedModal';
 
@@ -474,9 +474,18 @@ export default function PresentSection() {
           </div>
 
           {state.signature ? (
-            <div className="flex items-center gap-1.5 text-emerald-400 text-xs font-semibold">
-              <CheckCircle2 className="w-4 h-4" />
-              Signed by {state.signedBy}
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 text-emerald-400 text-xs font-semibold">
+                <CheckCircle2 className="w-4 h-4" />
+                Signed by {state.signedBy}
+              </div>
+              <button
+                onClick={() => setShowApprovedModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 rounded text-xs font-semibold text-white transition-colors"
+              >
+                <Trophy className="w-3.5 h-3.5" />
+                Approve Estimate
+              </button>
             </div>
           ) : (
             <button
@@ -502,7 +511,7 @@ export default function PresentSection() {
       </div>
 
       {/* ── Signature Panel (shown when Sign Now clicked) ── */}
-      {showSigPad && !state.signature && (
+      {showSigPad && (
         <div className="no-print max-w-2xl mx-auto mt-4 px-4">
           <SignaturePanel onSave={handleSign} onCancel={() => setShowSigPad(false)} />
         </div>
