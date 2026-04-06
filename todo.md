@@ -132,3 +132,13 @@
 
 - [x] Add "Adopt Signature" (type-to-sign) option alongside the draw-signature canvas — customer types their name and clicks "Adopt & Sign" to generate a cursive-style signature (Dancing Script font, live preview)
 - [x] Add column visibility panel to the estimate table — estimator can toggle which columns appear (Qty, Unit Price, Labor, Material, Amount) with Show All / Minimal presets
+
+## Deposit Configuration
+
+- [x] Add depositType ('pct' | 'flat') and depositValue (number) to EstimatorState
+- [x] Add SET_DEPOSIT reducer action
+- [x] Add setDeposit() to EstimatorContext
+- [x] Add deposit config UI in GlobalSettingsPanel (CalculatorSection): % / $ toggle, value input, quick presets 25/33/50%, live amount preview
+- [x] Update PresentSection to use configured deposit (depositLabel + computed amount)
+- [x] Update EstimateSection terms list and plain-text export to use configured deposit label
+- [ ] Update auto-deposit invoice generation to use configured deposit amount (currently defaults to 50%)

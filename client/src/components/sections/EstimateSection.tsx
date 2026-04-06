@@ -325,6 +325,11 @@ export default function EstimateSection() {
   const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
   const estimateNumber = state.jobInfo.jobNumber || `HP-${Date.now().toString().slice(-6)}`;
 
+  // Deposit label from configured settings
+  const depositLabel = state.depositType === 'pct'
+    ? `${state.depositValue}% deposit required to schedule work; balance due upon project completion`
+    : `$${state.depositValue.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} deposit required to schedule work; balance due upon project completion`;
+
   const togglePhase = (id: number) => {
     setExpandedPhases(prev => {
       const next = new Set(prev);
@@ -394,7 +399,7 @@ export default function EstimateSection() {
     lines.push('');
     lines.push('TERMS & CONDITIONS');
     lines.push('─────────────────────────────────────');
-    lines.push('• 50% deposit required to schedule work; balance due upon project completion');
+    lines.push(`• ${depositLabel}`);
     lines.push('• This estimate is valid for 30 days from the date above');
     lines.push('• All work guaranteed — 1-year workmanship warranty on labor');
     lines.push('• Any scope changes will be documented in a written change order');
@@ -612,7 +617,7 @@ export default function EstimateSection() {
         <div className="px-6 py-5 border-t border-border bg-slate-50">
           <div className="text-xs uppercase tracking-widest font-bold text-muted-foreground mb-3">Terms &amp; Conditions</div>
           <ul className="space-y-1.5 text-sm text-foreground mb-3">
-            <li className="flex items-start gap-2"><span className="text-primary shrink-0 font-bold">•</span>50% deposit required to schedule work; balance due upon project completion</li>
+            <li className="flex items-start gap-2"><span className="text-primary shrink-0 font-bold">•</span>{depositLabel}</li>
             <li className="flex items-start gap-2"><span className="text-primary shrink-0 font-bold">•</span>This estimate is valid for 30 days from the date above</li>
             <li className="flex items-start gap-2"><span className="text-primary shrink-0 font-bold">•</span>All work is guaranteed — 1-year workmanship warranty on labor</li>
             <li className="flex items-start gap-2"><span className="text-primary shrink-0 font-bold">•</span>Any changes to scope will be documented in a written change order before work proceeds</li>

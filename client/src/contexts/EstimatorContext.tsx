@@ -76,6 +76,9 @@ const initialState: EstimatorState = {
   invoiceCounter: 1,
   scheduleEvents: [],
   scheduleCounter: 1,
+  // Deposit configuration (default: 50%)
+  depositType: 'pct' as const,
+  depositValue: 50,
 };
 
 // ── Helper: build an ActivityEvent without id/timestamp ──────
@@ -141,7 +144,8 @@ type Action =
   | { type: 'ADD_SCHEDULE_EVENT'; payload: Omit<ScheduleEvent, 'id' | 'createdAt' | 'updatedAt'> }
   | { type: 'UPDATE_SCHEDULE_EVENT'; id: string; payload: Partial<ScheduleEvent> }
   | { type: 'REMOVE_SCHEDULE_EVENT'; id: string }
-  | { type: 'UPDATE_OPPORTUNITY_SCHEDULE'; id: string; scheduledDate?: string; scheduledEndDate?: string; scheduledDuration?: number; assignedTo?: string; scheduleNotes?: string };
+  | { type: 'UPDATE_OPPORTUNITY_SCHEDULE'; id: string; scheduledDate?: string; scheduledEndDate?: string; scheduledDuration?: number; assignedTo?: string; scheduleNotes?: string }
+  | { type: 'SET_DEPOSIT'; depositType: 'pct' | 'flat'; depositValue: number };
 
 function makeActivity(
   type: ActivityEvent['type'],
@@ -695,6 +699,9 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
     case 'REMOVE_SCHEDULE_EVENT':
       return { ...state, scheduleEvents: state.scheduleEvents.filter(e => e.id !== action.id) };
 
+    case 'SET_DEPOSIT':
+      return { ...state, depositType: action.depositType, depositValue: action.depositValue };
+
     case 'UPDATE_OPPORTUNITY_SCHEDULE': {
       const now = new Date().toISOString();
       const updatedOpps = state.opportunities.map(o =>
@@ -767,6 +774,8 @@ interface EstimatorContextValue {
   updateScheduleEvent: (id: string, payload: Partial<ScheduleEvent>) => void;
   removeScheduleEvent: (id: string) => void;
   updateOpportunitySchedule: (id: string, fields: { scheduledDate?: string; scheduledEndDate?: string; scheduledDuration?: number; assignedTo?: string; scheduleNotes?: string }) => void;
+  // Deposit
+  setDeposit: (depositType: 'pct' | 'flat', depositValue: number) => void;
 }
 
 const EstimatorContext = createContext<EstimatorContextValue | null>(null);
@@ -904,6 +913,10 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'UPDATE_OPPORTUNITY_SCHEDULE', id, ...fields });
   }, []);
 
+  const setDeposit = useCallback((depositType: 'pct' | 'flat', depositValue: number) => {
+    dispatch({ type: 'SET_DEPOSIT', depositType, depositValue });
+  }, []);
+
   return (
     <EstimatorContext.Provider value={{
       state, setSection, setJobInfo, setGlobal, updateItem,
@@ -919,6 +932,7 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
       navigateToTopLevel,
       reset,
       addScheduleEvent, updateScheduleEvent, removeScheduleEvent, updateOpportunitySchedule,
+      setDeposit,
     }}>
       {children}
     </EstimatorContext.Provider>

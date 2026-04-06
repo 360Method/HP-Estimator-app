@@ -402,7 +402,13 @@ export default function PresentSection() {
     return map;
   }, [activeCustom]);
 
-  const deposit = totals.totalPrice * 0.5;
+  // Deposit from configured settings (pct or flat)
+  const deposit = state.depositType === 'pct'
+    ? totals.totalPrice * (state.depositValue / 100)
+    : state.depositValue;
+  const depositLabel = state.depositType === 'pct'
+    ? `Deposit (${state.depositValue}%)`
+    : 'Deposit (Fixed Amount)';
 
   const handleSign = (dataUrl: string, name: string) => {
     setSignature(dataUrl, name);
@@ -719,7 +725,7 @@ export default function PresentSection() {
                     <span className="font-bold text-gray-900">{fmtDollarCents(totals.totalPrice)}</span>
                   </div>
                   <div className="flex justify-between py-2 text-sm">
-                    <span className="font-semibold text-gray-700">Deposit (50%)</span>
+                    <span className="font-semibold text-gray-700">{depositLabel}</span>
                     <span className="font-semibold text-gray-700">{fmtDollarCents(deposit)}</span>
                   </div>
                 </div>

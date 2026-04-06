@@ -372,6 +372,9 @@ export interface EstimatorState {
   // Schedule events (global across all customers)
   scheduleEvents: ScheduleEvent[];
   scheduleCounter: number;
+  // Deposit configuration
+  depositType: 'pct' | 'flat';  // 'pct' = percentage of total, 'flat' = fixed dollar amount
+  depositValue: number;          // percent (0-100) when pct, dollar amount when flat
 }
 
 // ── CRM Pipeline Types ──────────────────────────────────────

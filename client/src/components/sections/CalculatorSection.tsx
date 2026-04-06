@@ -54,7 +54,7 @@ Base your estimate on current Pacific Northwest contractor pricing (2024-2025). 
 
 // ─── GLOBAL SETTINGS PANEL ────────────────────────────────────
 function GlobalSettingsPanel() {
-  const { state, setGlobal } = useEstimator();
+  const { state, setGlobal, setDeposit } = useEstimator();
   const { global } = state;
   const totals = useMemo(() => {
     const phaseResults = state.phases.map(p => calcPhase(p, global));
@@ -110,6 +110,84 @@ function GlobalSettingsPanel() {
           <div className="text-xs text-muted-foreground mt-0.5">paint prep labor (Drywall &amp; Trim phases)</div>
         </div>
       </div>
+      {/* ── Deposit Configuration ── */}
+      <div className="px-4 pb-3 border-t border-slate-100 pt-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground w-28 shrink-0">Deposit</span>
+          {/* Type toggle */}
+          <div className="flex rounded-lg border border-border overflow-hidden">
+            <button
+              onClick={() => setDeposit('pct', state.depositValue)}
+              className={`px-3 py-1.5 text-xs font-semibold transition-colors ${
+                state.depositType === 'pct'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-background text-muted-foreground hover:bg-muted'
+              }`}
+            >
+              %
+            </button>
+            <button
+              onClick={() => setDeposit('flat', state.depositValue)}
+              className={`px-3 py-1.5 text-xs font-semibold transition-colors ${
+                state.depositType === 'flat'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-background text-muted-foreground hover:bg-muted'
+              }`}
+            >
+              $
+            </button>
+          </div>
+          {/* Value input */}
+          <div className="flex items-center gap-1.5">
+            {state.depositType === 'flat' && (
+              <span className="text-sm font-semibold text-muted-foreground">$</span>
+            )}
+            <input
+              type="number"
+              min={state.depositType === 'pct' ? 0 : 0}
+              max={state.depositType === 'pct' ? 100 : undefined}
+              step={state.depositType === 'pct' ? 1 : 100}
+              value={state.depositValue}
+              onChange={e => {
+                const v = parseFloat(e.target.value);
+                if (!isNaN(v) && v >= 0) setDeposit(state.depositType, v);
+              }}
+              className="w-24 border border-border rounded-lg px-2 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-ring text-right"
+            />
+            {state.depositType === 'pct' && (
+              <span className="text-sm font-semibold text-muted-foreground">%</span>
+            )}
+          </div>
+          {/* Live deposit amount preview */}
+          {totals.hasData && (
+            <span className="text-xs text-muted-foreground">
+              = <span className="font-semibold text-foreground">
+                {state.depositType === 'pct'
+                  ? fmtDollar(totals.price * (state.depositValue / 100))
+                  : fmtDollar(state.depositValue)
+                }
+              </span> deposit on {fmtDollar(totals.price)} total
+            </span>
+          )}
+          {/* Quick presets */}
+          <div className="flex gap-1 ml-auto">
+            {[25, 33, 50].map(pct => (
+              <button
+                key={pct}
+                onClick={() => setDeposit('pct', pct)}
+                className={`px-2 py-1 text-[10px] font-semibold rounded border transition-colors ${
+                  state.depositType === 'pct' && state.depositValue === pct
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'border-border text-muted-foreground hover:bg-muted'
+                }`}
+              >
+                {pct}%
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
       {/* Overall margin summary */}
       {totals.hasData && (
         <div className="mx-4 mb-3 rounded-lg bg-slate-50 border border-slate-200 p-3 grid grid-cols-4 gap-3 text-center">
