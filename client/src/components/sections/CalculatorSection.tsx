@@ -6,8 +6,8 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { calcPhase, calcLineItem, calcCustomItem, calcTotals, fmtDollar, fmtDollarCents, getMarginFlag, getMarginLabel } from '@/lib/calc';
-import { LineItem, CustomLineItem, Tier, UNIT_LABELS, UnitType } from '@/lib/types';
-import { ChevronDown, AlertTriangle, CheckCircle2, XCircle, Sparkles, Plus, Trash2, Loader2 } from 'lucide-react';
+import { LineItem, CustomLineItem, Tier, UNIT_LABELS, UnitType, DimensionOption } from '@/lib/types';
+import { ChevronDown, AlertTriangle, CheckCircle2, XCircle, Sparkles, Plus, Trash2, Loader2, Ruler } from 'lucide-react';
 import { toast } from 'sonner';
 
 const FORGE_API_URL = import.meta.env.VITE_FRONTEND_FORGE_API_URL as string;
@@ -217,8 +217,23 @@ function LineItemRow({ item, phaseId }: { item: LineItem; phaseId: number }) {
           )}
         </div>
 
-        {/* Quick qty input */}
+        {/* Quick qty input + dimension badge */}
         <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
+          {/* Dimension quick-select badge */}
+          {item.dimensionOptions && item.dimensionOptions.length > 0 && (
+            <div className="flex items-center gap-1">
+              <Ruler size={11} className="text-muted-foreground shrink-0" />
+              <select
+                value={item.selectedDimension || item.dimensionOptions[0].value}
+                onChange={e => update({ selectedDimension: e.target.value })}
+                className="text-xs border border-border rounded-md px-1.5 py-1 bg-background text-foreground h-8 max-w-[130px] cursor-pointer"
+              >
+                {item.dimensionOptions.map(d => (
+                  <option key={d.value} value={d.value}>{d.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <input
             type="number"
             min={0}
@@ -227,7 +242,8 @@ function LineItemRow({ item, phaseId }: { item: LineItem; phaseId: number }) {
             placeholder="0"
             className="field-input w-20 text-right"
           />
-          <span className="text-xs text-muted-foreground">{unitLabel}</span>
+       
+  <span className="text-xs text-muted-foreground">{unitLabel}</span>
         </div>
 
         {/* Price badge */}
@@ -264,6 +280,48 @@ function LineItemRow({ item, phaseId }: { item: LineItem; phaseId: number }) {
               />
             </div>
 
+            {/* Dimension selector (expanded detail) */}
+            {item.dimensionOptions && item.dimensionOptions.length > 0 && (
+              <div className="sm:col-span-2 lg:col-span-3">
+                <label className="field-label flex items-center gap-1.5">
+                  <Ruler size={12} /> Size / Dimension
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                  {item.dimensionOptions.map(dim => {
+                    const isSelected = (item.selectedDimension || item.dimensionOptions![0].value) === dim.value;
+                    // Compute effective rate for this dimension
+                    const tierRate = item.tiers[item.tier as Tier]?.rate ?? 0;
+                    const effectiveRate = dim.rateOverride !== undefined
+                      ? dim.rateOverride
+                      : dim.rateMultiplier !== undefined
+                        ? tierRate * dim.rateMultiplier
+                        : tierRate;
+                    return (
+                      <button
+                        key={dim.value}
+                        onClick={() => update({ selectedDimension: dim.value })}
+                        className={`text-left p-2 rounded-lg border-2 transition-all ${
+                          isSelected ? 'border-primary bg-primary/5' : 'border-border hover:border-muted-foreground/40'
+                        }`}
+                      >
+                        <div className={`text-xs font-semibold leading-tight ${
+                          isSelected ? 'text-primary' : 'text-foreground'
+                        }`}>{dim.label}</div>
+                        {dim.note && (
+                          <div className="text-[10px] text-muted-foreground mt-0.5">{dim.note}</div>
+                        )}
+                        {item.hasTiers && (
+                          <div className="text-[10px] font-bold mono text-muted-foreground mt-1">
+                            {fmtDollarCents(effectiveRate)}/{UNIT_LABELS[item.unitType]}
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Waste factor */}
             {item.wastePct > 0 && (
               <div>
@@ -285,11 +343,20 @@ function LineItemRow({ item, phaseId }: { item: LineItem; phaseId: number }) {
             {/* Material tier */}
             {item.hasTiers && (
               <div className="sm:col-span-2 lg:col-span-3">
-                <label className="field-label">Material Tier</label>
+                <label className="field-label">Material Tier (Good / Better / Best)</label>
                 <div className="grid grid-cols-3 gap-2">
                   {(['good', 'better', 'best'] as Tier[]).map(tier => {
                     const td = item.tiers[tier];
                     const isSelected = item.tier === tier;
+                    // Compute dimension-adjusted rate for display
+                    let displayRate = td.rate;
+                    if (item.dimensionOptions && item.selectedDimension) {
+                      const dim = item.dimensionOptions.find(d => d.value === item.selectedDimension);
+                      if (dim) {
+                        if (dim.rateOverride !== undefined) displayRate = dim.rateOverride;
+                        else if (dim.rateMultiplier !== undefined) displayRate = td.rate * dim.rateMultiplier;
+                      }
+                    }
                     return (
                       <button
                         key={tier}
@@ -302,13 +369,23 @@ function LineItemRow({ item, phaseId }: { item: LineItem; phaseId: number }) {
                           {tier.toUpperCase()}
                         </div>
                         <div className="text-xs font-semibold text-foreground leading-tight">{td.name}</div>
-                        <div className="text-xs font-bold mono text-primary mt-1">{fmtDollarCents(td.rate)}/{unitLabel}</div>
+                        <div className="text-xs text-muted-foreground leading-tight mt-0.5 line-clamp-2">{td.desc}</div>
+                        <div className="text-xs font-bold mono text-primary mt-1.5">
+                          {fmtDollarCents(displayRate)}/{unitLabel}
+                          {item.dimensionOptions && item.selectedDimension && displayRate !== td.rate && (
+                            <span className="text-[10px] text-muted-foreground font-normal ml-1">(adj.)</span>
+                          )}
+                        </div>
                       </button>
                     );
                   })}
                 </div>
                 <div className="text-xs text-muted-foreground mt-1.5">
                   {item.tiers[item.tier].name} — {item.tiers[item.tier].desc}
+                  {item.dimensionOptions && item.selectedDimension && (() => {
+                    const dim = item.dimensionOptions.find(d => d.value === item.selectedDimension);
+                    return dim ? <span className="ml-1 text-primary font-medium">· {dim.label}</span> : null;
+                  })()}
                 </div>
               </div>
             )}
@@ -446,6 +523,10 @@ function LineItemRow({ item, phaseId }: { item: LineItem; phaseId: number }) {
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">
                       Material ({fmtDollarCents(result.matRate)}/{unitLabel} × {result.purchaseQty.toFixed(1)} {unitLabel})
+                      {item.dimensionOptions && item.selectedDimension && (() => {
+                        const dim = item.dimensionOptions.find(d => d.value === item.selectedDimension);
+                        return dim ? <span className="ml-1 text-primary font-medium">[ {dim.label} ]</span> : null;
+                      })()}
                     </span>
                     <span className="font-mono">{fmtDollar(result.matCost)}</span>
                   </div>

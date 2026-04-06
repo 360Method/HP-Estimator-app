@@ -98,3 +98,17 @@
 - [ ] Add recurrence support in EventFormModal (daily/weekly/biweekly/monthly)
 - [ ] Add "Schedule" date fields to JobDetailsSection (service date, estimated duration)
 - [ ] Auto-create schedule event when job is created or estimate is scheduled
+
+## Calculator Upgrade — Material Dimensions, Tiers & Portland Labor Rates
+
+- [x] Research Portland metro labor rates (carpentry, tile, flooring, painting, plumbing, electrical, drywall, trim)
+- [x] Build material catalog with dimension options and Good/Better/Best tiers
+- [x] Add DimensionOption type and dimensionOptions/selectedDimension to LineItem
+- [x] Add dimension dropdown to line items (tile sizes, plank widths, door/window sizes, framing sizes, etc.)
+- [x] Add Good/Better/Best tier selector per line item (changes unit cost automatically, shows dimension-adjusted rate)
+- [x] Add labor rate field per line item (pre-populated from Portland metro rates)
+- [x] Show material cost, labor cost, and combined price in cost breakdown panel
+- [x] Update default labor rates: GC $125/hr, Carpenter $95/hr, Tile $90-115/hr, Plumber $125/hr, Electrician $110/hr, HVAC $120/hr, Drywall $80/hr, Painter $80/hr, Flooring $70-90/hr, Demo $65/hr
+- [x] Dimension picker added to SalesSection (pill buttons below tier cards)
+- [x] Dimension picker added to CalculatorSection header row (quick dropdown) and expanded detail (button grid)
+- [x] Vitest dimension rate multiplier tests (8 tests passing)

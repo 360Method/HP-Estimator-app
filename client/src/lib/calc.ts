@@ -97,8 +97,21 @@ export function calcLineItem(item: LineItem, global: GlobalSettings): LineItemRe
   }
 
   const tierData = item.hasTiers ? item.tiers[item.tier as Tier] : { rate: 0, name: 'Labor only', desc: '' };
-  const matRate = tierData.rate;
-  const matName = tierData.name;
+  // Apply dimension rate multiplier or override if a dimension is selected
+  let matRate = tierData.rate;
+  let matName = tierData.name;
+  if (item.dimensionOptions && item.selectedDimension) {
+    const dim = item.dimensionOptions.find(d => d.value === item.selectedDimension);
+    if (dim) {
+      if (dim.rateOverride !== undefined) {
+        matRate = dim.rateOverride;
+      } else if (dim.rateMultiplier !== undefined) {
+        matRate = tierData.rate * dim.rateMultiplier;
+      }
+      // Append dimension label to material name
+      matName = `${tierData.name} — ${dim.label}`;
+    }
+  }
 
   const purchaseQty = item.qty * (1 + item.wastePct / 100);
   const matCost = purchaseQty * matRate;

@@ -10,6 +10,7 @@ import React, { useState } from 'react';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { LineItem, Tier, CustomLineItem } from '@/lib/types';
 import { ITEM_PHOTOS } from '@/lib/photos';
+import { Ruler } from 'lucide-react';
 import { ALL_PHASES } from '@/lib/phases';
 import {
   ChevronDown, ChevronRight, CheckCircle2, PlusCircle,
@@ -177,6 +178,43 @@ function MaterialItemRow({ item, phaseId }: { item: LineItem; phaseId: number })
           />
         ))}
       </div>
+
+      {/* Dimension / Size selector */}
+      {item.dimensionOptions && item.dimensionOptions.length > 0 && (
+        <div className="mt-3 p-3 rounded-xl border border-border bg-muted/30">
+          <div className="flex items-center gap-1.5 mb-2">
+            <Ruler size={13} className="text-muted-foreground" />
+            <span className="text-xs font-semibold text-foreground">Select Size / Dimension</span>
+            {item.selectedDimension && (() => {
+              const dim = item.dimensionOptions!.find(d => d.value === item.selectedDimension);
+              return dim ? (
+                <span className="ml-auto text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+                  {dim.label}
+                </span>
+              ) : null;
+            })()}
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {item.dimensionOptions.map(dim => {
+              const isSelected = (item.selectedDimension || item.dimensionOptions![0].value) === dim.value;
+              return (
+                <button
+                  key={dim.value}
+                  onClick={() => updateItem(phaseId, item.id, { selectedDimension: dim.value })}
+                  className={`text-xs px-2.5 py-1 rounded-full border transition-all ${
+                    isSelected
+                      ? 'border-primary bg-primary text-white font-semibold'
+                      : 'border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground'
+                  }`}
+                >
+                  {dim.label}
+                  {dim.note && <span className="ml-1 opacity-60">({dim.note})</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Zoom modal */}
       <Dialog open={modal.open} onOpenChange={(o) => setModal(m => ({ ...m, open: o }))}>

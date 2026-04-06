@@ -33,6 +33,18 @@ export interface TierData {
   specs?: string; // e.g. "4mm wear layer · waterproof core"
 }
 
+// A selectable dimension/size option for a line item
+export interface DimensionOption {
+  label: string;   // e.g. "3x6 Subway", "12x24", "2.25\" plank"
+  value: string;   // machine key, e.g. "3x6", "12x24"
+  // Optional rate multiplier relative to base tier rate (1.0 = same)
+  rateMultiplier?: number;
+  // Optional absolute rate override (overrides tier rate entirely)
+  rateOverride?: number;
+  // Optional note shown in UI
+  note?: string;
+}
+
 export interface LineItem {
   id: string;
   name: string;
@@ -59,6 +71,9 @@ export interface LineItem {
   salesSelected: boolean;  // tier chosen in Sales View
   // v3: per-item markup override (null = use global)
   markupPct: number | null;
+  // v4: dimension/size options
+  dimensionOptions?: DimensionOption[];  // available sizes/dimensions
+  selectedDimension?: string;            // currently selected dimension value
 }
 
 // AI cost analysis result for custom items
