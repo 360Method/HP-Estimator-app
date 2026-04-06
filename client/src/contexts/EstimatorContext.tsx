@@ -1132,15 +1132,42 @@ const EstimatorContext = createContext<EstimatorContextValue | null>(null);
 
 const STORAGE_KEY = 'hp-field-estimator-v1';
 
+const SIGNED_EST_PREFIX = 'hp-signed-est-';
+
+/** Save a signed estimate PNG to its own localStorage key (keyed by opportunity ID). */
+export function persistSignedEstimate(oppId: string, dataUrl: string): void {
+  try { localStorage.setItem(`${SIGNED_EST_PREFIX}${oppId}`, dataUrl); } catch { /* quota */ }
+}
+
+/** Retrieve a signed estimate PNG by opportunity ID. */
+export function loadSignedEstimate(oppId: string): string | null {
+  try { return localStorage.getItem(`${SIGNED_EST_PREFIX}${oppId}`); } catch { return null; }
+}
+
 function loadPersistedState(): EstimatorState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return initialState;
     const parsed = JSON.parse(raw) as Partial<EstimatorState>;
+    // Restore signed estimate PNGs from their separate localStorage keys
+    const restoreOpp = (o: any) => {
+      if ((o as any).hasJobSignedEstimate) {
+        const png = loadSignedEstimate(o.id);
+        if (png) return { ...o, jobSignedEstimateDataUrl: png };
+      }
+      return o;
+    };
+    const restoredOpps = (parsed.opportunities ?? []).map(restoreOpp);
+    const restoredCustomers = (parsed.customers ?? []).map((c: any) => ({
+      ...c,
+      opportunities: (c.opportunities ?? []).map(restoreOpp),
+    }));
     // Merge with initialState so new fields added in code are always present
     return {
       ...initialState,
       ...parsed,
+      opportunities: restoredOpps,
+      customers: restoredCustomers,
       // Always reset transient UI state on reload
       activeSection: parsed.activeSection ?? 'dashboard',
       activeOpportunityId: null,
@@ -1154,11 +1181,51 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(reducer, undefined, loadPersistedState);
 
   // Persist state to localStorage on every change
+  // Strip large binary fields (data URLs, SOW text) to avoid quota errors
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch {
-      // Ignore quota errors
+      const sanitized = {
+        ...state,
+        // Strip large binary fields from the working state
+        signature: null,
+        // Strip large fields from each opportunity in the working set
+        opportunities: state.opportunities.map(o => ({
+          ...o,
+          // Strip PNG data URLs (50-200KB each) — stored separately to avoid quota issues
+          signedEstimateDataUrl: undefined,
+          jobSignedEstimateDataUrl: undefined,
+          hasJobSignedEstimate: o.jobSignedEstimateDataUrl ? true : (o as any).hasJobSignedEstimate ?? false,
+          estimateSnapshot: o.estimateSnapshot ? {
+            ...o.estimateSnapshot,
+            signature: null,
+          } : undefined,
+        })),
+        // Strip large fields from customer records too
+        customers: state.customers.map(c => ({
+          ...c,
+          opportunities: (c.opportunities ?? []).map(o => ({
+            ...o,
+            signedEstimateDataUrl: undefined,
+            jobSignedEstimateDataUrl: undefined,
+            hasJobSignedEstimate: o.jobSignedEstimateDataUrl ? true : (o as any).hasJobSignedEstimate ?? false,
+            estimateSnapshot: o.estimateSnapshot ? {
+              ...o.estimateSnapshot,
+              signature: null,
+            } : undefined,
+          })),
+          invoices: (c.invoices ?? []).map(inv => ({
+            ...inv,
+            completionSignature: inv.completionSignature
+              ? '[signature-stored]'
+              : undefined,
+          })),
+        })),
+      };
+      const serialized = JSON.stringify(sanitized);
+      localStorage.setItem(STORAGE_KEY, serialized);
+    } catch (err) {
+      // Log quota errors so they are visible in the browser console
+      console.warn('[HP Estimator] localStorage persist failed (quota exceeded?). State lives in memory only for this session.', err);
     }
   }, [state]);
 
@@ -1281,9 +1348,18 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
     sowDocument?: string;
     jobStartDate?: string;
   }) => {
+    const newJobId = nanoid(8);
+    // Persist the signed estimate PNG to its own localStorage key so the main
+    // state JSON stays small and doesn't hit the 5MB quota limit.
+    if (params.signedEstimateDataUrl) {
+      const targetId = (params.jobMode === 'existing' && params.existingJobId)
+        ? params.existingJobId
+        : newJobId;
+      persistSignedEstimate(targetId, params.signedEstimateDataUrl);
+    }
     dispatch({
       type: 'APPROVE_ESTIMATE',
-      newJobId: nanoid(8),
+      newJobId,
       ...params,
     });
   }, []);

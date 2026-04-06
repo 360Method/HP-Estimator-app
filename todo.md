@@ -217,6 +217,14 @@
 - [x] Final invoice PDF (InvoicePrintView) shows all payments already made (date, method, amount) before the balance due (Payment History section already present)
 - [x] Final invoice PDF includes the SOW from the linked job opportunity (opportunity.sowDocument, shown between line items and totals)
 
+## Bug: SOW Not Showing in Job Details
+
+- [x] Root cause: localStorage 5MB quota exceeded by large PNG data URLs (signed estimate) causing silent save failure
+- [x] Fix: strip PNG data URLs from main state JSON before persisting; store them in separate localStorage keys (hp-signed-est-{oppId})
+- [x] Fix: restore signed estimate PNGs from their separate keys on load
+- [x] Fix: persistSignedEstimate() called in approveEstimate() before dispatch so PNG is saved independently
+- [x] sowDocument (~3KB text) kept in main state JSON — no longer blocked by quota
+
 ## Enhancement: Final Invoice PDF — Full Package
 
 - [x] Final invoice PDF includes a Job Expenses Breakdown section showing all invoices for the job (deposit + final) with their line items, amounts, and payment status
