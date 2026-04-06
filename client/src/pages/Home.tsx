@@ -17,6 +17,7 @@ import CustomersListPage from '@/pages/CustomersListPage';
 import JobsListPage from '@/pages/JobsListPage';
 import PipelinePage from '@/pages/PipelinePage';
 import EstimatorDashboard from '@/pages/EstimatorDashboard';
+import SchedulePage from '@/pages/SchedulePage';
 
 export default function Home() {
   const { state } = useEstimator();
@@ -38,6 +39,8 @@ export default function Home() {
         <JobsListPage />
       ) : state.activeSection === 'pipeline' ? (
         <PipelinePage />
+      ) : state.activeSection === 'schedule' ? (
+        <SchedulePage />
       ) : (
         <div className="container py-6 max-w-4xl">
           {state.activeSection === 'customer' && <CustomerSection />}

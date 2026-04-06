@@ -7,7 +7,7 @@ import {
   EstimatorState, JobInfo, GlobalSettings, AppSection,
   LineItem, CustomLineItem, EstimateLineOverride,
   Opportunity, PipelineArea, CustomerProfile, ActivityEvent, CustomerProfileTab,
-  OpportunityStage, Customer, Invoice, InvoiceLineItem,
+  OpportunityStage, Customer, Invoice, InvoiceLineItem, ScheduleEvent,
 } from '@/lib/types';
 import { ALL_PHASES, DEFAULTS } from '@/lib/phases';
 import { nanoid } from 'nanoid';
@@ -74,6 +74,8 @@ const initialState: EstimatorState = {
   activeCustomerId: null,
   invoices: [],
   invoiceCounter: 1,
+  scheduleEvents: [],
+  scheduleCounter: 1,
 };
 
 // ── Helper: build an ActivityEvent without id/timestamp ──────
@@ -134,7 +136,12 @@ type Action =
       jobId: string;
       value: number;
     }
-  | { type: 'RESET' };
+  | { type: 'RESET' }
+  // ── Schedule actions ──────────────────────────────────────
+  | { type: 'ADD_SCHEDULE_EVENT'; payload: Omit<ScheduleEvent, 'id' | 'createdAt' | 'updatedAt'> }
+  | { type: 'UPDATE_SCHEDULE_EVENT'; id: string; payload: Partial<ScheduleEvent> }
+  | { type: 'REMOVE_SCHEDULE_EVENT'; id: string }
+  | { type: 'UPDATE_OPPORTUNITY_SCHEDULE'; id: string; scheduledDate?: string; scheduledEndDate?: string; scheduledDuration?: number; assignedTo?: string; scheduleNotes?: string };
 
 function makeActivity(
   type: ActivityEvent['type'],
@@ -664,6 +671,53 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
         signedBy: null,
       };
 
+    case 'ADD_SCHEDULE_EVENT': {
+      const now = new Date().toISOString();
+      const newEvent: ScheduleEvent = {
+        ...action.payload,
+        id: nanoid(8),
+        createdAt: now,
+        updatedAt: now,
+      };
+      return { ...state, scheduleEvents: [...state.scheduleEvents, newEvent], scheduleCounter: state.scheduleCounter + 1 };
+    }
+
+    case 'UPDATE_SCHEDULE_EVENT': {
+      const now = new Date().toISOString();
+      return {
+        ...state,
+        scheduleEvents: state.scheduleEvents.map(e =>
+          e.id === action.id ? { ...e, ...action.payload, updatedAt: now } : e
+        ),
+      };
+    }
+
+    case 'REMOVE_SCHEDULE_EVENT':
+      return { ...state, scheduleEvents: state.scheduleEvents.filter(e => e.id !== action.id) };
+
+    case 'UPDATE_OPPORTUNITY_SCHEDULE': {
+      const now = new Date().toISOString();
+      const updatedOpps = state.opportunities.map(o =>
+        o.id === action.id
+          ? {
+              ...o,
+              ...(action.scheduledDate !== undefined ? { scheduledDate: action.scheduledDate } : {}),
+              ...(action.scheduledEndDate !== undefined ? { scheduledEndDate: action.scheduledEndDate } : {}),
+              ...(action.scheduledDuration !== undefined ? { scheduledDuration: action.scheduledDuration } : {}),
+              ...(action.assignedTo !== undefined ? { assignedTo: action.assignedTo } : {}),
+              ...(action.scheduleNotes !== undefined ? { scheduleNotes: action.scheduleNotes } : {}),
+              updatedAt: now,
+            }
+          : o
+      );
+      const syncedCustomers = state.activeCustomerId
+        ? state.customers.map(c =>
+            c.id === state.activeCustomerId ? { ...c, opportunities: updatedOpps } : c
+          )
+        : state.customers;
+      return { ...state, opportunities: updatedOpps, customers: syncedCustomers };
+    }
+
     default:
       return state;
   }
@@ -708,6 +762,11 @@ interface EstimatorContextValue {
   setActiveCustomer: (id: string | null) => void;
   reset: () => void;
   navigateToTopLevel: (section: AppSection) => void;
+  // Schedule
+  addScheduleEvent: (payload: Omit<ScheduleEvent, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  updateScheduleEvent: (id: string, payload: Partial<ScheduleEvent>) => void;
+  removeScheduleEvent: (id: string) => void;
+  updateOpportunitySchedule: (id: string, fields: { scheduledDate?: string; scheduledEndDate?: string; scheduledDuration?: number; assignedTo?: string; scheduleNotes?: string }) => void;
 }
 
 const EstimatorContext = createContext<EstimatorContextValue | null>(null);
@@ -828,6 +887,23 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
 
   const reset = useCallback(() => dispatch({ type: 'RESET' }), []);
 
+  // ── Schedule callbacks ────────────────────────────────────
+  const addScheduleEvent = useCallback((payload: Omit<ScheduleEvent, 'id' | 'createdAt' | 'updatedAt'>) => {
+    dispatch({ type: 'ADD_SCHEDULE_EVENT', payload });
+  }, []);
+
+  const updateScheduleEvent = useCallback((id: string, payload: Partial<ScheduleEvent>) => {
+    dispatch({ type: 'UPDATE_SCHEDULE_EVENT', id, payload });
+  }, []);
+
+  const removeScheduleEvent = useCallback((id: string) => {
+    dispatch({ type: 'REMOVE_SCHEDULE_EVENT', id });
+  }, []);
+
+  const updateOpportunitySchedule = useCallback((id: string, fields: { scheduledDate?: string; scheduledEndDate?: string; scheduledDuration?: number; assignedTo?: string; scheduleNotes?: string }) => {
+    dispatch({ type: 'UPDATE_OPPORTUNITY_SCHEDULE', id, ...fields });
+  }, []);
+
   return (
     <EstimatorContext.Provider value={{
       state, setSection, setJobInfo, setGlobal, updateItem,
@@ -842,6 +918,7 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
       addCustomer, updateCustomer, setActiveCustomer,
       navigateToTopLevel,
       reset,
+      addScheduleEvent, updateScheduleEvent, removeScheduleEvent, updateOpportunitySchedule,
     }}>
       {children}
     </EstimatorContext.Provider>

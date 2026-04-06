@@ -71,3 +71,30 @@
 
 - [x] Fix: Jobs nav tab not navigating to JobsListPage
 - [x] Fix: Pipeline nav tab not navigating to PipelinePage
+
+## Schedule Tab (World-Class)
+
+- [x] ScheduleEvent type added to types.ts (id, title, type, start, end, opportunityId, customerId, assignedTo, recurrence, color, notes)
+- [x] scheduledDate, scheduledEndDate, assignedTo fields added to Opportunity interface
+- [x] scheduleEvents[] and scheduleCounter added to EstimatorState
+- [x] ADD_SCHEDULE_EVENT, UPDATE_SCHEDULE_EVENT, REMOVE_SCHEDULE_EVENT, UPDATE_OPPORTUNITY_SCHEDULE reducer actions
+- [x] Build SchedulePage: month/week/day/agenda views, color-coded by type (estimate/job/recurring/task/follow_up)
+- [x] Filter bar: by event type, by customer
+- [x] Event detail panel: customer name, address, job title, stage, open-in-opportunity deep link
+- [x] Drag-to-reschedule events (HTML5 drag-and-drop in month and week views)
+- [x] EventFormModal: create/edit with customer/opportunity link, assignee, notes
+- [x] Wire Schedule nav icon (CalendarDays) in MetricsBar
+- [x] Wire Schedule into Home.tsx routing
+- [x] Synthesize schedule events from opportunities with scheduledDate (auto-derived)
+- [x] Vitest unit tests for schedule reducer (7 tests passing)
+- [ ] Add "Schedule" date fields to JobDetailsSection (service date, estimated duration)
+- [ ] Auto-create schedule event when job is created or estimate is scheduled
+
+## Schedule Tab — Future Improvements
+
+- [ ] Add assignee and status filters to SchedulePage filter bar
+- [ ] Upgrade drag-reschedule to support time-slot precision in week/day views
+- [ ] Add event resize support (drag end time to adjust duration)
+- [ ] Add recurrence support in EventFormModal (daily/weekly/biweekly/monthly)
+- [ ] Add "Schedule" date fields to JobDetailsSection (service date, estimated duration)
+- [ ] Auto-create schedule event when job is created or estimate is scheduled

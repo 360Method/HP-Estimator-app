@@ -174,7 +174,46 @@ export interface GlobalSettings {
   paintRate: number;
 }
 
-export type AppSection = 'customer' | 'sales' | 'calculator' | 'estimate' | 'present' | 'customers' | 'jobs' | 'job-details' | 'pipeline' | 'invoice' | 'dashboard';
+export type AppSection = 'customer' | 'sales' | 'calculator' | 'estimate' | 'present' | 'customers' | 'jobs' | 'job-details' | 'pipeline' | 'invoice' | 'dashboard' | 'schedule';
+
+// ── Schedule / Calendar Types ──────────────────────────────────
+
+export type ScheduleEventType = 'estimate' | 'job' | 'recurring' | 'task' | 'follow_up';
+export type RecurrenceFrequency = 'daily' | 'weekly' | 'biweekly' | 'monthly';
+
+export interface RecurrenceRule {
+  frequency: RecurrenceFrequency;
+  interval: number;           // every N frequency units
+  endDate?: string;           // ISO — stop recurring after this date
+  occurrences?: number;       // or stop after N occurrences
+  daysOfWeek?: number[];      // 0=Sun … 6=Sat, for weekly
+}
+
+export interface ScheduleEvent {
+  id: string;
+  type: ScheduleEventType;
+  title: string;
+  start: string;              // ISO datetime
+  end: string;                // ISO datetime
+  allDay?: boolean;
+  // Links
+  opportunityId?: string;     // linked opportunity
+  customerId?: string;        // linked customer
+  // People
+  assignedTo: string[];       // crew member names
+  // Content
+  notes: string;
+  color?: string;             // hex override
+  // Recurrence
+  recurrence?: RecurrenceRule;
+  parentEventId?: string;     // if this is a recurring instance
+  // Status
+  completed: boolean;
+  completedAt?: string;       // ISO
+  // Metadata
+  createdAt: string;          // ISO
+  updatedAt: string;          // ISO
+}
 
 // ── Invoice / Payment Types ──────────────────────────────────
 
@@ -315,6 +354,9 @@ export interface EstimatorState {
   invoices: Invoice[];
   // Invoice counter for sequential numbering
   invoiceCounter: number;
+  // Schedule events (global across all customers)
+  scheduleEvents: ScheduleEvent[];
+  scheduleCounter: number;
 }
 
 // ── CRM Pipeline Types ──────────────────────────────────────
@@ -379,6 +421,12 @@ export interface Opportunity {
   convertedToJobAt?: string;       // ISO timestamp
   archived: boolean;               // moved to archive after Invoice Paid
   archivedAt?: string;             // ISO timestamp
+  // Schedule fields
+  scheduledDate?: string;          // ISO — start of scheduled window
+  scheduledEndDate?: string;       // ISO — end of scheduled window
+  scheduledDuration?: number;      // minutes
+  assignedTo?: string;             // comma-separated crew names
+  scheduleNotes?: string;
   // Snapshot of customer info at time of conversion
   clientSnapshot?: {
     client: string;

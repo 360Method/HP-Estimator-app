@@ -32,7 +32,7 @@ import NewLeadModal from '@/components/intakes/NewLeadModal';
 import {
   Search, LayoutDashboard, Users, Inbox, GitBranch,
   DollarSign, BarChart2, Megaphone, Settings, UserCircle,
-  ChevronDown, ArrowLeft, Plus, Menu, X, Briefcase,
+  ChevronDown, ArrowLeft, Plus, Menu, X, Briefcase, CalendarDays,
 } from 'lucide-react';
 
 const HP_LOGO = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg';
@@ -59,7 +59,7 @@ const BACKEND_NAV: { icon: React.ElementType; label: string; section: AppSection
   { icon: LayoutDashboard, label: 'Dashboard',  section: 'dashboard' as AppSection },
   { icon: Users,           label: 'Customers',  section: 'customers' },
   { icon: Briefcase,       label: 'Jobs',       section: 'jobs'      },
-  { icon: Inbox,           label: 'Inbox',      section: null        },
+  { icon: CalendarDays,    label: 'Schedule',   section: 'schedule' as AppSection },
   { icon: GitBranch,       label: 'Pipeline',   section: 'pipeline'  },
   { icon: DollarSign,      label: 'Financials', section: null        },
   { icon: BarChart2,       label: 'Reporting',  section: null        },
@@ -140,11 +140,17 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
     setShowMobileNav(false);
   };
 
+  const handleGoToSchedule = () => {
+    navigateToTopLevel('schedule');
+    setShowMobileNav(false);
+  };
+
   const handleNavClick = (section: AppSection | null, label: string) => {
     if (section === 'customers') { handleGoToCustomers(); return; }
     if (section === 'jobs') { handleGoToJobs(); return; }
     if (section === 'pipeline') { handleGoToPipeline(); return; }
     if (section === 'dashboard') { handleGoToDashboard(); return; }
+    if (section === 'schedule') { handleGoToSchedule(); return; }
     handleBackendNav(label);
   };
 
