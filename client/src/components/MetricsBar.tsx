@@ -142,9 +142,9 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
   };
 
   const handleGoToDashboard = () => {
-    setSection('dashboard');
     setActiveOpportunity(null);
     setActiveCustomer(null);
+    setSection('dashboard');  // Must fire LAST — SET_ACTIVE_CUSTOMER(null) can override activeSection
     setShowMobileNav(false);
   };
 

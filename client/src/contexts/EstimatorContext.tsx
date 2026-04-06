@@ -385,10 +385,16 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
 
     case 'SET_ACTIVE_CUSTOMER': {
       if (!action.payload) {
+        // Preserve the current section if navigating to a top-level page (dashboard, pipeline, jobs)
+        // Only fall back to 'customers' if we were inside a customer-specific section
+        const topLevelSections: AppSection[] = ['dashboard', 'pipeline', 'jobs', 'customers'];
+        const nextSection: AppSection = topLevelSections.includes(state.activeSection)
+          ? state.activeSection
+          : 'customers';
         return {
           ...state,
           activeCustomerId: null,
-          activeSection: 'customers',
+          activeSection: nextSection,
           activeOpportunityId: null,
         };
       }
