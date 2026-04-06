@@ -55,16 +55,61 @@ const METHOD_LABEL: Record<string, string> = {
 };
 
 // ── Signature canvas ─────────────────────────────────────────
+// ── Adopted signature renderer (cursive canvas) ─────────────
+function renderAdoptedSig(name: string, width = 460, height = 120): string {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d')!;
+  ctx.clearRect(0, 0, width, height);
+  ctx.fillStyle = '#1e293b';
+  ctx.font = `italic 52px 'Dancing Script', 'Brush Script MT', cursive`;
+  ctx.textBaseline = 'middle';
+  ctx.fillText(name, 20, height / 2);
+  return canvas.toDataURL('image/png');
+}
+
+type SigMode = 'draw' | 'adopt';
+
 interface SignatureCanvasProps {
   onSave: (dataUrl: string, name: string) => void;
   onCancel: () => void;
 }
 
 function SignatureCanvas({ onSave, onCancel }: SignatureCanvasProps) {
+  const [mode, setMode] = useState<SigMode>('draw');
+
+  // ── Draw mode state ──
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [drawing, setDrawing] = useState(false);
-  const [name, setName] = useState('');
+  const [drawName, setDrawName] = useState('');
   const [hasStrokes, setHasStrokes] = useState(false);
+
+  // ── Adopt mode state ──
+  const previewCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [adoptName, setAdoptName] = useState('');
+
+  // Load Dancing Script font for adopt mode
+  React.useEffect(() => {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&display=swap';
+    document.head.appendChild(link);
+  }, []);
+
+  // Re-render adopt preview whenever name changes
+  React.useEffect(() => {
+    if (mode !== 'adopt') return;
+    const canvas = previewCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d')!;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (!adoptName.trim()) return;
+    ctx.fillStyle = '#1e293b';
+    ctx.font = `italic 52px 'Dancing Script', 'Brush Script MT', cursive`;
+    ctx.textBaseline = 'middle';
+    ctx.fillText(adoptName.trim(), 20, canvas.height / 2);
+  }, [adoptName, mode]);
 
   const getPos = (e: React.MouseEvent | React.TouchEvent, canvas: HTMLCanvasElement) => {
     const rect = canvas.getBoundingClientRect();
@@ -101,7 +146,7 @@ function SignatureCanvas({ onSave, onCancel }: SignatureCanvasProps) {
 
   const endDraw = () => setDrawing(false);
 
-  const clear = () => {
+  const clearCanvas = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d')!;
@@ -109,10 +154,16 @@ function SignatureCanvas({ onSave, onCancel }: SignatureCanvasProps) {
     setHasStrokes(false);
   };
 
-  const save = () => {
+  const saveDrawn = () => {
     const canvas = canvasRef.current;
-    if (!canvas || !hasStrokes || !name.trim()) return;
-    onSave(canvas.toDataURL('image/png'), name.trim());
+    if (!canvas || !hasStrokes || !drawName.trim()) return;
+    onSave(canvas.toDataURL('image/png'), drawName.trim());
+  };
+
+  const saveAdopted = () => {
+    if (!adoptName.trim()) return;
+    const dataUrl = renderAdoptedSig(adoptName.trim());
+    onSave(dataUrl, adoptName.trim());
   };
 
   return (
@@ -128,50 +179,123 @@ function SignatureCanvas({ onSave, onCancel }: SignatureCanvasProps) {
           By signing below, you confirm that all work described in this invoice has been completed
           to your satisfaction and you authorize final payment.
         </p>
-        <div>
-          <label className="text-xs font-semibold text-slate-500 uppercase tracking-widest block mb-1">
-            Print your name
-          </label>
-          <input
-            type="text"
-            value={name}
-            onChange={e => setName(e.target.value)}
-            placeholder="Full name"
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-        <div>
-          <label className="text-xs font-semibold text-slate-500 uppercase tracking-widest block mb-1">
-            Signature
-          </label>
-          <canvas
-            ref={canvasRef}
-            width={460}
-            height={120}
-            className="w-full border-2 border-dashed border-slate-300 rounded-lg bg-slate-50 cursor-crosshair touch-none"
-            onMouseDown={startDraw}
-            onMouseMove={draw}
-            onMouseUp={endDraw}
-            onMouseLeave={endDraw}
-            onTouchStart={startDraw}
-            onTouchMove={draw}
-            onTouchEnd={endDraw}
-          />
-          <button onClick={clear} className="text-xs text-slate-400 hover:text-slate-600 mt-1">
-            Clear
+
+        {/* ── Mode tabs ── */}
+        <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
+          <button
+            onClick={() => setMode('draw')}
+            className={`flex-1 px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+              mode === 'draw' ? 'bg-white shadow text-slate-900' : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            ✏️ Draw Signature
+          </button>
+          <button
+            onClick={() => setMode('adopt')}
+            className={`flex-1 px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+              mode === 'adopt' ? 'bg-white shadow text-slate-900' : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            Aa Adopt Signature
           </button>
         </div>
-        <div className="flex gap-3 justify-end">
-          <Button variant="outline" onClick={onCancel}>Cancel</Button>
-          <Button
-            onClick={save}
-            disabled={!hasStrokes || !name.trim()}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white"
-          >
-            <CheckCircle2 className="w-4 h-4 mr-1.5" />
-            Confirm Job Complete
-          </Button>
-        </div>
+
+        {/* ── Draw mode ── */}
+        {mode === 'draw' && (
+          <>
+            <div>
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-widest block mb-1">Print your name</label>
+              <input
+                type="text"
+                value={drawName}
+                onChange={e => setDrawName(e.target.value)}
+                placeholder="Full name"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-widest block mb-1">Signature</label>
+              <div className="relative">
+                <canvas
+                  ref={canvasRef}
+                  width={460}
+                  height={120}
+                  className="w-full border-2 border-dashed border-slate-300 rounded-lg bg-slate-50 cursor-crosshair touch-none"
+                  onMouseDown={startDraw}
+                  onMouseMove={draw}
+                  onMouseUp={endDraw}
+                  onMouseLeave={endDraw}
+                  onTouchStart={startDraw}
+                  onTouchMove={draw}
+                  onTouchEnd={endDraw}
+                />
+                {!hasStrokes && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <span className="text-slate-300 text-sm italic">Sign here</span>
+                  </div>
+                )}
+              </div>
+              <button onClick={clearCanvas} className="text-xs text-slate-400 hover:text-slate-600 mt-1">Clear</button>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <Button variant="outline" onClick={onCancel}>Cancel</Button>
+              <Button
+                onClick={saveDrawn}
+                disabled={!hasStrokes || !drawName.trim()}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              >
+                <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                Confirm Job Complete
+              </Button>
+            </div>
+          </>
+        )}
+
+        {/* ── Adopt mode ── */}
+        {mode === 'adopt' && (
+          <>
+            <div>
+              <label className="text-xs font-semibold text-slate-500 uppercase tracking-widest block mb-1">Type your full name to adopt a signature</label>
+              <input
+                type="text"
+                value={adoptName}
+                onChange={e => setAdoptName(e.target.value)}
+                placeholder="e.g. Jane Smith"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                autoFocus
+              />
+            </div>
+            {/* Live cursive preview */}
+            <div className="relative border-2 border-dashed border-slate-300 rounded-lg bg-slate-50 overflow-hidden" style={{ height: 80 }}>
+              <canvas
+                ref={previewCanvasRef}
+                width={460}
+                height={120}
+                className="w-full"
+                style={{ height: 80, display: 'block' }}
+              />
+              {!adoptName.trim() && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <span className="text-slate-300 text-sm italic">Your adopted signature will appear here</span>
+                </div>
+              )}
+            </div>
+            <p className="text-[10px] text-slate-400">
+              By clicking "Adopt &amp; Sign" you agree that this typed representation constitutes your legal electronic signature.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <Button variant="outline" onClick={onCancel}>Cancel</Button>
+              <Button
+                onClick={saveAdopted}
+                disabled={!adoptName.trim()}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              >
+                <CheckCircle2 className="w-4 h-4 mr-1.5" />
+                Adopt &amp; Sign Job Complete
+              </Button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

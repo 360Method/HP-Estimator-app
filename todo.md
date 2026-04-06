@@ -217,6 +217,10 @@
 - [x] Final invoice PDF (InvoicePrintView) shows all payments already made (date, method, amount) before the balance due (Payment History section already present)
 - [x] Final invoice PDF includes the SOW from the linked job opportunity (opportunity.sowDocument, shown between line items and totals)
 
+## Enhancement: Invoice Completion Sign-Off — Adopt Signature
+
+- [x] Add "Adopt Signature" (type-to-sign) tab to InvoicePrintView SignatureCanvas, matching the estimate PresentSection flow
+
 ## Enhancement: Client Completion Sign-Off Before Final Payment
 
 - [x] Add completionSignature, completionSignedBy, completionSignedAt fields to Invoice type
