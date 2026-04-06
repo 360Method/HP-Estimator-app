@@ -217,6 +217,14 @@
 - [x] Final invoice PDF (InvoicePrintView) shows all payments already made (date, method, amount) before the balance due (Payment History section already present)
 - [x] Final invoice PDF includes the SOW from the linked job opportunity (opportunity.sowDocument, shown between line items and totals)
 
+## Enhancement: Post-Sign-Off Pay Prompt + Job Invoice Grouping
+
+- [x] After job completion sign-off: save completionSignature/completionSignedBy/completionSignedAt to the final invoice record in state
+- [x] After sign-off: update final invoice status from pending_signoff to due (status set to 'due', not 'paid')
+- [x] After sign-off: close InvoicePrintView and show a blue "Ready to Collect Final Payment" prompt with balance amount
+- [x] InvoiceSection: show all invoices for the current job together (deposit + final), sorted deposit-first
+- [x] Job invoice list shows a summary header: job number badge, contract value, total billed, total paid, balance due (4-stat grid)
+
 ## Enhancement: Invoice Completion Sign-Off — Adopt Signature
 
 - [x] Add "Adopt Signature" (type-to-sign) tab to InvoicePrintView SignatureCanvas, matching the estimate PresentSection flow

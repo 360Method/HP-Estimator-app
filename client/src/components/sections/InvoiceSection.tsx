@@ -26,7 +26,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
-  CreditCard, DollarSign, CheckCircle2, Clock, AlertCircle,
+  CreditCard, DollarSign, CheckCircle2, Clock, AlertCircle, FileText,
   Plus, Printer, Send, ChevronRight, Banknote, Smartphone, PenLine, ShieldCheck,
 } from 'lucide-react';
 
@@ -245,6 +245,7 @@ function InvoiceCard({
   const [showStripe, setShowStripe] = useState(false);
   const [showPayPal, setShowPayPal] = useState(false);
   const [showManual, setShowManual] = useState(false);
+  const [showPayPrompt, setShowPayPrompt] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
 
@@ -526,6 +527,30 @@ function InvoiceCard({
             </div>
           )}
 
+          {/* ── Pay Balance Prompt (shown immediately after sign-off) ── */}
+          {showPayPrompt && !isPaid && invoice.completionSignature && (
+            <div className="rounded-xl border-2 border-blue-400 dark:border-blue-600 bg-blue-50 dark:bg-blue-950/40 p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <DollarSign className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-bold text-blue-900 dark:text-blue-200">
+                    Ready to Collect Final Payment
+                  </p>
+                  <p className="text-xs text-blue-700 dark:text-blue-400 mt-0.5">
+                    {invoice.completionSignedBy || 'The client'} has signed off on the completed work.
+                    The balance of <span className="font-bold">{fmt(balance)}</span> is now due.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowPayPrompt(false)}
+                  className="text-blue-400 hover:text-blue-600 text-xs"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Payment actions */}
           {!isPaid && (invoice.type !== 'final' || !!invoice.completionSignature) && (
             <div className="space-y-3">
@@ -615,17 +640,20 @@ function InvoiceCard({
               customer={customer}
               opportunity={opportunity}
               onClose={() => setShowPrintView(false)}
-              onSaveSignature={(sig, name, invId) => {
+              onSaveSignature={(sig, name, _invId) => {
                 const now = new Date().toISOString();
+                // Save signature and unlock payment (status: due, NOT paid yet)
                 onUpdate({
                   ...invoice,
                   completionSignature: sig,
                   completionSignedBy: name,
                   completionSignedAt: now,
-                  status: 'paid' as InvoiceStatus,
-                  paidAt: invoice.paidAt ?? now,
+                  status: 'due' as InvoiceStatus,
                 });
-                toast.success('Job completion signature saved');
+                setShowPrintView(false);
+                setExpanded(true);
+                setShowPayPrompt(true);
+                toast.success('Sign-off saved — ready to collect final payment');
               }}
             />
           )}
@@ -843,9 +871,12 @@ export default function InvoiceSection() {
     updateCustomer(customer.id, { invoices: newInvoices });
   };
 
-  const estimateValue = activeOpp?.value ?? 0;
-
+   const estimateValue = activeOpp?.value ?? 0;
   // Summary stats
+  const sortedInvoices = [...invoices].sort((a, b) => {
+    const order = { deposit: 0, final: 1, other: 2 };
+    return (order[a.type as keyof typeof order] ?? 2) - (order[b.type as keyof typeof order] ?? 2);
+  });
   const totalBilled = invoices.reduce((s, inv) => s + inv.total, 0);
   const totalPaid = invoices.reduce((s, inv) => s + inv.amountPaid, 0);
   const totalBalance = invoices.reduce((s, inv) => s + inv.balance, 0);
@@ -857,10 +888,18 @@ export default function InvoiceSection() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold">Invoices</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-semibold">Invoices</h2>
+            {activeOpp?.jobNumber && (
+              <span className="text-xs font-mono bg-muted text-muted-foreground px-2 py-0.5 rounded-full">
+                {activeOpp.jobNumber}
+              </span>
+            )}
+          </div>
           {activeOpp && (
             <p className="text-sm text-muted-foreground">
-              {activeOpp.title} · {fmt(estimateValue)} project value
+              {activeOpp.title}
+              {estimateValue > 0 && <> · <span className="font-medium text-foreground">{fmt(estimateValue)}</span> contract</>}
             </p>
           )}
         </div>
@@ -887,15 +926,16 @@ export default function InvoiceSection() {
 
       {/* Summary bar */}
       {invoices.length > 0 && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: 'Total Billed', value: totalBilled, icon: <DollarSign className="w-4 h-4 text-blue-500" /> },
-            { label: 'Total Paid', value: totalPaid, icon: <CheckCircle2 className="w-4 h-4 text-green-500" /> },
-            { label: 'Balance Due', value: totalBalance, icon: <Clock className="w-4 h-4 text-yellow-500" /> },
+            { label: 'Contract Value', value: estimateValue, icon: <FileText className="w-4 h-4 text-slate-500" />, muted: true },
+            { label: 'Total Billed', value: totalBilled, icon: <DollarSign className="w-4 h-4 text-blue-500" />, muted: false },
+            { label: 'Total Paid', value: totalPaid, icon: <CheckCircle2 className="w-4 h-4 text-green-500" />, muted: false },
+            { label: 'Balance Due', value: totalBalance, icon: <Clock className="w-4 h-4 text-yellow-500" />, muted: false },
           ].map(stat => (
             <Card key={stat.label} className="p-3">
               <div className="flex items-center gap-2 mb-1">{stat.icon}<span className="text-xs text-muted-foreground">{stat.label}</span></div>
-              <div className="font-bold">{fmt(stat.value)}</div>
+              <div className={`font-bold ${stat.muted ? 'text-muted-foreground' : ''}`}>{fmt(stat.value)}</div>
             </Card>
           ))}
         </div>
@@ -914,7 +954,7 @@ export default function InvoiceSection() {
         </div>
       ) : (
         <div className="space-y-3">
-          {invoices.map(inv => (
+          {sortedInvoices.map(inv => (
             <InvoiceCard
               key={inv.id}
               invoice={inv}
