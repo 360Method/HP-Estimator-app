@@ -1183,13 +1183,41 @@ export default function CustomerSection() {
                         </p>
                       </div>
                       {est.signedEstimateDataUrl && (
-                        <a
-                          href={est.signedEstimateDataUrl}
-                          download={est.signedEstimateFilename ?? `Estimate-Signed.png`}
+                        <button
+                          type="button"
                           className="shrink-0 text-xs text-primary hover:underline flex items-center gap-1"
+                          onClick={async () => {
+                            try {
+                              const { jsPDF } = await import('jspdf');
+                              const img = new Image();
+                              img.src = est.signedEstimateDataUrl!;
+                              await new Promise<void>((res, rej) => {
+                                img.onload = () => res();
+                                img.onerror = rej;
+                              });
+                              const imgW = img.naturalWidth || 1240;
+                              const imgH = img.naturalHeight || 1754;
+                              // Fit image to A4 page (210 x 297 mm)
+                              const pageW = 210;
+                              const pageH = 297;
+                              const ratio = Math.min(pageW / imgW, pageH / imgH);
+                              const drawW = imgW * ratio;
+                              const drawH = imgH * ratio;
+                              const offsetX = (pageW - drawW) / 2;
+                              const offsetY = (pageH - drawH) / 2;
+                              const orientation = drawH > drawW ? 'portrait' : 'landscape';
+                              const pdf = new jsPDF({ orientation, unit: 'mm', format: 'a4' });
+                              pdf.addImage(est.signedEstimateDataUrl!, 'PNG', offsetX, offsetY, drawW, drawH);
+                              const base = (est.signedEstimateFilename ?? `Estimate-${est.id}-Signed`).replace(/\.png$/i, '');
+                              pdf.save(base + '.pdf');
+                            } catch (err) {
+                              console.error('PDF generation failed', err);
+                              toast.error('Could not generate PDF');
+                            }
+                          }}
                         >
-                          <Download className="w-3.5 h-3.5" /> Download
-                        </a>
+                          <Download className="w-3.5 h-3.5" /> Download PDF
+                        </button>
                       )}
                     </div>
                   ))}

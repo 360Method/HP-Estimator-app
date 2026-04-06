@@ -217,6 +217,10 @@
 - [x] Final invoice PDF (InvoicePrintView) shows all payments already made (date, method, amount) before the balance due (Payment History section already present)
 - [x] Final invoice PDF includes the SOW from the linked job opportunity (opportunity.sowDocument, shown between line items and totals)
 
+## Enhancement: Signed Estimate Download as PDF
+
+- [x] CustomerSection signed estimate download link generates and downloads a PDF instead of a PNG (uses jsPDF to wrap the PNG canvas image in an A4 PDF, auto-oriented portrait/landscape)
+
 ## Enhancement: InvoicePrintView — Job Reference + Related Invoices
 
 - [x] InvoicePrintView header shows the linked job number and job title (from opportunity prop) — JOB row now shows number + title below it
