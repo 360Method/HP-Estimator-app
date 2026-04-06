@@ -422,6 +422,24 @@ export type JobStage =
 
 export type OpportunityStage = LeadStage | EstimateStage | JobStage;
 
+// Per-opportunity snapshot of all calculator/estimate data
+export interface EstimateSnapshot {
+  jobInfo: JobInfo;
+  global: GlobalSettings;
+  phases: PhaseGroup[];
+  customItems: CustomLineItem[];
+  fieldNotes: string;
+  summaryNotes: string;
+  estimatorNotes: string;
+  clientNote: string;
+  estimateOverrides: EstimateLineOverride[];
+  signature: string | null;
+  signedAt: string | null;
+  signedBy: string | null;
+  depositType: 'pct' | 'flat';
+  depositValue: number;
+}
+
 export interface Opportunity {
   id: string;
   area: PipelineArea;
@@ -449,6 +467,8 @@ export interface Opportunity {
   scheduledDuration?: number;      // minutes
   assignedTo?: string;             // comma-separated crew names
   scheduleNotes?: string;
+  // Per-opportunity calculator/estimate data snapshot
+  estimateSnapshot?: EstimateSnapshot;
   // Snapshot of customer info at time of conversion
   clientSnapshot?: {
     client: string;

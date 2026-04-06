@@ -8,6 +8,7 @@ import {
   LineItem, CustomLineItem, EstimateLineOverride,
   Opportunity, PipelineArea, CustomerProfile, ActivityEvent, CustomerProfileTab,
   OpportunityStage, Customer, Invoice, InvoiceLineItem, ScheduleEvent,
+  EstimateSnapshot,
 } from '@/lib/types';
 import { ALL_PHASES, DEFAULTS } from '@/lib/phases';
 import { nanoid } from 'nanoid';
@@ -398,14 +399,88 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
     case 'SET_CUSTOMER_TAB':
       return { ...state, activeCustomerTab: action.payload };
 
-    case 'SET_ACTIVE_OPPORTUNITY':
+    case 'SET_ACTIVE_OPPORTUNITY': {
+      // ── Save current working state into the outgoing opportunity's snapshot ──
+      let updatedOpportunities = state.opportunities;
+      if (state.activeOpportunityId) {
+        const outgoingSnapshot: EstimateSnapshot = {
+          jobInfo: state.jobInfo,
+          global: state.global,
+          phases: state.phases,
+          customItems: state.customItems,
+          fieldNotes: state.fieldNotes,
+          summaryNotes: state.summaryNotes,
+          estimatorNotes: state.estimatorNotes,
+          clientNote: state.clientNote,
+          estimateOverrides: state.estimateOverrides,
+          signature: state.signature,
+          signedAt: state.signedAt,
+          signedBy: state.signedBy,
+          depositType: state.depositType,
+          depositValue: state.depositValue,
+        };
+        updatedOpportunities = state.opportunities.map(o =>
+          o.id === state.activeOpportunityId
+            ? { ...o, estimateSnapshot: outgoingSnapshot }
+            : o
+        );
+      }
+
+      if (!action.payload) {
+        // Closing — return to customer profile with clean working state
+        return {
+          ...state,
+          opportunities: updatedOpportunities,
+          activeOpportunityId: null,
+          activeSection: 'customer',
+        };
+      }
+
+      // ── Restore the incoming opportunity's snapshot ──
+      const incoming = updatedOpportunities.find(o => o.id === action.payload);
+      const snap = incoming?.estimateSnapshot;
+
+      // Build a clean default snapshot for new/unseen opportunities
+      const freshJobInfo: JobInfo = {
+        client: incoming?.clientSnapshot?.client ?? '',
+        companyName: incoming?.clientSnapshot?.companyName ?? '',
+        address: incoming?.clientSnapshot?.address ?? '',
+        city: incoming?.clientSnapshot?.city ?? 'Vancouver',
+        state: incoming?.clientSnapshot?.state ?? 'WA',
+        zip: incoming?.clientSnapshot?.zip ?? '',
+        phone: incoming?.clientSnapshot?.phone ?? '',
+        email: incoming?.clientSnapshot?.email ?? '',
+        date: new Date().toISOString().split('T')[0],
+        expiresDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        servicedDate: '',
+        jobType: incoming?.clientSnapshot?.jobType ?? 'Full residential remodel',
+        estimator: '',
+        jobNumber: `HP-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 900) + 100)}`,
+        scope: incoming?.clientSnapshot?.scope ?? '',
+      };
+
       return {
         ...state,
+        opportunities: updatedOpportunities,
         activeOpportunityId: action.payload,
-        // When opening an opportunity, switch to customer section first (then caller can navigate)
-        // When closing (null), return to customer profile
-        activeSection: action.payload ? state.activeSection : 'customer',
+        activeSection: state.activeSection,
+        // Restore snapshot or start fresh
+        jobInfo: snap?.jobInfo ?? freshJobInfo,
+        global: snap?.global ?? { markupPct: DEFAULTS.markupPct, laborRate: DEFAULTS.laborRate, paintRate: DEFAULTS.paintRate },
+        phases: snap?.phases ?? ALL_PHASES,
+        customItems: snap?.customItems ?? [],
+        fieldNotes: snap?.fieldNotes ?? '',
+        summaryNotes: snap?.summaryNotes ?? '',
+        estimatorNotes: snap?.estimatorNotes ?? '',
+        clientNote: snap?.clientNote ?? '',
+        estimateOverrides: snap?.estimateOverrides ?? [],
+        signature: snap?.signature ?? null,
+        signedAt: snap?.signedAt ?? null,
+        signedBy: snap?.signedBy ?? null,
+        depositType: snap?.depositType ?? 'pct',
+        depositValue: snap?.depositValue ?? 50,
       };
+    }
 
     case 'ADD_CUSTOMER':
       return { ...state, customers: [action.payload, ...state.customers] };
@@ -433,10 +508,42 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
           activeOpportunityId: null,
         };
       }
-      const customer = state.customers.find(c => c.id === action.payload);
+      // ── Flush current working opportunities (with snapshots) back to the outgoing customer ──
+      let flushedCustomers = state.customers;
+      if (state.activeCustomerId && state.opportunities.length > 0) {
+        // Also save the active opportunity's snapshot before flushing
+        let oppsToFlush = state.opportunities;
+        if (state.activeOpportunityId) {
+          const outSnap: EstimateSnapshot = {
+            jobInfo: state.jobInfo,
+            global: state.global,
+            phases: state.phases,
+            customItems: state.customItems,
+            fieldNotes: state.fieldNotes,
+            summaryNotes: state.summaryNotes,
+            estimatorNotes: state.estimatorNotes,
+            clientNote: state.clientNote,
+            estimateOverrides: state.estimateOverrides,
+            signature: state.signature,
+            signedAt: state.signedAt,
+            signedBy: state.signedBy,
+            depositType: state.depositType,
+            depositValue: state.depositValue,
+          };
+          oppsToFlush = state.opportunities.map(o =>
+            o.id === state.activeOpportunityId ? { ...o, estimateSnapshot: outSnap } : o
+          );
+        }
+        flushedCustomers = state.customers.map(c =>
+          c.id === state.activeCustomerId ? { ...c, opportunities: oppsToFlush } : c
+        );
+      }
+
+      const customer = flushedCustomers.find(c => c.id === action.payload);
       if (!customer) {
         return {
           ...state,
+          customers: flushedCustomers,
           activeCustomerId: action.payload,
           activeSection: 'customer',
           activeOpportunityId: null,
@@ -475,6 +582,7 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
           };
       return {
         ...state,
+        customers: flushedCustomers,
         activeCustomerId: action.payload,
         activeSection: 'customer',
         activeOpportunityId: null,

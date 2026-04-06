@@ -157,3 +157,14 @@
 - [x] APPROVE_ESTIMATE reducer action handles all state transitions atomically
 - [x] CustomerSection Attachments tab: shows signed estimate copies with Approved badge and download link
 - [x] EstimateApprovedModal: 3-step flow (Celebration → Job Selection → Invoice Summary)
+
+## Bug: Estimate Data Isolation (FIXED)
+
+- [x] Root cause identified: all estimates shared the same global phases/jobInfo/global state
+- [x] Added EstimateSnapshot type to types.ts with all per-estimate fields
+- [x] Added estimateSnapshot?: EstimateSnapshot field to Opportunity interface
+- [x] SET_ACTIVE_OPPORTUNITY reducer: saves outgoing snapshot, restores incoming snapshot (or clean default)
+- [x] SET_ACTIVE_CUSTOMER reducer: flushes current opportunities (with snapshots) back to customer record before loading new customer
+- [x] New estimates start with a clean default snapshot pre-filled with customer contact info
+- [x] Isolated fields: jobInfo, phases, customItems, global, fieldNotes, summaryNotes, estimatorNotes, clientNote, estimateOverrides, signature, signedAt, signedBy, depositType, depositValue
+- [x] 7 vitest isolation tests passing (switching Bath ↔ Remodel preserves independent data, deposit settings isolated, signature isolated)
