@@ -6,7 +6,8 @@
 //   - Client block left / HP contact block right
 //   - Per-phase service tables with SOW bullets
 //   - Subtotal per phase, grand total, deposit
-//   - Inline e-signature canvas + "Accept & Sign" flow
+//   - Inline e-signature: Draw OR Adopt (type-to-sign)
+//   - Column visibility panel: toggle qty/unit price/labor/material/amount
 //   - Email-to-sign button (mailto: pre-filled)
 //   - Print button (triggers window.print())
 // ============================================================
@@ -14,7 +15,7 @@
 import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { calcPhase, calcCustomItem, calcTotals, fmtDollar, fmtDollarCents } from '@/lib/calc';
-import { X, Printer, Mail, PenLine, RotateCcw, Check, CheckCircle2 } from 'lucide-react';
+import { X, Printer, Mail, PenLine, RotateCcw, Check, CheckCircle2, Settings2, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 
 const HP_LOGO = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg';
@@ -22,6 +23,25 @@ const HP_ADDRESS = '808 SE Chkalov Dr, 3-433\nVancouver, WA 98683';
 const HP_PHONE = '(360) 544-9858';
 const HP_EMAIL = 'help@handypioneers.com';
 const HP_WEB = 'http://handypioneers.com';
+
+// ─── Column visibility config ─────────────────────────────────
+export type ColKey = 'qty' | 'unitPrice' | 'labor' | 'material' | 'amount';
+
+const ALL_COLS: { key: ColKey; label: string }[] = [
+  { key: 'qty',       label: 'Qty' },
+  { key: 'unitPrice', label: 'Unit Price' },
+  { key: 'labor',     label: 'Labor' },
+  { key: 'material',  label: 'Material' },
+  { key: 'amount',    label: 'Amount' },
+];
+
+const DEFAULT_COLS: Record<ColKey, boolean> = {
+  qty:       true,
+  unitPrice: true,
+  labor:     false,
+  material:  false,
+  amount:    true,
+};
 
 // ─── SOW bullet generator ─────────────────────────────────────
 function buildSowBullets(items: { id: string; name: string; qty: number; tier: string; tiers: Record<string, { name: string }>; hasTiers: boolean; unitType: string; wastePct: number; paintPrep?: string; hasPaintPrep?: boolean; sowTemplate?: string; salesSelected?: boolean }[]): { title: string; desc: string }[] {
@@ -54,14 +74,64 @@ function buildSowBullets(items: { id: string; name: string; qty: number; tier: s
   return bullets;
 }
 
-// ─── Signature Canvas ─────────────────────────────────────────
-function SignatureCanvas({ onSave, onCancel }: { onSave: (dataUrl: string, name: string) => void; onCancel: () => void }) {
+// ─── Adopted (typed) signature renderer ───────────────────────
+// Renders the typed name in a cursive font onto a canvas and returns a data URL.
+function renderAdoptedSig(name: string, width = 700, height = 160): string {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return '';
+  ctx.clearRect(0, 0, width, height);
+  ctx.font = `italic 64px 'Dancing Script', 'Brush Script MT', cursive`;
+  ctx.fillStyle = '#1a1a2e';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(name, 24, height / 2);
+  return canvas.toDataURL('image/png');
+}
+
+// ─── Signature Panel (Draw + Adopt tabs) ─────────────────────
+type SigMode = 'draw' | 'adopt';
+
+function SignaturePanel({ onSave, onCancel }: { onSave: (dataUrl: string, name: string) => void; onCancel: () => void }) {
+  const [mode, setMode] = useState<SigMode>('draw');
+
+  // ── Draw mode state ──
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasStrokes, setHasStrokes] = useState(false);
-  const [signerName, setSignerName] = useState('');
+  const [drawName, setDrawName] = useState('');
   const lastPos = useRef<{ x: number; y: number } | null>(null);
 
+  // ── Adopt mode state ──
+  const [adoptName, setAdoptName] = useState('');
+  const previewCanvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Load cursive font for adopt mode
+  useEffect(() => {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&display=swap';
+    document.head.appendChild(link);
+    return () => { document.head.removeChild(link); };
+  }, []);
+
+  // Re-render adopt preview whenever name changes
+  useEffect(() => {
+    if (mode !== 'adopt') return;
+    const canvas = previewCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (!adoptName.trim()) return;
+    ctx.font = `italic 64px 'Dancing Script', 'Brush Script MT', cursive`;
+    ctx.fillStyle = '#1a1a2e';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(adoptName.trim(), 24, canvas.height / 2);
+  }, [adoptName, mode]);
+
+  // ── Draw helpers ──
   const getPos = (e: React.MouseEvent | React.TouchEvent, canvas: HTMLCanvasElement) => {
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
@@ -103,7 +173,7 @@ function SignatureCanvas({ onSave, onCancel }: { onSave: (dataUrl: string, name:
 
   const endDraw = () => { setIsDrawing(false); lastPos.current = null; };
 
-  const clear = () => {
+  const clearCanvas = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -112,60 +182,182 @@ function SignatureCanvas({ onSave, onCancel }: { onSave: (dataUrl: string, name:
     setHasStrokes(false);
   };
 
-  const save = () => {
+  // ── Save handlers ──
+  const saveDrawn = () => {
     if (!hasStrokes) { toast.error('Please sign before accepting'); return; }
-    if (!signerName.trim()) { toast.error('Please enter your name'); return; }
+    if (!drawName.trim()) { toast.error('Please enter your name'); return; }
     const canvas = canvasRef.current;
     if (!canvas) return;
-    onSave(canvas.toDataURL('image/png'), signerName.trim());
+    onSave(canvas.toDataURL('image/png'), drawName.trim());
+  };
+
+  const saveAdopted = () => {
+    if (!adoptName.trim()) { toast.error('Please type your name to adopt a signature'); return; }
+    const dataUrl = renderAdoptedSig(adoptName.trim());
+    if (!dataUrl) { toast.error('Could not render signature'); return; }
+    onSave(dataUrl, adoptName.trim());
   };
 
   return (
     <div className="border border-border rounded-xl p-5 bg-white shadow-sm">
       <div className="text-sm font-semibold text-foreground mb-3">Client Signature</div>
-      <div className="mb-3">
-        <label className="block text-xs text-muted-foreground mb-1">Full Name (print)</label>
-        <input
-          type="text"
-          value={signerName}
-          onChange={e => setSignerName(e.target.value)}
-          placeholder="Client's full name"
-          className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-        />
-      </div>
-      <div className="border-2 border-dashed border-border rounded-lg bg-slate-50 mb-3 relative" style={{ touchAction: 'none' }}>
-        <canvas
-          ref={canvasRef}
-          width={700}
-          height={160}
-          className="w-full h-28 rounded-lg cursor-crosshair"
-          onMouseDown={startDraw}
-          onMouseMove={draw}
-          onMouseUp={endDraw}
-          onMouseLeave={endDraw}
-          onTouchStart={startDraw}
-          onTouchMove={draw}
-          onTouchEnd={endDraw}
-        />
-        {!hasStrokes && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <span className="text-muted-foreground/50 text-sm italic">Sign here</span>
-          </div>
-        )}
-      </div>
-      <div className="flex gap-2">
-        <button onClick={clear} className="flex items-center gap-1.5 px-3 py-2 text-xs border border-border rounded-lg hover:bg-muted transition-colors">
-          <RotateCcw className="w-3.5 h-3.5" /> Clear
-        </button>
-        <button onClick={onCancel} className="flex items-center gap-1.5 px-3 py-2 text-xs border border-border rounded-lg hover:bg-muted transition-colors">
-          Cancel
+
+      {/* ── Mode tabs ── */}
+      <div className="flex gap-1 mb-4 bg-muted rounded-lg p-1 w-fit">
+        <button
+          onClick={() => setMode('draw')}
+          className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${mode === 'draw' ? 'bg-white shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+        >
+          ✏️ Draw Signature
         </button>
         <button
-          onClick={save}
-          disabled={!hasStrokes || !signerName.trim()}
-          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed font-semibold"
+          onClick={() => setMode('adopt')}
+          className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${mode === 'adopt' ? 'bg-white shadow text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
         >
-          <Check className="w-3.5 h-3.5" /> Accept & Sign
+          Aa Adopt Signature
+        </button>
+      </div>
+
+      {/* ── Draw mode ── */}
+      {mode === 'draw' && (
+        <>
+          <div className="mb-3">
+            <label className="block text-xs text-muted-foreground mb-1">Full Name (print)</label>
+            <input
+              type="text"
+              value={drawName}
+              onChange={e => setDrawName(e.target.value)}
+              placeholder="Client's full name"
+              className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+          <div className="border-2 border-dashed border-border rounded-lg bg-slate-50 mb-3 relative" style={{ touchAction: 'none' }}>
+            <canvas
+              ref={canvasRef}
+              width={700}
+              height={160}
+              className="w-full h-28 rounded-lg cursor-crosshair"
+              onMouseDown={startDraw}
+              onMouseMove={draw}
+              onMouseUp={endDraw}
+              onMouseLeave={endDraw}
+              onTouchStart={startDraw}
+              onTouchMove={draw}
+              onTouchEnd={endDraw}
+            />
+            {!hasStrokes && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <span className="text-muted-foreground/50 text-sm italic">Sign here</span>
+              </div>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button onClick={clearCanvas} className="flex items-center gap-1.5 px-3 py-2 text-xs border border-border rounded-lg hover:bg-muted transition-colors">
+              <RotateCcw className="w-3.5 h-3.5" /> Clear
+            </button>
+            <button onClick={onCancel} className="flex items-center gap-1.5 px-3 py-2 text-xs border border-border rounded-lg hover:bg-muted transition-colors">
+              Cancel
+            </button>
+            <button
+              onClick={saveDrawn}
+              disabled={!hasStrokes || !drawName.trim()}
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed font-semibold"
+            >
+              <Check className="w-3.5 h-3.5" /> Accept & Sign
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* ── Adopt mode ── */}
+      {mode === 'adopt' && (
+        <>
+          <div className="mb-3">
+            <label className="block text-xs text-muted-foreground mb-1">Type your full name to adopt a signature</label>
+            <input
+              type="text"
+              value={adoptName}
+              onChange={e => setAdoptName(e.target.value)}
+              placeholder="e.g. Jane Smith"
+              className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              autoFocus
+            />
+          </div>
+
+          {/* Live cursive preview */}
+          <div className="border-2 border-dashed border-border rounded-lg bg-slate-50 mb-3 relative overflow-hidden" style={{ height: 80 }}>
+            <canvas
+              ref={previewCanvasRef}
+              width={700}
+              height={160}
+              className="w-full"
+              style={{ height: 80, display: 'block' }}
+            />
+            {!adoptName.trim() && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <span className="text-muted-foreground/50 text-sm italic">Your adopted signature will appear here</span>
+              </div>
+            )}
+          </div>
+
+          <p className="text-[10px] text-muted-foreground mb-3">
+            By clicking "Adopt &amp; Sign" you agree that this typed representation constitutes your legal electronic signature.
+          </p>
+
+          <div className="flex gap-2">
+            <button onClick={onCancel} className="flex items-center gap-1.5 px-3 py-2 text-xs border border-border rounded-lg hover:bg-muted transition-colors">
+              Cancel
+            </button>
+            <button
+              onClick={saveAdopted}
+              disabled={!adoptName.trim()}
+              className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed font-semibold"
+            >
+              <Check className="w-3.5 h-3.5" /> Adopt &amp; Sign
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── Column Visibility Panel ──────────────────────────────────
+function ColVisPanel({ cols, onChange, onClose }: { cols: Record<ColKey, boolean>; onChange: (k: ColKey, v: boolean) => void; onClose: () => void }) {
+  return (
+    <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-border rounded-xl shadow-xl p-4 w-56">
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-xs font-semibold text-foreground">Visible Columns</span>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      <div className="space-y-2">
+        {ALL_COLS.map(col => (
+          <label key={col.key} className="flex items-center gap-2 cursor-pointer group">
+            <div
+              onClick={() => onChange(col.key, !cols[col.key])}
+              className={`w-8 h-4 rounded-full transition-colors relative cursor-pointer ${cols[col.key] ? 'bg-emerald-500' : 'bg-gray-300'}`}
+            >
+              <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${cols[col.key] ? 'translate-x-4' : 'translate-x-0.5'}`} />
+            </div>
+            <span className="text-xs text-foreground group-hover:text-foreground/80">{col.label}</span>
+            {cols[col.key] ? <Eye className="w-3 h-3 text-emerald-500 ml-auto" /> : <EyeOff className="w-3 h-3 text-muted-foreground ml-auto" />}
+          </label>
+        ))}
+      </div>
+      <div className="mt-3 pt-3 border-t border-border flex gap-2">
+        <button
+          onClick={() => ALL_COLS.forEach(c => onChange(c.key, true))}
+          className="flex-1 text-xs px-2 py-1 border border-border rounded hover:bg-muted transition-colors"
+        >
+          Show All
+        </button>
+        <button
+          onClick={() => ALL_COLS.forEach(c => onChange(c.key, c.key === 'amount'))}
+          className="flex-1 text-xs px-2 py-1 border border-border rounded hover:bg-muted transition-colors"
+        >
+          Minimal
         </button>
       </div>
     </div>
@@ -176,9 +368,15 @@ function SignatureCanvas({ onSave, onCancel }: { onSave: (dataUrl: string, name:
 export default function PresentSection() {
   const { state, setSection, setSignature, clearSignature } = useEstimator();
   const [showSigPad, setShowSigPad] = useState(false);
+  const [showColPanel, setShowColPanel] = useState(false);
+  const [cols, setCols] = useState<Record<ColKey, boolean>>(DEFAULT_COLS);
   const docRef = useRef<HTMLDivElement>(null);
 
   const { jobInfo } = state;
+
+  const toggleCol = useCallback((k: ColKey, v: boolean) => {
+    setCols(prev => ({ ...prev, [k]: v }));
+  }, []);
 
   // Compute all phase results
   const phaseResults = useMemo(() =>
@@ -221,7 +419,6 @@ export default function PresentSection() {
   };
 
   const handlePrint = () => window.print();
-
   const handleClose = () => setSection('estimate');
 
   // Format date helper
@@ -231,6 +428,9 @@ export default function PresentSection() {
       return new Date(iso + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     } catch { return iso; }
   };
+
+  // Build visible column headers
+  const visibleCols = ALL_COLS.filter(c => cols[c.key]);
 
   return (
     <div className="fixed inset-0 z-50 bg-gray-800/95 overflow-y-auto print:bg-white print:overflow-visible">
@@ -243,6 +443,24 @@ export default function PresentSection() {
           Present Estimate — {jobInfo.client || 'Client'} · {jobInfo.jobNumber}
         </div>
         <div className="flex items-center gap-2">
+          {/* Column visibility toggle */}
+          <div className="relative">
+            <button
+              onClick={() => setShowColPanel(s => !s)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 border rounded text-xs font-semibold transition-colors ${showColPanel ? 'bg-white/20 border-white/40' : 'border-white/20 hover:bg-white/10'}`}
+              title="Customize visible columns"
+            >
+              <Settings2 className="w-3.5 h-3.5" /> Columns
+            </button>
+            {showColPanel && (
+              <ColVisPanel
+                cols={cols}
+                onChange={toggleCol}
+                onClose={() => setShowColPanel(false)}
+              />
+            )}
+          </div>
+
           {state.signature ? (
             <div className="flex items-center gap-1.5 text-emerald-400 text-xs font-semibold">
               <CheckCircle2 className="w-4 h-4" />
@@ -271,10 +489,10 @@ export default function PresentSection() {
         </div>
       </div>
 
-      {/* ── Signature Pad (shown when Sign Now clicked) ── */}
+      {/* ── Signature Panel (shown when Sign Now clicked) ── */}
       {showSigPad && !state.signature && (
         <div className="no-print max-w-2xl mx-auto mt-4 px-4">
-          <SignatureCanvas onSave={handleSign} onCancel={() => setShowSigPad(false)} />
+          <SignaturePanel onSave={handleSign} onCancel={() => setShowSigPad(false)} />
         </div>
       )}
 
@@ -380,20 +598,25 @@ export default function PresentSection() {
                       )}
                     </div>
 
-                    {/* Line items table */}
+                    {/* Line items table — columns driven by visibility state */}
                     <table className="w-full text-xs border-collapse mb-3">
                       <thead>
                         <tr className="bg-gray-100">
                           <th className="text-left px-3 py-2 font-semibold text-gray-600 border border-gray-200">Services</th>
-                          <th className="text-right px-3 py-2 font-semibold text-gray-600 border border-gray-200 w-12">qty</th>
-                          <th className="text-right px-3 py-2 font-semibold text-gray-600 border border-gray-200 w-24">unit price</th>
-                          <th className="text-right px-3 py-2 font-semibold text-gray-600 border border-gray-200 w-24">amount</th>
+                          {cols.qty       && <th className="text-right px-3 py-2 font-semibold text-gray-600 border border-gray-200 w-12">Qty</th>}
+                          {cols.material  && <th className="text-right px-3 py-2 font-semibold text-gray-600 border border-gray-200 w-24">Material</th>}
+                          {cols.labor     && <th className="text-right px-3 py-2 font-semibold text-gray-600 border border-gray-200 w-24">Labor</th>}
+                          {cols.unitPrice && <th className="text-right px-3 py-2 font-semibold text-gray-600 border border-gray-200 w-24">Unit Price</th>}
+                          {cols.amount    && <th className="text-right px-3 py-2 font-semibold text-gray-600 border border-gray-200 w-24">Amount</th>}
                         </tr>
                       </thead>
                       <tbody>
                         {activeItems.map((item, idx) => {
                           const bullet = bullets[idx];
                           const unitPrice = item.qty > 0 ? item.price / item.qty : 0;
+                          // Derive material and labor from item if available
+                          const matCost = (item as any).matCost ?? 0;
+                          const laborCost = (item as any).laborCost ?? 0;
                           return (
                             <tr key={item.id}>
                               <td className="px-3 py-2 border-b border-gray-100 align-top">
@@ -406,24 +629,33 @@ export default function PresentSection() {
                                   </div>
                                 )}
                               </td>
-                              <td className="px-3 py-2 border-b border-gray-100 text-right align-top text-gray-700">{item.qty}</td>
-                              <td className="px-3 py-2 border-b border-gray-100 text-right align-top text-gray-700">{fmtDollarCents(unitPrice)}</td>
-                              <td className="px-3 py-2 border-b border-gray-100 text-right align-top font-semibold text-gray-900">{fmtDollarCents(item.price)}</td>
+                              {cols.qty       && <td className="px-3 py-2 border-b border-gray-100 text-right align-top text-gray-700">{item.qty}</td>}
+                              {cols.material  && <td className="px-3 py-2 border-b border-gray-100 text-right align-top text-gray-700">{fmtDollarCents(matCost)}</td>}
+                              {cols.labor     && <td className="px-3 py-2 border-b border-gray-100 text-right align-top text-gray-700">{fmtDollarCents(laborCost)}</td>}
+                              {cols.unitPrice && <td className="px-3 py-2 border-b border-gray-100 text-right align-top text-gray-700">{fmtDollarCents(unitPrice)}</td>}
+                              {cols.amount    && <td className="px-3 py-2 border-b border-gray-100 text-right align-top font-semibold text-gray-900">{fmtDollarCents(item.price)}</td>}
                             </tr>
                           );
                         })}
                         {/* Custom items for this phase */}
-                        {phaseCustom.map(ci => (
-                          <tr key={ci.id}>
-                            <td className="px-3 py-2 border-b border-gray-100 align-top">
-                              <div className="font-semibold text-gray-900 mb-1">{ci.description}</div>
-                              <div className="text-xs text-gray-600">— {ci.qty} {ci.unitType}</div>
-                            </td>
-                            <td className="px-3 py-2 border-b border-gray-100 text-right align-top text-gray-700">{ci.qty}</td>
-                            <td className="px-3 py-2 border-b border-gray-100 text-right align-top text-gray-700">{fmtDollarCents(ci.qty > 0 ? ci.price / ci.qty : 0)}</td>
-                            <td className="px-3 py-2 border-b border-gray-100 text-right align-top font-semibold text-gray-900">{fmtDollarCents(ci.price)}</td>
-                          </tr>
-                        ))}
+                        {phaseCustom.map(ci => {
+                          const unitPrice = ci.qty > 0 ? ci.price / ci.qty : 0;
+                          const matCost = (ci as any).matCost ?? 0;
+                          const laborCost = (ci as any).laborCost ?? 0;
+                          return (
+                            <tr key={ci.id}>
+                              <td className="px-3 py-2 border-b border-gray-100 align-top">
+                                <div className="font-semibold text-gray-900 mb-1">{ci.description}</div>
+                                <div className="text-xs text-gray-600">— {ci.qty} {ci.unitType}</div>
+                              </td>
+                              {cols.qty       && <td className="px-3 py-2 border-b border-gray-100 text-right align-top text-gray-700">{ci.qty}</td>}
+                              {cols.material  && <td className="px-3 py-2 border-b border-gray-100 text-right align-top text-gray-700">{fmtDollarCents(matCost)}</td>}
+                              {cols.labor     && <td className="px-3 py-2 border-b border-gray-100 text-right align-top text-gray-700">{fmtDollarCents(laborCost)}</td>}
+                              {cols.unitPrice && <td className="px-3 py-2 border-b border-gray-100 text-right align-top text-gray-700">{fmtDollarCents(unitPrice)}</td>}
+                              {cols.amount    && <td className="px-3 py-2 border-b border-gray-100 text-right align-top font-semibold text-gray-900">{fmtDollarCents(ci.price)}</td>}
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
 
@@ -443,20 +675,29 @@ export default function PresentSection() {
                     <thead>
                       <tr className="bg-gray-100">
                         <th className="text-left px-3 py-2 font-semibold text-gray-600 border border-gray-200">Services</th>
-                        <th className="text-right px-3 py-2 font-semibold text-gray-600 border border-gray-200 w-12">qty</th>
-                        <th className="text-right px-3 py-2 font-semibold text-gray-600 border border-gray-200 w-24">unit price</th>
-                        <th className="text-right px-3 py-2 font-semibold text-gray-600 border border-gray-200 w-24">amount</th>
+                        {cols.qty       && <th className="text-right px-3 py-2 font-semibold text-gray-600 border border-gray-200 w-12">Qty</th>}
+                        {cols.material  && <th className="text-right px-3 py-2 font-semibold text-gray-600 border border-gray-200 w-24">Material</th>}
+                        {cols.labor     && <th className="text-right px-3 py-2 font-semibold text-gray-600 border border-gray-200 w-24">Labor</th>}
+                        {cols.unitPrice && <th className="text-right px-3 py-2 font-semibold text-gray-600 border border-gray-200 w-24">Unit Price</th>}
+                        {cols.amount    && <th className="text-right px-3 py-2 font-semibold text-gray-600 border border-gray-200 w-24">Amount</th>}
                       </tr>
                     </thead>
                     <tbody>
-                      {activeCustom.filter(c => !activePhases.find(p => p.phaseId === c.phaseId)).map(ci => (
-                        <tr key={ci.id}>
-                          <td className="px-3 py-2 border-b border-gray-100">{ci.description}</td>
-                          <td className="px-3 py-2 border-b border-gray-100 text-right">{ci.qty}</td>
-                          <td className="px-3 py-2 border-b border-gray-100 text-right">{fmtDollarCents(ci.qty > 0 ? ci.price / ci.qty : 0)}</td>
-                          <td className="px-3 py-2 border-b border-gray-100 text-right font-semibold">{fmtDollarCents(ci.price)}</td>
-                        </tr>
-                      ))}
+                      {activeCustom.filter(c => !activePhases.find(p => p.phaseId === c.phaseId)).map(ci => {
+                        const unitPrice = ci.qty > 0 ? ci.price / ci.qty : 0;
+                        const matCost = (ci as any).matCost ?? 0;
+                        const laborCost = (ci as any).laborCost ?? 0;
+                        return (
+                          <tr key={ci.id}>
+                            <td className="px-3 py-2 border-b border-gray-100">{ci.description}</td>
+                            {cols.qty       && <td className="px-3 py-2 border-b border-gray-100 text-right">{ci.qty}</td>}
+                            {cols.material  && <td className="px-3 py-2 border-b border-gray-100 text-right">{fmtDollarCents(matCost)}</td>}
+                            {cols.labor     && <td className="px-3 py-2 border-b border-gray-100 text-right">{fmtDollarCents(laborCost)}</td>}
+                            {cols.unitPrice && <td className="px-3 py-2 border-b border-gray-100 text-right">{fmtDollarCents(unitPrice)}</td>}
+                            {cols.amount    && <td className="px-3 py-2 border-b border-gray-100 text-right font-semibold">{fmtDollarCents(ci.price)}</td>}
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
