@@ -308,6 +308,8 @@ interface InvoicePrintViewProps {
   opportunity: Opportunity | null;
   onClose: () => void;
   onSaveSignature?: (sig: string, name: string, invoiceId: string) => void;
+  /** All invoices for the same job (same opportunityId), used for the Job Invoice Summary section */
+  allJobInvoices?: Invoice[];
 }
 
 // ── Main component ───────────────────────────────────────────
@@ -317,6 +319,7 @@ export default function InvoicePrintView({
   opportunity,
   onClose,
   onSaveSignature,
+  allJobInvoices = [],
 }: InvoicePrintViewProps) {
   const [showSignatureCanvas, setShowSignatureCanvas] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
@@ -407,8 +410,17 @@ export default function InvoicePrintView({
 
             {/* Right: Meta table */}
             <div style={{ border: '1px solid #ccc', minWidth: '280px', fontSize: '12px' }}>
+              {/* JOB row — shows job number + title */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 10px', borderBottom: '1px solid #e5e5e5' }}>
+                <span style={{ color: '#888', textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: '11px' }}>JOB</span>
+                <div style={{ textAlign: 'right' }}>
+                  <span style={{ fontWeight: '500' }}>{jobDisplay}</span>
+                  {opportunity?.title && (
+                    <div style={{ fontSize: '11px', color: '#666', marginTop: '1px' }}>{opportunity.title}</div>
+                  )}
+                </div>
+              </div>
               {[
-                { label: 'JOB', value: jobDisplay },
                 { label: 'INVOICE', value: invDisplay },
                 { label: 'SERVICE DATE', value: fmtDate(invoice.serviceDate ?? invoice.issuedAt) },
                 { label: 'INVOICE DATE', value: fmtDate(invoice.issuedAt) },
@@ -576,9 +588,7 @@ export default function InvoicePrintView({
                 <span style={{ fontWeight: 'bold', fontSize: '15px' }}>{fmt(amountDue)}</span>
               </div>
             </div>
-          </div>
-
-          {/* ── Payment History ───────────────────────────────── */}
+          </div>          {/* ── Payment History ──────────────────────────────────── */}
           {invoice.payments && invoice.payments.length > 0 && (
             <div style={{ marginBottom: '28px' }}>
               <div style={{ fontWeight: '400', marginBottom: '8px', color: '#444' }}>Payment History</div>
@@ -593,6 +603,91 @@ export default function InvoicePrintView({
             </div>
           )}
 
+          {/* ── Job Invoice Summary (all invoices for this job) ── */}
+          {allJobInvoices.length > 0 && (
+            <div style={{ marginBottom: '28px', borderTop: '1px solid #e8e8e8', paddingTop: '20px' }}>
+              <div style={{ fontWeight: '500', marginBottom: '10px', color: '#444', fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Job Invoice Summary
+              </div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#f5f5f5' }}>
+                    <th style={{ textAlign: 'left', padding: '5px 8px', fontWeight: '500', color: '#555', fontSize: '11px' }}>Invoice #</th>
+                    <th style={{ textAlign: 'left', padding: '5px 8px', fontWeight: '500', color: '#555', fontSize: '11px' }}>Type</th>
+                    <th style={{ textAlign: 'left', padding: '5px 8px', fontWeight: '500', color: '#555', fontSize: '11px' }}>Date Paid</th>
+                    <th style={{ textAlign: 'right', padding: '5px 8px', fontWeight: '500', color: '#555', fontSize: '11px' }}>Amount</th>
+                    <th style={{ textAlign: 'right', padding: '5px 8px', fontWeight: '500', color: '#555', fontSize: '11px' }}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...allJobInvoices].sort((a, b) => {
+                    const order: Record<string, number> = { deposit: 0, final: 1 };
+                    return (order[a.type] ?? 2) - (order[b.type] ?? 2);
+                  }).map((inv, i) => {
+                    const isCurrentInv = inv.id === invoice.id;
+                    const lastPayment = inv.payments && inv.payments.length > 0
+                      ? inv.payments.sort((a, b) => new Date(b.paidAt).getTime() - new Date(a.paidAt).getTime())[0]
+                      : null;
+                    const statusLabel: Record<string, string> = {
+                      paid: 'Paid', partial: 'Partial', due: 'Due', sent: 'Sent',
+                      draft: 'Draft', void: 'Void', pending_signoff: 'Pending Sign-Off',
+                    };
+                    return (
+                      <tr key={inv.id ?? i} style={{
+                        borderBottom: '1px solid #ebebeb',
+                        backgroundColor: isCurrentInv ? '#fffbeb' : 'transparent',
+                      }}>
+                        <td style={{ padding: '6px 8px', color: isCurrentInv ? '#92400e' : '#333' }}>
+                          {inv.invoiceNumber.replace(/^INV-\d{4}-/, '#')}
+                          {isCurrentInv && <span style={{ fontSize: '10px', color: '#b45309', marginLeft: '4px' }}>(this invoice)</span>}
+                        </td>
+                        <td style={{ padding: '6px 8px', color: '#555', textTransform: 'capitalize' }}>{inv.type}</td>
+                        <td style={{ padding: '6px 8px', color: '#555' }}>
+                          {lastPayment ? fmtDate(lastPayment.paidAt) : (inv.status === 'paid' && inv.paidAt ? fmtDate(inv.paidAt) : '—')}
+                        </td>
+                        <td style={{ padding: '6px 8px', textAlign: 'right', color: '#333' }}>{fmt(inv.total)}</td>
+                        <td style={{ padding: '6px 8px', textAlign: 'right' }}>
+                          <span style={{
+                            fontSize: '10px',
+                            fontWeight: '500',
+                            padding: '2px 6px',
+                            borderRadius: '3px',
+                            backgroundColor: (inv.status as string) === 'paid' ? '#d1fae5' : (inv.status as string) === 'due' ? '#fef3c7' : '#f3f4f6',
+                            color: (inv.status as string) === 'paid' ? '#065f46' : (inv.status as string) === 'due' ? '#92400e' : '#374151',
+                          }}>
+                            {statusLabel[inv.status] ?? inv.status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr style={{ borderTop: '2px solid #ccc' }}>
+                    <td colSpan={3} style={{ padding: '7px 8px', fontWeight: '600', fontSize: '12px', color: '#222' }}>Contract Total</td>
+                    <td style={{ padding: '7px 8px', textAlign: 'right', fontWeight: '600', fontSize: '12px', color: '#222' }}>
+                      {fmt(allJobInvoices.reduce((s, inv) => s + inv.total, 0))}
+                    </td>
+                    <td />
+                  </tr>
+                  <tr>
+                    <td colSpan={3} style={{ padding: '4px 8px', fontSize: '12px', color: '#555' }}>Total Paid</td>
+                    <td style={{ padding: '4px 8px', textAlign: 'right', fontSize: '12px', color: '#059669', fontWeight: '500' }}>
+                      {fmt(allJobInvoices.reduce((s, inv) => s + inv.amountPaid, 0))}
+                    </td>
+                    <td />
+                  </tr>
+                  <tr>
+                    <td colSpan={3} style={{ padding: '4px 8px 8px', fontSize: '12px', color: '#555' }}>Balance Remaining</td>
+                    <td style={{ padding: '4px 8px 8px', textAlign: 'right', fontSize: '12px', color: '#b45309', fontWeight: '500' }}>
+                      {fmt(allJobInvoices.reduce((s, inv) => s + inv.balance, 0))}
+                    </td>
+                    <td />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
           {/* ── Statement of Work (final invoices only) ──────── */}
           {isFinal && opportunity?.sowDocument && (
             <div style={{ marginBottom: '28px', borderTop: '1px solid #e8e8e8', paddingTop: '20px' }}>

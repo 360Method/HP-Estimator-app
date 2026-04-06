@@ -217,6 +217,13 @@
 - [x] Final invoice PDF (InvoicePrintView) shows all payments already made (date, method, amount) before the balance due (Payment History section already present)
 - [x] Final invoice PDF includes the SOW from the linked job opportunity (opportunity.sowDocument, shown between line items and totals)
 
+## Enhancement: InvoicePrintView — Job Reference + Related Invoices
+
+- [x] InvoicePrintView header shows the linked job number and job title (from opportunity prop) — JOB row now shows number + title below it
+- [x] InvoicePrintView includes a "Job Invoice Summary" section listing all invoices for the same job: invoice #, type, date paid, amount, status (current invoice highlighted in amber)
+- [x] Job Invoice Summary shows Contract Total, Total Paid, and Balance Remaining in the footer
+- [x] InvoicePrintView receives allJobInvoices prop from InvoiceCard (sortedInvoices passed down)
+
 ## Enhancement: Post-Sign-Off Pay Prompt + Job Invoice Grouping
 
 - [x] After job completion sign-off: save completionSignature/completionSignedBy/completionSignedAt to the final invoice record in state

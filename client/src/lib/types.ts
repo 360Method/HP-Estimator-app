@@ -233,7 +233,7 @@ export interface ScheduleEvent {
 // ── Invoice / Payment Types ──────────────────────────────────
 
 export type InvoiceType = 'deposit' | 'final';
-export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'void' | 'partial' | 'pending_signoff';
+export type InvoiceStatus = 'draft' | 'sent' | 'due' | 'paid' | 'void' | 'partial' | 'pending_signoff';
 export type PaymentMethod = 'stripe' | 'paypal' | 'cash' | 'check' | 'zelle' | 'venmo' | 'other';
 
 export interface PaymentRecord {

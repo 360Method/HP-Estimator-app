@@ -74,6 +74,7 @@ function fmtDate(iso: string) {
 const STATUS_COLORS: Record<InvoiceStatus, string> = {
   draft: 'bg-gray-100 text-gray-700',
   sent: 'bg-blue-100 text-blue-700',
+  due: 'bg-orange-100 text-orange-700',
   partial: 'bg-yellow-100 text-yellow-700',
   paid: 'bg-green-100 text-green-700',
   void: 'bg-red-100 text-red-700',
@@ -232,6 +233,7 @@ function InvoiceCard({
   paypalClientId,
   customer,
   opportunity,
+  allJobInvoices = [],
 }: {
   invoice: Invoice;
   onUpdate: (updated: Invoice) => void;
@@ -239,6 +241,7 @@ function InvoiceCard({
   paypalClientId: string | null;
   customer: Customer | undefined;
   opportunity: Opportunity | null;
+  allJobInvoices?: Invoice[];
 }) {
   const [showPrintView, setShowPrintView] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -639,6 +642,7 @@ function InvoiceCard({
               invoice={invoice}
               customer={customer}
               opportunity={opportunity}
+              allJobInvoices={allJobInvoices}
               onClose={() => setShowPrintView(false)}
               onSaveSignature={(sig, name, _invId) => {
                 const now = new Date().toISOString();
@@ -963,6 +967,7 @@ export default function InvoiceSection() {
               paypalClientId={paypalClientId}
               customer={customer}
               opportunity={activeOpp ?? null}
+              allJobInvoices={sortedInvoices}
             />
           ))}
         </div>
