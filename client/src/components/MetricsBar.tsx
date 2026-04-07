@@ -29,9 +29,13 @@ import NewEstimateModal from '@/components/intakes/NewEstimateModal';
 import NewEventModal from '@/components/intakes/NewEventModal';
 import NewIntakeModal from '@/components/intakes/NewIntakeModal';
 import NewLeadModal from '@/components/intakes/NewLeadModal';
+import UserMenu, { UserMenuAction } from '@/components/UserMenu';
+import MyAccountPage from '@/pages/MyAccountPage';
+import MyTasksPage from '@/pages/MyTasksPage';
+import HelpPage from '@/pages/HelpPage';
 import {
   Search, LayoutDashboard, Users, Inbox, GitBranch,
-  DollarSign, BarChart2, Megaphone, Settings, UserCircle,
+  DollarSign, BarChart2, Megaphone, Settings,
   ChevronDown, ArrowLeft, Plus, Menu, X, Briefcase, CalendarDays,
 } from 'lucide-react';
 
@@ -74,7 +78,19 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
   const [showNewMenu, setShowNewMenu] = useState(false);
   const [showMobileNav, setShowMobileNav] = useState(false);
   const [activeModal, setActiveModal] = useState<NewMenuAction | null>(null);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [overlay, setOverlay] = useState<'account' | 'tasks' | 'help' | 'shortcuts' | null>(null);
   const newBtnRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  const handleUserMenuSelect = (action: UserMenuAction) => {
+    if (action === 'my-account') setOverlay('account');
+    else if (action === 'my-tasks') setOverlay('tasks');
+    else if (action === 'help') setOverlay('help');
+    else if (action === 'keyboard-shortcuts') setOverlay('shortcuts');
+    else if (action === 'settings') handleBackendNav('Settings');
+    else if (action === 'sign-out') { reset(); window.location.reload(); }
+  };
 
   const handleNewMenuSelect = (action: NewMenuAction) => {
     setShowNewMenu(false);
@@ -254,14 +270,43 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
               >
                 <Settings className="w-4 h-4" />
               </button>
-              <button
-                onClick={() => handleBackendNav('My Account')}
-                title="My Account"
-                className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-              >
-                <UserCircle className="w-5 h-5" />
-                <ChevronDown className="w-3 h-3" />
-              </button>
+              {/* User avatar + dropdown */}
+              <div ref={userMenuRef} className="relative">
+                <button
+                  onClick={() => setShowUserMenu(v => !v)}
+                  title="My Account"
+                  className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                >
+                  {state.userProfile.avatarUrl ? (
+                    <img src={state.userProfile.avatarUrl} alt="avatar" className="w-6 h-6 rounded-full object-cover" />
+                  ) : (
+                    <div
+                      className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold"
+                      style={{ backgroundColor: state.userProfile.teamColor }}
+                    >
+                      {[state.userProfile.firstName[0], state.userProfile.lastName[0]].filter(Boolean).join('').toUpperCase() || 'HP'}
+                    </div>
+                  )}
+                  <ChevronDown className="w-3 h-3" />
+                </button>
+                {showUserMenu && (
+                  <UserMenu
+                    onSelect={handleUserMenuSelect}
+                    onClose={() => setShowUserMenu(false)}
+                  />
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Full-screen overlays for account pages */}
+          {overlay && (
+            <div className="fixed inset-0 z-[300] bg-background overflow-y-auto">
+              {overlay === 'account' && <MyAccountPage onBack={() => setOverlay(null)} />}
+              {overlay === 'tasks' && <MyTasksPage onBack={() => setOverlay(null)} />}
+              {(overlay === 'help' || overlay === 'shortcuts') && (
+                <HelpPage onBack={() => setOverlay(null)} initialTab={overlay === 'shortcuts' ? 'shortcuts' : 'help'} />
+              )}
             </div>
           )}
 

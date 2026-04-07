@@ -83,6 +83,17 @@ const initialState: EstimatorState = {
   depositValue: 50,
   // Schedule deep-link filter
   scheduleFilterJobId: null,
+  // User profile
+  userProfile: {
+    firstName: 'Handy',
+    lastName: 'Pioneers',
+    email: 'help@handypioneers.com',
+    phone: '(360) 555-0100',
+    teamColor: '#e07b39',
+    avatarUrl: null,
+    role: 'Owner',
+    bio: '',
+  },
 };
 
 // ── Helper: build an ActivityEvent without id/timestamp ──────
@@ -179,7 +190,8 @@ type Action =
       signedEstimateFilename?: string;
       sowDocument?: string;           // generated SOW text to attach to job
       jobStartDate?: string;          // ISO date string for project start (defaults to today+7)
-    };
+    }
+  | { type: 'UPDATE_USER_PROFILE'; payload: Partial<import('@/lib/types').UserProfile> };
 
 function makeActivity(
   type: ActivityEvent['type'],
@@ -1195,6 +1207,9 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
     case 'SET_SCHEDULE_FILTER':
       return { ...state, scheduleFilterJobId: action.jobId };
 
+    case 'UPDATE_USER_PROFILE':
+      return { ...state, userProfile: { ...state.userProfile, ...action.payload } };
+
     case 'UPDATE_OPPORTUNITY_SCHEDULE': {
       const now = new Date().toISOString();
       const updatedOpps = state.opportunities.map(o =>
@@ -1299,6 +1314,8 @@ interface EstimatorContextValue {
   removeJobAttachment: (oppId: string, attachmentId: string) => void;
   // Job activity
   addJobActivity: (oppId: string, event: Omit<ActivityEvent, 'id' | 'timestamp'>) => void;
+  // User profile
+  updateUserProfile: (payload: Partial<import('@/lib/types').UserProfile>) => void;
 }
 
 const EstimatorContext = createContext<EstimatorContextValue | null>(null);
@@ -1586,6 +1603,10 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const updateUserProfile = useCallback((payload: Partial<import('@/lib/types').UserProfile>) => {
+    dispatch({ type: 'UPDATE_USER_PROFILE', payload });
+  }, []);
+
   return (
     <EstimatorContext.Provider value={{
       state, setSection, setJobInfo, setGlobal, updateItem,
@@ -1608,6 +1629,7 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
       addJobTask, updateJobTask, removeJobTask,
       addJobAttachment, removeJobAttachment,
       addJobActivity,
+      updateUserProfile,
     }}>
       {children}
     </EstimatorContext.Provider>

@@ -307,3 +307,13 @@
 ## NewMenu Dropdown Fix
 
 - [x] Fix NewMenu dropdown to fit within viewport — no scrolling required to see all items
+
+## My Account System
+
+- [x] UserMenu dropdown: avatar initials + color, name, role, divider, My Account, My Tasks, Help, Keyboard Shortcuts, Sign Out
+- [x] My Account page: first/last name, avatar color picker, avatar image upload, mobile, email, password change section
+- [x] My Tasks page: aggregated view of all job tasks assigned to the current user, filter by status/priority
+- [x] Help page: FAQ, contact support, keyboard shortcuts reference
+- [x] Sign Out: wired to reset() + page reload
+- [x] Wire UserMenu into MetricsBar header replacing current user icon
+- [x] Add UserProfile type to EstimatorContext (firstName, lastName, teamColor, avatarUrl, phone, email, role, bio)

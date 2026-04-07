@@ -417,6 +417,20 @@ export interface EstimatorState {
   depositValue: number;          // percent (0-100) when pct, dollar amount when flat
   // Schedule deep-link: when set, SchedulePage pre-filters to this opportunityId
   scheduleFilterJobId: string | null;
+  // Current user profile (persisted locally)
+  userProfile: UserProfile;
+}
+
+// ── User Profile ────────────────────────────────────────────
+export interface UserProfile {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  teamColor: string;   // hex color for avatar background
+  avatarUrl: string | null;
+  role: string;        // e.g. 'Owner', 'Estimator', 'Field Tech'
+  bio: string;
 }
 
 // ── CRM Pipeline Types ──────────────────────────────────────
