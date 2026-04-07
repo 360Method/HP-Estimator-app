@@ -317,3 +317,33 @@
 - [x] Sign Out: wired to reset() + page reload
 - [x] Wire UserMenu into MetricsBar header replacing current user icon
 - [x] Add UserProfile type to EstimatorContext (firstName, lastName, teamColor, avatarUrl, phone, email, role, bio)
+
+## Settings System
+
+### Shell & Navigation
+- [x] SettingsPage shell with collapsible sidebar (Global Settings / Feature Configurations / Tags & Tools / Integrations)
+- [x] Wire Settings nav item in MetricsBar to open SettingsPage overlay
+- [x] Settings sidebar active state, mobile drawer
+
+### Global Settings
+- [x] Company page: Business info (pre-filled HP data), description, logo, invoice message, T&C, business hours, service area
+- [x] Billing page: Plan info, payment method, Stripe sandbox claim link
+- [x] Notifications page: Email/SMS/in-app toggles per event type (12 events)
+- [x] Team & Permissions page: Owner row pre-filled, invite form, role badges, permission matrix tab
+
+### Feature Configurations
+- [x] Estimates settings: numbering, expiry, deposit %, signature, reminders
+- [x] Invoices settings: numbering, due days, late fees, payment methods, options
+- [x] Jobs settings: numbering, stages, tax rate, completion options
+- [x] Leads settings: stages, follow-up defaults, auto-assign, archive options
+- [x] Pipeline settings: default view, card display, win probability by stage
+- [x] Price Book settings: markup %, labor rate, material tiers (Good/Better/Best)
+
+### Tags & Tools
+- [x] Checklists: pre-built HP checklists, expandable items, add/delete
+- [x] Job Fields: custom fields (text/number/select/date/checkbox), pre-filled HP fields
+- [x] Lead Sources: active/inactive list, pre-filled 14 sources, add/remove
+- [x] Tags: color-coded CRUD, entity scope toggles (customer/lead/job/estimate)
+
+### Integrations
+- [x] Integrations page: 9 integrations across 6 categories, Stripe + Google Maps pre-connected

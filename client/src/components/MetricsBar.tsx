@@ -33,6 +33,7 @@ import UserMenu, { UserMenuAction } from '@/components/UserMenu';
 import MyAccountPage from '@/pages/MyAccountPage';
 import MyTasksPage from '@/pages/MyTasksPage';
 import HelpPage from '@/pages/HelpPage';
+import SettingsPage from '@/pages/settings/SettingsPage';
 import {
   Search, LayoutDashboard, Users, Inbox, GitBranch,
   DollarSign, BarChart2, Megaphone, Settings,
@@ -79,7 +80,7 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
   const [showMobileNav, setShowMobileNav] = useState(false);
   const [activeModal, setActiveModal] = useState<NewMenuAction | null>(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  const [overlay, setOverlay] = useState<'account' | 'tasks' | 'help' | 'shortcuts' | null>(null);
+  const [overlay, setOverlay] = useState<'account' | 'tasks' | 'help' | 'shortcuts' | 'settings' | null>(null);
   const newBtnRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
@@ -88,7 +89,7 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
     else if (action === 'my-tasks') setOverlay('tasks');
     else if (action === 'help') setOverlay('help');
     else if (action === 'keyboard-shortcuts') setOverlay('shortcuts');
-    else if (action === 'settings') handleBackendNav('Settings');
+    else if (action === 'settings') setOverlay('settings');
     else if (action === 'sign-out') { reset(); window.location.reload(); }
   };
 
@@ -307,6 +308,7 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
               {(overlay === 'help' || overlay === 'shortcuts') && (
                 <HelpPage onBack={() => setOverlay(null)} initialTab={overlay === 'shortcuts' ? 'shortcuts' : 'help'} />
               )}
+              {overlay === 'settings' && <SettingsPage onBack={() => setOverlay(null)} />}
             </div>
           )}
 
