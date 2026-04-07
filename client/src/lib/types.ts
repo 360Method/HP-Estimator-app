@@ -154,6 +154,31 @@ export interface CustomerProfile {
   outstandingBalance: number;
 }
 
+// ── Job Task ────────────────────────────────────────────────
+export type JobTaskPriority = 'low' | 'normal' | 'high';
+
+export interface JobTask {
+  id: string;
+  title: string;
+  completed: boolean;
+  completedAt?: string;   // ISO
+  assignedTo?: string;
+  dueDate?: string;       // ISO date
+  priority: JobTaskPriority;
+  createdAt: string;      // ISO
+}
+
+// ── Job Attachment ───────────────────────────────────────────
+export interface JobAttachment {
+  id: string;
+  name: string;           // display filename
+  url: string;            // S3 CDN URL
+  mimeType: string;
+  size: number;           // bytes
+  uploadedAt: string;     // ISO
+  uploadedBy?: string;
+}
+
 export interface ActivityEvent {
   id: string;
   type: 'estimate_created' | 'estimate_sent' | 'estimate_approved' | 'job_created' | 'note_added' | 'call_logged' | 'payment_received' | 'stage_changed';
@@ -496,6 +521,12 @@ export interface Opportunity {
   jobSignedEstimateFilename?: string;
   // Per-opportunity calculator/estimate data snapshot
   estimateSnapshot?: EstimateSnapshot;
+  // Job tasks checklist
+  tasks?: JobTask[];
+  // Job attachments
+  attachments?: JobAttachment[];
+  // Per-job activity feed
+  jobActivity?: ActivityEvent[];
   // Snapshot of customer info at time of conversion
   clientSnapshot?: {
     client: string;

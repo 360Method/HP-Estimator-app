@@ -290,3 +290,16 @@
 - [x] EstimateSection: show AddressMapPreview + Open in Google Maps button (Service Location panel)
 - [x] JobDetailsSection: show AddressMapPreview + Open in Google Maps button (replace plain link)
 - [x] PipelineBoard kanban cards + table rows: show address snippet + Maps button when clientSnapshot.address present
+
+## Job Details Page Overhaul
+
+- [x] Add JobTask type (id, title, completed, completedAt, assignedTo, dueDate, priority) to types.ts
+- [x] Add JobAttachment type (id, name, url, mimeType, uploadedAt, size) to types.ts
+- [x] Add tasks[] and attachments[] to Opportunity interface
+- [x] Add reducer actions: ADD_JOB_TASK, UPDATE_JOB_TASK, REMOVE_JOB_TASK, ADD_JOB_ATTACHMENT, REMOVE_JOB_ATTACHMENT
+- [x] Add context helpers for job tasks and attachments
+- [x] Job header card: customer name, company, phone, email, address + map preview
+- [x] Job tasks panel: add/delete/complete tasks with priority and assignee
+- [x] Job pricing panel: pricing summary (total/deposit/balance) + custom items table from estimateSnapshot
+- [x] Job attachments panel: upload files (local dataURL), list with download/delete
+- [x] Job activity feed: per-job activity timeline with add-note capability

@@ -8,7 +8,7 @@ import {
   LineItem, CustomLineItem, EstimateLineOverride,
   Opportunity, PipelineArea, CustomerProfile, ActivityEvent, CustomerProfileTab,
   OpportunityStage, Customer, Invoice, InvoiceLineItem, ScheduleEvent,
-  EstimateSnapshot, CustomerAddress,
+  EstimateSnapshot, CustomerAddress, JobTask, JobAttachment,
 } from '@/lib/types';
 import { ALL_PHASES, DEFAULTS } from '@/lib/phases';
 import { generateProjectSchedule } from '@/lib/generateProjectSchedule';
@@ -127,6 +127,15 @@ type Action =
   | { type: 'UPDATE_CUSTOMER_ADDRESS'; customerId: string; addressId: string; payload: Partial<CustomerAddress> }
   | { type: 'REMOVE_CUSTOMER_ADDRESS'; customerId: string; addressId: string }
   | { type: 'SET_PRIMARY_ADDRESS'; customerId: string; addressId: string }
+  // ── Job task actions ─────────────────────────────────────────
+  | { type: 'ADD_JOB_TASK'; oppId: string; task: JobTask }
+  | { type: 'UPDATE_JOB_TASK'; oppId: string; taskId: string; payload: Partial<JobTask> }
+  | { type: 'REMOVE_JOB_TASK'; oppId: string; taskId: string }
+  // ── Job attachment actions ────────────────────────────────────
+  | { type: 'ADD_JOB_ATTACHMENT'; oppId: string; attachment: JobAttachment }
+  | { type: 'REMOVE_JOB_ATTACHMENT'; oppId: string; attachmentId: string }
+  // ── Job activity actions ──────────────────────────────────────
+  | { type: 'ADD_JOB_ACTIVITY'; oppId: string; event: ActivityEvent }
   // ── Lifecycle actions ──────────────────────────────────────
   | {
       type: 'CONVERT_LEAD_TO_ESTIMATE';
@@ -595,6 +604,59 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
             zip: primary?.zip ?? c.zip,
           };
         }),
+      };
+
+    case 'ADD_JOB_TASK':
+      return {
+        ...state,
+        opportunities: state.opportunities.map(o =>
+          o.id !== action.oppId ? o : { ...o, tasks: [...(o.tasks ?? []), action.task] }
+        ),
+      };
+
+    case 'UPDATE_JOB_TASK':
+      return {
+        ...state,
+        opportunities: state.opportunities.map(o =>
+          o.id !== action.oppId ? o : {
+            ...o,
+            tasks: (o.tasks ?? []).map(t =>
+              t.id !== action.taskId ? t : { ...t, ...action.payload }
+            ),
+          }
+        ),
+      };
+
+    case 'REMOVE_JOB_TASK':
+      return {
+        ...state,
+        opportunities: state.opportunities.map(o =>
+          o.id !== action.oppId ? o : { ...o, tasks: (o.tasks ?? []).filter(t => t.id !== action.taskId) }
+        ),
+      };
+
+    case 'ADD_JOB_ATTACHMENT':
+      return {
+        ...state,
+        opportunities: state.opportunities.map(o =>
+          o.id !== action.oppId ? o : { ...o, attachments: [...(o.attachments ?? []), action.attachment] }
+        ),
+      };
+
+    case 'REMOVE_JOB_ATTACHMENT':
+      return {
+        ...state,
+        opportunities: state.opportunities.map(o =>
+          o.id !== action.oppId ? o : { ...o, attachments: (o.attachments ?? []).filter(a => a.id !== action.attachmentId) }
+        ),
+      };
+
+    case 'ADD_JOB_ACTIVITY':
+      return {
+        ...state,
+        opportunities: state.opportunities.map(o =>
+          o.id !== action.oppId ? o : { ...o, jobActivity: [action.event, ...(o.jobActivity ?? [])] }
+        ),
       };
 
     case 'SET_ACTIVE_CUSTOMER': {
@@ -1228,6 +1290,15 @@ interface EstimatorContextValue {
     sowDocument?: string;
     jobStartDate?: string;
   }) => void;
+  // Job tasks
+  addJobTask: (oppId: string, task: JobTask) => void;
+  updateJobTask: (oppId: string, taskId: string, payload: Partial<JobTask>) => void;
+  removeJobTask: (oppId: string, taskId: string) => void;
+  // Job attachments
+  addJobAttachment: (oppId: string, attachment: JobAttachment) => void;
+  removeJobAttachment: (oppId: string, attachmentId: string) => void;
+  // Job activity
+  addJobActivity: (oppId: string, event: Omit<ActivityEvent, 'id' | 'timestamp'>) => void;
 }
 
 const EstimatorContext = createContext<EstimatorContextValue | null>(null);
@@ -1486,6 +1557,35 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'SET_SCHEDULE_FILTER', jobId });
   }, []);
 
+  // ── Job task / attachment / activity helpers ─────────────────────
+  const addJobTask = useCallback((oppId: string, task: JobTask) => {
+    dispatch({ type: 'ADD_JOB_TASK', oppId, task });
+  }, []);
+
+  const updateJobTask = useCallback((oppId: string, taskId: string, payload: Partial<JobTask>) => {
+    dispatch({ type: 'UPDATE_JOB_TASK', oppId, taskId, payload });
+  }, []);
+
+  const removeJobTask = useCallback((oppId: string, taskId: string) => {
+    dispatch({ type: 'REMOVE_JOB_TASK', oppId, taskId });
+  }, []);
+
+  const addJobAttachment = useCallback((oppId: string, attachment: JobAttachment) => {
+    dispatch({ type: 'ADD_JOB_ATTACHMENT', oppId, attachment });
+  }, []);
+
+  const removeJobAttachment = useCallback((oppId: string, attachmentId: string) => {
+    dispatch({ type: 'REMOVE_JOB_ATTACHMENT', oppId, attachmentId });
+  }, []);
+
+  const addJobActivity = useCallback((oppId: string, event: Omit<ActivityEvent, 'id' | 'timestamp'>) => {
+    dispatch({
+      type: 'ADD_JOB_ACTIVITY',
+      oppId,
+      event: { ...event, id: nanoid(8), timestamp: new Date().toISOString() },
+    });
+  }, []);
+
   return (
     <EstimatorContext.Provider value={{
       state, setSection, setJobInfo, setGlobal, updateItem,
@@ -1505,6 +1605,9 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
       setDeposit,
       setScheduleFilter,
       approveEstimate,
+      addJobTask, updateJobTask, removeJobTask,
+      addJobAttachment, removeJobAttachment,
+      addJobActivity,
     }}>
       {children}
     </EstimatorContext.Provider>
