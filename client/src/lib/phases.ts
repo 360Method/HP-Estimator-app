@@ -851,19 +851,28 @@ const phase11: PhaseGroup = {
       ]),
     matItem('p11-dc', 'Door Casing', 'Door casing', 'opening',
       tiers(
-        1.20,'Finger-joint pine, primed','Colonial 2.5" — paint-grade',
-        1.80,'MDF colonial casing, primed','Colonial 3.5" — smooth MDF',
-        3.50,'Solid poplar, unfinished','Colonial 3.5" — stain-grade'
+        // Rate is per OPENING (both sides of door) — each opening ≈ 26–32 LF of casing
+        // (2 faces × (2 × door height + door width) ÷ 12 ≈ 26–32 LF)
+        // Good: ~26 LF × $3.20/lf mat + labor ≈ $85
+        // Better: ~26 LF × $4.50/lf mat + labor ≈ $130
+        // Best: ~26 LF × $7.50/lf mat + labor ≈ $220
+        85,'Finger-joint pine, primed','Colonial 2.5" — paint-grade, both sides',
+        130,'MDF colonial casing, primed','Colonial 3.5" — smooth MDF, both sides',
+        220,'Solid poplar, unfinished','Colonial 3.5" — stain-grade, both sides'
       ),
       1.5, L_CARP,
-      'Door casing installation — colonial or craftsman profiles.',
+      'Door casing installation — colonial or craftsman profiles. Rate is per opening (both sides of door).',
       'Door casing — {qty} opening(s) ({tier} grade)', 10, true,
       false, '',
       [
-        { label: '2.5" colonial (paint-grade)', value: '2.5in' },
-        { label: '3.5" colonial (most popular)', value: '3.5in', note: 'Most popular' },
+        { label: '2/0–2/4 (narrow door, 24–28")', value: 'narrow', note: '~24 LF per opening', rateMultiplier: 0.90 },
+        { label: '2/6×6/8 (32"×80") — most common', value: '2668', note: '~26 LF per opening' },
+        { label: '2/8×6/8 (34"×80")', value: '2868', note: '~27 LF per opening' },
+        { label: '3/0×6/8 (36"×80")', value: '3068', note: '~28 LF per opening' },
+        { label: '3/0×8/0 (36"×96")', value: '3080', note: '~30 LF per opening', rateMultiplier: 1.12 },
         { label: '3.5" craftsman flat casing', value: '3.5in-craft', rateMultiplier: 1.10 },
         { label: '4.5" craftsman (wider reveal)', value: '4.5in-craft', rateMultiplier: 1.25 },
+        { label: 'Double door (5/0–6/0)', value: 'dbl', note: '~40 LF per opening', rateMultiplier: 1.55 },
         { label: 'Rosette & plinth block set', value: 'rosette-plinth', rateMultiplier: 1.40, note: 'Traditional style' },
       ]),
     matItem('p11-wc', 'Window Casing', 'Window casing', 'window',

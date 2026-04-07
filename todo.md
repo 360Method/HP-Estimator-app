@@ -415,3 +415,9 @@
 - [x] All 5 intake modals updated: Job, Recurring Job, Estimate, Event, Intake (Call)
 - [x] Lead modal updated
 - [x] Prefill path (from customer profile) bypasses gate and goes directly to details
+
+## Door Casing Pricing Correction
+
+- [x] Raise door casing rates to reflect both-sides-of-door reality: each opening = 2 faces × (2×height + door width) ≈ 26–28 LF of casing per opening
+- [x] Update Good/Better/Best rates for p11-dc (Door Casing) accordingly: Good $85, Better $130, Best $220
+- [x] Add per-opening note in dimension options explaining the both-sides assumption
