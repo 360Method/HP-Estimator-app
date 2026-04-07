@@ -7,6 +7,7 @@
 // ============================================================
 
 import { useState, useEffect, useRef } from 'react';
+import AddressAutocomplete, { ParsedAddress } from '@/components/AddressAutocomplete';
 import { X, Plus, MapPin, User, Building2, Phone, Mail, AlertTriangle } from 'lucide-react';
 import { Customer, CustomerType, LeadSource } from '@/lib/types';
 import { nanoid } from 'nanoid';
@@ -236,9 +237,20 @@ export default function NewCustomerModal({ onClose, onCreated }: Props) {
               {/* Left: address fields */}
               <div className="space-y-3">
                 <div className="grid grid-cols-3 gap-3">
-                  <input type="text" placeholder="Street" value={form.street}
-                    onChange={e => set('street', e.target.value)}
-                    className="intake-field col-span-2" />
+                  <AddressAutocomplete
+                    value={form.street}
+                    onChange={v => set('street', v)}
+                    onAddressSelect={(parsed: ParsedAddress) => {
+                      set('street', parsed.street);
+                      if (parsed.unit) set('unit', parsed.unit);
+                      if (parsed.city) set('city', parsed.city);
+                      if (parsed.state) set('state', parsed.state);
+                      if (parsed.zip) set('zip', parsed.zip);
+                    }}
+                    placeholder="Street"
+                    className="col-span-2"
+                    inputClassName="intake-field"
+                  />
                   <input type="text" placeholder="Unit" value={form.unit}
                     onChange={e => set('unit', e.target.value)}
                     className="intake-field" />

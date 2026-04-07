@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import PipelineBoard from '@/components/PipelineBoard';
+import AddressAutocomplete, { ParsedAddress } from '@/components/AddressAutocomplete';
 import InvoiceSection from '@/components/sections/InvoiceSection';
 import { toast } from 'sonner';
 import { nanoid } from 'nanoid';
@@ -894,11 +895,19 @@ export default function CustomerSection() {
           <div className="card-section-body space-y-3">
             <div>
               <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Street Address</label>
-              <div className="relative">
-                <MapPin size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <input type="text" value={jobInfo.address} onChange={e => setJobInfo({ address: e.target.value })}
-                  placeholder="1234 Main St" className="field-input w-full pl-9" />
-              </div>
+              <AddressAutocomplete
+                value={jobInfo.address}
+                onChange={v => setJobInfo({ address: v })}
+                onAddressSelect={(parsed: ParsedAddress) => {
+                  setJobInfo({
+                    address: parsed.street,
+                    city: parsed.city || jobInfo.city,
+                    state: parsed.state || jobInfo.state,
+                    zip: parsed.zip || jobInfo.zip,
+                  });
+                }}
+                placeholder="1234 Main St"
+              />
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="col-span-1">

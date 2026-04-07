@@ -263,3 +263,10 @@
 - [x] Gate includes "Get Client Sign-Off" button that opens InvoicePrintView
 - [x] After sign-off: green confirmation banner shows signer name and date; payment buttons unlock
 - [x] Sign-off captured via existing SignatureCanvas in InvoicePrintView ("Sign Job Complete" button)
+
+## Google Places Autocomplete — Address Inputs
+
+- [x] Build reusable AddressAutocomplete component (Google Places, auto-fill city/state/zip, Vancouver WA bias)
+- [x] Wire AddressAutocomplete into NewCustomerModal street address field
+- [x] Wire AddressAutocomplete into CustomerSection street address field
+- [x] Wire AddressAutocomplete into JobDetailsSection street address field

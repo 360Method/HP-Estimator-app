@@ -21,6 +21,7 @@ import {
   ExternalLink, Edit3, ChevronDown, CalendarDays, ClipboardList, Download, ImageIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import AddressAutocomplete, { ParsedAddress } from '@/components/AddressAutocomplete';
 
 const STAGE_COLORS: Record<string, string> = {
   'New Job':                  'bg-blue-100 text-blue-800',
@@ -259,16 +260,19 @@ export default function JobDetailsSection() {
             <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
               Street Address
             </label>
-            <div className="relative">
-              <MapPin size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <input
-                type="text"
-                value={jobInfo.address}
-                onChange={e => setJobInfo({ address: e.target.value })}
-                placeholder="1234 Main St"
-                className="field-input w-full pl-8"
-              />
-            </div>
+            <AddressAutocomplete
+              value={jobInfo.address}
+              onChange={v => setJobInfo({ address: v })}
+              onAddressSelect={(parsed: ParsedAddress) => {
+                setJobInfo({
+                  address: parsed.street,
+                  city: parsed.city || jobInfo.city,
+                  state: parsed.state || jobInfo.state,
+                  zip: parsed.zip || jobInfo.zip,
+                });
+              }}
+              placeholder="1234 Main St"
+            />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="col-span-1">
