@@ -556,7 +556,7 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
         // Restore snapshot or start fresh
         jobInfo: snap?.jobInfo ?? freshJobInfo,
         global: snap?.global ?? { markupPct: DEFAULTS.markupPct, laborRate: DEFAULTS.laborRate, paintRate: DEFAULTS.paintRate },
-        phases: snap?.phases ?? ALL_PHASES,
+        phases: snap?.phases ? mergePhasesWithCatalog(snap.phases as any[]) : ALL_PHASES,
         customItems: snap?.customItems ?? [],
         fieldNotes: snap?.fieldNotes ?? '',
         summaryNotes: snap?.summaryNotes ?? '',
@@ -1394,7 +1394,11 @@ interface EstimatorContextValue {
 
 const EstimatorContext = createContext<EstimatorContextValue | null>(null);
 
-const STORAGE_KEY = 'hp-field-estimator-v1';
+// Bump this version whenever ALL_PHASES catalog rates change — forces a phases refresh
+// while preserving all customer/opportunity/invoice data.
+// v1 → v2: door casing (p11-dc) rates corrected to per-opening ($85/$130/$220)
+const STORAGE_KEY = 'hp-field-estimator-v2';
+const LEGACY_STORAGE_KEY = 'hp-field-estimator-v1';
 
 const SIGNED_EST_PREFIX = 'hp-signed-est-';
 
@@ -1408,9 +1412,42 @@ export function loadSignedEstimate(oppId: string): string | null {
   try { return localStorage.getItem(`${SIGNED_EST_PREFIX}${oppId}`); } catch { return null; }
 }
 
+/**
+ * Merge persisted per-item user data (qty, notes, tier, selectedDimension, markupPct, enabled)
+ * onto the fresh ALL_PHASES catalog so rate/dimension changes in code always take effect.
+ */
+function mergePhasesWithCatalog(persistedPhases: any[]): typeof ALL_PHASES {
+  return ALL_PHASES.map(catalogPhase => ({
+    ...catalogPhase,
+    items: catalogPhase.items.map(catalogItem => {
+      const persistedPhase = persistedPhases.find((p: any) => p.id === catalogPhase.id);
+      const persistedItem = persistedPhase?.items?.find((i: any) => i.id === catalogItem.id);
+      if (!persistedItem) return catalogItem;
+      // Preserve only user-entered fields; all catalog fields (rates, tiers, dimensions) come fresh
+      return {
+        ...catalogItem,
+        qty: persistedItem.qty ?? catalogItem.qty,
+        notes: persistedItem.notes ?? catalogItem.notes,
+        tier: persistedItem.tier ?? catalogItem.tier,
+        selectedDimension: persistedItem.selectedDimension ?? catalogItem.selectedDimension,
+        markupPct: persistedItem.markupPct ?? catalogItem.markupPct,
+        enabled: persistedItem.enabled ?? catalogItem.enabled,
+        paintPrep: persistedItem.paintPrep ?? catalogItem.paintPrep,
+        salesSelected: persistedItem.salesSelected ?? catalogItem.salesSelected,
+      };
+    }),
+  }));
+}
+
 function loadPersistedState(): EstimatorState {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    // Try current version key first; fall back to legacy key for migration
+    let raw = localStorage.getItem(STORAGE_KEY);
+    let isLegacy = false;
+    if (!raw) {
+      raw = localStorage.getItem(LEGACY_STORAGE_KEY);
+      isLegacy = !!raw;
+    }
     if (!raw) return initialState;
     const parsed = JSON.parse(raw) as Partial<EstimatorState>;
     // Restore signed estimate PNGs from their separate localStorage keys
@@ -1426,10 +1463,19 @@ function loadPersistedState(): EstimatorState {
       ...c,
       opportunities: (c.opportunities ?? []).map(restoreOpp),
     }));
+    // Always merge phases with fresh catalog so rate changes in code take effect immediately
+    const mergedPhases = parsed.phases
+      ? mergePhasesWithCatalog(parsed.phases as any[])
+      : ALL_PHASES;
+    // If migrating from legacy key, clear the old key
+    if (isLegacy) {
+      try { localStorage.removeItem(LEGACY_STORAGE_KEY); } catch { /* ignore */ }
+    }
     // Merge with initialState so new fields added in code are always present
     return {
       ...initialState,
       ...parsed,
+      phases: mergedPhases,
       opportunities: restoredOpps,
       customers: restoredCustomers,
       // Always reset transient UI state on reload

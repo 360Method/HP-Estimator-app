@@ -425,3 +425,9 @@
 ## Door Casing Tier Card Display Fix
 
 - [x] Tier cards for opening-type items show per-opening cost breakdown note (e.g. "~26 LF × $3.27/lf mat + labor") below the rate — derived from dimension LF note
+
+## localStorage Phase Migration Fix
+
+- [x] Bump STORAGE_KEY to v2; legacy v1 data migrated automatically on first load then cleared
+- [x] mergePhasesWithCatalog() merges fresh catalog rates with persisted qty/notes/tier/dimension — customer/opportunity/invoice data preserved
+- [x] SET_ACTIVE_OPPORTUNITY also applies mergePhasesWithCatalog to snapshot phases so old estimates get fresh rates
