@@ -265,7 +265,7 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
           {!searchOpen && (
             <div className="hidden sm:flex items-center gap-1">
               <button
-                onClick={() => handleBackendNav('Settings')}
+                onClick={() => setOverlay('settings')}
                 title="Settings"
                 className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
               >
