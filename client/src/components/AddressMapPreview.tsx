@@ -2,14 +2,9 @@
  * AddressMapPreview
  * -----------------
  * Small embedded Google Map showing a pin at a given address.
- * Loads the Maps SDK lazily (shared with AddressAutocomplete).
- * Falls back gracefully if the SDK fails to load.
- *
- * Props
- *   address  – full address string OR individual parts
- *   lat/lng  – optional pre-geocoded coordinates (skips geocoding)
- *   height   – CSS height string (default "160px")
- *   className – extra wrapper classes
+ * Uses the shared SDK loader (no duplicate script injection).
+ * Uses classic google.maps.Marker (NOT AdvancedMarkerElement) for
+ * iOS Safari / WebKit compatibility.
  */
 
 /// <reference types="@types/google.maps" />
@@ -17,28 +12,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { MapPin, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-const API_KEY = import.meta.env.VITE_FRONTEND_FORGE_API_KEY as string;
-const FORGE_BASE_URL =
-  (import.meta.env.VITE_FRONTEND_FORGE_API_URL as string) ||
-  'https://forge.butterfly-effect.dev';
-const MAPS_PROXY_URL = `${FORGE_BASE_URL}/v1/maps/proxy`;
-
-let mapsLoadPromise: Promise<void> | null = null;
-function loadMapsSDK(): Promise<void> {
-  if (window.google?.maps?.places) return Promise.resolve();
-  if (mapsLoadPromise) return mapsLoadPromise;
-  mapsLoadPromise = new Promise<void>((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = `${MAPS_PROXY_URL}/maps/api/js?key=${API_KEY}&v=weekly&libraries=marker,places,geocoding,geometry`;
-    script.async = true;
-    script.crossOrigin = 'anonymous';
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Failed to load Google Maps SDK'));
-    document.head.appendChild(script);
-  });
-  return mapsLoadPromise;
-}
+import { loadMapsSDK } from '@/lib/googleMapsLoader';
 
 interface AddressMapPreviewProps {
   /** Pre-built address string, e.g. "1234 Main St, Vancouver, WA 98683" */
@@ -71,13 +45,16 @@ export default function AddressMapPreview({
 }: AddressMapPreviewProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
-  const markerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
+  // Use classic Marker — AdvancedMarkerElement has known iOS Safari crashes
+  const markerRef = useRef<google.maps.Marker | null>(null);
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Build the query string
   const query = addressString
-    ?? [street, city, state && zip ? `${state} ${zip}` : state ?? zip].filter(Boolean).join(', ');
+    ?? [street, city, state && zip ? `${state} ${zip}` : state ?? zip]
+      .filter(Boolean)
+      .join(', ');
 
   const mapsUrl = `https://maps.google.com/?q=${encodeURIComponent(query)}`;
 
@@ -106,8 +83,7 @@ export default function AddressMapPreview({
             });
           });
           if (!result || cancelled) {
-            setLoading(false);
-            setError(true);
+            if (!cancelled) { setLoading(false); setError(true); }
             return;
           }
           lat = result.geometry.location.lat();
@@ -116,43 +92,52 @@ export default function AddressMapPreview({
 
         if (cancelled || !mapContainerRef.current) return;
 
-        const center = { lat, lng };
+        const center = { lat: lat!, lng: lng! };
 
         if (!mapRef.current) {
           mapRef.current = new window.google.maps.Map(mapContainerRef.current, {
             center,
             zoom: 16,
-            mapId: 'DEMO_MAP_ID',
+            // No mapId — required to avoid AdvancedMarker dependency on iOS
             disableDefaultUI: true,
-            zoomControl: true,
+            zoomControl: false,
             gestureHandling: 'cooperative',
+            clickableIcons: false,
           });
         } else {
           mapRef.current.setCenter(center);
         }
 
-        // Remove old marker
+        // Remove old marker safely
         if (markerRef.current) {
-          markerRef.current.map = null;
+          markerRef.current.setMap(null);
+          markerRef.current = null;
         }
 
-        markerRef.current = new window.google.maps.marker.AdvancedMarkerElement({
+        // Classic Marker — fully supported on all browsers including iOS Safari
+        markerRef.current = new window.google.maps.Marker({
           map: mapRef.current,
           position: center,
           title: query,
         });
 
-        setLoading(false);
-      } catch {
-        if (!cancelled) {
-          setLoading(false);
-          setError(true);
-        }
+        if (!cancelled) setLoading(false);
+      } catch (e) {
+        console.error('[AddressMapPreview]', e);
+        if (!cancelled) { setLoading(false); setError(true); }
       }
     }
 
     init();
-    return () => { cancelled = true; };
+
+    return () => {
+      cancelled = true;
+      // Clean up marker on unmount to prevent callbacks on detached DOM
+      if (markerRef.current) {
+        markerRef.current.setMap(null);
+        markerRef.current = null;
+      }
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, propLat, propLng]);
 

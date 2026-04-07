@@ -28,6 +28,7 @@ import {
 } from 'react';
 import { MapPin, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { loadMapsSDK } from '@/lib/googleMapsLoader';
 
 export interface ParsedAddress {
   street: string;   // e.g. "1234 Main St"
@@ -57,29 +58,7 @@ interface AddressAutocompleteProps {
   disabled?: boolean;
 }
 
-// ── Maps SDK loader (shared singleton) ───────────────────────────────────────
-const API_KEY = import.meta.env.VITE_FRONTEND_FORGE_API_KEY as string;
-const FORGE_BASE_URL =
-  (import.meta.env.VITE_FRONTEND_FORGE_API_URL as string) ||
-  'https://forge.butterfly-effect.dev';
-const MAPS_PROXY_URL = `${FORGE_BASE_URL}/v1/maps/proxy`;
-
-let mapsLoadPromise: Promise<void> | null = null;
-
-function loadMapsSDK(): Promise<void> {
-  if (window.google?.maps?.places) return Promise.resolve();
-  if (mapsLoadPromise) return mapsLoadPromise;
-  mapsLoadPromise = new Promise<void>((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = `${MAPS_PROXY_URL}/maps/api/js?key=${API_KEY}&v=weekly&libraries=marker,places,geocoding,geometry`;
-    script.async = true;
-    script.crossOrigin = 'anonymous';
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Failed to load Google Maps SDK'));
-    document.head.appendChild(script);
-  });
-  return mapsLoadPromise;
-}
+// SDK loading is handled by the shared singleton in @/lib/googleMapsLoader
 
 // ── Address component parser ──────────────────────────────────────────────────
 function parseComponents(

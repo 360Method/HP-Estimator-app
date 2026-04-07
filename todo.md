@@ -358,3 +358,9 @@
 - [x] System roles (Owner, Admin) locked — cannot be deleted or permission-edited
 - [x] Wire role selector in TeamSettings member rows to use customRoles list
 - [x] Register Roles & Permissions under Team & Permissions section in SettingsPage sidebar
+
+## iOS Safari Maps Crash Fix
+
+- [x] Fix AddressAutocomplete render loop / DOM mutation crash on iOS Safari (WebKit)
+- [x] Fix AddressMapPreview Safari-incompatible patterns
+- [x] Ensure Maps SDK loads safely on WebKit without triggering removeChild errors
