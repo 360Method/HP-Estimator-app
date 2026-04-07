@@ -440,6 +440,19 @@ function LineItemRow({ item, phaseId, showPaintPrep }: { item: LineItem; phaseId
                           <span className="text-[10px] text-muted-foreground font-normal ml-1">(adj.)</span>
                         )}
                       </div>
+                      {/* For opening-type items, show the LF breakdown note */}
+                      {item.unitType === 'opening' && (
+                        <div className="text-[10px] text-muted-foreground font-normal mt-0.5 leading-tight">
+                          {item.unitType === 'opening' && (() => {
+                            // Derive approximate LF from selected dimension note, or default to ~26 LF
+                            const dim = item.dimensionOptions?.find(d => d.value === (item.selectedDimension ?? item.dimensionOptions?.[0]?.value));
+                            const lfNote = dim?.note?.match(/(\d+)\s*LF/)?.[1];
+                            const lf = lfNote ? parseInt(lfNote) : 26;
+                            const matPerLf = lf > 0 ? displayRate / lf : 0;
+                            return `~${lf} LF × ${fmtDollarCents(matPerLf)}/lf mat + labor`;
+                          })()}
+                        </div>
+                      )}
                     </button>
                   );
                 })}

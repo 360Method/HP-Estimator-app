@@ -421,3 +421,7 @@
 - [x] Raise door casing rates to reflect both-sides-of-door reality: each opening = 2 faces × (2×height + door width) ≈ 26–28 LF of casing per opening
 - [x] Update Good/Better/Best rates for p11-dc (Door Casing) accordingly: Good $85, Better $130, Best $220
 - [x] Add per-opening note in dimension options explaining the both-sides assumption
+
+## Door Casing Tier Card Display Fix
+
+- [x] Tier cards for opening-type items show per-opening cost breakdown note (e.g. "~26 LF × $3.27/lf mat + labor") below the rate — derived from dimension LF note
