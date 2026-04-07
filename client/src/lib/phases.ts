@@ -851,17 +851,17 @@ const phase11: PhaseGroup = {
       ]),
     matItem('p11-dc', 'Door Casing', 'Door casing', 'opening',
       tiers(
-        // Rate is per OPENING (both sides of door) — each opening ≈ 26–32 LF of casing
-        // (2 faces × (2 × door height + door width) ÷ 12 ≈ 26–32 LF)
-        // Good: ~26 LF × $3.20/lf mat + labor ≈ $85
-        // Better: ~26 LF × $4.50/lf mat + labor ≈ $130
-        // Best: ~26 LF × $7.50/lf mat + labor ≈ $220
-        85,'Finger-joint pine, primed','Colonial 2.5" — paint-grade, both sides',
-        130,'MDF colonial casing, primed','Colonial 3.5" — smooth MDF, both sides',
-        220,'Solid poplar, unfinished','Colonial 3.5" — stain-grade, both sides'
+        // MATERIAL COST ONLY per opening (both sides of door) — ~26 LF of casing per standard opening
+        // Labor is separate: 2.5 hrs/opening × $95/hr = $237.50 shown as a distinct line
+        // Good:   26 LF × $1.20/lf = ~$31  (FJ pine, primed)
+        // Better: 26 LF × $1.80/lf = ~$47  (MDF colonial)
+        // Best:   26 LF × $3.50/lf = ~$91  (solid poplar)
+        31,'Finger-joint pine, primed','Colonial 2.5" — paint-grade, both sides',
+        47,'MDF colonial casing, primed','Colonial 3.5" — smooth MDF, both sides',
+        91,'Solid poplar, unfinished','Colonial 3.5" — stain-grade, both sides'
       ),
-      1.5, L_CARP,
-      'Door casing installation — colonial or craftsman profiles. Rate is per opening (both sides of door).',
+      2.5, L_CARP,
+      'Door casing installation — colonial or craftsman profiles. Material rate is per opening (both sides of door, ~26 LF). Labor billed separately at 2.5 hrs/opening.',
       'Door casing — {qty} opening(s) ({tier} grade)', 10, true,
       false, '',
       [

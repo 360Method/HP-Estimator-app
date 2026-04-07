@@ -449,7 +449,7 @@ function LineItemRow({ item, phaseId, showPaintPrep }: { item: LineItem; phaseId
                             const lfNote = dim?.note?.match(/(\d+)\s*LF/)?.[1];
                             const lf = lfNote ? parseInt(lfNote) : 26;
                             const matPerLf = lf > 0 ? displayRate / lf : 0;
-                            return `~${lf} LF × ${fmtDollarCents(matPerLf)}/lf mat + labor`;
+                            return `~${lf} LF × ${fmtDollarCents(matPerLf)}/lf (mat only — labor separate)`;
                           })()}
                         </div>
                       )}

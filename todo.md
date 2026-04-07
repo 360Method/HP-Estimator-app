@@ -431,3 +431,9 @@
 - [x] Bump STORAGE_KEY to v2; legacy v1 data migrated automatically on first load then cleared
 - [x] mergePhasesWithCatalog() merges fresh catalog rates with persisted qty/notes/tier/dimension — customer/opportunity/invoice data preserved
 - [x] SET_ACTIVE_OPPORTUNITY also applies mergePhasesWithCatalog to snapshot phases so old estimates get fresh rates
+
+## Door Casing Material vs Labor Split
+
+- [x] Tier card rate now shows material cost only: Good $31, Better $47, Best $91 per opening (~26 LF)
+- [x] Labor is separate: 2.5 hrs/opening × $95/hr = $237.50 shown as distinct labor line in breakdown
+- [x] Tier card note updated to read '(mat only — labor separate)'
