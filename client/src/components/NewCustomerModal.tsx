@@ -168,9 +168,10 @@ export default function NewCustomerModal({ onClose, onCreated }: Props) {
 
               {/* Row 2: Display name, Home phone, Role */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <input type="text" placeholder="Display name (shown on invoices)"
+                <input type="text" placeholder="Display name (First + Last)"
                   value={form.displayName} onChange={e => set('displayName', e.target.value)}
-                  className="intake-field sm:col-span-1" />
+                  className="intake-field sm:col-span-1"
+                  title="Auto-built from First + Last name. Edit to override." />
                 <input type="tel" placeholder="Home phone"
                   value={form.homePhone} onChange={e => set('homePhone', e.target.value)}
                   className="intake-field" />
