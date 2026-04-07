@@ -27,9 +27,10 @@ import JobFieldsSettings from './JobFieldsSettings';
 import LeadSourcesSettings from './LeadSourcesSettings';
 import TagsSettings from './TagsSettings';
 import IntegrationsSettings from './IntegrationsSettings';
+import RolesSettings from './RolesSettings';
 
 export type SettingsSection =
-  | 'company' | 'billing' | 'notifications' | 'team'
+  | 'company' | 'billing' | 'notifications' | 'team' | 'roles'
   | 'estimates' | 'invoices' | 'jobs' | 'leads' | 'pipeline' | 'price-book'
   | 'checklists' | 'job-fields' | 'lead-sources' | 'tags'
   | 'integrations';
@@ -47,6 +48,7 @@ const NAV_GROUPS: NavGroup[] = [
       { id: 'billing',       label: 'Billing',           icon: CreditCard },
       { id: 'notifications', label: 'Notifications',     icon: Bell       },
       { id: 'team',          label: 'Team & Permissions', icon: Users      },
+      { id: 'roles',         label: 'Roles & Permissions', icon: Settings   },
     ],
   },
   {
@@ -105,6 +107,7 @@ export default function SettingsPage({ onBack, initialSection = 'company' }: Pro
       case 'billing':       return <BillingSettings />;
       case 'notifications': return <NotificationsSettings />;
       case 'team':          return <TeamSettings />;
+      case 'roles':         return <RolesSettings />;
       case 'estimates':     return <EstimatesSettings />;
       case 'invoices':      return <InvoicesSettings />;
       case 'jobs':          return <JobsSettings />;

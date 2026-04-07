@@ -347,3 +347,14 @@
 
 ### Integrations
 - [x] Integrations page: 9 integrations across 6 categories, Stripe + Google Maps pre-connected
+
+## Custom Roles & Permissions Builder
+
+- [x] CustomRole type: id, name, description, color, isSystem (bool), permissions (Record<module, {view,create,edit,delete,manage}>)
+- [x] Permission modules: Customers, Leads, Estimates, Jobs, Invoices, Pipeline, Schedule, Reports, Marketing, Settings, Team, Price Book
+- [x] Add customRoles[] to EstimatorState with 5 pre-built system roles (Owner, Admin, Estimator, Field Tech, Office Manager)
+- [x] RolesSettings page: role cards list, + Create Role button, edit/delete per role
+- [x] Role editor modal: name, description, color, per-module permission toggles (View/Create/Edit/Delete/Manage), presets (Full Access / Read Only / Custom)
+- [x] System roles (Owner, Admin) locked — cannot be deleted or permission-edited
+- [x] Wire role selector in TeamSettings member rows to use customRoles list
+- [x] Register Roles & Permissions under Team & Permissions section in SettingsPage sidebar

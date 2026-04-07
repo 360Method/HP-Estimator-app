@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Users, Crown, Shield, Hammer, Clipboard, UserPlus, Trash2, Mail, ChevronDown } from 'lucide-react';
+import { Users, Crown, Shield, Hammer, Clipboard, UserPlus, Trash2, Mail, ChevronDown, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
+import { useEstimator } from '@/contexts/EstimatorContext';
 
 type Role = 'Owner' | 'Admin' | 'Estimator' | 'Field Tech' | 'Office Manager';
 
@@ -57,12 +58,19 @@ const INITIAL_TEAM: TeamMember[] = [
 const ROLES: Role[] = ['Owner', 'Admin', 'Estimator', 'Field Tech', 'Office Manager'];
 
 export default function TeamSettings() {
+  const { state } = useEstimator();
   const [team, setTeam] = useState<TeamMember[]>(INITIAL_TEAM);
   const [showInvite, setShowInvite] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<Role>('Field Tech');
   const [inviteName, setInviteName] = useState('');
   const [tab, setTab] = useState<'members' | 'permissions'>('members');
+
+  // Merge system role names with any custom role names for the invite selector
+  const allRoleNames = [
+    ...ROLES.filter(r => r !== 'Owner'),
+    ...state.customRoles.filter(r => !r.isSystem).map(r => r.name as Role),
+  ].filter((v, i, a) => a.indexOf(v) === i);
 
   const sendInvite = () => {
     if (!inviteEmail || !inviteName) { toast.error('Name and email are required'); return; }
@@ -125,7 +133,7 @@ export default function TeamSettings() {
               <label className="field-label">Role</label>
               <div className="relative">
                 <select value={inviteRole} onChange={e => setInviteRole(e.target.value as Role)} className="field-input pr-8 appearance-none">
-                  {ROLES.filter(r => r !== 'Owner').map(r => <option key={r}>{r}</option>)}
+                  {allRoleNames.map(r => <option key={r}>{r}</option>)}
                 </select>
                 <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
               </div>
@@ -248,6 +256,32 @@ export default function TeamSettings() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </section>
+      )}
+
+      {/* Custom roles notice */}
+      {state.customRoles.filter(r => !r.isSystem).length > 0 && (
+        <section className="card-section border-primary/20">
+          <div className="card-section-header">
+            <Shield size={13} className="text-primary" />
+            <span className="text-xs font-bold uppercase tracking-wider text-primary">Custom Roles Active</span>
+            <span className="ml-auto text-xs text-muted-foreground">
+              {state.customRoles.filter(r => !r.isSystem).length} custom role{state.customRoles.filter(r => !r.isSystem).length !== 1 ? 's' : ''} defined
+            </span>
+          </div>
+          <div className="card-section-body">
+            <div className="flex flex-wrap gap-2">
+              {state.customRoles.filter(r => !r.isSystem).map(role => (
+                <span key={role.id} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold text-white" style={{ backgroundColor: role.color }}>
+                  <Shield size={9} /> {role.name}
+                </span>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground mt-2">
+              Custom roles are available in the invite form above. Manage them in{' '}
+              <span className="text-primary font-semibold">Settings → Roles & Permissions</span>.
+            </p>
           </div>
         </section>
       )}

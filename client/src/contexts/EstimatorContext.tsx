@@ -8,7 +8,7 @@ import {
   LineItem, CustomLineItem, EstimateLineOverride,
   Opportunity, PipelineArea, CustomerProfile, ActivityEvent, CustomerProfileTab,
   OpportunityStage, Customer, Invoice, InvoiceLineItem, ScheduleEvent,
-  EstimateSnapshot, CustomerAddress, JobTask, JobAttachment,
+  EstimateSnapshot, CustomerAddress, JobTask, JobAttachment, CustomRole,
 } from '@/lib/types';
 import { ALL_PHASES, DEFAULTS } from '@/lib/phases';
 import { generateProjectSchedule } from '@/lib/generateProjectSchedule';
@@ -94,6 +94,62 @@ const initialState: EstimatorState = {
     role: 'Owner',
     bio: '',
   },
+  // Custom roles (5 system roles pre-built)
+  customRoles: [
+    {
+      id: 'owner', name: 'Owner', description: 'Full access to everything. Cannot be modified.',
+      color: '#7c3aed', isSystem: true,
+      permissions: Object.fromEntries(
+        ['customers','leads','estimates','jobs','invoices','pipeline','schedule','reports','marketing','settings','team','priceBook']
+          .map(m => [m, { view: true, create: true, edit: true, delete: true, manage: true }])
+      ),
+    },
+    {
+      id: 'admin', name: 'Admin', description: 'Full access except owner-level billing and account deletion.',
+      color: '#0ea5e9', isSystem: true,
+      permissions: Object.fromEntries(
+        ['customers','leads','estimates','jobs','invoices','pipeline','schedule','reports','marketing','settings','team','priceBook']
+          .map(m => [m, { view: true, create: true, edit: true, delete: true, manage: m !== 'settings' }])
+      ),
+    },
+    {
+      id: 'estimator', name: 'Estimator', description: 'Can create and manage estimates and leads. No access to invoices or settings.',
+      color: '#10b981', isSystem: true,
+      permissions: {
+        customers: { view: true, create: true, edit: true, delete: false, manage: false },
+        leads: { view: true, create: true, edit: true, delete: false, manage: false },
+        estimates: { view: true, create: true, edit: true, delete: false, manage: false },
+        jobs: { view: true, create: false, edit: false, delete: false, manage: false },
+        invoices: { view: true, create: false, edit: false, delete: false, manage: false },
+        pipeline: { view: true, create: false, edit: false, delete: false, manage: false },
+        schedule: { view: true, create: true, edit: true, delete: false, manage: false },
+        priceBook: { view: true, create: false, edit: false, delete: false, manage: false },
+      },
+    },
+    {
+      id: 'field-tech', name: 'Field Tech', description: 'View assigned jobs and update job status. No financial access.',
+      color: '#f59e0b', isSystem: true,
+      permissions: {
+        customers: { view: true, create: false, edit: false, delete: false, manage: false },
+        jobs: { view: true, create: false, edit: true, delete: false, manage: false },
+        schedule: { view: true, create: false, edit: false, delete: false, manage: false },
+      },
+    },
+    {
+      id: 'office-manager', name: 'Office Manager', description: 'Full access to customers, invoices, and scheduling. Cannot manage settings or team.',
+      color: '#ec4899', isSystem: true,
+      permissions: {
+        customers: { view: true, create: true, edit: true, delete: false, manage: false },
+        leads: { view: true, create: true, edit: true, delete: false, manage: false },
+        estimates: { view: true, create: false, edit: false, delete: false, manage: false },
+        jobs: { view: true, create: false, edit: true, delete: false, manage: false },
+        invoices: { view: true, create: true, edit: true, delete: false, manage: true },
+        pipeline: { view: true, create: false, edit: false, delete: false, manage: false },
+        schedule: { view: true, create: true, edit: true, delete: true, manage: true },
+        reports: { view: true, create: false, edit: false, delete: false, manage: false },
+      },
+    },
+  ] as CustomRole[],
 };
 
 // ── Helper: build an ActivityEvent without id/timestamp ──────
@@ -191,7 +247,9 @@ type Action =
       sowDocument?: string;           // generated SOW text to attach to job
       jobStartDate?: string;          // ISO date string for project start (defaults to today+7)
     }
-  | { type: 'UPDATE_USER_PROFILE'; payload: Partial<import('@/lib/types').UserProfile> };
+  | { type: 'UPDATE_USER_PROFILE'; payload: Partial<import('@/lib/types').UserProfile> }
+  | { type: 'UPSERT_CUSTOM_ROLE'; role: CustomRole }
+  | { type: 'REMOVE_CUSTOM_ROLE'; id: string };
 
 function makeActivity(
   type: ActivityEvent['type'],
@@ -1210,6 +1268,19 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
     case 'UPDATE_USER_PROFILE':
       return { ...state, userProfile: { ...state.userProfile, ...action.payload } };
 
+    case 'UPSERT_CUSTOM_ROLE': {
+      const exists = state.customRoles.some(r => r.id === action.role.id);
+      return {
+        ...state,
+        customRoles: exists
+          ? state.customRoles.map(r => r.id === action.role.id ? action.role : r)
+          : [...state.customRoles, action.role],
+      };
+    }
+
+    case 'REMOVE_CUSTOM_ROLE':
+      return { ...state, customRoles: state.customRoles.filter(r => r.id !== action.id) };
+
     case 'UPDATE_OPPORTUNITY_SCHEDULE': {
       const now = new Date().toISOString();
       const updatedOpps = state.opportunities.map(o =>
@@ -1316,6 +1387,9 @@ interface EstimatorContextValue {
   addJobActivity: (oppId: string, event: Omit<ActivityEvent, 'id' | 'timestamp'>) => void;
   // User profile
   updateUserProfile: (payload: Partial<import('@/lib/types').UserProfile>) => void;
+  // Custom roles
+  upsertCustomRole: (role: CustomRole) => void;
+  removeCustomRole: (id: string) => void;
 }
 
 const EstimatorContext = createContext<EstimatorContextValue | null>(null);
@@ -1607,6 +1681,14 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'UPDATE_USER_PROFILE', payload });
   }, []);
 
+  const upsertCustomRole = useCallback((role: CustomRole) => {
+    dispatch({ type: 'UPSERT_CUSTOM_ROLE', role });
+  }, []);
+
+  const removeCustomRole = useCallback((id: string) => {
+    dispatch({ type: 'REMOVE_CUSTOM_ROLE', id });
+  }, []);
+
   return (
     <EstimatorContext.Provider value={{
       state, setSection, setJobInfo, setGlobal, updateItem,
@@ -1630,6 +1712,8 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
       addJobAttachment, removeJobAttachment,
       addJobActivity,
       updateUserProfile,
+      upsertCustomRole,
+      removeCustomRole,
     }}>
       {children}
     </EstimatorContext.Provider>

@@ -419,6 +419,26 @@ export interface EstimatorState {
   scheduleFilterJobId: string | null;
   // Current user profile (persisted locally)
   userProfile: UserProfile;
+  // Custom roles & permissions
+  customRoles: CustomRole[];
+}
+
+// ── Custom Roles & Permissions ─────────────────────────────
+export type PermissionAction = 'view' | 'create' | 'edit' | 'delete' | 'manage';
+export type PermissionModule =
+  | 'customers' | 'leads' | 'estimates' | 'jobs' | 'invoices'
+  | 'pipeline' | 'schedule' | 'reports' | 'marketing'
+  | 'settings' | 'team' | 'priceBook';
+
+export type RolePermissions = Partial<Record<PermissionModule, Partial<Record<PermissionAction, boolean>>>>;
+
+export interface CustomRole {
+  id: string;
+  name: string;
+  description: string;
+  color: string;          // hex color for role badge
+  isSystem: boolean;      // true = cannot be deleted or permission-edited
+  permissions: RolePermissions;
 }
 
 // ── User Profile ────────────────────────────────────────────
