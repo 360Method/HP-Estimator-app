@@ -29,6 +29,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import PipelineBoard from '@/components/PipelineBoard';
 import AddressAutocomplete, { ParsedAddress } from '@/components/AddressAutocomplete';
+import AddressMapPreview from '@/components/AddressMapPreview';
 import InvoiceSection from '@/components/sections/InvoiceSection';
 import { toast } from 'sonner';
 import { nanoid } from 'nanoid';
@@ -531,12 +532,19 @@ export default function CustomerSection() {
     addOpportunity, updateOpportunity, removeOpportunity, setPipelineArea,
     convertLeadToEstimate, convertEstimateToJob, archiveJob,
     setActiveOpportunity, setSection,
+    addCustomerAddress, updateCustomerAddress, removeCustomerAddress, setPrimaryAddress,
   } = useEstimator();
-  const { jobInfo, customerProfile, activityFeed, activeCustomerTab, opportunities, activePipelineArea } = state;
+  const { jobInfo, customerProfile, activityFeed, activeCustomerTab, opportunities, activePipelineArea, activeCustomerId, customers } = state;
+  const activeCustomer = customers.find(c => c.id === activeCustomerId);
 
   const [newTag, setNewTag] = useState('');
   const [editingContact, setEditingContact] = useState(false);
   const [newNote, setNewNote] = useState('');
+  // Multi-address state
+  const [addingAddress, setAddingAddress] = useState(false);
+  const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
+  const [addrForm, setAddrForm] = useState({ label: 'Home', street: '', unit: '', city: 'Vancouver', state: 'WA', zip: '', lat: undefined as number | undefined, lng: undefined as number | undefined });
+  const [addrLatLng, setAddrLatLng] = useState<{ lat?: number; lng?: number }>({}); // for map preview in form
 
   // ── Derived ──
   const displayName = jobInfo.client || 'New Customer';
@@ -886,56 +894,126 @@ export default function CustomerSection() {
         </div>
         )}
 
-        {/* Addresses */}
+        {/* Addresses — multi-address */}
         <div className="card-section">
           <div className="card-section-header text-xs font-semibold uppercase tracking-wider">
             <MapPin size={13} />
-            <span>Address</span>
+            <span>Addresses</span>
+            <button
+              onClick={() => { setAddingAddress(true); setEditingAddressId(null); setAddrForm({ label: 'Home', street: '', unit: '', city: 'Vancouver', state: 'WA', zip: '', lat: undefined, lng: undefined }); setAddrLatLng({}); }}
+              className="ml-auto inline-flex items-center gap-1 text-xs text-primary hover:underline font-medium"
+            >
+              <Plus size={11} /> Add Address
+            </button>
           </div>
-          <div className="card-section-body space-y-3">
-            <div>
-              <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Street Address</label>
-              <AddressAutocomplete
-                value={jobInfo.address}
-                onChange={v => setJobInfo({ address: v })}
-                onAddressSelect={(parsed: ParsedAddress) => {
-                  setJobInfo({
-                    address: parsed.street,
-                    city: parsed.city || jobInfo.city,
-                    state: parsed.state || jobInfo.state,
-                    zip: parsed.zip || jobInfo.zip,
-                  });
-                }}
-                placeholder="1234 Main St"
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="col-span-1">
-                <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">City</label>
-                <input type="text" value={jobInfo.city} onChange={e => setJobInfo({ city: e.target.value })}
-                  placeholder="Vancouver" className="field-input w-full" />
+          <div className="card-section-body space-y-4">
+            {/* Existing addresses */}
+            {(activeCustomer?.addresses ?? []).length === 0 && !addingAddress && (
+              <p className="text-xs text-muted-foreground">No addresses on file.</p>
+            )}
+            {(activeCustomer?.addresses ?? []).map(addr => (
+              <div key={addr.id} className="rounded-lg border border-border overflow-hidden">
+                {/* Address row header */}
+                <div className="flex items-center gap-2 px-3 py-2 bg-muted/30 border-b border-border">
+                  <span className="text-xs font-semibold text-foreground">{addr.label}</span>
+                  {addr.isPrimary && (
+                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-primary/10 text-primary">Primary</span>
+                  )}
+                  <div className="ml-auto flex items-center gap-2">
+                    {!addr.isPrimary && (
+                      <button
+                        onClick={() => activeCustomerId && setPrimaryAddress(activeCustomerId, addr.id)}
+                        className="text-[11px] text-muted-foreground hover:text-primary"
+                      >Set Primary</button>
+                    )}
+                    <button
+                      onClick={() => {
+                        setEditingAddressId(addr.id);
+                        setAddingAddress(false);
+                        setAddrForm({ label: addr.label, street: addr.street, unit: addr.unit, city: addr.city, state: addr.state, zip: addr.zip, lat: addr.lat, lng: addr.lng });
+                        setAddrLatLng({ lat: addr.lat, lng: addr.lng });
+                      }}
+                      className="text-[11px] text-muted-foreground hover:text-foreground"
+                    ><Edit3 size={11} /></button>
+                    <button
+                      onClick={() => activeCustomerId && removeCustomerAddress(activeCustomerId, addr.id)}
+                      className="text-[11px] text-muted-foreground hover:text-destructive"
+                    ><Trash2 size={11} /></button>
+                  </div>
+                </div>
+                {/* Address details + map */}
+                {editingAddressId === addr.id ? (
+                  <div className="p-3 space-y-2">
+                    <input value={addrForm.label} onChange={e => setAddrForm(f => ({ ...f, label: e.target.value }))} placeholder="Label (Home, Rental…)" className="field-input w-full text-xs" />
+                    <AddressAutocomplete
+                      value={addrForm.street}
+                      onChange={v => setAddrForm(f => ({ ...f, street: v }))}
+                      onAddressSelect={(p: ParsedAddress) => {
+                        setAddrForm(f => ({ ...f, street: p.street, unit: p.unit || f.unit, city: p.city || f.city, state: p.state || f.state, zip: p.zip || f.zip, lat: p.lat, lng: p.lng }));
+                        setAddrLatLng({ lat: p.lat, lng: p.lng });
+                      }}
+                      placeholder="Street"
+                    />
+                    <div className="grid grid-cols-3 gap-2">
+                      <input value={addrForm.city} onChange={e => setAddrForm(f => ({ ...f, city: e.target.value }))} placeholder="City" className="field-input text-xs" />
+                      <input value={addrForm.state} onChange={e => setAddrForm(f => ({ ...f, state: e.target.value }))} placeholder="State" className="field-input text-xs" />
+                      <input value={addrForm.zip} onChange={e => setAddrForm(f => ({ ...f, zip: e.target.value }))} placeholder="Zip" className="field-input text-xs" />
+                    </div>
+                    {addrForm.street && <AddressMapPreview street={addrForm.street} city={addrForm.city} state={addrForm.state} zip={addrForm.zip} lat={addrLatLng.lat} lng={addrLatLng.lng} height="120px" showLink={false} />}
+                    <div className="flex gap-2">
+                      <button onClick={() => {
+                        if (!activeCustomerId) return;
+                        updateCustomerAddress(activeCustomerId, addr.id, { label: addrForm.label, street: addrForm.street, unit: addrForm.unit, city: addrForm.city, state: addrForm.state, zip: addrForm.zip, lat: addrForm.lat, lng: addrForm.lng });
+                        // Sync jobInfo if this is primary
+                        if (addr.isPrimary) setJobInfo({ address: addrForm.street, city: addrForm.city, state: addrForm.state, zip: addrForm.zip });
+                        setEditingAddressId(null);
+                      }} className="flex-1 text-xs bg-primary text-primary-foreground rounded px-2 py-1.5">Save</button>
+                      <button onClick={() => setEditingAddressId(null)} className="text-xs text-muted-foreground hover:text-foreground px-2">Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 space-y-2">
+                    <div className="text-sm">
+                      {[addr.street, addr.unit].filter(Boolean).join(' ')}
+                      {(addr.city || addr.state || addr.zip) && <div className="text-xs text-muted-foreground">{[addr.city, addr.state, addr.zip].filter(Boolean).join(', ')}</div>}
+                    </div>
+                    <AddressMapPreview street={addr.street} city={addr.city} state={addr.state} zip={addr.zip} lat={addr.lat} lng={addr.lng} height="140px" showLink />
+                  </div>
+                )}
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">State</label>
-                <input type="text" value={jobInfo.state} onChange={e => setJobInfo({ state: e.target.value })}
-                  placeholder="WA" className="field-input w-full" />
+            ))}
+
+            {/* Add address form */}
+            {addingAddress && (
+              <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2">
+                <div className="text-xs font-semibold text-foreground mb-1">New Address</div>
+                <input value={addrForm.label} onChange={e => setAddrForm(f => ({ ...f, label: e.target.value }))} placeholder="Label (Home, Rental, Office…)" className="field-input w-full text-xs" />
+                <AddressAutocomplete
+                  value={addrForm.street}
+                  onChange={v => setAddrForm(f => ({ ...f, street: v }))}
+                  onAddressSelect={(p: ParsedAddress) => {
+                    setAddrForm(f => ({ ...f, street: p.street, unit: p.unit || f.unit, city: p.city || f.city, state: p.state || f.state, zip: p.zip || f.zip, lat: p.lat, lng: p.lng }));
+                    setAddrLatLng({ lat: p.lat, lng: p.lng });
+                  }}
+                  placeholder="Street"
+                />
+                <div className="grid grid-cols-3 gap-2">
+                  <input value={addrForm.city} onChange={e => setAddrForm(f => ({ ...f, city: e.target.value }))} placeholder="City" className="field-input text-xs" />
+                  <input value={addrForm.state} onChange={e => setAddrForm(f => ({ ...f, state: e.target.value }))} placeholder="State" className="field-input text-xs" />
+                  <input value={addrForm.zip} onChange={e => setAddrForm(f => ({ ...f, zip: e.target.value }))} placeholder="Zip" className="field-input text-xs" />
+                </div>
+                {addrForm.street && <AddressMapPreview street={addrForm.street} city={addrForm.city} state={addrForm.state} zip={addrForm.zip} lat={addrLatLng.lat} lng={addrLatLng.lng} height="120px" showLink={false} />}
+                <div className="flex gap-2">
+                  <button onClick={() => {
+                    if (!activeCustomerId || !addrForm.street) { toast.error('Street is required'); return; }
+                    const isFirst = (activeCustomer?.addresses ?? []).length === 0;
+                    addCustomerAddress(activeCustomerId, { id: nanoid(), label: addrForm.label || 'Home', street: addrForm.street, unit: addrForm.unit, city: addrForm.city, state: addrForm.state, zip: addrForm.zip, isPrimary: isFirst, lat: addrForm.lat, lng: addrForm.lng });
+                    if (isFirst) setJobInfo({ address: addrForm.street, city: addrForm.city, state: addrForm.state, zip: addrForm.zip });
+                    setAddingAddress(false);
+                  }} className="flex-1 text-xs bg-primary text-primary-foreground rounded px-2 py-1.5">Add Address</button>
+                  <button onClick={() => setAddingAddress(false)} className="text-xs text-muted-foreground hover:text-foreground px-2">Cancel</button>
+                </div>
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Zip</label>
-                <input type="text" value={jobInfo.zip} onChange={e => setJobInfo({ zip: e.target.value })}
-                  placeholder="98683" className="field-input w-full" />
-              </div>
-            </div>
-            {jobInfo.address && (
-              <a
-                href={`https://maps.google.com/?q=${encodeURIComponent([jobInfo.address, jobInfo.city, jobInfo.state, jobInfo.zip].filter(Boolean).join(', '))}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline mt-1"
-              >
-                <ExternalLink size={11} />
-                Open in Google Maps
-              </a>
             )}
           </div>
         </div>

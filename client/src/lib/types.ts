@@ -297,6 +297,19 @@ export interface InvoiceLineItem {
 // ── Customer Record (multi-customer list) ─────────────────
 export type CustomerType = 'homeowner' | 'business';
 
+export interface CustomerAddress {
+  id: string;
+  label: string;          // e.g. 'Home', 'Rental Property', 'Office'
+  street: string;
+  unit: string;
+  city: string;
+  state: string;
+  zip: string;
+  isPrimary: boolean;
+  lat?: number;
+  lng?: number;
+}
+
 export interface Customer {
   id: string;
   // Contact
@@ -311,13 +324,15 @@ export interface Customer {
   role: string;               // e.g. Property Manager
   customerType: CustomerType;
   doNotService: boolean;
-  // Address
+  // Address (legacy flat fields — kept for backward compat)
   street: string;
   unit: string;
   city: string;
   state: string;
   zip: string;
   addressNotes: string;
+  // Multi-address list (primary address mirrors street/city/state/zip)
+  addresses?: CustomerAddress[];
   // Notes
   customerNotes: string;
   billsTo: string;            // billing contact name

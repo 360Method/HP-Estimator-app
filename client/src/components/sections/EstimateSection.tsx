@@ -15,6 +15,7 @@ import {
   CheckCircle2, XCircle, Mail, Presentation, X, FileText,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import AddressMapPreview from '@/components/AddressMapPreview';
 
 const HP_LOGO = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg';
 
@@ -461,6 +462,21 @@ export default function EstimateSection() {
 
         {/* Branded header */}
         <EstimateHeader jobInfo={state.jobInfo} estimateNumber={estimateNumber} today={today} />
+
+        {/* Service address map preview — no-print */}
+        {state.jobInfo.address && (
+          <div className="px-6 py-4 border-b border-border no-print">
+            <div className="text-xs uppercase tracking-widest font-bold text-muted-foreground mb-2">Service Location</div>
+            <AddressMapPreview
+              street={state.jobInfo.address}
+              city={state.jobInfo.city}
+              state={state.jobInfo.state}
+              zip={state.jobInfo.zip}
+              height="160px"
+              showLink
+            />
+          </div>
+        )}
 
         {/* Project overview */}
         {state.jobInfo.scope && (

@@ -28,7 +28,7 @@ import { CSS } from '@dnd-kit/utilities';
 import {
   LayoutGrid, List, Plus, GripVertical, ExternalLink,
   DollarSign, Archive, ArrowRight, ChevronDown, Trash2,
-  ArrowUpDown,
+  ArrowUpDown, MapPin,
 } from 'lucide-react';
 import { Opportunity, PipelineArea, OpportunityStage } from '@/lib/types';
 import { toast } from 'sonner';
@@ -166,6 +166,12 @@ function KanbanCard({
               {opp.notes}
             </div>
           )}
+          {opp.clientSnapshot?.address && (
+            <div className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
+              <MapPin size={9} className="shrink-0" />
+              <span className="truncate">{[opp.clientSnapshot.address, opp.clientSnapshot.city].filter(Boolean).join(', ')}</span>
+            </div>
+          )}
         </div>
 
         <button
@@ -204,6 +210,16 @@ function KanbanCard({
               >
                 <ExternalLink size={10} /> Open
               </button>
+            )}
+            {opp.clientSnapshot?.address && (
+              <a
+                href={`https://maps.google.com/?q=${encodeURIComponent([opp.clientSnapshot.address, opp.clientSnapshot.city, opp.clientSnapshot.state, opp.clientSnapshot.zip].filter(Boolean).join(', '))}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold border border-border rounded-lg text-muted-foreground hover:text-primary hover:border-primary transition-colors"
+              >
+                <MapPin size={10} /> Maps
+              </a>
             )}
             {onConvertToEstimate && (
               <button
@@ -382,6 +398,17 @@ function TableRow({
             >
               Open
             </button>
+          )}
+          {opp.clientSnapshot?.address && (
+            <a
+              href={`https://maps.google.com/?q=${encodeURIComponent([opp.clientSnapshot.address, opp.clientSnapshot.city, opp.clientSnapshot.state, opp.clientSnapshot.zip].filter(Boolean).join(', '))}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-1 text-muted-foreground/50 hover:text-primary transition-colors"
+              title="Open in Google Maps"
+            >
+              <MapPin size={12} />
+            </a>
           )}
           {onConvertToEstimate && (
             <button

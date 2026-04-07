@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import AddressAutocomplete, { ParsedAddress } from '@/components/AddressAutocomplete';
+import AddressMapPreview from '@/components/AddressMapPreview';
 
 const STAGE_COLORS: Record<string, string> = {
   'New Job':                  'bg-blue-100 text-blue-800',
@@ -307,15 +308,14 @@ export default function JobDetailsSection() {
             </div>
           </div>
           {jobInfo.address && (
-            <a
-              href={`https://maps.google.com/?q=${encodeURIComponent([jobInfo.address, jobInfo.city, jobInfo.state, jobInfo.zip].filter(Boolean).join(', '))}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline mt-1"
-            >
-              <ExternalLink size={11} />
-              Open in Google Maps
-            </a>
+            <AddressMapPreview
+              street={jobInfo.address}
+              city={jobInfo.city}
+              state={jobInfo.state}
+              zip={jobInfo.zip}
+              height="160px"
+              showLink
+            />
           )}
         </div>
       </div>

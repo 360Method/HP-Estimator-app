@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import AddressAutocomplete, { ParsedAddress } from '@/components/AddressAutocomplete';
+import AddressMapPreview from '@/components/AddressMapPreview';
 import { X, Plus, MapPin, User, Building2, Phone, Mail, AlertTriangle } from 'lucide-react';
 import { Customer, CustomerType, LeadSource } from '@/lib/types';
 import { nanoid } from 'nanoid';
@@ -60,7 +61,7 @@ const EMPTY: Omit<Customer, 'id' | 'createdAt' | 'lifetimeValue' | 'outstandingB
 export default function NewCustomerModal({ onClose, onCreated }: Props) {
   const [form, setForm] = useState({ ...EMPTY });
   const [tagInput, setTagInput] = useState('');
-  const [mapUrl, setMapUrl] = useState('');
+  const [lastParsedLatLng, setLastParsedLatLng] = useState<{ lat?: number; lng?: number }>({});
   const firstNameRef = useRef<HTMLInputElement>(null);
 
   // Auto-build display name from first + last
@@ -71,15 +72,7 @@ export default function NewCustomerModal({ onClose, onCreated }: Props) {
     }
   }, [form.firstName, form.lastName]);
 
-  // Build static map preview URL when address changes
-  useEffect(() => {
-    const addr = [form.street, form.city, form.state, form.zip].filter(Boolean).join(', ');
-    if (addr.length > 5) {
-      setMapUrl(`https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(addr)}&zoom=14&size=400x200&markers=color:red%7C${encodeURIComponent(addr)}&key=AIzaSyD-placeholder`);
-    } else {
-      setMapUrl('');
-    }
-  }, [form.street, form.city, form.state, form.zip]);
+  // (map preview is handled by AddressMapPreview component)
 
   // Focus first name on open
   useEffect(() => {
@@ -105,12 +98,25 @@ export default function NewCustomerModal({ onClose, onCreated }: Props) {
       toast.error('Please enter at least a first name or display name');
       return;
     }
+    const firstAddressId = nanoid();
     const customer: Customer = {
       ...form,
       id: nanoid(),
       createdAt: new Date().toISOString(),
       lifetimeValue: 0,
       outstandingBalance: 0,
+      addresses: form.street ? [{
+        id: firstAddressId,
+        label: 'Home',
+        street: form.street,
+        unit: form.unit,
+        city: form.city,
+        state: form.state,
+        zip: form.zip,
+        isPrimary: true,
+        lat: lastParsedLatLng.lat,
+        lng: lastParsedLatLng.lng,
+      }] : [],
     };
     onCreated(customer);
     toast.success(`Customer "${customer.displayName || customer.firstName}" created`);
@@ -246,6 +252,7 @@ export default function NewCustomerModal({ onClose, onCreated }: Props) {
                       if (parsed.city) set('city', parsed.city);
                       if (parsed.state) set('state', parsed.state);
                       if (parsed.zip) set('zip', parsed.zip);
+                      setLastParsedLatLng({ lat: parsed.lat, lng: parsed.lng });
                     }}
                     placeholder="Street"
                     className="col-span-2"
@@ -270,33 +277,28 @@ export default function NewCustomerModal({ onClose, onCreated }: Props) {
                 <input type="text" placeholder="Address Notes" value={form.addressNotes}
                   onChange={e => set('addressNotes', e.target.value)}
                   className="intake-field w-full" />
-                <button className="intake-add-btn" onClick={() => toast.info('Multiple address support coming soon')}>
-                  <Plus size={13} /> Address
-                </button>
+
               </div>
 
               {/* Right: map preview */}
-              <div className="rounded-lg overflow-hidden border border-border bg-slate-100 h-44 flex items-center justify-center">
+              <div className="flex flex-col justify-center">
                 {form.street ? (
-                  <div className="w-full h-full relative bg-sky-100 flex items-center justify-center">
-                    {/* Static map placeholder — shows address visually */}
-                    <div className="text-center text-sm text-slate-600 px-4">
-                      <MapPin size={24} className="mx-auto mb-2 text-red-500" />
-                      <div className="font-medium">{[form.street, form.unit].filter(Boolean).join(' ')}</div>
-                      <div className="text-xs text-slate-500">{[form.city, form.state, form.zip].filter(Boolean).join(', ')}</div>
-                      <a
-                        href={`https://maps.google.com/?q=${encodeURIComponent([form.street, form.unit, form.city, form.state, form.zip].filter(Boolean).join(', '))}`}
-                        target="_blank" rel="noopener noreferrer"
-                        className="mt-2 inline-block text-xs text-primary hover:underline"
-                      >
-                        Open in Google Maps →
-                      </a>
-                    </div>
-                  </div>
+                  <AddressMapPreview
+                    street={form.street}
+                    city={form.city}
+                    state={form.state}
+                    zip={form.zip}
+                    lat={lastParsedLatLng.lat}
+                    lng={lastParsedLatLng.lng}
+                    height="176px"
+                    showLink
+                  />
                 ) : (
-                  <div className="text-center text-muted-foreground text-sm">
-                    <MapPin size={20} className="mx-auto mb-1 opacity-30" />
-                    <span className="text-xs">Enter an address to preview</span>
+                  <div className="rounded-lg border border-border bg-slate-50 h-44 flex items-center justify-center">
+                    <div className="text-center text-muted-foreground">
+                      <MapPin size={20} className="mx-auto mb-1 opacity-30" />
+                      <span className="text-xs">Enter an address to preview</span>
+                    </div>
                   </div>
                 )}
               </div>

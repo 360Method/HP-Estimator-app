@@ -270,3 +270,23 @@
 - [x] Wire AddressAutocomplete into NewCustomerModal street address field
 - [x] Wire AddressAutocomplete into CustomerSection street address field
 - [x] Wire AddressAutocomplete into JobDetailsSection street address field
+
+## Address UX Enhancements
+
+### Multi-address on customer profile
+- [x] Add CustomerAddress type (id, label, street, unit, city, state, zip, isPrimary)
+- [x] Add addresses[] array to Customer type (alongside existing street/city/state/zip for backward compat)
+- [x] Add ADD_CUSTOMER_ADDRESS, UPDATE_CUSTOMER_ADDRESS, REMOVE_CUSTOMER_ADDRESS, SET_PRIMARY_ADDRESS reducer actions
+- [x] CustomerSection Address card: list all addresses with Primary badge, Edit/Delete per row, + Add Address button
+- [x] NewCustomerModal: captures first address into addresses[] on create
+
+### Live map preview + typo correction
+- [x] AddressAutocomplete: after geocoding a selected suggestion, show corrected canonical address if it differs from typed input
+- [x] AddressMapPreview component: small embedded Google Map (MapView) with a pin at the geocoded lat/lng
+- [x] NewCustomerModal: show AddressMapPreview below address fields when street is filled
+- [x] CustomerSection Address card: show AddressMapPreview for each address inline
+
+### Map preview on lead/estimate/job detail views
+- [x] EstimateSection: show AddressMapPreview + Open in Google Maps button (Service Location panel)
+- [x] JobDetailsSection: show AddressMapPreview + Open in Google Maps button (replace plain link)
+- [x] PipelineBoard kanban cards + table rows: show address snippet + Maps button when clientSnapshot.address present

@@ -8,7 +8,7 @@ import {
   LineItem, CustomLineItem, EstimateLineOverride,
   Opportunity, PipelineArea, CustomerProfile, ActivityEvent, CustomerProfileTab,
   OpportunityStage, Customer, Invoice, InvoiceLineItem, ScheduleEvent,
-  EstimateSnapshot,
+  EstimateSnapshot, CustomerAddress,
 } from '@/lib/types';
 import { ALL_PHASES, DEFAULTS } from '@/lib/phases';
 import { generateProjectSchedule } from '@/lib/generateProjectSchedule';
@@ -123,6 +123,10 @@ type Action =
   | { type: 'ADD_CUSTOMER'; payload: Customer }
   | { type: 'UPDATE_CUSTOMER'; id: string; payload: Partial<Customer> }
   | { type: 'SET_ACTIVE_CUSTOMER'; payload: string | null }
+  | { type: 'ADD_CUSTOMER_ADDRESS'; customerId: string; address: CustomerAddress }
+  | { type: 'UPDATE_CUSTOMER_ADDRESS'; customerId: string; addressId: string; payload: Partial<CustomerAddress> }
+  | { type: 'REMOVE_CUSTOMER_ADDRESS'; customerId: string; addressId: string }
+  | { type: 'SET_PRIMARY_ADDRESS'; customerId: string; addressId: string }
   // ── Lifecycle actions ──────────────────────────────────────
   | {
       type: 'CONVERT_LEAD_TO_ESTIMATE';
@@ -497,6 +501,100 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
         customers: state.customers.map(c =>
           c.id === action.id ? { ...c, ...action.payload } : c
         ),
+      };
+
+    case 'ADD_CUSTOMER_ADDRESS':
+      return {
+        ...state,
+        customers: state.customers.map(c => {
+          if (c.id !== action.customerId) return c;
+          const existing = c.addresses ?? [];
+          const newAddr = action.address.isPrimary
+            ? { ...action.address }
+            : action.address;
+          // If this is primary, demote others
+          const updated = action.address.isPrimary
+            ? existing.map(a => ({ ...a, isPrimary: false }))
+            : existing;
+          const newAddresses = [...updated, newAddr];
+          // Sync flat fields to primary
+          const primary = newAddresses.find(a => a.isPrimary) ?? newAddresses[0];
+          return {
+            ...c,
+            addresses: newAddresses,
+            street: primary?.street ?? c.street,
+            unit: primary?.unit ?? c.unit,
+            city: primary?.city ?? c.city,
+            state: primary?.state ?? c.state,
+            zip: primary?.zip ?? c.zip,
+          };
+        }),
+      };
+
+    case 'UPDATE_CUSTOMER_ADDRESS':
+      return {
+        ...state,
+        customers: state.customers.map(c => {
+          if (c.id !== action.customerId) return c;
+          const newAddresses = (c.addresses ?? []).map(a =>
+            a.id === action.addressId ? { ...a, ...action.payload } : a
+          );
+          const primary = newAddresses.find(a => a.isPrimary) ?? newAddresses[0];
+          return {
+            ...c,
+            addresses: newAddresses,
+            street: primary?.street ?? c.street,
+            unit: primary?.unit ?? c.unit,
+            city: primary?.city ?? c.city,
+            state: primary?.state ?? c.state,
+            zip: primary?.zip ?? c.zip,
+          };
+        }),
+      };
+
+    case 'REMOVE_CUSTOMER_ADDRESS':
+      return {
+        ...state,
+        customers: state.customers.map(c => {
+          if (c.id !== action.customerId) return c;
+          const remaining = (c.addresses ?? []).filter(a => a.id !== action.addressId);
+          // If removed was primary, promote first remaining
+          if (remaining.length > 0 && !remaining.some(a => a.isPrimary)) {
+            remaining[0] = { ...remaining[0], isPrimary: true };
+          }
+          const primary = remaining.find(a => a.isPrimary) ?? remaining[0];
+          return {
+            ...c,
+            addresses: remaining,
+            street: primary?.street ?? '',
+            unit: primary?.unit ?? '',
+            city: primary?.city ?? '',
+            state: primary?.state ?? '',
+            zip: primary?.zip ?? '',
+          };
+        }),
+      };
+
+    case 'SET_PRIMARY_ADDRESS':
+      return {
+        ...state,
+        customers: state.customers.map(c => {
+          if (c.id !== action.customerId) return c;
+          const newAddresses = (c.addresses ?? []).map(a => ({
+            ...a,
+            isPrimary: a.id === action.addressId,
+          }));
+          const primary = newAddresses.find(a => a.isPrimary);
+          return {
+            ...c,
+            addresses: newAddresses,
+            street: primary?.street ?? c.street,
+            unit: primary?.unit ?? c.unit,
+            city: primary?.city ?? c.city,
+            state: primary?.state ?? c.state,
+            zip: primary?.zip ?? c.zip,
+          };
+        }),
       };
 
     case 'SET_ACTIVE_CUSTOMER': {
@@ -1100,6 +1198,10 @@ interface EstimatorContextValue {
   addCustomer: (customer: Customer) => void;
   updateCustomer: (id: string, payload: Partial<Customer>) => void;
   setActiveCustomer: (id: string | null) => void;
+  addCustomerAddress: (customerId: string, address: CustomerAddress) => void;
+  updateCustomerAddress: (customerId: string, addressId: string, payload: Partial<CustomerAddress>) => void;
+  removeCustomerAddress: (customerId: string, addressId: string) => void;
+  setPrimaryAddress: (customerId: string, addressId: string) => void;
   reset: () => void;
   navigateToTopLevel: (section: AppSection) => void;
   // Schedule
@@ -1303,6 +1405,22 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'UPDATE_CUSTOMER', id, payload });
   }, []);
 
+  const addCustomerAddress = useCallback((customerId: string, address: CustomerAddress) => {
+    dispatch({ type: 'ADD_CUSTOMER_ADDRESS', customerId, address });
+  }, []);
+
+  const updateCustomerAddress = useCallback((customerId: string, addressId: string, payload: Partial<CustomerAddress>) => {
+    dispatch({ type: 'UPDATE_CUSTOMER_ADDRESS', customerId, addressId, payload });
+  }, []);
+
+  const removeCustomerAddress = useCallback((customerId: string, addressId: string) => {
+    dispatch({ type: 'REMOVE_CUSTOMER_ADDRESS', customerId, addressId });
+  }, []);
+
+  const setPrimaryAddress = useCallback((customerId: string, addressId: string) => {
+    dispatch({ type: 'SET_PRIMARY_ADDRESS', customerId, addressId });
+  }, []);
+
   const setActiveCustomer = useCallback((id: string | null) => {
     dispatch({ type: 'SET_ACTIVE_CUSTOMER', payload: id });
   }, []);
@@ -1380,6 +1498,7 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
       convertLeadToEstimate, convertEstimateToJob, archiveJob,
       setActiveOpportunity,
       addCustomer, updateCustomer, setActiveCustomer,
+      addCustomerAddress, updateCustomerAddress, removeCustomerAddress, setPrimaryAddress,
       navigateToTopLevel,
       reset,
       addScheduleEvent, updateScheduleEvent, removeScheduleEvent, updateOpportunitySchedule,
