@@ -17,6 +17,7 @@
 // ============================================================
 
 import React, { useState, useRef } from 'react';
+import AIEstimateChat from '@/components/AIEstimateChat';
 import { fmtDollar, fmtPct, getMarginFlag, TotalsResult } from '@/lib/calc';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { AppSection, Customer } from '@/lib/types';
@@ -93,9 +94,17 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
     else if (action === 'sign-out') { reset(); window.location.reload(); }
   };
 
+  const [aiEstimateOpen, setAiEstimateOpen] = useState(false);
+
   const handleNewMenuSelect = (action: NewMenuAction) => {
     setShowNewMenu(false);
-    setActiveModal(action);
+    if (action === 'ai-estimate') {
+      // Navigate to calculator section first, then open AI chat
+      setSection('calculator');
+      setAiEstimateOpen(true);
+    } else {
+      setActiveModal(action);
+    }
   };
 
   const handleNewCustomerCreated = (customer: Customer) => {
@@ -410,6 +419,9 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
       {activeModal === 'event'         && <NewEventModal onClose={closeModal} />}
       {activeModal === 'intake'        && <NewIntakeModal onClose={closeModal} />}
       {activeModal === 'lead'          && <NewLeadModal onClose={closeModal} />}
+
+      {/* ── AI Estimate Chat drawer ── */}
+      <AIEstimateChat open={aiEstimateOpen} onClose={() => setAiEstimateOpen(false)} />
 
       {/* ── NAVIGATION BAR ─────────────────────────────────────── */}
       <div className="border-t border-border bg-white">

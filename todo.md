@@ -364,3 +364,54 @@
 - [x] Fix AddressAutocomplete render loop / DOM mutation crash on iOS Safari (WebKit)
 - [x] Fix AddressMapPreview Safari-incompatible patterns
 - [x] Ensure Maps SDK loads safely on WebKit without triggering removeChild errors
+
+## AI Estimator Chat + Customer-First Flow
+
+### Phase 1 — Server
+- [ ] Build estimate.aiParse tRPC mutation in server/routers.ts
+- [ ] Design JSON schema for LLM structured output (phases, lineItems, customItems, warnings)
+- [ ] Build catalog serializer — converts phases.ts into LLM-readable item list
+- [ ] Prompt engineering: pre-primed detection, lf summation, unit inference, ambiguity flagging
+- [ ] Wire invokeLLM with response_format json_schema
+
+### Phase 2 — Client AI Chat Panel
+- [ ] AIEstimatorPanel component: textarea input, submit, loading spinner
+- [ ] Diff/review panel: green new items, amber changed qty, yellow warnings
+- [ ] Apply button: dispatches parsed result to EstimatorContext calculator state
+- [ ] Cancel/reset button
+
+### Phase 3 — Customer-First Intake Modals
+- [ ] Refactor NewLeadModal: Step 1 customer search/create, Step 2 lead details
+- [ ] Refactor NewEstimateModal: Step 1 customer search/create, Step 2 estimate details
+- [ ] Refactor NewJobModal: Step 1 customer search/create, Step 2 job details
+- [ ] Customer badge shown at top of Step 2 (confirmed, cannot be blank)
+
+### Phase 4 — Wiring
+- [ ] Add "AI Estimate" button to CalculatorSection header
+- [ ] Add "AI Estimate" entry to NewMenu dropdown
+- [ ] Customer must be selected before AI chat opens
+
+## AI Estimate Chat Panel
+
+- [x] Build AIEstimateChat drawer component (right-side Sheet, violet theme)
+- [x] Notes textarea with char/line count, sample notes loader
+- [x] Parse Notes button → trpc.estimate.aiParse mutation
+- [x] Diff/review panel: job title, scope summary, catalog items, custom items, warnings
+- [x] Severity badges (missing/review/info), tier badges, paint prep badges
+- [x] Apply to Calculator button: maps AI items to updateItem/addCustomItem, sets jobInfo/fieldNotes/summaryNotes
+- [x] Applied confirmation state with "All fields remain editable" note
+- [x] Wire AI Estimate button in CalculatorSection header bar
+- [x] Add AI Estimate to NewMenu (highlighted violet, AI badge, top of list)
+- [x] MetricsBar: AI Estimate from NewMenu navigates to calculator + opens drawer
+- [x] Vitest: 7 unit tests for mapUnit function (all passing)
+
+## 2-Step Customer-First Intake Flow
+
+- [x] CustomerGateStep component in IntakeShell: step 1 = customer selection, step 2 = details
+- [x] Search existing customers with live autocomplete and selection highlight
+- [x] Create new customer inline (first name required, phone + email optional)
+- [x] Step indicator (1 Customer → 2 Details) in gate header
+- [x] Confirmed customer badge in details header with "change" link
+- [x] All 5 intake modals updated: Job, Recurring Job, Estimate, Event, Intake (Call)
+- [x] Lead modal updated
+- [x] Prefill path (from customer profile) bypasses gate and goes directly to details

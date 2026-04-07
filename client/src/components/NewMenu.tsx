@@ -9,7 +9,7 @@
 import { useEffect, useRef } from 'react';
 import {
   Briefcase, RefreshCw, FileText, Calendar,
-  UserPlus, ClipboardList, Star,
+  UserPlus, ClipboardList, Star, Sparkles,
 } from 'lucide-react';
 
 export type NewMenuAction =
@@ -19,14 +19,16 @@ export type NewMenuAction =
   | 'event'
   | 'customer'
   | 'intake'
-  | 'lead';
+  | 'lead'
+  | 'ai-estimate';
 
 interface Props {
   onSelect: (action: NewMenuAction) => void;
   onClose: () => void;
 }
 
-const MENU_ITEMS: { action: NewMenuAction; icon: React.ElementType; label: string }[] = [
+const MENU_ITEMS: { action: NewMenuAction; icon: React.ElementType; label: string; highlight?: boolean }[] = [
+  { action: 'ai-estimate',   icon: Sparkles,      label: 'AI Estimate',   highlight: true },
   { action: 'job',           icon: Briefcase,     label: 'Job'           },
   { action: 'recurring-job', icon: RefreshCw,     label: 'Recurring Job' },
   { action: 'estimate',      icon: FileText,      label: 'Estimate'      },
@@ -68,15 +70,23 @@ export default function NewMenu({ onSelect, onClose }: Props) {
                  overflow-y-auto"
       style={{ maxHeight: 'calc(100vh - 80px)' }}
     >
-      {MENU_ITEMS.map(({ action, icon: Icon, label }) => (
+      {MENU_ITEMS.map(({ action, icon: Icon, label, highlight }) => (
         <button
           key={action}
           onClick={() => { onSelect(action); onClose(); }}
-          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-white/90
-                     hover:bg-white/10 hover:text-white transition-colors text-left"
+          className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium transition-colors text-left ${
+            highlight
+              ? 'text-violet-300 hover:bg-violet-500/20 hover:text-violet-200'
+              : 'text-white/90 hover:bg-white/10 hover:text-white'
+          }`}
         >
-          <Icon size={15} className="text-white/50 shrink-0" />
+          <Icon size={15} className={highlight ? 'text-violet-400 shrink-0' : 'text-white/50 shrink-0'} />
           {label}
+          {highlight && (
+            <span className="ml-auto text-[9px] font-bold px-1 py-0.5 rounded bg-violet-500/30 text-violet-300 uppercase tracking-wide">
+              AI
+            </span>
+          )}
         </button>
       ))}
     </div>

@@ -8,7 +8,7 @@
 import { useState } from 'react';
 import { Calendar, MapPin, Tag, Globe, User } from 'lucide-react';
 import { toast } from 'sonner';
-import IntakeShell, { CustomerSearchBox, SidebarSection } from './IntakeShell';
+import IntakeShell, { CustomerSearchBox, SidebarSection, SelectedCustomer } from './IntakeShell';
 
 const EVENT_TYPES = ['Site Visit', 'Estimate Appointment', 'Follow-up Call', 'Job Start', 'Job Completion', 'Team Meeting', 'Other'];
 
@@ -22,6 +22,11 @@ export default function NewEventModal({ onClose, prefill }: { onClose: () => voi
   const [location, setLocation] = useState('');
   const [team, setTeam] = useState('');
   const [notes, setNotes] = useState('');
+
+  const handleCustomerConfirmed = (c: SelectedCustomer) => {
+    setCustomer(c.displayName);
+    if (c.address) setLocation(`${c.address}, ${c.city}, ${c.state} ${c.zip}`.trim());
+  };
 
   const handleSave = () => {
     toast.success('Event saved');
@@ -111,6 +116,9 @@ export default function NewEventModal({ onClose, prefill }: { onClose: () => voi
       saveLabel="Save event"
       leftPanel={leftPanel}
       rightPanel={rightPanel}
+      requireCustomer={!prefill}
+      prefillCustomer={prefill ? { id: prefill.id ?? '', displayName: prefill.displayName ?? '', phone: prefill.phone ?? '', email: prefill.email ?? '', address: prefill.address ?? '', city: prefill.city ?? '', state: prefill.state ?? '', zip: prefill.zip ?? '' } : null}
+      onCustomerConfirmed={handleCustomerConfirmed}
     />
   );
 }

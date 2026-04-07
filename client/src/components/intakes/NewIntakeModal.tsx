@@ -9,7 +9,7 @@
 import { useState } from 'react';
 import { MapPin, Globe, Hash, Tag } from 'lucide-react';
 import { toast } from 'sonner';
-import IntakeShell, { LineItemsPanel, LineItem } from './IntakeShell';
+import IntakeShell, { LineItemsPanel, LineItem, SelectedCustomer } from './IntakeShell';
 
 type PillGroup = { question: string; options: string[] };
 
@@ -71,6 +71,11 @@ export default function NewIntakeModal({ onClose, prefill }: { onClose: () => vo
       const current = prev[question] ?? [];
       return { ...prev, [question]: current.includes(opt) ? current.filter(o => o !== opt) : [opt] };
     });
+  };
+
+  const handleCustomerConfirmed = (c: SelectedCustomer) => {
+    setCustomerName(c.displayName);
+    if (c.address) setAddress(`${c.address}, ${c.city}, ${c.state} ${c.zip}`.trim());
   };
 
   const handleSave = () => {
@@ -221,6 +226,9 @@ export default function NewIntakeModal({ onClose, prefill }: { onClose: () => vo
       saveLabel="Save intake"
       leftPanel={leftPanel}
       rightPanel={rightPanel}
+      requireCustomer={!prefill}
+      prefillCustomer={prefill ? { id: prefill.id ?? '', displayName: prefill.displayName ?? '', phone: prefill.phone ?? '', email: prefill.email ?? '', address: prefill.street ?? '', city: prefill.city ?? '', state: prefill.state ?? '', zip: prefill.zip ?? '' } : null}
+      onCustomerConfirmed={handleCustomerConfirmed}
     />
   );
 }

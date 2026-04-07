@@ -28,6 +28,11 @@ export default function NewEstimateModal({ onClose, prefill }: { onClose: () => 
   const [notes, setNotes] = useState('');
   const [items, setItems] = useState<LineItem[]>([]);
 
+  const handleCustomerConfirmed = (c: SelectedCustomer) => {
+    setCustomer(c.displayName);
+    setSelectedCustomer(c);
+  };
+
   const handleSave = () => {
     if (!customer.trim()) { toast.error('Please select or enter a customer'); return; }
     let customerId = selectedCustomer?.id ?? '';
@@ -114,6 +119,9 @@ export default function NewEstimateModal({ onClose, prefill }: { onClose: () => 
       saveLabel="Save estimate"
       leftPanel={leftPanel}
       rightPanel={rightPanel}
+      requireCustomer={!prefill}
+      prefillCustomer={prefill ? { id: prefill.id ?? '', displayName: prefill.displayName ?? '', phone: prefill.phone ?? '', email: prefill.email ?? '', address: prefill.address ?? '', city: prefill.city ?? '', state: prefill.state ?? '', zip: prefill.zip ?? '' } : null}
+      onCustomerConfirmed={handleCustomerConfirmed}
     />
   );
 }

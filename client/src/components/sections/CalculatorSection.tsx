@@ -6,6 +6,7 @@
 // ============================================================
 
 import { useState, useMemo, useCallback, useEffect } from 'react';
+import AIEstimateChat from '@/components/AIEstimateChat';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { calcPhase, calcLineItem, calcCustomItem, calcTotals, fmtDollar, fmtDollarCents, getMarginFlag, getMarginLabel } from '@/lib/calc';
 import { LineItem, CustomLineItem, Tier, UNIT_LABELS, UnitType } from '@/lib/types';
@@ -1172,8 +1173,27 @@ export default function CalculatorSection() {
     [state.phases]
   );
 
+  const [aiChatOpen, setAiChatOpen] = useState(false);
+
   return (
     <div className="pb-24">
+      {/* AI Estimate Chat drawer */}
+      <AIEstimateChat open={aiChatOpen} onClose={() => setAiChatOpen(false)} />
+
+      {/* AI Estimate button bar */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="text-xs text-muted-foreground">
+          Build your estimate phase by phase, or let AI parse your walkthrough notes.
+        </div>
+        <button
+          onClick={() => setAiChatOpen(true)}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg border border-violet-300 bg-violet-50 text-violet-700 text-xs font-semibold hover:bg-violet-100 hover:border-violet-400 transition-colors shadow-sm"
+        >
+          <Sparkles size={13} />
+          AI Estimate
+        </button>
+      </div>
+
       <GlobalSettingsPanel />
       <PhaseTabBar
         phases={orderedPhases.map(p => ({ id: p.id, name: p.name, icon: p.icon }))}
