@@ -234,7 +234,21 @@
   @media print {
     .no-print { display: none !important; }
     .print-only { display: block !important; }
-    body { background: white; }
+    body { background: white; margin: 0; padding: 0; }
     .sticky { position: static; }
+
+    /* Fix estimate PDF cut-off: the present-section overlay uses fixed+overflow-y-auto
+       which clips to one viewport height. Override to let the full document flow. */
+    .fixed {
+      position: static !important;
+    }
+    .overflow-y-auto,
+    .overflow-y-scroll {
+      overflow: visible !important;
+    }
+    /* Ensure the document container fills the page width */
+    .print\:max-w-none {
+      max-width: none !important;
+    }
   }
 }

@@ -445,7 +445,7 @@ export default function PresentSection() {
   const visibleCols = ALL_COLS.filter(c => cols[c.key]);
 
   return (
-    <div className="fixed inset-0 z-50 bg-gray-800/95 overflow-y-auto print:bg-white print:overflow-visible">
+    <div className="fixed inset-0 z-50 bg-gray-800/95 overflow-y-auto print:bg-white print:overflow-visible print:static print:inset-auto print:block">
       {/* ── Toolbar (hidden on print) ── */}
       <div className="no-print sticky top-0 z-10 bg-gray-900 text-white px-4 py-2.5 flex items-center gap-3 shadow-lg">
         <button onClick={handleClose} className="p-1.5 rounded hover:bg-white/10 transition-colors">

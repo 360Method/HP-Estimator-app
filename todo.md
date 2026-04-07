@@ -437,3 +437,9 @@
 - [x] Tier card rate now shows material cost only: Good $31, Better $47, Best $91 per opening (~26 LF)
 - [x] Labor is separate: 2.5 hrs/opening × $95/hr = $237.50 shown as distinct labor line in breakdown
 - [x] Tier card note updated to read '(mat only — labor separate)'
+
+## Estimate PDF Cut-off Bug
+
+- [x] Root cause: outer container uses `fixed inset-0 overflow-y-auto` which clips to viewport height during print
+- [x] Fix: added `print:static print:inset-auto` to PresentSection outer div
+- [x] Fix: added `@media print` CSS to force `.fixed` → `position: static` and `.overflow-y-auto` → `overflow: visible`
