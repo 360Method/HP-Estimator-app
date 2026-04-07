@@ -303,3 +303,7 @@
 - [x] Job pricing panel: pricing summary (total/deposit/balance) + custom items table from estimateSnapshot
 - [x] Job attachments panel: upload files (local dataURL), list with download/delete
 - [x] Job activity feed: per-job activity timeline with add-note capability
+
+## NewMenu Dropdown Fix
+
+- [x] Fix NewMenu dropdown to fit within viewport — no scrolling required to see all items

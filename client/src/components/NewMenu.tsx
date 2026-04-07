@@ -63,15 +63,16 @@ export default function NewMenu({ onSelect, onClose }: Props) {
   return (
     <div
       ref={menuRef}
-      className="absolute top-full left-0 mt-1.5 w-48 rounded-xl overflow-hidden shadow-2xl z-50
-                 bg-[#1e2028] border border-white/10"
-      style={{ minWidth: '160px' }}
+      className="absolute top-full right-0 mt-1.5 w-48 rounded-xl shadow-2xl z-[200]
+                 bg-[#1e2028] border border-white/10
+                 overflow-y-auto"
+      style={{ maxHeight: 'calc(100vh - 80px)' }}
     >
       {MENU_ITEMS.map(({ action, icon: Icon, label }) => (
         <button
           key={action}
           onClick={() => { onSelect(action); onClose(); }}
-          className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-white/90
+          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium text-white/90
                      hover:bg-white/10 hover:text-white transition-colors text-left"
         >
           <Icon size={15} className="text-white/50 shrink-0" />
