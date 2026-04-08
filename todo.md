@@ -505,3 +505,9 @@
 - [x] Root cause: public_application_connect_enabled was false + no edge specified
 - [x] Enabled public_application_connect_enabled via Twilio API
 - [x] Added edge: 'roaming' to Device init to let Twilio pick closest edge
+
+## Inbox — Outbound SMS Debug
+
+- [ ] Check server logs for errors when sending outbound SMS
+- [ ] Verify sendSms helper and tRPC procedure
+- [ ] Fix and verify end-to-end

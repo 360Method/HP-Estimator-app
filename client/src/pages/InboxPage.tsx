@@ -1,7 +1,10 @@
 // ============================================================
 // InboxPage — Unified Communications Hub
-// 3-panel layout: sidebar | conversation list | thread view
-// Channels: SMS · Email · Call · Internal Note
+// Mobile-first 3-screen navigation:
+//   Screen 1: Inbox Home (sections list)
+//   Screen 2: Conversation List (with back button)
+//   Screen 3: Thread View (with back button)
+// Desktop: shows all 3 panels side-by-side
 // ============================================================
 
 import { useState, useRef, useEffect, useCallback } from 'react';
@@ -14,16 +17,18 @@ import {
   Send, Paperclip, Inbox, Users, Briefcase,
   PhoneIncoming, PhoneOutgoing, PhoneMissed,
   RefreshCw, MoreHorizontal, X, CheckCheck, AlertCircle, Clock,
+  ChevronRight, ChevronLeft, Settings, Edit,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Channel = 'sms' | 'email' | 'call' | 'note';
 type SidebarFilter = 'all' | 'customers' | 'employees' | 'calls';
+// Mobile screen stack
+type MobileScreen = 'home' | 'list' | 'thread';
 
 interface Conversation {
   id: number;
@@ -57,8 +62,8 @@ function getInitials(name: string | null) {
 
 function getAvatarColor(name: string | null) {
   const colors = [
-    'bg-blue-500', 'bg-emerald-500', 'bg-violet-500', 'bg-amber-500',
-    'bg-rose-500', 'bg-cyan-500', 'bg-orange-500', 'bg-teal-500',
+    'bg-slate-400', 'bg-blue-400', 'bg-emerald-500', 'bg-violet-500',
+    'bg-amber-500', 'bg-rose-500', 'bg-cyan-500', 'bg-orange-500',
   ];
   if (!name) return colors[0];
   return colors[name.charCodeAt(0) % colors.length];
@@ -105,30 +110,33 @@ function ConversationItem({
 }: { conv: Conversation; isActive: boolean; onClick: () => void }) {
   const initials = getInitials(conv.contactName);
   const avatarColor = getAvatarColor(conv.contactName);
+  const displayName = conv.contactName || conv.contactPhone || conv.contactEmail || 'Unknown';
 
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left px-4 py-3 border-b border-border/50 hover:bg-muted/50 transition-colors flex items-start gap-3 ${
-        isActive ? 'bg-primary/5 border-l-2 border-l-primary' : ''
+      className={`w-full text-left px-4 py-3.5 border-b border-border/40 hover:bg-muted/40 active:bg-muted/60 transition-colors flex items-center gap-3.5 ${
+        isActive ? 'bg-primary/5' : ''
       }`}
     >
-      <div className={`flex-shrink-0 w-9 h-9 rounded-full ${avatarColor} flex items-center justify-center text-white text-xs font-bold`}>
+      {/* Avatar */}
+      <div className={`flex-shrink-0 w-11 h-11 rounded-full ${avatarColor} flex items-center justify-center text-white text-sm font-bold`}>
         {initials}
       </div>
+      {/* Content */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between gap-2">
-          <span className={`text-sm font-semibold truncate ${conv.unreadCount > 0 ? 'text-foreground' : 'text-foreground/80'}`}>
-            {conv.contactName || conv.contactPhone || conv.contactEmail || 'Unknown'}
+        <div className="flex items-baseline justify-between gap-2">
+          <span className={`text-[15px] font-semibold truncate ${conv.unreadCount > 0 ? 'text-foreground' : 'text-foreground/80'}`}>
+            {displayName}
           </span>
-          <span className="text-[10px] text-muted-foreground flex-shrink-0">{fmtTime(conv.lastMessageAt)}</span>
+          <span className="text-xs text-muted-foreground flex-shrink-0">{fmtTime(conv.lastMessageAt)}</span>
         </div>
         <div className="flex items-center justify-between gap-2 mt-0.5">
-          <p className={`text-xs truncate ${conv.unreadCount > 0 ? 'text-foreground/70 font-medium' : 'text-muted-foreground'}`}>
+          <p className={`text-sm truncate ${conv.unreadCount > 0 ? 'text-foreground/70 font-medium' : 'text-muted-foreground'}`}>
             {conv.lastMessagePreview || 'No messages yet'}
           </p>
           {conv.unreadCount > 0 && (
-            <span className="flex-shrink-0 bg-primary text-primary-foreground text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+            <span className="flex-shrink-0 bg-primary text-primary-foreground text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
               {conv.unreadCount > 9 ? '9+' : conv.unreadCount}
             </span>
           )}
@@ -148,8 +156,8 @@ function MessageBubble({ msg }: { msg: Message }) {
 
   if (isCall) {
     return (
-      <div className="flex justify-center my-2">
-        <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-xs text-amber-800">
+      <div className="flex justify-center my-3">
+        <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-xs text-amber-800">
           {msg.direction === 'inbound'
             ? <PhoneIncoming className="w-3.5 h-3.5 text-emerald-600" />
             : <PhoneOutgoing className="w-3.5 h-3.5 text-blue-600" />}
@@ -162,14 +170,14 @@ function MessageBubble({ msg }: { msg: Message }) {
 
   if (isNote) {
     return (
-      <div className="flex justify-center my-2">
-        <div className="max-w-[80%] bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5 text-xs text-amber-900">
-          <div className="flex items-center gap-1.5 mb-1 text-amber-600 font-semibold">
+      <div className="flex justify-center my-3">
+        <div className="max-w-[85%] bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-900">
+          <div className="flex items-center gap-1.5 mb-1.5 text-amber-600 font-semibold">
             <StickyNote className="w-3 h-3" />
             Internal Note
           </div>
           <p className="text-sm text-amber-900 whitespace-pre-wrap">{msg.body}</p>
-          <div className="mt-1 text-[10px] text-amber-600 text-right">{fmtTime(msg.sentAt)}</div>
+          <div className="mt-1.5 text-[10px] text-amber-600 text-right">{fmtTime(msg.sentAt)}</div>
         </div>
       </div>
     );
@@ -177,16 +185,16 @@ function MessageBubble({ msg }: { msg: Message }) {
 
   return (
     <div className={`flex ${isOutbound ? 'justify-end' : 'justify-start'} mb-3`}>
-      <div className={`max-w-[72%] ${isOutbound ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
+      <div className={`max-w-[78%] ${isOutbound ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
         {msg.subject && (
           <div className="text-[10px] text-muted-foreground font-medium px-1">Re: {msg.subject}</div>
         )}
-        <div className={`rounded-2xl px-4 py-2.5 text-sm ${
+        <div className={`rounded-2xl px-4 py-2.5 text-[15px] leading-relaxed ${
           isOutbound
-            ? 'bg-primary text-primary-foreground rounded-br-sm'
-            : 'bg-muted text-foreground rounded-bl-sm'
+            ? 'bg-blue-500 text-white rounded-br-md'
+            : 'bg-muted text-foreground rounded-bl-md'
         }`}>
-          <p className="whitespace-pre-wrap leading-relaxed">{msg.body}</p>
+          <p className="whitespace-pre-wrap">{msg.body}</p>
           {msg.attachmentUrl && (
             <a href={msg.attachmentUrl} target="_blank" rel="noopener noreferrer"
               className="flex items-center gap-1.5 mt-2 text-xs underline opacity-80">
@@ -195,11 +203,11 @@ function MessageBubble({ msg }: { msg: Message }) {
             </a>
           )}
         </div>
-        <div className={`flex items-center gap-1.5 text-[10px] text-muted-foreground px-1 ${isOutbound ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex items-center gap-1.5 text-[11px] text-muted-foreground px-1 ${isOutbound ? 'flex-row-reverse' : ''}`}>
           <ChanIcon className={`w-3 h-3 ${CHANNEL_COLORS[msg.channel]}`} />
           <span>{fmtTime(msg.sentAt)}</span>
           {isOutbound && (
-            msg.status === 'delivered' ? <CheckCheck className="w-3 h-3 text-primary" /> :
+            msg.status === 'delivered' ? <CheckCheck className="w-3 h-3 text-blue-500" /> :
             msg.status === 'failed' ? <AlertCircle className="w-3 h-3 text-destructive" /> :
             <Clock className="w-3 h-3 opacity-50" />
           )}
@@ -233,28 +241,28 @@ function NewConversationModal({ onClose, onCreated }: { onClose: () => void; onC
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-      <div className="bg-background rounded-xl shadow-2xl w-full max-w-md p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-base font-semibold">New Conversation</h2>
-          <button onClick={onClose} className="p-1 rounded hover:bg-muted"><X className="w-4 h-4" /></button>
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center">
+      <div className="bg-background rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-md p-6 pb-8 sm:pb-6">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-semibold">New Conversation</h2>
+          <button onClick={onClose} className="p-1.5 rounded-full hover:bg-muted"><X className="w-5 h-5" /></button>
         </div>
-        <form onSubmit={handleSubmit} className="space-y-3">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Contact Name</label>
-            <Input value={name} onChange={e => setName(e.target.value)} placeholder="Jane Smith" />
+            <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Contact Name</label>
+            <Input value={name} onChange={e => setName(e.target.value)} placeholder="Jane Smith" className="h-11 text-base" />
           </div>
           <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Phone Number</label>
-            <Input value={phone} onChange={e => setPhone(e.target.value)} placeholder="+1 (360) 555-0100" type="tel" />
+            <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Phone Number</label>
+            <Input value={phone} onChange={e => setPhone(e.target.value)} placeholder="+1 (360) 555-0100" type="tel" className="h-11 text-base" />
           </div>
           <div>
-            <label className="text-xs font-medium text-muted-foreground mb-1 block">Email</label>
-            <Input value={email} onChange={e => setEmail(e.target.value)} placeholder="jane@example.com" type="email" />
+            <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Email</label>
+            <Input value={email} onChange={e => setEmail(e.target.value)} placeholder="jane@example.com" type="email" className="h-11 text-base" />
           </div>
-          <div className="flex gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={onClose} className="flex-1">Cancel</Button>
-            <Button type="submit" className="flex-1" disabled={findOrCreate.isPending}>
+          <div className="flex gap-3 pt-1">
+            <Button type="button" variant="outline" onClick={onClose} className="flex-1 h-11">Cancel</Button>
+            <Button type="submit" disabled={findOrCreate.isPending} className="flex-1 h-11">
               {findOrCreate.isPending ? 'Creating...' : 'Start Conversation'}
             </Button>
           </div>
@@ -278,6 +286,8 @@ export default function InboxPage() {
   const [notifPermission, setNotifPermission] = useState<NotificationPermission>(
     typeof Notification !== 'undefined' ? Notification.permission : 'default'
   );
+  // Mobile navigation state
+  const [mobileScreen, setMobileScreen] = useState<MobileScreen>('home');
   const threadEndRef = useRef<HTMLDivElement>(null);
 
   const requestNotifPermission = async () => {
@@ -416,38 +426,416 @@ export default function InboxPage() {
     return acc;
   }, []);
 
-  const SIDEBAR_ITEMS: { id: SidebarFilter; icon: typeof Inbox; label: string }[] = [
-    { id: 'all', icon: Inbox, label: 'All Comms' },
-    { id: 'customers', icon: Users, label: 'Customers' },
-    { id: 'employees', icon: Briefcase, label: 'Employees' },
+  // Navigate to list screen and set filter
+  const goToList = (filter: SidebarFilter) => {
+    setSidebarFilter(filter);
+    setMobileScreen('list');
+  };
+
+  // Navigate to thread
+  const openConversation = (id: number) => {
+    setActiveConvId(id);
+    setMobileScreen('thread');
+  };
+
+  // Total unread count
+  const totalUnread = conversations.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
+
+  // ── Section items for home screen ──
+  const chatSections = [
+    { id: 'all' as SidebarFilter, label: 'All comms', unread: totalUnread },
+    { id: 'customers' as SidebarFilter, label: 'Customers', unread: 0 },
+    { id: 'employees' as SidebarFilter, label: 'Employees', unread: 0 },
   ];
 
-  return (
-    <div className="flex flex-col h-[calc(100vh-57px)] bg-background overflow-hidden">
+  const callSections = [
+    { id: 'calls' as SidebarFilter, label: 'Voice call log', unread: 0 },
+  ];
 
-      {/* Notification permission banner */}
+  // ─── Screen: Home ─────────────────────────────────────────────────────────
+
+  const HomeScreen = (
+    <div className="flex flex-col h-full bg-[#f0f0f5]">
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 pt-5 pb-3 bg-[#f0f0f5]">
+        <h1 className="text-3xl font-bold text-foreground">Inbox</h1>
+        <button className="p-1.5 rounded-full hover:bg-black/10 transition-colors">
+          <Settings className="w-6 h-6 text-foreground/70" />
+        </button>
+      </div>
+
+      {/* Notification banner */}
       {notifPermission === 'default' && (
-        <div className="flex items-center justify-between px-4 py-2 bg-amber-50 border-b border-amber-200 text-sm text-amber-800 flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <span>⚠️</span>
-            <span>Turn on browser notifications to be notified of customer and employee communications</span>
-          </div>
-          <button
-            onClick={requestNotifPermission}
-            className="text-xs font-semibold text-amber-900 underline hover:no-underline flex-shrink-0 ml-4"
-          >
-            Turn on notifications
-          </button>
+        <div className="mx-4 mb-3 flex items-center justify-between px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
+          <span className="text-xs">Enable notifications for new messages</span>
+          <button onClick={requestNotifPermission} className="text-xs font-semibold text-amber-900 underline ml-3">Turn on</button>
         </div>
       )}
 
-      {/* Main 3-panel layout */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex-1 overflow-y-auto px-4 pb-6 space-y-4">
+        {/* CHAT section */}
+        <div>
+          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-2">Chat</div>
 
-        {/* ── SIDEBAR ── */}
-        <div className="w-44 flex-shrink-0 border-r border-border bg-muted/30 flex flex-col py-3 gap-0.5 px-2">
-          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-2 mb-1">Chat</div>
-          {SIDEBAR_ITEMS.map(({ id, icon: Icon, label }) => (
+          {/* All comms — standalone card */}
+          <div className="bg-white rounded-xl shadow-sm overflow-hidden mb-3">
+            <button
+              onClick={() => goToList('all')}
+              className="w-full flex items-center justify-between px-4 py-4 hover:bg-muted/30 active:bg-muted/50 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-[16px] font-medium text-foreground">All comms</span>
+                {totalUnread > 0 && (
+                  <span className="bg-primary text-primary-foreground text-xs font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1.5">
+                    {totalUnread}
+                  </span>
+                )}
+              </div>
+              <ChevronRight className="w-5 h-5 text-muted-foreground" />
+            </button>
+          </div>
+
+          {/* Customers / Employees / etc — grouped card */}
+          <div className="bg-white rounded-xl shadow-sm overflow-hidden divide-y divide-border/50">
+            {[
+              { id: 'customers' as SidebarFilter, label: 'Customers' },
+              { id: 'employees' as SidebarFilter, label: 'Employees' },
+            ].map(({ id, label }) => (
+              <button
+                key={id}
+                onClick={() => goToList(id)}
+                className="w-full flex items-center justify-between px-4 py-4 hover:bg-muted/30 active:bg-muted/50 transition-colors"
+              >
+                <span className="text-[16px] font-medium text-foreground">{label}</span>
+                <ChevronRight className="w-5 h-5 text-muted-foreground" />
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* CALLS section */}
+        <div>
+          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-2">Calls</div>
+          <div className="bg-white rounded-xl shadow-sm overflow-hidden divide-y divide-border/50">
+            <button
+              onClick={() => goToList('calls')}
+              className="w-full flex items-center justify-between px-4 py-4 hover:bg-muted/30 active:bg-muted/50 transition-colors"
+            >
+              <span className="text-[16px] font-medium text-foreground">Voice call log</span>
+              <ChevronRight className="w-5 h-5 text-muted-foreground" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ─── Screen: Conversation List ────────────────────────────────────────────
+
+  const listTitle =
+    sidebarFilter === 'all' ? 'All Comms' :
+    sidebarFilter === 'customers' ? 'Customers' :
+    sidebarFilter === 'employees' ? 'Employees' : 'Voice Call Log';
+
+  const ListScreen = (
+    <div className="flex flex-col h-full bg-background">
+      {/* Header */}
+      <div className="flex items-center justify-between px-2 py-3 border-b border-border bg-background">
+        <button
+          onClick={() => setMobileScreen('home')}
+          className="flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-muted transition-colors text-primary font-medium"
+        >
+          <ChevronLeft className="w-5 h-5" />
+          <span className="text-[15px]">Inbox</span>
+        </button>
+        <h2 className="text-[17px] font-semibold">{listTitle}</h2>
+        {sidebarFilter !== 'calls' ? (
+          <button
+            onClick={() => setShowNewConv(true)}
+            className="p-2 rounded-lg hover:bg-muted transition-colors"
+          >
+            <Edit className="w-5 h-5 text-primary" />
+          </button>
+        ) : (
+          <button
+            onClick={() => refetchConvs()}
+            className="p-2 rounded-lg hover:bg-muted transition-colors"
+          >
+            <RefreshCw className="w-4 h-4 text-muted-foreground" />
+          </button>
+        )}
+      </div>
+
+      {/* Search */}
+      {sidebarFilter !== 'calls' && (
+        <div className="px-4 py-2.5 border-b border-border bg-background">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search conversations..."
+              className="pl-9 h-9 text-sm bg-muted/50 border-0 rounded-lg"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* List */}
+      <div className="flex-1 overflow-y-auto">
+        {sidebarFilter === 'calls' ? (
+          callLogsLoading ? (
+            <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">Loading...</div>
+          ) : (callLogs as any[]).length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 gap-3 text-center px-4">
+              <Phone className="w-10 h-10 text-muted-foreground/30" />
+              <p className="text-sm font-medium text-muted-foreground">No call logs yet</p>
+            </div>
+          ) : (
+            <div>
+              {(callLogs as any[]).map((log) => (
+                <div key={log.id} className="px-4 py-3.5 border-b border-border/40 flex items-center gap-3.5 hover:bg-muted/30">
+                  <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
+                    log.status === 'missed' ? 'bg-red-100' :
+                    log.direction === 'inbound' ? 'bg-emerald-100' : 'bg-blue-100'
+                  }`}>
+                    {log.status === 'missed' ? <PhoneMissed className="w-5 h-5 text-destructive" /> :
+                     log.direction === 'inbound' ? <PhoneIncoming className="w-5 h-5 text-emerald-600" /> :
+                     <PhoneOutgoing className="w-5 h-5 text-blue-600" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[15px] font-medium truncate">{log.callerPhone || 'Unknown'}</span>
+                      <span className="text-xs text-muted-foreground flex-shrink-0">
+                        {log.durationSecs ? `${Math.floor(log.durationSecs / 60)}m ${log.durationSecs % 60}s` : '—'}
+                      </span>
+                    </div>
+                    <div className="text-sm text-muted-foreground mt-0.5 capitalize">
+                      {log.status} · {log.startedAt ? fmtTime(log.startedAt) : ''}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        ) : convsLoading ? (
+          <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">Loading...</div>
+        ) : filteredConvs.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 gap-4 text-center px-6">
+            <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center">
+              <MessageSquare className="w-8 h-8 text-muted-foreground/40" />
+            </div>
+            <div>
+              <p className="text-base font-semibold text-foreground">No conversations yet</p>
+              <p className="text-sm text-muted-foreground mt-1">Tap the compose button to start one</p>
+            </div>
+          </div>
+        ) : (
+          <div>
+            {filteredConvs.map(conv => (
+              <ConversationItem
+                key={conv.id}
+                conv={conv as Conversation}
+                isActive={conv.id === activeConvId}
+                onClick={() => openConversation(conv.id)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  // ─── Screen: Thread View ──────────────────────────────────────────────────
+
+  const ThreadScreen = (
+    <div className="flex flex-col h-full bg-background">
+      {/* Thread header */}
+      <div className="flex items-center gap-2 px-2 py-3 border-b border-border bg-background">
+        <button
+          onClick={() => setMobileScreen('list')}
+          className="flex items-center gap-0.5 px-2 py-1.5 rounded-lg hover:bg-muted transition-colors text-primary font-medium flex-shrink-0"
+        >
+          <ChevronLeft className="w-5 h-5" />
+          <span className="text-[15px]">{listTitle}</span>
+        </button>
+        {activeConv && (
+          <>
+            <div className={`flex-shrink-0 w-8 h-8 rounded-full ${getAvatarColor(activeConv.contactName)} flex items-center justify-center text-white text-xs font-bold`}>
+              {getInitials(activeConv.contactName)}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[15px] font-semibold truncate">
+                {activeConv.contactName || activeConv.contactPhone || activeConv.contactEmail || 'Unknown'}
+              </div>
+            </div>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              <VoiceCallPanel
+                toNumber={activeConv.contactPhone ?? undefined}
+                toName={activeConv.contactName ?? undefined}
+                onCallEnd={(secs) => {
+                  refetchMsgs();
+                  refetchConvs();
+                  toast.success(`Call ended — ${Math.floor(secs / 60)}m ${secs % 60}s`);
+                }}
+              />
+              <button className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground">
+                <MoreHorizontal className="w-5 h-5" />
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto px-4 py-4">
+        {msgsLoading ? (
+          <div className="flex items-center justify-center h-full text-muted-foreground text-sm">Loading messages...</div>
+        ) : messages.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
+            <MessageSquare className="w-10 h-10 text-muted-foreground/30" />
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">No messages yet</p>
+              <p className="text-xs text-muted-foreground/60 mt-1">Send the first message below</p>
+            </div>
+          </div>
+        ) : (
+          <div>
+            {groupedMessages.map(group => (
+              <div key={group.date}>
+                <div className="flex items-center gap-3 my-4">
+                  <div className="flex-1 h-px bg-border" />
+                  <span className="text-xs text-muted-foreground font-medium">{group.date}</span>
+                  <div className="flex-1 h-px bg-border" />
+                </div>
+                {group.msgs.map(msg => (
+                  <MessageBubble key={msg.id} msg={msg as Message} />
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+        <div ref={threadEndRef} />
+      </div>
+
+      {/* Compose bar */}
+      <div className="border-t border-border bg-background px-3 py-3 pb-safe">
+        {/* Subject line (email only) */}
+        {showSubject && (
+          <Input
+            value={composeSubject}
+            onChange={e => setComposeSubject(e.target.value)}
+            placeholder="Subject"
+            className="mb-2 h-9 text-sm"
+          />
+        )}
+
+        {/* Input row */}
+        <div className="flex items-end gap-2">
+          {/* Channel + attach button */}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button
+              onClick={() => setShowNewConv(true)}
+              className="w-9 h-9 rounded-full border border-border flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+            </button>
+            {/* Channel dropdown button */}
+            <div className="relative">
+              <button
+                onClick={() => {
+                  const channels: Channel[] = ['sms', 'email', 'note'];
+                  const idx = channels.indexOf(composeChannel);
+                  setComposeChannel(channels[(idx + 1) % channels.length]);
+                }}
+                className="flex items-center gap-1 px-2 h-9 rounded-full border border-border text-muted-foreground hover:bg-muted transition-colors text-xs font-medium"
+              >
+                {(() => {
+                  const Icon = CHANNEL_ICONS[composeChannel];
+                  return <Icon className="w-3.5 h-3.5" />;
+                })()}
+                <span className="uppercase text-[10px]">{composeChannel}</span>
+                <ChevronRight className="w-3 h-3 rotate-90" />
+              </button>
+            </div>
+          </div>
+
+          {/* Text input */}
+          <div className="flex-1 relative">
+            <Textarea
+              value={composeBody}
+              onChange={e => setComposeBody(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={
+                composeChannel === 'sms' ? 'Type a message' :
+                composeChannel === 'email' ? 'Type an email...' :
+                'Add an internal note...'
+              }
+              className={`resize-none text-[15px] min-h-[40px] max-h-[120px] rounded-2xl py-2 px-4 ${
+                composeChannel === 'note' ? 'bg-amber-50/80 border-amber-200' : 'bg-muted/50 border-border'
+              }`}
+              rows={1}
+            />
+          </div>
+
+          {/* Send button */}
+          {composeBody.trim() ? (
+            <Button
+              onClick={handleSend}
+              disabled={isSending}
+              size="icon"
+              className="w-9 h-9 rounded-full flex-shrink-0"
+            >
+              <Send className="w-4 h-4" />
+            </Button>
+          ) : (
+            <button className="w-9 h-9 rounded-full border border-border flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors flex-shrink-0">
+              <Paperclip className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        {/* Channel status hints */}
+        {composeChannel === 'sms' && (
+          <p className={`text-[10px] mt-1.5 px-1 ${twilioStatus?.configured ? 'text-emerald-600' : 'text-muted-foreground'}`}>
+            {twilioStatus?.configured
+              ? `SMS via ${twilioStatus.phoneNumber}`
+              : 'SMS not configured — add Twilio credentials in Settings'}
+          </p>
+        )}
+        {composeChannel === 'email' && (
+          <p className={`text-[10px] mt-1.5 px-1 ${gmailStatus?.connected ? 'text-emerald-600' : 'text-muted-foreground'}`}>
+            {gmailStatus?.connected
+              ? `Email via ${gmailStatus.email}`
+              : 'Gmail not connected — go to Settings → Inbox → Gmail Connect'}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+
+  // ─── Desktop layout (md+): show all 3 panels side by side ────────────────
+
+  return (
+    <>
+      {/* ── MOBILE: single-screen stack ── */}
+      <div className="md:hidden flex flex-col h-[calc(100vh-57px)] overflow-hidden">
+        {mobileScreen === 'home' && HomeScreen}
+        {mobileScreen === 'list' && ListScreen}
+        {mobileScreen === 'thread' && (activeConv ? ThreadScreen : ListScreen)}
+      </div>
+
+      {/* ── DESKTOP: 3-panel side-by-side ── */}
+      <div className="hidden md:flex h-[calc(100vh-57px)] overflow-hidden">
+
+        {/* Sidebar */}
+        <div className="w-48 flex-shrink-0 border-r border-border bg-[#f0f0f5] flex flex-col py-4 gap-0.5 px-3">
+          <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-2 mb-1">Chat</div>
+          {[
+            { id: 'all' as SidebarFilter, icon: Inbox, label: 'All Comms', unread: totalUnread },
+            { id: 'customers' as SidebarFilter, icon: Users, label: 'Customers', unread: 0 },
+            { id: 'employees' as SidebarFilter, icon: Briefcase, label: 'Employees', unread: 0 },
+          ].map(({ id, icon: Icon, label, unread }) => (
             <button
               key={id}
               onClick={() => setSidebarFilter(id)}
@@ -458,11 +846,16 @@ export default function InboxPage() {
               }`}
             >
               <Icon className="w-4 h-4 flex-shrink-0" />
-              <span className="truncate">{label}</span>
+              <span className="truncate flex-1">{label}</span>
+              {unread > 0 && (
+                <span className="bg-primary text-primary-foreground text-[10px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
+                  {unread}
+                </span>
+              )}
             </button>
           ))}
 
-          <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-2 mt-3 mb-1">Calls</div>
+          <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-2 mt-3 mb-1">Calls</div>
           <button
             onClick={() => setSidebarFilter('calls')}
             className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-colors text-left ${
@@ -476,38 +869,21 @@ export default function InboxPage() {
           </button>
         </div>
 
-        {/* ── CONVERSATION / CALL LOG LIST ── */}
-        <div className="w-72 flex-shrink-0 border-r border-border flex flex-col">
-          {/* Header */}
+        {/* Conversation list */}
+        <div className="w-80 flex-shrink-0 border-r border-border flex flex-col">
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-            <h2 className="text-sm font-semibold">
-              {sidebarFilter === 'all' ? 'All Comms' :
-               sidebarFilter === 'customers' ? 'Customers' :
-               sidebarFilter === 'employees' ? 'Employees' : 'Voice Call Log'}
-            </h2>
+            <h2 className="text-sm font-semibold">{listTitle}</h2>
             <div className="flex items-center gap-1">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button onClick={() => refetchConvs()} className="p-1.5 rounded hover:bg-muted transition-colors">
-                    <RefreshCw className="w-3.5 h-3.5 text-muted-foreground" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>Refresh</TooltipContent>
-              </Tooltip>
+              <button onClick={() => refetchConvs()} className="p-1.5 rounded hover:bg-muted transition-colors">
+                <RefreshCw className="w-3.5 h-3.5 text-muted-foreground" />
+              </button>
               {sidebarFilter !== 'calls' && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button onClick={() => setShowNewConv(true)} className="p-1.5 rounded hover:bg-muted transition-colors">
-                      <Plus className="w-3.5 h-3.5 text-muted-foreground" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>New Conversation</TooltipContent>
-                </Tooltip>
+                <button onClick={() => setShowNewConv(true)} className="p-1.5 rounded hover:bg-muted transition-colors">
+                  <Plus className="w-3.5 h-3.5 text-muted-foreground" />
+                </button>
               )}
             </div>
           </div>
-
-          {/* Search */}
           {sidebarFilter !== 'calls' && (
             <div className="px-3 py-2 border-b border-border">
               <div className="relative">
@@ -515,19 +891,17 @@ export default function InboxPage() {
                 <Input
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
-                  placeholder="Search conversations..."
+                  placeholder="Search..."
                   className="pl-8 h-8 text-xs"
                 />
               </div>
             </div>
           )}
-
-          {/* List */}
           <div className="flex-1 overflow-y-auto">
             {sidebarFilter === 'calls' ? (
               callLogsLoading ? (
                 <div className="flex items-center justify-center py-12 text-muted-foreground text-sm">Loading...</div>
-              ) : callLogs.length === 0 ? (
+              ) : (callLogs as any[]).length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 gap-3 text-center px-4">
                   <Phone className="w-8 h-8 text-muted-foreground/40" />
                   <p className="text-sm font-medium text-muted-foreground">No call logs yet</p>
@@ -564,10 +938,8 @@ export default function InboxPage() {
             ) : filteredConvs.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 gap-3 text-center px-4">
                 <MessageSquare className="w-8 h-8 text-muted-foreground/40" />
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">No conversations yet</p>
-                  <p className="text-xs text-muted-foreground/60 mt-1">Click + to start a new conversation</p>
-                </div>
+                <p className="text-sm font-medium text-muted-foreground">No conversations yet</p>
+                <p className="text-xs text-muted-foreground/60">Click + to start a new conversation</p>
               </div>
             ) : (
               <div>
@@ -584,10 +956,9 @@ export default function InboxPage() {
           </div>
         </div>
 
-        {/* ── THREAD PANEL ── */}
+        {/* Thread panel */}
         {activeConv ? (
           <div className="flex-1 flex flex-col min-w-0">
-            {/* Thread header */}
             <div className="px-5 py-3 border-b border-border flex items-center justify-between bg-background">
               <div className="flex items-center gap-3">
                 <div className={`w-8 h-8 rounded-full ${getAvatarColor(activeConv.contactName)} flex items-center justify-center text-white text-xs font-bold`}>
@@ -613,28 +984,19 @@ export default function InboxPage() {
                     toast.success(`Call ended — ${Math.floor(secs / 60)}m ${secs % 60}s`);
                   }}
                 />
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground">
-                      <MoreHorizontal className="w-4 h-4" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>More options</TooltipContent>
-                </Tooltip>
+                <button className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground">
+                  <MoreHorizontal className="w-4 h-4" />
+                </button>
               </div>
             </div>
-
-            {/* Messages */}
             <div className="flex-1 overflow-y-auto px-5 py-4">
               {msgsLoading ? (
                 <div className="flex items-center justify-center h-full text-muted-foreground text-sm">Loading messages...</div>
               ) : messages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
                   <MessageSquare className="w-10 h-10 text-muted-foreground/30" />
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">No messages yet</p>
-                    <p className="text-xs text-muted-foreground/60 mt-1">Send the first message below</p>
-                  </div>
+                  <p className="text-sm font-medium text-muted-foreground">No messages yet</p>
+                  <p className="text-xs text-muted-foreground/60 mt-1">Send the first message below</p>
                 </div>
               ) : (
                 <div>
@@ -654,14 +1016,12 @@ export default function InboxPage() {
               )}
               <div ref={threadEndRef} />
             </div>
-
-            {/* Compose bar */}
+            {/* Desktop compose bar */}
             <div className="border-t border-border bg-background px-4 py-3">
-              {/* Channel switcher */}
               <div className="flex items-center gap-1 mb-2">
                 {(['sms', 'email', 'note'] as Channel[]).map(ch => {
                   const Icon = CHANNEL_ICONS[ch];
-                  const labels = { sms: 'SMS', email: 'Email', note: 'Internal Note' };
+                  const labels = { sms: 'SMS', email: 'Email', note: 'Note' };
                   return (
                     <button
                       key={ch}
@@ -681,8 +1041,6 @@ export default function InboxPage() {
                 })}
                 <div className="ml-auto text-[10px] text-muted-foreground">⌘↵ to send</div>
               </div>
-
-              {/* Subject line (email only) */}
               {showSubject && (
                 <Input
                   value={composeSubject}
@@ -691,8 +1049,6 @@ export default function InboxPage() {
                   className="mb-2 h-8 text-sm"
                 />
               )}
-
-              {/* Message input */}
               <div className="flex items-end gap-2">
                 <Textarea
                   value={composeBody}
@@ -708,45 +1064,23 @@ export default function InboxPage() {
                   }`}
                   rows={2}
                 />
-                <div className="flex flex-col gap-1.5">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground">
-                        <Paperclip className="w-4 h-4" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent>Attach file</TooltipContent>
-                  </Tooltip>
-                  <Button
-                    onClick={handleSend}
-                    disabled={!composeBody.trim() || isSending}
-                    size="sm"
-                    className="px-3"
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                  </Button>
-                </div>
+                <Button
+                  onClick={handleSend}
+                  disabled={!composeBody.trim() || isSending}
+                  size="sm"
+                  className="px-3"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                </Button>
               </div>
-
-              {/* Channel status hints */}
               {composeChannel === 'sms' && (
                 <p className={`text-[10px] mt-1.5 ${twilioStatus?.configured ? 'text-emerald-600' : 'text-muted-foreground'}`}>
-                  {twilioStatus?.configured
-                    ? `SMS via ${twilioStatus.phoneNumber}`
-                    : 'SMS via Twilio — add TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER in Settings → Secrets'}
-                </p>
-              )}
-              {composeChannel === 'email' && (
-                <p className={`text-[10px] mt-1.5 ${gmailStatus?.connected ? 'text-emerald-600' : 'text-muted-foreground'}`}>
-                  {gmailStatus?.connected
-                    ? `Email via ${gmailStatus.email}`
-                    : 'Email via Gmail — connect help@handypioneers.com in Settings → Inbox → Gmail Connect'}
+                  {twilioStatus?.configured ? `SMS via ${twilioStatus.phoneNumber}` : 'SMS not configured'}
                 </p>
               )}
             </div>
           </div>
         ) : (
-          /* Empty state — no conversation selected */
           <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center p-8">
             <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
               <MessageSquare className="w-8 h-8 text-primary" />
@@ -754,7 +1088,7 @@ export default function InboxPage() {
             <div>
               <h3 className="text-base font-semibold mb-1">Select a conversation</h3>
               <p className="text-sm text-muted-foreground max-w-xs">
-                Choose a conversation from the list, or start a new one to communicate with clients and vendors.
+                Choose a conversation from the list, or start a new one.
               </p>
             </div>
             <Button onClick={() => setShowNewConv(true)} className="gap-2">
@@ -763,7 +1097,6 @@ export default function InboxPage() {
             </Button>
           </div>
         )}
-
       </div>
 
       {/* New Conversation Modal */}
@@ -774,9 +1107,10 @@ export default function InboxPage() {
             setShowNewConv(false);
             refetchConvs();
             setActiveConvId(id);
+            setMobileScreen('thread');
           }}
         />
       )}
-    </div>
+    </>
   );
 }
