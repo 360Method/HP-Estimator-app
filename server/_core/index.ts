@@ -8,6 +8,11 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import Stripe from "stripe";
+import { handleInboundSms, handleCallStatusUpdate, generateVoiceToken, isTwilioConfigured } from "../twilio";
+import twilio from "twilio";
+import { exchangeGmailCode, pollInboundEmails } from "../gmail";
+import { addSSEClient, broadcastNewMessage } from "../sse";
+import { randomUUID } from "crypto";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -75,11 +80,100 @@ async function startServer() {
     res.json({ received: true });
   });
 
+  // ── Twilio SMS inbound webhook ──────────────────────────────────────────────
+  // POST /api/twilio/sms — Twilio calls this when an SMS arrives
+  app.post("/api/twilio/sms", express.urlencoded({ extended: false }), async (req, res) => {
+    try {
+      // Validate Twilio signature in production
+      const authToken = process.env.TWILIO_AUTH_TOKEN;
+      if (authToken) {
+        const sig = req.headers["x-twilio-signature"] as string;
+        const url = `${req.protocol}://${req.get("host")}/api/twilio/sms`;
+        const valid = twilio.validateRequest(authToken, sig, url, req.body);
+        if (!valid && process.env.NODE_ENV === "production") {
+          res.status(403).send("Forbidden");
+          return;
+        }
+      }
+      const inboundMsg = await handleInboundSms(req.body);
+      // Broadcast real-time update to connected clients
+      if (inboundMsg) {
+        broadcastNewMessage(inboundMsg.conversationId, inboundMsg);
+      }
+      // Respond with empty TwiML — no auto-reply
+      res.set("Content-Type", "text/xml");
+      res.send("<Response></Response>");
+    } catch (err) {
+      console.error("[Twilio SMS webhook]", err);
+      res.status(500).send("Error");
+    }
+  });
+
+  // ── Twilio Voice status callback ─────────────────────────────────────────────
+  // POST /api/twilio/voice/status — Twilio calls this when call status changes
+  app.post("/api/twilio/voice/status", express.urlencoded({ extended: false }), async (req, res) => {
+    try {
+      await handleCallStatusUpdate(req.body);
+      res.sendStatus(204);
+    } catch (err) {
+      console.error("[Twilio Voice status]", err);
+      res.status(500).send("Error");
+    }
+  });
+
+  // ── Twilio Voice TwiML — outbound call instructions ──────────────────────────
+  // POST /api/twilio/voice/connect — returns TwiML to connect a browser call
+  app.post("/api/twilio/voice/connect", express.urlencoded({ extended: false }), (req, res) => {
+    const to = req.body.To || req.body.to;
+    const VoiceResponse = twilio.twiml.VoiceResponse;
+    const twiml = new VoiceResponse();
+    if (to) {
+      const dial = twiml.dial({ callerId: process.env.TWILIO_PHONE_NUMBER || "" });
+      dial.number(to);
+    } else {
+      twiml.say("No destination specified.");
+    }
+    res.set("Content-Type", "text/xml");
+    res.send(twiml.toString());
+  });
+
+  // ── SSE endpoint for real-time inbox updates ─────────────────────────────────────────────
+  app.get("/api/inbox/events", (req, res) => {
+    const clientId = randomUUID();
+    addSSEClient(clientId, res);
+  });
+
+  // ── Gmail OAuth callback ───────────────────────────────────────────────────────────────────
+  app.get("/api/gmail/callback", async (req, res) => {
+    const code = req.query.code as string;
+    if (!code) { res.status(400).send("Missing code"); return; }
+    try {
+      const email = await exchangeGmailCode(code);
+      console.log(`[Gmail] Connected account: ${email}`);
+      // Store the connected email in env for reference
+      process.env.GMAIL_CONNECTED_EMAIL = email;
+      res.redirect("/?gmail=connected");
+    } catch (err) {
+      console.error("[Gmail] OAuth callback error:", err);
+      res.redirect("/?gmail=error");
+    }
+  });
+
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   // OAuth callback under /api/oauth/callback
   registerOAuthRoutes(app);
+
+  // ── Gmail poll schedule (every 2 minutes) ────────────────────────────────────────────────────
+  setInterval(async () => {
+    const email = process.env.GMAIL_CONNECTED_EMAIL;
+    if (email) {
+      await pollInboundEmails(email).catch(err =>
+        console.error("[Gmail] Poll error:", err)
+      );
+    }
+  }, 2 * 60 * 1000); // every 2 minutes
   // tRPC API
   app.use(
     "/api/trpc",

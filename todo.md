@@ -443,3 +443,45 @@
 - [x] Root cause: outer container uses `fixed inset-0 overflow-y-auto` which clips to viewport height during print
 - [x] Fix: added `print:static print:inset-auto` to PresentSection outer div
 - [x] Fix: added `@media print` CSS to force `.fixed` → `position: static` and `.overflow-y-auto` → `overflow: visible`
+
+## Inbox — Unified Communications Hub
+
+### Phase 1: Schema + API
+- [x] Add `conversations` table (id, customerId, contactName, contactPhone, contactEmail, lastMessageAt, lastMessagePreview, unreadCount, channels)
+- [x] Add `messages` table (id, conversationId, channel, direction, body, status, metadata, sentAt, readAt)
+- [x] Add `call_logs` table (id, conversationId, messageId, twilioCallSid, direction, duration, recordingUrl, voicemailUrl, status)
+- [x] Run pnpm db:push
+- [x] tRPC: conversations.list, conversations.get, conversations.markRead, conversations.findOrCreate
+- [x] tRPC: messages.send (channel-agnostic), messages.list
+- [x] tRPC: callLogs.list
+
+### Phase 2: Core UI Shell
+- [x] /inbox route with 3-panel layout (sidebar filters, conversation list, thread panel)
+- [x] Conversation list with avatar, name, last message preview, timestamp, unread badge
+- [x] Thread view with chronological messages, channel icons, direction styling
+- [x] Compose bar with channel switcher (SMS/Email/Note), send button
+- [x] Internal notes (no external provider needed — works immediately)
+
+### Phase 3: SMS via Twilio
+- [x] TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER secrets scaffolded (user must add credentials)
+- [x] Outbound SMS send via Twilio REST API (server/twilio.ts)
+- [x] Inbound SMS webhook at /api/twilio/sms
+- [x] Real-time SSE endpoint for new message push (server/sse.ts + useInboxSSE hook)
+
+### Phase 4: Email via Gmail API
+- [x] Gmail OAuth flow in Settings → Integrations (server/gmail.ts + server/routers/gmail.ts)
+- [x] Outbound email via Gmail API (send as help@handypioneers.com)
+- [x] Inbound email polling/webhook, thread linking to conversation
+
+### Phase 5: Calling
+- [x] Twilio call log sync (missed/inbound/outbound shown in Voice Call Log tab)
+- [x] Twilio Voice SDK — in-browser click-to-call (VoiceCallPanel component)
+- [x] Inbound call routing webhook at /api/twilio/voice
+- [x] Call events logged to call_logs table
+
+### Phase 6: Polish
+- [x] Unread count badges on conversation list items
+- [x] Browser push notification permission banner + Notification API on new inbound messages
+- [x] Search conversations by name/number/email/preview
+- [x] Channel filter chips in compose bar (SMS/Email/Note)
+- [x] New Conversation modal with name/phone/email fields

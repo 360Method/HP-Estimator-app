@@ -67,6 +67,7 @@ const BACKEND_NAV: { icon: React.ElementType; label: string; section: AppSection
   { icon: Briefcase,       label: 'Jobs',       section: 'jobs'      },
   { icon: CalendarDays,    label: 'Schedule',   section: 'schedule' as AppSection },
   { icon: GitBranch,       label: 'Pipeline',   section: 'pipeline'  },
+  { icon: Inbox,           label: 'Inbox',      section: 'inbox' as AppSection },
   { icon: DollarSign,      label: 'Financials', section: null        },
   { icon: BarChart2,       label: 'Reporting',  section: null        },
   { icon: Megaphone,       label: 'Marketing',  section: null        },
@@ -171,12 +172,18 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
     setShowMobileNav(false);
   };
 
+  const handleGoToInbox = () => {
+    navigateToTopLevel('inbox' as AppSection);
+    setShowMobileNav(false);
+  };
+
   const handleNavClick = (section: AppSection | null, label: string) => {
     if (section === 'customers') { handleGoToCustomers(); return; }
     if (section === 'jobs') { handleGoToJobs(); return; }
     if (section === 'pipeline') { handleGoToPipeline(); return; }
     if (section === 'dashboard') { handleGoToDashboard(); return; }
     if (section === 'schedule') { handleGoToSchedule(); return; }
+    if (section === 'inbox') { handleGoToInbox(); return; }
     handleBackendNav(label);
   };
 
