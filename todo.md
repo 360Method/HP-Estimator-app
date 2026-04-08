@@ -498,3 +498,10 @@
 - [x] Root cause: AccessToken requires a Twilio API Key (SK...) as the signing key, not the Auth Token
 - [x] API Key SK09bf8c... (HP Field Estimator Voice) added and validated
 - [x] generateVoiceToken now uses TWILIO_API_KEY + TWILIO_API_SECRET — JWT generates successfully (HS256)
+
+## Inbox — Voice ConnectionError 53000
+
+- [x] Token claims correct; TwiML App Voice URL set correctly
+- [x] Root cause: public_application_connect_enabled was false + no edge specified
+- [x] Enabled public_application_connect_enabled via Twilio API
+- [x] Added edge: 'roaming' to Device init to let Twilio pick closest edge

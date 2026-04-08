@@ -49,6 +49,9 @@ export default function VoiceCallPanel({ toNumber, toName, onCallEnd }: VoiceCal
     const device = new Device(tokenData.token, {
       logLevel: 1,
       codecPreferences: ['opus', 'pcmu'] as any,
+      // Specify edge to avoid 53000 signaling connection errors.
+      // 'roaming' lets Twilio pick the closest edge automatically.
+      edge: 'roaming',
     });
 
     device.on('registered', () => {
