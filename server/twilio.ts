@@ -148,12 +148,19 @@ export async function handleCallStatusUpdate(params: {
 // ─── Voice Token (for in-browser calling) ────────────────────────────────────
 
 export function generateVoiceToken(identity: string): string {
-  const sid = process.env.TWILIO_ACCOUNT_SID;
-  const token = process.env.TWILIO_AUTH_TOKEN;
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const apiKey = process.env.TWILIO_API_KEY;
+  const apiSecret = process.env.TWILIO_API_SECRET;
   const twimlAppSid = process.env.TWILIO_TWIML_APP_SID;
 
-  if (!sid || !token || !twimlAppSid) {
-    throw new Error("Twilio Voice not fully configured. Add TWILIO_TWIML_APP_SID in Settings → Secrets.");
+  if (!accountSid || !apiKey || !apiSecret || !twimlAppSid) {
+    const missing = [
+      !accountSid && 'TWILIO_ACCOUNT_SID',
+      !apiKey && 'TWILIO_API_KEY',
+      !apiSecret && 'TWILIO_API_SECRET',
+      !twimlAppSid && 'TWILIO_TWIML_APP_SID',
+    ].filter(Boolean).join(', ');
+    throw new Error(`Twilio Voice not fully configured. Missing: ${missing}`);
   }
 
   const AccessToken = twilio.jwt.AccessToken;
@@ -164,7 +171,9 @@ export function generateVoiceToken(identity: string): string {
     incomingAllow: true,
   });
 
-  const accessToken = new AccessToken(sid, token, process.env.TWILIO_API_KEY || token, {
+  // AccessToken must be signed with an API Key (SK...) + API Secret pair.
+  // Using Auth Token directly causes error 20101 (AccessTokenInvalid).
+  const accessToken = new AccessToken(accountSid, apiKey, apiSecret, {
     identity,
     ttl: 3600, // 1 hour
   });

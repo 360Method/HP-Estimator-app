@@ -492,3 +492,9 @@
 - [x] Fixed signature validation URL to use x-forwarded-proto/host behind reverse proxy
 - [x] Signature validation now logs but does not block (allows debugging)
 - [x] Inbound SMS confirmed working — test message received in Inbox
+
+## Inbox — Voice Token Fix (20101)
+
+- [x] Root cause: AccessToken requires a Twilio API Key (SK...) as the signing key, not the Auth Token
+- [x] API Key SK09bf8c... (HP Field Estimator Voice) added and validated
+- [x] generateVoiceToken now uses TWILIO_API_KEY + TWILIO_API_SECRET — JWT generates successfully (HS256)
