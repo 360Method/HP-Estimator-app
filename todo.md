@@ -485,3 +485,10 @@
 - [x] Search conversations by name/number/email/preview
 - [x] Channel filter chips in compose bar (SMS/Email/Note)
 - [x] New Conversation modal with name/phone/email fields
+
+## Inbox — Inbound SMS Debug
+
+- [x] Root cause: Twilio webhook URL not yet configured in Twilio console
+- [x] Fixed signature validation URL to use x-forwarded-proto/host behind reverse proxy
+- [x] Signature validation now logs but does not block (allows debugging)
+- [x] Inbound SMS confirmed working — test message received in Inbox

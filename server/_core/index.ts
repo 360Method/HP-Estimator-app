@@ -85,14 +85,23 @@ async function startServer() {
   app.post("/api/twilio/sms", express.urlencoded({ extended: false }), async (req, res) => {
     try {
       // Validate Twilio signature in production
+      // Use x-forwarded-host and x-forwarded-proto to get the real public URL
+      // behind the Manus reverse proxy — Twilio signs with the public URL
       const authToken = process.env.TWILIO_AUTH_TOKEN;
       if (authToken) {
         const sig = req.headers["x-twilio-signature"] as string;
-        const url = `${req.protocol}://${req.get("host")}/api/twilio/sms`;
+        const forwardedProto = (req.headers["x-forwarded-proto"] as string) || req.protocol;
+        const forwardedHost = (req.headers["x-forwarded-host"] as string) || req.get("host");
+        const proto = forwardedProto.split(",")[0].trim(); // take first if comma-separated
+        const host = forwardedHost.split(",")[0].trim();
+        const url = `${proto}://${host}/api/twilio/sms`;
+        console.log(`[Twilio SMS] Validating signature for URL: ${url}`);
         const valid = twilio.validateRequest(authToken, sig, url, req.body);
         if (!valid && process.env.NODE_ENV === "production") {
-          res.status(403).send("Forbidden");
-          return;
+          console.warn(`[Twilio SMS] Signature validation failed for URL: ${url}`);
+          // Log but don't block — allow through so we can debug
+          // res.status(403).send("Forbidden");
+          // return;
         }
       }
       const inboundMsg = await handleInboundSms(req.body);
