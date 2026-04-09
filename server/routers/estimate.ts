@@ -303,14 +303,15 @@ export const estimateRouter = router({
     .mutation(async ({ input }) => {
       const results: { email?: string; sms?: string; errors: string[] } = { errors: [] };
 
-      // Auto-generate portalUrl if customerId + origin provided but portalUrl is not
+      // Auto-generate portalUrl using the customer portal base URL
       let portalUrl = input.portalUrl;
-      if (!portalUrl && input.customerId && input.origin) {
+      if (!portalUrl && input.customerId) {
         try {
           const token = randomBytes(32).toString('hex');
           const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
           await createPortalToken({ customerId: input.customerId, token, expiresAt });
-          portalUrl = `${input.origin}/portal/auth?token=${token}&redirect=/portal/estimates`;
+          const portalBase = process.env.PORTAL_BASE_URL ?? 'https://client.handypioneers.com';
+          portalUrl = `${portalBase}/portal/auth?token=${token}&redirect=/portal/estimates`;
         } catch (e) {
           console.warn('[estimate.send] Could not generate portal token:', e);
         }

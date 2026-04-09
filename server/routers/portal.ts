@@ -698,7 +698,7 @@ export const portalRouter = router({
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
       await createPortalToken({ customerId: customer.id, token, expiresAt });
 
-      const baseUrl = input.origin ?? process.env.PORTAL_BASE_URL ?? 'https://pro.handypioneers.com';
+      const baseUrl = process.env.PORTAL_BASE_URL ?? 'https://client.handypioneers.com';
       const portalUrl = `${baseUrl}/portal/auth?token=${token}`;
 
       try {
