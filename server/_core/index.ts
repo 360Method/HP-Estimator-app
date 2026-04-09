@@ -166,6 +166,16 @@ async function startServer() {
     addSSEClient(clientId, res);
   });
 
+  // ── Gmail diagnostic endpoint (temporary) ─────────────────────────────────────────────────
+  app.get("/api/gmail/debug", (req, res) => {
+    res.json({
+      configured: !!(process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET),
+      clientIdPrefix: process.env.GMAIL_CLIENT_ID?.slice(0, 20) || null,
+      lastError: process.env.GMAIL_LAST_ERROR || null,
+      connectedEmail: process.env.GMAIL_CONNECTED_EMAIL || null,
+    });
+  });
+
   // ── Gmail OAuth callback ───────────────────────────────────────────────────────────────────
   app.get("/api/gmail/callback", async (req, res) => {
     const code = req.query.code as string;
@@ -187,8 +197,12 @@ async function startServer() {
       process.env.GMAIL_CONNECTED_EMAIL = email;
       res.redirect(`${origin}/?gmail=connected`);
     } catch (err) {
-      console.error("[Gmail] OAuth callback error:", err);
-      res.redirect(`${origin}/?gmail=error`);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      const errDetail = (err as any)?.response?.data ? JSON.stringify((err as any).response.data) : '';
+      console.error("[Gmail] OAuth callback error:", errMsg, errDetail);
+      // Store error for diagnostic endpoint
+      process.env.GMAIL_LAST_ERROR = `${errMsg} ${errDetail}`.trim();
+      res.redirect(`${origin}/?gmail=error&reason=${encodeURIComponent(errMsg.slice(0, 100))}`);
     }
   });
 
