@@ -1,6 +1,7 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
+  adminAllowlist,
   callLogs,
   conversations,
   gmailTokens,
@@ -244,4 +245,44 @@ export async function upsertGmailToken(
   await db.insert(gmailTokens)
     .values({ email, accessToken, refreshToken: refreshToken ?? undefined, expiresAt })
     .onDuplicateKeyUpdate({ set: { accessToken, refreshToken: refreshToken ?? undefined, expiresAt } });
+}
+
+// ─── ADMIN ALLOWLIST ─────────────────────────────────────────────────────────
+
+export async function getAdminAllowlist() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(adminAllowlist).orderBy(adminAllowlist.createdAt);
+}
+
+/**
+ * Returns true if the email is allowed to access the admin app.
+ * If the allowlist is empty, all authenticated users are allowed (open mode).
+ */
+export async function isEmailAllowed(email: string): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return true; // fail-open if DB unavailable
+  const rows = await db.select({ id: adminAllowlist.id }).from(adminAllowlist).limit(1);
+  if (rows.length === 0) return true; // empty list = open mode
+  const match = await db
+    .select({ id: adminAllowlist.id })
+    .from(adminAllowlist)
+    .where(eq(adminAllowlist.email, email.toLowerCase().trim()))
+    .limit(1);
+  return match.length > 0;
+}
+
+export async function addAdminAllowlistEmail(email: string, addedBy?: string) {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .insert(adminAllowlist)
+    .values({ email: email.toLowerCase().trim(), addedBy })
+    .onDuplicateKeyUpdate({ set: { addedBy } });
+}
+
+export async function removeAdminAllowlistEmail(email: string) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(adminAllowlist).where(eq(adminAllowlist.email, email.toLowerCase().trim()));
 }

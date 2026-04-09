@@ -29,6 +29,13 @@
       "when": 1775748348618,
       "tag": "0003_illegal_maria_hill",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1775757347120,
+      "tag": "0004_goofy_sentinels",
+      "breakpoints": true
     }
   ]
 }

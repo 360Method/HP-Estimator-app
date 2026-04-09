@@ -365,3 +365,15 @@ export const snapshotInvoices = mysqlTable("snapshotInvoices", {
 
 export type SnapshotOpportunity = typeof snapshotOpportunities.$inferSelect;
 export type SnapshotInvoice = typeof snapshotInvoices.$inferSelect;
+
+// ─── ADMIN ALLOWLIST ─────────────────────────────────────────────────────────
+// Emails allowed to access the admin app (pro.handypioneers.com).
+// If the table is empty, all authenticated users are allowed (open mode).
+export const adminAllowlist = mysqlTable("adminAllowlist", {
+  id: int("id").autoincrement().primaryKey(),
+  email: varchar("email", { length: 320 }).notNull().unique(),
+  addedBy: varchar("addedBy", { length: 64 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type AdminAllowlistEntry = typeof adminAllowlist.$inferSelect;
+export type InsertAdminAllowlistEntry = typeof adminAllowlist.$inferInsert;

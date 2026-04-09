@@ -603,3 +603,16 @@
 - [x] Server: reporting.getMetrics tRPC query (monthly revenue, funnel, top customers, open invoices)
 - [x] Client: auto-sync on app load and on any opportunity/invoice change (debounced 5s)
 - [x] Client: ReportingPage reads from trpc.reporting.getMetrics instead of local state
+
+## Admin App Access Control (Allowlist)
+
+- [x] Add `admin_allowlist` table to drizzle schema (id, email, createdAt, addedBy)
+- [x] Add DB helpers: getAdminAllowlist, addAdminAllowlistEmail, removeAdminAllowlistEmail, isEmailAllowed
+- [x] Add tRPC procedures: allowlist.list, allowlist.add, allowlist.remove (all protectedProcedure)
+- [x] Add server-side check: auth.me returns isAllowed flag based on email
+- [x] Add 403 gate in Home.tsx: authenticated but not allowed → show access denied page
+- [x] Add allowlist management UI in Settings page
+- [x] Seed allowlist with owner email on first boot if list is empty (skipped — empty list = open mode by default)
+- [x] Build HCP-style branded login page (AdminLogin.tsx) — split layout, left: HP logo + Google sign-in button, right: branded illustration/message
+- [x] Wire AdminLogin as the unauthenticated gate for pro.handypioneers.com (show instead of Home when not logged in)
+- [x] Show 403 access-denied screen when authenticated but email not on allowlist

@@ -3,6 +3,7 @@
 // ============================================================
 
 import { useMemo } from 'react';
+import { useAuth } from '@/_core/hooks/useAuth';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { calcPhase, calcTotals } from '@/lib/calc';
 import MetricsBar from '@/components/MetricsBar';
@@ -21,8 +22,32 @@ import SchedulePage from '@/pages/SchedulePage';
 import InboxPage from '@/pages/InboxPage';
 import ReportingPage from '@/pages/ReportingPage';
 import MarketingPage from '@/pages/MarketingPage';
+import AdminLogin from '@/pages/AdminLogin';
+import AdminAccessDenied from '@/pages/AdminAccessDenied';
 
 export default function Home() {
+  const { user, loading } = useAuth();
+
+  // Auth loading — render nothing to avoid flash of login page
+  if (loading) return null;
+
+  // Not authenticated — show branded login page
+  if (!user) return <AdminLogin />;
+
+  // Authenticated but not on the admin allowlist
+  if ((user as { isAllowed?: boolean }).isAllowed === false) {
+    return <AdminAccessDenied email={user.email} />;
+  }
+
+  return <AdminApp />;
+}
+
+/**
+ * Separate component so hooks (useEstimator) are only called
+ * after auth is confirmed — avoids triggering protected procedures
+ * before we know the user is allowed.
+ */
+function AdminApp() {
   const { state } = useEstimator();
 
   const totals = useMemo(() => {

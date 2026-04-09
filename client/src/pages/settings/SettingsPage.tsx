@@ -8,7 +8,7 @@ import {
   ArrowLeft, Building2, CreditCard, Bell, Users,
   FileText, Receipt, Briefcase, UserPlus, GitBranch,
   BookOpen, CheckSquare, Tag, Zap, ChevronDown, ChevronRight,
-  DollarSign, Layers, Settings,
+  DollarSign, Layers, Settings, ShieldCheck,
 } from 'lucide-react';
 
 // Sub-page imports
@@ -28,9 +28,10 @@ import LeadSourcesSettings from './LeadSourcesSettings';
 import TagsSettings from './TagsSettings';
 import IntegrationsSettings from './IntegrationsSettings';
 import RolesSettings from './RolesSettings';
+import AllowlistSettings from './AllowlistSettings';
 
 export type SettingsSection =
-  | 'company' | 'billing' | 'notifications' | 'team' | 'roles'
+  | 'company' | 'billing' | 'notifications' | 'team' | 'roles' | 'allowlist'
   | 'estimates' | 'invoices' | 'jobs' | 'leads' | 'pipeline' | 'price-book'
   | 'checklists' | 'job-fields' | 'lead-sources' | 'tags'
   | 'integrations';
@@ -44,11 +45,12 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Global Settings',
     items: [
-      { id: 'company',       label: 'Company',           icon: Building2  },
-      { id: 'billing',       label: 'Billing',           icon: CreditCard },
-      { id: 'notifications', label: 'Notifications',     icon: Bell       },
-      { id: 'team',          label: 'Team & Permissions', icon: Users      },
-      { id: 'roles',         label: 'Roles & Permissions', icon: Settings   },
+      { id: 'company',       label: 'Company',             icon: Building2   },
+      { id: 'billing',       label: 'Billing',             icon: CreditCard  },
+      { id: 'notifications', label: 'Notifications',       icon: Bell        },
+      { id: 'team',          label: 'Team & Permissions',  icon: Users       },
+      { id: 'roles',         label: 'Roles & Permissions', icon: Settings    },
+      { id: 'allowlist',     label: 'Access Allowlist',    icon: ShieldCheck },
     ],
   },
   {
@@ -108,6 +110,7 @@ export default function SettingsPage({ onBack, initialSection = 'company' }: Pro
       case 'notifications': return <NotificationsSettings />;
       case 'team':          return <TeamSettings />;
       case 'roles':         return <RolesSettings />;
+      case 'allowlist':     return <AllowlistSettings />;
       case 'estimates':     return <EstimatesSettings />;
       case 'invoices':      return <InvoicesSettings />;
       case 'jobs':          return <JobsSettings />;

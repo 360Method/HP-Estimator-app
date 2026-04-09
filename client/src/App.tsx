@@ -1,14 +1,15 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import { Route, Switch, useLocation } from "wouter";
+import { useEffect } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { EstimatorProvider } from "./contexts/EstimatorContext";
 import { PortalProvider } from "./contexts/PortalContext";
 import Home from "./pages/Home";
 
-// Portal pages (lazy-loaded to keep main bundle small)
+// Portal pages
 import PortalLogin from "./pages/portal/PortalLogin";
 import PortalAppointments from "./pages/portal/PortalAppointments";
 import PortalInvoices from "./pages/portal/PortalInvoices";
@@ -20,11 +21,28 @@ import PortalWallet from "./pages/portal/PortalWallet";
 import PortalReferral from "./pages/portal/PortalReferral";
 import PortalMessages from "./pages/portal/PortalMessages";
 
+// Domains that should serve only the customer portal (no admin app)
+const PORTAL_HOSTNAMES = ["client.handypioneers.com"];
+
+const isPortalDomain = PORTAL_HOSTNAMES.includes(window.location.hostname);
+
+/**
+ * On portal domains, redirect root "/" to "/portal/login" so customers
+ * never load the admin app and never trigger Manus OAuth.
+ */
+function PortalDomainRoot() {
+  const [, navigate] = useLocation();
+  useEffect(() => {
+    navigate("/portal/login", { replace: true });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+
 function Router() {
   return (
     <Switch>
-      {/* Main app */}
-      <Route path="/" component={Home} />
+      {/* Main app — on portal domains, root redirects to portal login */}
+      <Route path="/" component={isPortalDomain ? PortalDomainRoot : Home} />
 
       {/* Customer portal — public (no session required) */}
       <Route path="/portal/login" component={PortalLogin} />
