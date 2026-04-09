@@ -319,3 +319,49 @@ export const portalReferrals = mysqlTable("portalReferrals", {
 
 export type PortalReferral = typeof portalReferrals.$inferSelect;
 export type InsertPortalReferral = typeof portalReferrals.$inferInsert;
+
+// ─── Reporting Snapshot Tables ────────────────────────────────────────────────
+// These tables receive periodic snapshots of local-state data for reporting.
+// They are NOT the source of truth — EstimatorContext is. They exist solely
+// to power the Reporting page with DB-backed queries.
+
+export const snapshotOpportunities = mysqlTable("snapshotOpportunities", {
+  /** Matches Opportunity.id from local state */
+  id: varchar("id", { length: 64 }).primaryKey(),
+  area: varchar("area", { length: 16 }).notNull(), // lead | estimate | job
+  stage: varchar("stage", { length: 64 }).notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  value: int("value").default(0).notNull(), // cents
+  archived: boolean("archived").default(false).notNull(),
+  /** ISO string — when the estimate/job was won */
+  wonAt: varchar("wonAt", { length: 32 }),
+  /** ISO string — when the estimate was sent to the customer */
+  sentAt: varchar("sentAt", { length: 32 }),
+  /** HP customer ID from local state */
+  customerId: varchar("customerId", { length: 64 }),
+  customerName: varchar("customerName", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export const snapshotInvoices = mysqlTable("snapshotInvoices", {
+  /** Matches Invoice.id from local state */
+  id: varchar("id", { length: 64 }).primaryKey(),
+  opportunityId: varchar("opportunityId", { length: 64 }),
+  customerId: varchar("customerId", { length: 64 }),
+  customerName: varchar("customerName", { length: 255 }),
+  status: varchar("status", { length: 32 }).notNull(), // draft | unpaid | partial | paid | void
+  /** Total amount in cents */
+  total: int("total").default(0).notNull(),
+  /** Amount paid in cents */
+  amountPaid: int("amountPaid").default(0).notNull(),
+  /** Due date ISO string */
+  dueDate: varchar("dueDate", { length: 32 }),
+  /** Issued date ISO string */
+  issuedAt: varchar("issuedAt", { length: 32 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type SnapshotOpportunity = typeof snapshotOpportunities.$inferSelect;
+export type SnapshotInvoice = typeof snapshotInvoices.$inferSelect;

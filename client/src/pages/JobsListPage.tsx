@@ -379,6 +379,11 @@ export default function JobsListPage() {
                       {row.opp.archived && (
                         <span className="text-[10px] text-muted-foreground">(archived)</span>
                       )}
+                      {row.opp.sentAt && (
+                        <span className="inline-flex items-center gap-0.5 mt-0.5 px-1.5 py-0.5 bg-sky-50 border border-sky-200 text-sky-700 rounded-full text-[9px] font-semibold">
+                          ✉️ Sent {new Date(row.opp.sentAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        </span>
+                      )}
                     </td>
 
                     {/* Stage */}

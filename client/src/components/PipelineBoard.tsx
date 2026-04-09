@@ -29,6 +29,7 @@ import {
   LayoutGrid, List, Plus, GripVertical, ExternalLink,
   DollarSign, Archive, ArrowRight, ChevronDown, Trash2,
   ArrowUpDown, MapPin, Search, User, UserPlus, Check, X as XIcon, ChevronRight,
+  SendHorizonal,
 } from 'lucide-react';
 import { Opportunity, PipelineArea, OpportunityStage, Customer } from '@/lib/types';
 import { useEstimator } from '@/contexts/EstimatorContext';
@@ -172,6 +173,12 @@ function KanbanCard({
             <div className="text-[10px] text-muted-foreground mt-1 flex items-center gap-1">
               <MapPin size={9} className="shrink-0" />
               <span className="truncate">{[opp.clientSnapshot.address, opp.clientSnapshot.city].filter(Boolean).join(', ')}</span>
+            </div>
+          )}
+          {opp.sentAt && (
+            <div className="inline-flex items-center gap-1 mt-1.5 px-1.5 py-0.5 bg-sky-50 border border-sky-200 text-sky-700 rounded-full text-[9px] font-semibold">
+              <SendHorizonal size={8} />
+              Sent {new Date(opp.sentAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
             </div>
           )}
         </div>

@@ -672,6 +672,42 @@ export const portalRouter = router({
       });
       return { appointment: appt };
     }),
+
+  /** Standalone portal invite — upsert customer, generate magic link, send email */
+  inviteCustomerToPortal: hpProcedure
+    .input(
+      z.object({
+        customerEmail: z.string().email(),
+        customerName: z.string(),
+        customerPhone: z.string().optional(),
+        hpCustomerId: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const customer = await upsertPortalCustomer({
+        email: input.customerEmail.toLowerCase().trim(),
+        name: input.customerName,
+        phone: input.customerPhone,
+        hpCustomerId: input.hpCustomerId,
+        referralCode: await generateReferralCode(input.customerName),
+      });
+      if (!customer) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR' });
+
+      const token = randomBytes(32).toString('hex');
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      await createPortalToken({ customerId: customer.id, token, expiresAt });
+
+      const baseUrl = process.env.PORTAL_BASE_URL ?? 'https://client.handypioneers.com';
+      const portalUrl = `${baseUrl}/portal/auth?token=${token}`;
+
+      await sendEmail({
+        to: customer.email,
+        subject: 'Your Handy Pioneers Customer Portal Invitation',
+        html: buildMagicLinkEmail(customer.name, portalUrl),
+      }).catch(() => null);
+
+      return { sent: true, portalCustomerId: customer.id };
+    }),
 });
 
 // ─── EMAIL TEMPLATES ──────────────────────────────────────────────────────────

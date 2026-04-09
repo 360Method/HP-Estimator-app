@@ -572,11 +572,26 @@ export default function CustomerSection() {
     setCustomerProfile({ tags: customerProfile.tags.filter(t => t !== tag) });
   };
 
+  const inviteToPortalMutation = trpc.portal.inviteCustomerToPortal.useMutation({
+    onSuccess: () => {
+      setCustomerProfile({ portalInviteSent: true, portalInvitedAt: new Date().toISOString() });
+      addActivityEvent({ type: 'note_added', title: 'Portal invite sent', description: `Invite sent to ${jobInfo.email}` });
+      toast.success('Portal invite sent! Customer will receive a login email.');
+    },
+    onError: (err) => {
+      toast.error(`Failed to send invite: ${err.message}`);
+    },
+  });
+
   const sendPortalInvite = () => {
     if (!jobInfo.email) { toast.error('Add an email address first'); return; }
-    setCustomerProfile({ portalInviteSent: true, portalInvitedAt: new Date().toISOString() });
-    addActivityEvent({ type: 'note_added', title: 'Portal invite sent', description: `Invite sent to ${jobInfo.email}` });
-    toast.success('Portal invite sent!');
+    if (!jobInfo.client) { toast.error('Add a customer name first'); return; }
+    inviteToPortalMutation.mutate({
+      customerEmail: jobInfo.email,
+      customerName: jobInfo.client,
+      customerPhone: jobInfo.phone || undefined,
+      hpCustomerId: activeCustomerId || undefined,
+    });
   };
 
   const logCall = () => {
@@ -708,9 +723,10 @@ export default function CustomerSection() {
                     </div>
                   ) : (
                     <button onClick={sendPortalInvite}
-                      className="flex items-center gap-1.5 text-xs text-primary hover:underline">
+                      disabled={inviteToPortalMutation.isPending}
+                      className="flex items-center gap-1.5 text-xs text-primary hover:underline disabled:opacity-50 disabled:cursor-not-allowed">
                       <ExternalLink size={12} />
-                      Invite to customer portal
+                      {inviteToPortalMutation.isPending ? 'Sending invite…' : 'Invite to customer portal'}
                     </button>
                   )}
                 </div>

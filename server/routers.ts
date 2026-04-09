@@ -8,6 +8,7 @@ import { inboxRouter } from "./routers/inbox";
 import { gmailRouter } from "./routers/gmail";
 import { portalRouter } from "./routers/portal";
 import { uploadsRouter } from "./routers/uploads";
+import { reportingRouter } from "./routers/reporting";
 
 export const appRouter = router({
   // if you need to use socket.io, read and register route in server/_core/index.ts
@@ -18,6 +19,7 @@ export const appRouter = router({
   gmail: gmailRouter,
   portal: portalRouter,
   uploads: uploadsRouter,
+  reporting: reportingRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
