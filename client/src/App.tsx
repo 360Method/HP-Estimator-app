@@ -9,6 +9,9 @@ import { EstimatorProvider } from "./contexts/EstimatorContext";
 import { PortalProvider } from "./contexts/PortalContext";
 import Home from "./pages/Home";
 
+// Booking wizard (public)
+import BookingWizard from "./pages/book/BookingWizard";
+
 // Portal pages
 import PortalLogin from "./pages/portal/PortalLogin";
 import PortalAppointments from "./pages/portal/PortalAppointments";
@@ -44,7 +47,10 @@ function Router() {
       {/* Main app — on portal domains, root redirects to portal login */}
       <Route path="/" component={isPortalDomain ? PortalDomainRoot : Home} />
 
-      {/* Customer portal — public (no session required) */}
+        {/* Public booking wizard — no login required */}
+      <Route path="/book" component={BookingWizard} />
+
+      {/* Customer portal — public (no login required) */}
       <Route path="/portal/login" component={PortalLogin} />
       <Route path="/portal/auth" component={PortalLogin} />
 

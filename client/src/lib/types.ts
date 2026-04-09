@@ -216,7 +216,7 @@ export interface GlobalSettings {
   paintRate: number;
 }
 
-export type AppSection = 'customer' | 'sales' | 'calculator' | 'estimate' | 'present' | 'customers' | 'jobs' | 'job-details' | 'pipeline' | 'invoice' | 'dashboard' | 'schedule' | 'inbox' | 'reporting' | 'marketing';
+export type AppSection = 'customer' | 'sales' | 'calculator' | 'estimate' | 'present' | 'customers' | 'jobs' | 'job-details' | 'pipeline' | 'invoice' | 'dashboard' | 'schedule' | 'inbox' | 'reporting' | 'marketing' | 'requests';
 
 // ── Schedule / Calendar Types ──────────────────────────────────
 

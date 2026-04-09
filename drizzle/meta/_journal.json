@@ -36,6 +36,20 @@
       "when": 1775757347120,
       "tag": "0004_goofy_sentinels",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1775764182558,
+      "tag": "0005_confused_shadow_king",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1775764612976,
+      "tag": "0006_messy_pandemic",
+      "breakpoints": true
     }
   ]
 }

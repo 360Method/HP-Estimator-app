@@ -377,3 +377,162 @@ export const adminAllowlist = mysqlTable("adminAllowlist", {
 });
 export type AdminAllowlistEntry = typeof adminAllowlist.$inferSelect;
 export type InsertAdminAllowlistEntry = typeof adminAllowlist.$inferInsert;
+
+
+// ─── SERVICE ZIP CODES ────────────────────────────────────────────────────────
+// Zip codes where Handy Pioneers operates. Managed in Settings → Service Area.
+// If the table is empty, all zip codes are accepted (open mode).
+export const serviceZipCodes = mysqlTable("serviceZipCodes", {
+  id: int("id").autoincrement().primaryKey(),
+  zip: varchar("zip", { length: 10 }).notNull().unique(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type ServiceZipCode = typeof serviceZipCodes.$inferSelect;
+export type InsertServiceZipCode = typeof serviceZipCodes.$inferInsert;
+
+// ─── ONLINE REQUESTS ──────────────────────────────────────────────────────────
+// Submitted via the public booking wizard at /book.
+// On submit, a customer record and a lead are created automatically.
+export const onlineRequests = mysqlTable("onlineRequests", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Zip code entered at step 1 */
+  zip: varchar("zip", { length: 10 }).notNull(),
+  /** Always "general" for now */
+  serviceType: varchar("serviceType", { length: 64 }).notNull().default("general"),
+  /** Free-text description of the work needed */
+  description: text("description"),
+  /** ASAP | within_week | flexible */
+  timeline: varchar("timeline", { length: 32 }),
+  /** JSON array of S3 URLs for uploaded photos */
+  photoUrls: text("photoUrls"),
+  /** Contact info */
+  firstName: varchar("firstName", { length: 128 }).notNull(),
+  lastName: varchar("lastName", { length: 128 }).notNull(),
+  phone: varchar("phone", { length: 32 }).notNull(),
+  email: varchar("email", { length: 320 }).notNull(),
+  /** Service address */
+  street: varchar("street", { length: 255 }).notNull(),
+  unit: varchar("unit", { length: 64 }),
+  city: varchar("city", { length: 128 }).notNull(),
+  state: varchar("state", { length: 64 }).notNull(),
+  /** SMS marketing consent */
+  smsConsent: boolean("smsConsent").default(false).notNull(),
+  /** Linked customer ID (set after submit) */
+  customerId: varchar("customerId", { length: 64 }),
+  /** Linked lead ID (set after submit) */
+  leadId: varchar("leadId", { length: 64 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type OnlineRequest = typeof onlineRequests.$inferSelect;
+export type InsertOnlineRequest = typeof onlineRequests.$inferInsert;
+
+// ─── CUSTOMERS ────────────────────────────────────────────────────────────────
+// Core CRM customer record. Mirrors the Client-side Customer interface.
+export const customers = mysqlTable("customers", {
+  id: varchar("id", { length: 64 }).primaryKey(), // nanoid
+  firstName: varchar("firstName", { length: 128 }).notNull().default(""),
+  lastName: varchar("lastName", { length: 128 }).notNull().default(""),
+  displayName: varchar("displayName", { length: 255 }).notNull().default(""),
+  company: varchar("company", { length: 255 }).notNull().default(""),
+  mobilePhone: varchar("mobilePhone", { length: 32 }).notNull().default(""),
+  homePhone: varchar("homePhone", { length: 32 }).notNull().default(""),
+  workPhone: varchar("workPhone", { length: 32 }).notNull().default(""),
+  email: varchar("email", { length: 320 }).notNull().default(""),
+  role: varchar("role", { length: 128 }).notNull().default(""),
+  customerType: varchar("customerType", { length: 32 }).notNull().default("homeowner"),
+  doNotService: boolean("doNotService").default(false).notNull(),
+  // Primary address (flat fields for quick access)
+  street: varchar("street", { length: 255 }).notNull().default(""),
+  unit: varchar("unit", { length: 64 }).notNull().default(""),
+  city: varchar("city", { length: 128 }).notNull().default(""),
+  state: varchar("state", { length: 64 }).notNull().default(""),
+  zip: varchar("zip", { length: 10 }).notNull().default(""),
+  addressNotes: text("addressNotes"),
+  // Notes & preferences
+  customerNotes: text("customerNotes"),
+  billsTo: varchar("billsTo", { length: 255 }).notNull().default(""),
+  tags: text("tags"), // JSON array of strings
+  leadSource: varchar("leadSource", { length: 64 }).notNull().default(""),
+  referredBy: varchar("referredBy", { length: 255 }).notNull().default(""),
+  sendNotifications: boolean("sendNotifications").default(true).notNull(),
+  sendMarketingOptIn: boolean("sendMarketingOptIn").default(false).notNull(),
+  defaultTaxCode: varchar("defaultTaxCode", { length: 16 }),
+  // Financials (computed/cached)
+  lifetimeValue: int("lifetimeValue").default(0).notNull(),
+  outstandingBalance: int("outstandingBalance").default(0).notNull(),
+  // Source tracking
+  /** If created from an online request, link to it */
+  onlineRequestId: int("onlineRequestId"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbCustomer = typeof customers.$inferSelect;
+export type InsertDbCustomer = typeof customers.$inferInsert;
+
+// ─── CUSTOMER ADDRESSES ───────────────────────────────────────────────────────
+// Additional service addresses for a customer (beyond the primary flat fields).
+export const customerAddresses = mysqlTable("customerAddresses", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  customerId: varchar("customerId", { length: 64 }).notNull(),
+  label: varchar("label", { length: 64 }).notNull().default("Home"),
+  street: varchar("street", { length: 255 }).notNull().default(""),
+  unit: varchar("unit", { length: 64 }).notNull().default(""),
+  city: varchar("city", { length: 128 }).notNull().default(""),
+  state: varchar("state", { length: 64 }).notNull().default(""),
+  zip: varchar("zip", { length: 10 }).notNull().default(""),
+  isPrimary: boolean("isPrimary").default(false).notNull(),
+  lat: text("lat"),
+  lng: text("lng"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbCustomerAddress = typeof customerAddresses.$inferSelect;
+export type InsertDbCustomerAddress = typeof customerAddresses.$inferInsert;
+
+// ─── OPPORTUNITIES ────────────────────────────────────────────────────────────
+// Leads, estimates, and jobs — unified pipeline record.
+export const opportunities = mysqlTable("opportunities", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  customerId: varchar("customerId", { length: 64 }).notNull(),
+  area: varchar("area", { length: 16 }).notNull().default("lead"), // lead | estimate | job
+  stage: varchar("stage", { length: 64 }).notNull().default("New Lead"),
+  title: varchar("title", { length: 255 }).notNull().default(""),
+  value: int("value").default(0).notNull(), // cents
+  jobNumber: varchar("jobNumber", { length: 64 }),
+  notes: text("notes"),
+  archived: boolean("archived").default(false).notNull(),
+  archivedAt: varchar("archivedAt", { length: 32 }),
+  // Lifecycle timestamps
+  sourceLeadId: varchar("sourceLeadId", { length: 64 }),
+  sourceEstimateId: varchar("sourceEstimateId", { length: 64 }),
+  convertedToEstimateAt: varchar("convertedToEstimateAt", { length: 32 }),
+  convertedToJobAt: varchar("convertedToJobAt", { length: 32 }),
+  sentAt: varchar("sentAt", { length: 32 }),
+  wonAt: varchar("wonAt", { length: 32 }),
+  // Schedule
+  scheduledDate: varchar("scheduledDate", { length: 32 }),
+  scheduledEndDate: varchar("scheduledEndDate", { length: 32 }),
+  scheduledDuration: int("scheduledDuration"),
+  assignedTo: text("assignedTo"),
+  scheduleNotes: text("scheduleNotes"),
+  // Large JSON blobs stored as text
+  estimateSnapshot: text("estimateSnapshot"), // JSON EstimateSnapshot
+  tasks: text("tasks"),                       // JSON JobTask[]
+  attachments: text("attachments"),           // JSON JobAttachment[]
+  jobActivity: text("jobActivity"),           // JSON ActivityEvent[]
+  clientSnapshot: text("clientSnapshot"),     // JSON clientSnapshot
+  // Signed documents (S3 URLs preferred over base64)
+  signedEstimateUrl: text("signedEstimateUrl"),
+  signedEstimateFilename: varchar("signedEstimateFilename", { length: 255 }),
+  completionSignatureUrl: text("completionSignatureUrl"),
+  completionSignedBy: varchar("completionSignedBy", { length: 255 }),
+  completionSignedAt: varchar("completionSignedAt", { length: 32 }),
+  sowDocument: text("sowDocument"),
+  sowGeneratedAt: varchar("sowGeneratedAt", { length: 32 }),
+  // Source tracking
+  /** If created from an online request */
+  onlineRequestId: int("onlineRequestId"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbOpportunity = typeof opportunities.$inferSelect;
+export type InsertDbOpportunity = typeof opportunities.$inferInsert;

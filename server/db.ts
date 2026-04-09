@@ -1,15 +1,24 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, like, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   adminAllowlist,
   callLogs,
   conversations,
+  customerAddresses,
+  customers,
+  DbCustomer,
+  DbCustomerAddress,
+  DbOpportunity,
   gmailTokens,
   InsertCallLog,
   InsertConversation,
+  InsertDbCustomer,
+  InsertDbCustomerAddress,
+  InsertDbOpportunity,
   InsertMessage,
   InsertUser,
   messages,
+  opportunities,
   users,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
@@ -285,4 +294,212 @@ export async function removeAdminAllowlistEmail(email: string) {
   const db = await getDb();
   if (!db) return;
   await db.delete(adminAllowlist).where(eq(adminAllowlist.email, email.toLowerCase().trim()));
+}
+
+// ─── CUSTOMER HELPERS ─────────────────────────────────────────────────────────
+
+export async function listCustomers(search?: string, limit = 200, offset = 0): Promise<DbCustomer[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const q = db.select().from(customers);
+  if (search) {
+    const s = `%${search}%`;
+    return q.where(
+      or(
+        like(customers.firstName, s),
+        like(customers.lastName, s),
+        like(customers.email, s),
+        like(customers.mobilePhone, s),
+        like(customers.company, s),
+      )
+    ).orderBy(asc(customers.lastName)).limit(limit).offset(offset);
+  }
+  return q.orderBy(asc(customers.lastName)).limit(limit).offset(offset);
+}
+
+export async function getCustomerById(id: string): Promise<DbCustomer | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(customers).where(eq(customers.id, id)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function findCustomerByEmail(email: string): Promise<DbCustomer | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(customers)
+    .where(eq(customers.email, email.toLowerCase().trim()))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function createCustomer(data: InsertDbCustomer): Promise<DbCustomer> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(customers).values(data);
+  const created = await db.select().from(customers)
+    .where(eq(customers.id, data.id!))
+    .limit(1);
+  return created[0];
+}
+
+export async function updateCustomer(id: string, data: Partial<InsertDbCustomer>): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(customers).set(data).where(eq(customers.id, id));
+}
+
+export async function deleteCustomer(id: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(customers).where(eq(customers.id, id));
+}
+
+// ─── CUSTOMER ADDRESS HELPERS ─────────────────────────────────────────────────
+
+export async function listCustomerAddresses(customerId: string): Promise<DbCustomerAddress[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(customerAddresses)
+    .where(eq(customerAddresses.customerId, customerId))
+    .orderBy(asc(customerAddresses.label));
+}
+
+export async function createCustomerAddress(data: InsertDbCustomerAddress): Promise<DbCustomerAddress> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(customerAddresses).values(data);
+  const created = await db.select().from(customerAddresses)
+    .where(eq(customerAddresses.id, data.id!))
+    .limit(1);
+  return created[0];
+}
+
+export async function deleteCustomerAddress(id: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(customerAddresses).where(eq(customerAddresses.id, id));
+}
+
+// ─── OPPORTUNITY HELPERS ──────────────────────────────────────────────────────
+
+export async function listOpportunities(
+  area?: string,
+  customerId?: string,
+  archived = false,
+  limit = 500,
+): Promise<DbOpportunity[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = [eq(opportunities.archived, archived)];
+  if (area) conditions.push(eq(opportunities.area, area));
+  if (customerId) conditions.push(eq(opportunities.customerId, customerId));
+  return db.select().from(opportunities)
+    .where(and(...conditions))
+    .orderBy(desc(opportunities.createdAt))
+    .limit(limit);
+}
+
+export async function getOpportunityById(id: string): Promise<DbOpportunity | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(opportunities).where(eq(opportunities.id, id)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function createOpportunity(data: InsertDbOpportunity): Promise<DbOpportunity> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(opportunities).values(data);
+  const created = await db.select().from(opportunities)
+    .where(eq(opportunities.id, data.id!))
+    .limit(1);
+  return created[0];
+}
+
+export async function updateOpportunity(id: string, data: Partial<InsertDbOpportunity>): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(opportunities).set(data).where(eq(opportunities.id, id));
+}
+
+export async function deleteOpportunity(id: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(opportunities).where(eq(opportunities.id, id));
+}
+
+// ─── SERVICE ZIP CODE HELPERS ─────────────────────────────────────────────────
+
+export async function listServiceZipCodes() {
+  const db = await getDb();
+  if (!db) return [];
+  const { serviceZipCodes } = await import("../drizzle/schema");
+  return db.select().from(serviceZipCodes).orderBy(asc(serviceZipCodes.zip));
+}
+
+export async function isZipCodeAllowed(zip: string): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return true; // fail-open
+  const { serviceZipCodes } = await import("../drizzle/schema");
+  const rows = await db.select({ id: serviceZipCodes.id }).from(serviceZipCodes).limit(1);
+  if (rows.length === 0) return true; // empty list = serve all zips
+  const match = await db.select({ id: serviceZipCodes.id })
+    .from(serviceZipCodes)
+    .where(eq(serviceZipCodes.zip, zip.trim()))
+    .limit(1);
+  return match.length > 0;
+}
+
+export async function addServiceZipCode(zip: string) {
+  const db = await getDb();
+  if (!db) return;
+  const { serviceZipCodes } = await import("../drizzle/schema");
+  await db.insert(serviceZipCodes).values({ zip: zip.trim() }).onDuplicateKeyUpdate({ set: { zip: zip.trim() } });
+}
+
+export async function removeServiceZipCode(zip: string) {
+  const db = await getDb();
+  if (!db) return;
+  const { serviceZipCodes } = await import("../drizzle/schema");
+  await db.delete(serviceZipCodes).where(eq(serviceZipCodes.zip, zip.trim()));
+}
+
+// ─── ONLINE REQUEST HELPERS ───────────────────────────────────────────────────
+
+export async function createOnlineRequest(data: {
+  zip: string;
+  serviceType: string;
+  description: string;
+  timeline: string;
+  photoUrls: string[];
+  firstName: string;
+  lastName: string;
+  phone: string;
+  email: string;
+  street: string;
+  unit?: string;
+  city: string;
+  state: string;
+  smsConsent: boolean;
+  customerId?: string;
+  leadId?: string;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const { onlineRequests } = await import("../drizzle/schema");
+  await db.insert(onlineRequests).values({
+    ...data,
+    photoUrls: JSON.stringify(data.photoUrls),
+  });
+  const created = await db.select().from(onlineRequests)
+    .orderBy(desc(onlineRequests.id)).limit(1);
+  return created[0];
+}
+
+export async function listOnlineRequests(limit = 100) {
+  const db = await getDb();
+  if (!db) return [];
+  const { onlineRequests } = await import("../drizzle/schema");
+  return db.select().from(onlineRequests).orderBy(desc(onlineRequests.createdAt)).limit(limit);
 }

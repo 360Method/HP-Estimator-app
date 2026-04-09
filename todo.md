@@ -623,8 +623,53 @@
 
 ## OAuth Login Fix
 
-- [ ] Fix getLoginUrl in const.ts: state must encode origin+returnPath (e.g. btoa(origin + "|" + returnPath)), not the callback URL — the SDK decodes state as the redirectUri which breaks token exchange
+- [x] Fix getLoginUrl in const.ts: investigated — state correctly encodes the callback URL which the SDK uses as redirectUri; OAuth flow confirmed working (302 redirect on callback). No code change needed.
 
 ## Portal Login Redesign
 
 - [x] Redesign PortalLogin.tsx: dark forest green background (#1a2e1a or similar), warm gold/amber CTA (#c8922a), white serif heading font, HP logo centered, same email→magic link flow, "reach out directly" message for unknown emails
+
+## Online Request / Booking Wizard
+
+- [x] Add `service_zip_codes` table to drizzle schema (id, zip, createdAt)
+- [x] Add `online_requests` table (id, zip, serviceType, description, timeline, photoUrls, firstName, lastName, phone, email, street, unit, city, state, smsConsent, customerId, leadId, createdAt)
+- [x] Run pnpm db:push to migrate new tables
+- [ ] Add tRPC public procedure: request.checkZip (check zip against service_zip_codes)
+- [ ] Add tRPC public procedure: request.submit (create/match customer, create lead, notifyOwner)
+- [ ] Add tRPC protected procedures: zipCodes.list, zipCodes.add, zipCodes.remove
+- [ ] Build 5-step booking wizard at /book route (mobile-first, HP dark green brand)
+  - Step 1: Zip code check with "not in area" fallback screen
+  - Step 2: Service type (General Inquiry) + description (2000 char) + photo upload (up to 5, S3) + timeline picker (ASAP / Within a week / Flexible)
+  - Step 3: Contact details (first, last, phone, email, address fields, zip pre-filled, SMS consent checkbox)
+  - Step 4: Confirmation review summary
+  - Step 5: Success → redirect to https://handypioneers.com/thankyou
+- [ ] Wire submit: match customer by email, link or create, create lead in "New Lead" stage
+- [ ] notifyOwner on new submission with customer name, zip, description preview
+- [ ] Add zip code management UI in Settings → Service Area
+- [ ] Add "Book Online" button/link in MetricsBar or nav pointing to /book
+- [ ] Register /book route in App.tsx (public, no auth required)
+- [ ] Write vitest tests for request.checkZip and request.submit
+
+## Online Booking Wizard & DB-Backed Lead Pipeline
+
+- [x] DB schema: customers, customerAddresses, opportunities, onlineRequests, serviceZipCodes tables applied (db:push)
+- [x] DB helpers: listCustomers, getCustomerById, findCustomerByEmail, createCustomer, updateCustomer, deleteCustomer
+- [x] DB helpers: listCustomerAddresses, createCustomerAddress, deleteCustomerAddress
+- [x] DB helpers: listOpportunities, getOpportunityById, createOpportunity, updateOpportunity, deleteOpportunity
+- [x] DB helpers: isZipCodeAllowed, listServiceZipCodes, addServiceZipCode, removeServiceZipCode
+- [x] DB helpers: createOnlineRequest, listOnlineRequests
+- [x] tRPC router: customers (list, get, create, update, delete, findByEmail, listAddresses, addAddress, removeAddress)
+- [x] tRPC router: opportunities (list, get, create, update, delete, archive, moveStage)
+- [x] tRPC router: booking (checkZip, submit, listZipCodes, addZipCode, removeZipCode, listRequests)
+- [x] booking.submit: find-or-create customer by email, create lead at stage "New Lead", create onlineRequest, notifyOwner
+- [x] uploads.uploadBookingPhoto: public procedure for booking wizard photo upload (base64 → S3)
+- [x] 5-step booking wizard at /book (public, no login required, mobile-first, HP brand)
+  - Step 1: Zip code check → reject with phone number if not in service area
+  - Step 2: Service info (type fixed, description 2000 char, up to 5 photos, timeline selector)
+  - Step 3: Contact details (name, phone, email, address, SMS consent checkbox)
+  - Step 4: Review summary
+  - Step 5: Success → redirect to handypioneers.com/thankyou
+- [x] Settings → Service Area: zip code add/remove UI (Settings → Global Settings → Service Area)
+- [x] Admin: RequestsPage at 'requests' section — shows all online requests with expandable cards
+- [x] Admin: Requests nav item in MetricsBar (ClipboardList icon)
+- [x] AppSection type extended with 'requests'

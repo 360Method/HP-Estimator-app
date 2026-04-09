@@ -24,6 +24,7 @@ import ReportingPage from '@/pages/ReportingPage';
 import MarketingPage from '@/pages/MarketingPage';
 import AdminLogin from '@/pages/AdminLogin';
 import AdminAccessDenied from '@/pages/AdminAccessDenied';
+import RequestsPage from '@/pages/RequestsPage';
 
 export default function Home() {
   const { user, loading } = useAuth();
@@ -75,6 +76,8 @@ function AdminApp() {
         <ReportingPage />
       ) : state.activeSection === 'marketing' ? (
         <MarketingPage />
+      ) : state.activeSection === 'requests' ? (
+        <RequestsPage />
       ) : (
         <div className="container py-6 max-w-4xl">
           {state.activeSection === 'customer' && <CustomerSection />}

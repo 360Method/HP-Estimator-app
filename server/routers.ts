@@ -11,6 +11,9 @@ import { gmailRouter } from "./routers/gmail";
 import { portalRouter } from "./routers/portal";
 import { uploadsRouter } from "./routers/uploads";
 import { reportingRouter } from "./routers/reporting";
+import { customersRouter } from "./routers/customers";
+import { opportunitiesRouter } from "./routers/opportunities";
+import { bookingRouter } from "./routers/booking";
 import {
   getAdminAllowlist,
   addAdminAllowlistEmail,
@@ -27,6 +30,9 @@ export const appRouter = router({
   portal: portalRouter,
   uploads: uploadsRouter,
   reporting: reportingRouter,
+  customers: customersRouter,
+  opportunities: opportunitiesRouter,
+  booking: bookingRouter,
 
   auth: router({
     /**
