@@ -15,7 +15,7 @@ import IntakeShell, {
 } from './IntakeShell';
 
 export default function NewJobModal({ onClose, prefill }: { onClose: () => void; prefill?: any }) {
-  const { addOpportunity, addCustomer, setActiveCustomer } = useEstimator();
+  const { addOpportunity, addCustomer, setActiveCustomer, addScheduleEvent } = useEstimator();
   const [customer, setCustomer] = useState(prefill?.displayName ?? '');
   const [selectedCustomer, setSelectedCustomer] = useState<SelectedCustomer | null>(
     prefill ? { id: prefill.id ?? '', displayName: prefill.displayName ?? '', phone: prefill.phone ?? '', email: prefill.email ?? '', address: prefill.address ?? '', city: prefill.city ?? '', state: prefill.state ?? '', zip: prefill.zip ?? '' } : null
@@ -43,6 +43,10 @@ export default function NewJobModal({ onClose, prefill }: { onClose: () => void;
       addCustomer({ id: customerId, displayName: customer.trim(), firstName: '', lastName: '', company: '', mobilePhone: '', homePhone: '', workPhone: '', email: '', role: '', customerType: 'homeowner', doNotService: false, street: '', unit: '', city: '', state: 'WA', zip: '', addressNotes: '', customerNotes: '', billsTo: '', tags: [], leadSource: '', referredBy: '', sendNotifications: true, sendMarketingOptIn: false, createdAt: new Date().toISOString(), lifetimeValue: 0, outstandingBalance: 0 });
     }
     const totalValue = items.reduce((s, i) => s + i.qty * i.unitPrice, 0);
+    // We can't pass id to addOpportunity (it generates its own), so we use a stable ref
+    // and rely on the fact that the new opp will be the last one added for this customer.
+    // Instead, we'll add the schedule event using a predictable title match after creation.
+    const newJobTitle = `Job — ${customer.trim()}`;
     addOpportunity({
       area: 'job',
       stage: 'New Job',
@@ -52,6 +56,26 @@ export default function NewJobModal({ onClose, prefill }: { onClose: () => void;
       archived: false,
       clientSnapshot: { client: customer.trim(), companyName: '', phone: selectedCustomer?.phone ?? '', email: selectedCustomer?.email ?? '', address: selectedCustomer?.address ?? '', city: selectedCustomer?.city ?? '', state: selectedCustomer?.state ?? '', zip: selectedCustomer?.zip ?? '', jobType: '', scope: '' },
     });
+    // Auto-create schedule event if dates were provided
+    if (!anytime && fromDate) {
+      const startISO = fromDate && fromTime
+        ? new Date(`${fromDate}T${fromTime}`).toISOString()
+        : new Date(`${fromDate}T08:00`).toISOString();
+      const endISO = toDate
+        ? (toTime ? new Date(`${toDate}T${toTime}`).toISOString() : new Date(`${toDate}T17:00`).toISOString())
+        : new Date(new Date(startISO).getTime() + 8 * 60 * 60 * 1000).toISOString();
+      addScheduleEvent({
+        type: 'job',
+        title: newJobTitle,
+        start: startISO,
+        end: endISO,
+        allDay: false,
+        customerId,
+        assignedTo: team ? team.split(',').map(s => s.trim()).filter(Boolean) : [],
+        notes: notes || '',
+        completed: false,
+      });
+    }
     setActiveCustomer(customerId);
     toast.success('Job created');
     onClose();

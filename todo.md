@@ -92,12 +92,12 @@
 
 ## Schedule Tab — Future Improvements
 
-- [ ] Add assignee and status filters to SchedulePage filter bar
+- [x] Add assignee and status filters to SchedulePage filter bar
 - [ ] Upgrade drag-reschedule to support time-slot precision in week/day views
 - [ ] Add event resize support (drag end time to adjust duration)
 - [x] Add recurrence support in EventFormModal (daily/weekly/biweekly/monthly)
-- [ ] Add "Schedule" date fields to JobDetailsSection (service date, estimated duration)
-- [ ] Auto-create schedule event when job is created or estimate is scheduled
+- [x] Add "Schedule" date fields to JobDetailsSection (service date, estimated duration)
+- [x] Auto-create schedule event when job is created or estimate is scheduled
 
 ## Calculator Upgrade — Material Dimensions, Tiers & Portland Labor Rates
 
@@ -508,9 +508,9 @@
 
 ## Inbox — Outbound SMS Debug
 
-- [ ] Check server logs for errors when sending outbound SMS
-- [ ] Verify sendSms helper and tRPC procedure
-- [ ] Fix and verify end-to-end
+- [x] Check server logs for errors when sending outbound SMS
+- [x] Verify sendSms helper and tRPC procedure
+- [x] Fix and verify end-to-end
 
 ## Customer Portal (client.handypioneers.com)
 
