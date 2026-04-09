@@ -35,6 +35,7 @@ import { Opportunity, PipelineArea, OpportunityStage, Customer } from '@/lib/typ
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { nanoid } from 'nanoid';
 import { toast } from 'sonner';
+import { ConvertToEstimateModal, ConvertToJobModal } from '@/components/ConversionModal';
 
 // ── Stage color map ───────────────────────────────────────────
 const STAGE_COLORS: Record<string, string> = {
@@ -124,6 +125,8 @@ function KanbanCard({
   };
 
   const [showActions, setShowActions] = useState(false);
+  const [showConvertToEstimateModal, setShowConvertToEstimateModal] = useState(false);
+  const [showConvertToJobModal, setShowConvertToJobModal] = useState(false);
 
   const handleDelete = () => {
     if (window.confirm(`Delete "${opp.title}"? This cannot be undone.`)) {
@@ -141,15 +144,15 @@ function KanbanCard({
       {/* Card header */}
       <div className="flex items-start gap-2 p-3">
         {/* Drag handle */}
-        <button
+        <div
           {...attributes}
           {...listeners}
-          className="mt-0.5 shrink-0 text-muted-foreground/40 hover:text-muted-foreground cursor-grab active:cursor-grabbing touch-none select-none"
+          className="mt-0.5 shrink-0 text-muted-foreground/40 hover:text-muted-foreground cursor-grab active:cursor-grabbing touch-none select-none p-0.5"
           aria-label="Drag to reorder"
-          onPointerDown={e => e.stopPropagation()}
+          role="button"
         >
           <GripVertical size={14} />
-        </button>
+        </div>
 
         <div className="flex-1 min-w-0">
           {customerName && (
@@ -232,7 +235,7 @@ function KanbanCard({
             )}
             {onConvertToEstimate && (
               <button
-                onClick={() => onConvertToEstimate(opp.id, opp.title, opp.value)}
+                onClick={() => setShowConvertToEstimateModal(true)}
                 className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold border border-border rounded-lg text-muted-foreground hover:text-primary hover:border-primary transition-colors"
               >
                 <ArrowRight size={10} /> → Estimate
@@ -240,7 +243,7 @@ function KanbanCard({
             )}
             {onConvertToJob && (
               <button
-                onClick={() => onConvertToJob(opp.id, opp.title, opp.value)}
+                onClick={() => setShowConvertToJobModal(true)}
                 className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold border border-border rounded-lg text-muted-foreground hover:text-primary hover:border-primary transition-colors"
               >
                 <ArrowRight size={10} /> → Job
@@ -265,6 +268,30 @@ function KanbanCard({
             Created {fmtDate(opp.createdAt)}
           </div>
         </div>
+      )}
+
+      {/* Conversion modals */}
+      {showConvertToEstimateModal && onConvertToEstimate && (
+        <ConvertToEstimateModal
+          opp={opp}
+          onConfirm={(title, value) => {
+            onConvertToEstimate(opp.id, title, value);
+            setShowConvertToEstimateModal(false);
+            toast.success('Lead converted to Estimate');
+          }}
+          onClose={() => setShowConvertToEstimateModal(false)}
+        />
+      )}
+      {showConvertToJobModal && onConvertToJob && (
+        <ConvertToJobModal
+          opp={opp}
+          onConfirm={(title, value) => {
+            onConvertToJob(opp.id, title, value);
+            setShowConvertToJobModal(false);
+            toast.success('Estimate approved — Job created');
+          }}
+          onClose={() => setShowConvertToJobModal(false)}
+        />
       )}
     </div>
   );
@@ -343,7 +370,7 @@ function KanbanColumn({
   );
 }
 
-// ── Table Row ─────────────────────────────────────────────────
+// // ── Table Row ─────────────────────────────────────────────
 function TableRow({
   opp, area, stages, onUpdate, onRemove,
   onConvertToEstimate, onConvertToJob, onArchive, onOpen,
@@ -360,7 +387,10 @@ function TableRow({
   onOpen?: (id: string) => void;
   customerName?: string;
 }) {
+  const [showConvertToEstimateModal, setShowConvertToEstimateModal] = useState(false);
+  const [showConvertToJobModal, setShowConvertToJobModal] = useState(false);
   return (
+    <>
     <tr className="hover:bg-slate-50 transition-colors group">
       {customerName !== undefined && (
         <td className="px-4 py-3 text-xs font-semibold text-primary truncate max-w-[120px]">
@@ -421,7 +451,7 @@ function TableRow({
           )}
           {onConvertToEstimate && (
             <button
-              onClick={() => onConvertToEstimate(opp.id, opp.title, opp.value)}
+              onClick={() => setShowConvertToEstimateModal(true)}
               className="px-2 py-1 text-[10px] font-semibold border border-border rounded-lg text-muted-foreground hover:text-primary hover:border-primary transition-colors hidden sm:inline-flex"
             >
               → Est
@@ -429,7 +459,7 @@ function TableRow({
           )}
           {onConvertToJob && (
             <button
-              onClick={() => onConvertToJob(opp.id, opp.title, opp.value)}
+              onClick={() => setShowConvertToJobModal(true)}
               className="px-2 py-1 text-[10px] font-semibold border border-border rounded-lg text-muted-foreground hover:text-primary hover:border-primary transition-colors hidden sm:inline-flex"
             >
               → Job
@@ -457,6 +487,29 @@ function TableRow({
         </div>
       </td>
     </tr>
+    {showConvertToEstimateModal && onConvertToEstimate && (
+      <ConvertToEstimateModal
+        opp={opp}
+        onConfirm={(title, value) => {
+          onConvertToEstimate(opp.id, title, value);
+          setShowConvertToEstimateModal(false);
+          toast.success('Lead converted to Estimate');
+        }}
+        onClose={() => setShowConvertToEstimateModal(false)}
+      />
+    )}
+    {showConvertToJobModal && onConvertToJob && (
+      <ConvertToJobModal
+        opp={opp}
+        onConfirm={(title, value) => {
+          onConvertToJob(opp.id, title, value);
+          setShowConvertToJobModal(false);
+          toast.success('Estimate approved — Job created');
+        }}
+        onClose={() => setShowConvertToJobModal(false)}
+      />
+    )}
+    </>
   );
 }
 

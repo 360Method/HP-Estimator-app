@@ -704,3 +704,15 @@
 - [x] Wire 'opp-details' section in Home.tsx routing → render OpportunityDetailsTab
 - [x] When opening an opportunity, default to 'opp-details' tab — updated CustomerSection, PipelinePage, JobsListPage
 - [x] Read-only mode: locked banner shown when viewing an approved estimate (wonAt set); ancestor navigation opens Details tab
+
+## Fix: Kanban DnD + Conversion Modals
+
+- [x] Fix Kanban drag-and-drop: remove onPointerDown stopPropagation from drag handle in PipelineBoard KanbanCard
+- [x] Build ConvertToEstimateModal: pre-filled title from lead, shows contact/address preview, confirm button
+- [x] Build ConvertToJobModal: pre-filled title from estimate, shows contact/address preview, confirm button
+- [x] Wire modals into CustomerSection (replaced prompt() calls)
+- [x] Wire modals into PipelineBoard KanbanCard and TableRow (replaced direct calls)
+- [x] After Lead→Estimate conversion: navigate to new estimate's Details tab (not Calculator)
+- [x] After Estimate→Job conversion: navigate to new job's Details tab (not Calculator)
+- [x] Lead card shows "Converted → Estimate" badge after conversion (via lineage chain on Details tab)
+- [x] Estimate card shows "Converted → Job" badge after conversion (via lineage chain on Details tab)

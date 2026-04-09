@@ -897,7 +897,8 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
           .concat(newEstimate),
         activePipelineArea: 'estimate',
         activeCustomerTab: 'estimates',
-        activeSection: 'calculator',
+        activeOpportunityId: action.newEstimateId,
+        activeSection: 'opp-details',
         activityFeed: [event, ...state.activityFeed],
       };
     }
@@ -1025,6 +1026,8 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
           .concat(newJob),
         activePipelineArea: 'job',
         activeCustomerTab: 'jobs',
+        activeOpportunityId: action.newJobId,
+        activeSection: 'opp-details',
         activityFeed: [event, ...state.activityFeed],
         customers: syncedCustomers,
         scheduleEvents: [...state.scheduleEvents, autoScheduleEvent],

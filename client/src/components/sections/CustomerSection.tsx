@@ -11,7 +11,8 @@
 //   Leads/Estimates/Jobs tabs: Pipeline tracker with Convert/Archive lifecycle buttons
 // ============================================================
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { ConvertToEstimateModal, ConvertToJobModal } from '@/components/ConversionModal';
 import { trpc } from '@/lib/trpc';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import {
@@ -224,6 +225,7 @@ function OpportunityCard({
     notes: string; createdAt: string; archived: boolean;
     sourceLeadId?: string; sourceEstimateId?: string;
     convertedToEstimateAt?: string; convertedToJobAt?: string;
+    clientSnapshot?: { name?: string; phone?: string; email?: string; address?: string; city?: string; state?: string; zip?: string; };
   };
   stages: OpportunityStage[];
   area: PipelineArea;
@@ -235,6 +237,8 @@ function OpportunityCard({
   onOpen?: (id: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [showConvertToEstimateModal, setShowConvertToEstimateModal] = useState(false);
+  const [showConvertToJobModal, setShowConvertToJobModal] = useState(false);
 
   const isArchived = opp.archived;
   const canConvertToEstimate = area === 'lead' && !opp.convertedToEstimateAt;
@@ -297,11 +301,7 @@ function OpportunityCard({
         <div className="mt-2 flex flex-wrap gap-1.5">
           {canConvertToEstimate && onConvertToEstimate && (
             <button
-              onClick={() => {
-                const title = prompt('Estimate title:', opp.title) ?? opp.title;
-                onConvertToEstimate(opp.id, title, opp.value);
-                toast.success('Lead converted to Estimate — opening Calculator');
-              }}
+              onClick={() => setShowConvertToEstimateModal(true)}
               className="flex items-center gap-1 px-2.5 py-1 bg-blue-600 text-white rounded-md text-[11px] font-semibold hover:bg-blue-700 transition-colors"
             >
               <RefreshCw size={10} />
@@ -316,11 +316,7 @@ function OpportunityCard({
           )}
           {canConvertToJob && onConvertToJob && (
             <button
-              onClick={() => {
-                const title = prompt('Job title:', opp.title) ?? opp.title;
-                onConvertToJob(opp.id, title, opp.value);
-                toast.success('Estimate converted to Job — opening Jobs tab');
-              }}
+              onClick={() => setShowConvertToJobModal(true)}
               className="flex items-center gap-1 px-2.5 py-1 bg-violet-600 text-white rounded-md text-[11px] font-semibold hover:bg-violet-700 transition-colors"
             >
               <RefreshCw size={10} />
@@ -371,6 +367,30 @@ function OpportunityCard({
           {opp.notes && <div className="text-xs text-muted-foreground bg-muted/50 rounded p-2">{opp.notes}</div>}
           <div className="text-[10px] text-muted-foreground">Added {new Date(opp.createdAt).toLocaleDateString()}</div>
         </div>
+      )}
+
+      {/* Conversion modals */}
+      {showConvertToEstimateModal && onConvertToEstimate && (
+        <ConvertToEstimateModal
+          opp={opp}
+          onConfirm={(title, value) => {
+            onConvertToEstimate(opp.id, title, value);
+            setShowConvertToEstimateModal(false);
+            toast.success('Lead converted to Estimate');
+          }}
+          onClose={() => setShowConvertToEstimateModal(false)}
+        />
+      )}
+      {showConvertToJobModal && onConvertToJob && (
+        <ConvertToJobModal
+          opp={opp}
+          onConfirm={(title, value) => {
+            onConvertToJob(opp.id, title, value);
+            setShowConvertToJobModal(false);
+            toast.success('Estimate approved — Job created');
+          }}
+          onClose={() => setShowConvertToJobModal(false)}
+        />
       )}
     </div>
   );
