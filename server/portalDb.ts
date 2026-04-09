@@ -244,6 +244,16 @@ export async function updatePortalInvoicePaid(
     .where(eq(portalInvoices.id, id));
 }
 
+export async function getPortalInvoiceByStripePaymentIntentId(piId: string) {
+  const db = await d();
+  const rows = await db
+    .select()
+    .from(portalInvoices)
+    .where(eq(portalInvoices.stripePaymentIntentId, piId))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
 export async function markPortalInvoiceViewed(id: number) {
   const inv = await getPortalInvoiceById(id);
   if (inv && !inv.viewedAt) {

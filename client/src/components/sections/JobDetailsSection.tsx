@@ -13,6 +13,7 @@
 // ============================================================
 
 import { useState, useRef } from 'react';
+import { trpc } from '@/lib/trpc';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import {
   JOB_TYPES, JOB_STAGES, OpportunityStage, JobTaskPriority,
@@ -90,6 +91,7 @@ export default function JobDetailsSection() {
     addJobAttachment, removeJobAttachment,
     addJobActivity, updateOpportunitySchedule,
   } = useEstimator();
+  const uploadFile = trpc.uploads.uploadFile.useMutation();
   const { jobInfo, activeOpportunityId, opportunities, customers, activeCustomerId } = state;
 
   const activeOpp = activeOpportunityId
@@ -205,17 +207,33 @@ export default function JobDetailsSection() {
     toast.success('Note added to activity feed');
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
-    files.forEach(file => {
-      // Store as a data URL for local-only persistence (no S3 in static mode)
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const url = ev.target?.result as string;
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    for (const file of files) {
+      if (file.size > 16 * 1024 * 1024) {
+        toast.error(`"${file.name}" exceeds 16 MB limit`);
+        continue;
+      }
+      try {
+        // Convert to base64 for upload
+        const base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = ev => resolve(ev.target?.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(file);
+        });
+        toast.loading(`Uploading "${file.name}"...`, { id: file.name });
+        const result = await uploadFile.mutateAsync({
+          filename: file.name,
+          mimeType: file.type || 'application/octet-stream',
+          base64,
+          folder: 'job-attachments',
+        });
         addJobAttachment(activeOpp.id, {
           id: nanoid(8),
           name: file.name,
-          url,
+          url: result.url,
           mimeType: file.type,
           size: file.size,
           uploadedAt: new Date().toISOString(),
@@ -223,14 +241,14 @@ export default function JobDetailsSection() {
         addJobActivity(activeOpp.id, {
           type: 'note_added',
           title: 'Attachment added',
-          description: `File "${file.name}" attached to job`,
+          description: `File "${file.name}" uploaded`,
         });
-        toast.success(`"${file.name}" attached`);
-      };
-      reader.readAsDataURL(file);
-    });
-    // Reset input
-    if (fileInputRef.current) fileInputRef.current.value = '';
+        toast.success(`"${file.name}" uploaded`, { id: file.name });
+      } catch (err) {
+        toast.error(`Failed to upload "${file.name}"`, { id: file.name });
+        console.error('Upload error:', err);
+      }
+    }
   };
 
   const handleDeleteAttachment = (attachmentId: string, name: string) => {

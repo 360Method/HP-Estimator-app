@@ -69,7 +69,7 @@ const BACKEND_NAV: { icon: React.ElementType; label: string; section: AppSection
   { icon: GitBranch,       label: 'Pipeline',   section: 'pipeline'  },
   { icon: Inbox,           label: 'Inbox',      section: 'inbox' as AppSection },
   { icon: DollarSign,      label: 'Financials', section: null        },
-  { icon: BarChart2,       label: 'Reporting',  section: null        },
+  { icon: BarChart2,       label: 'Reporting',  section: 'reporting' as AppSection },
   { icon: Megaphone,       label: 'Marketing',  section: null        },
 ];
 

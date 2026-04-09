@@ -308,6 +308,9 @@ function EventFormModal({ initial, customers, onSave, onClose }: EventFormModalP
   const [form, setForm] = useState<Partial<ScheduleEvent>>({ ...initial });
   const [assignedInput, setAssignedInput] = useState(initial.assignedTo?.join(', ') || '');
   const [selectedCustomerId, setSelectedCustomerId] = useState(initial.customerId || '');
+  const [recurrenceEnabled, setRecurrenceEnabled] = useState(!!initial.recurrence);
+  const [recurrenceFreq, setRecurrenceFreq] = useState<'daily' | 'weekly' | 'biweekly' | 'monthly'>(initial.recurrence?.frequency || 'weekly');
+  const [recurrenceEnd, setRecurrenceEnd] = useState(initial.recurrence?.endDate || '');
 
   const selectedCustomer = customers.find(c => c.id === selectedCustomerId);
   const availableOpportunities = selectedCustomer?.opportunities?.filter(o => !o.archived) || [];
@@ -338,6 +341,7 @@ function EventFormModal({ initial, customers, onSave, onClose }: EventFormModalP
       notes: form.notes || '',
       color: form.color,
       completed: form.completed || false,
+      recurrence: recurrenceEnabled ? { frequency: recurrenceFreq, endDate: recurrenceEnd || undefined } : undefined,
     });
   }
 
@@ -491,6 +495,46 @@ function EventFormModal({ initial, customers, onSave, onClose }: EventFormModalP
             />
           </div>
 
+          {/* Recurrence */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <input
+                type="checkbox"
+                id="recurrence"
+                checked={recurrenceEnabled}
+                onChange={e => setRecurrenceEnabled(e.target.checked)}
+                className="rounded border-gray-300 text-blue-600"
+              />
+              <label htmlFor="recurrence" className="text-sm text-gray-700 font-medium">Repeating event</label>
+            </div>
+            {recurrenceEnabled && (
+              <div className="grid grid-cols-2 gap-3 pl-6">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Frequency</label>
+                  <select
+                    value={recurrenceFreq}
+                    onChange={e => setRecurrenceFreq(e.target.value as typeof recurrenceFreq)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="biweekly">Bi-weekly</option>
+                    <option value="monthly">Monthly</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">End date (optional)</label>
+                  <input
+                    type="date"
+                    value={recurrenceEnd}
+                    onChange={e => setRecurrenceEnd(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Notes */}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Notes</label>
@@ -538,6 +582,8 @@ export default function SchedulePage() {
   const [filterTypes, setFilterTypes] = useState<Set<ScheduleEventType>>(new Set());
   const [filterCustomerId, setFilterCustomerId] = useState('');
   const [filterOpportunityId, setFilterOpportunityId] = useState<string | null>(null);
+  const [filterAssignee, setFilterAssignee] = useState('');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'completed'>('all');
   const [showFilters, setShowFilters] = useState(false);
 
   // Deep-link: pre-apply job filter from state.scheduleFilterJobId on mount
@@ -598,11 +644,19 @@ export default function SchedulePage() {
     if (filterCustomerId) {
       events = events.filter(e => e.customerId === filterCustomerId);
     }
+    if (filterAssignee) {
+      events = events.filter(e => e.assignedTo.some(a => a.toLowerCase().includes(filterAssignee.toLowerCase())));
+    }
+    if (filterStatus === 'pending') {
+      events = events.filter(e => !e.completed);
+    } else if (filterStatus === 'completed') {
+      events = events.filter(e => e.completed);
+    }
     if (filterOpportunityId) {
       events = events.filter(e => e.opportunityId === filterOpportunityId);
     }
     return events;
-  }, [state.scheduleEvents, state.customers, filterTypes, filterCustomerId, filterOpportunityId]);
+  }, [state.scheduleEvents, state.customers, filterTypes, filterCustomerId, filterOpportunityId, filterAssignee, filterStatus]);
 
   const getEventsForDay = useCallback((day: Date) => {
     return allEvents.filter(e => isSameDay(new Date(e.start), day));
@@ -714,7 +768,7 @@ export default function SchedulePage() {
     });
   }
 
-  const activeFilterCount = filterTypes.size + (filterCustomerId ? 1 : 0) + (filterOpportunityId ? 1 : 0);
+  const activeFilterCount = filterTypes.size + (filterCustomerId ? 1 : 0) + (filterOpportunityId ? 1 : 0) + (filterAssignee ? 1 : 0) + (filterStatus !== 'all' ? 1 : 0);
 
   // ── Render ────────────────────────────────────────────────
   const weekStart = startOfWeek(currentDate);
@@ -813,9 +867,27 @@ export default function SchedulePage() {
               <option key={c.id} value={c.id}>{c.displayName}</option>
             ))}
           </select>
+          <span className="text-xs font-medium text-gray-500 uppercase tracking-wide ml-2">Assignee:</span>
+          <input
+            type="text"
+            placeholder="Search crew..."
+            value={filterAssignee}
+            onChange={e => setFilterAssignee(e.target.value)}
+            className="px-2.5 py-1 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-32"
+          />
+          <span className="text-xs font-medium text-gray-500 uppercase tracking-wide ml-2">Status:</span>
+          <select
+            value={filterStatus}
+            onChange={e => setFilterStatus(e.target.value as 'all' | 'pending' | 'completed')}
+            className="px-2.5 py-1 border border-gray-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="all">All</option>
+            <option value="pending">Pending</option>
+            <option value="completed">Completed</option>
+          </select>
           {activeFilterCount > 0 && (
             <button
-              onClick={() => { setFilterTypes(new Set()); setFilterCustomerId(''); setFilterOpportunityId(null); }}
+              onClick={() => { setFilterTypes(new Set()); setFilterCustomerId(''); setFilterOpportunityId(null); setFilterAssignee(''); setFilterStatus('all'); }}
               className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 transition-colors"
             >
               <X className="w-3 h-3" /> Clear all

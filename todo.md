@@ -33,13 +33,13 @@
 - [x] Final invoice auto-generation on job completion (Archive Job)
 - [x] Invoice PDF export / print (InvoicePrintView with print-only isolation)
 - [x] Send invoice to customer via email
-- [ ] Stripe webhook → update invoice status in DB (currently client-side only)
+- [x] Stripe webhook → update invoice status in DB (currently client-side only)
 - [ ] PayPal JS SDK integration (replace redirect flow with in-page approval)
 - [x] Deposit % configurable per-job (currently defaults to 50%)
 - [ ] Tax rate per-customer or per-region
-- [ ] Communication tab (SMS/email log)
-- [ ] Attachments tab (photo uploads)
-- [ ] Reporting / analytics page
+- [x] Communication tab (SMS/email log)
+- [x] Attachments tab (photo uploads)
+- [x] Reporting / analytics page
 - [ ] Marketing tab
 - [x] Dashboard overview page (world-class EstimatorDashboard with KPIs, funnel, charts, activity)
 
@@ -95,7 +95,7 @@
 - [ ] Add assignee and status filters to SchedulePage filter bar
 - [ ] Upgrade drag-reschedule to support time-slot precision in week/day views
 - [ ] Add event resize support (drag end time to adjust duration)
-- [ ] Add recurrence support in EventFormModal (daily/weekly/biweekly/monthly)
+- [x] Add recurrence support in EventFormModal (daily/weekly/biweekly/monthly)
 - [ ] Add "Schedule" date fields to JobDetailsSection (service date, estimated duration)
 - [ ] Auto-create schedule event when job is created or estimate is scheduled
 
@@ -368,28 +368,28 @@
 ## AI Estimator Chat + Customer-First Flow
 
 ### Phase 1 — Server
-- [ ] Build estimate.aiParse tRPC mutation in server/routers.ts
-- [ ] Design JSON schema for LLM structured output (phases, lineItems, customItems, warnings)
-- [ ] Build catalog serializer — converts phases.ts into LLM-readable item list
-- [ ] Prompt engineering: pre-primed detection, lf summation, unit inference, ambiguity flagging
-- [ ] Wire invokeLLM with response_format json_schema
+- [x] Build estimate.aiParse tRPC mutation in server/routers.ts
+- [x] Design JSON schema for LLM structured output (phases, lineItems, customItems, warnings)
+- [x] Build catalog serializer — converts phases.ts into LLM-readable item list
+- [x] Prompt engineering: pre-primed detection, lf summation, unit inference, ambiguity flagging
+- [x] Wire invokeLLM with response_format json_schema
 
 ### Phase 2 — Client AI Chat Panel
-- [ ] AIEstimatorPanel component: textarea input, submit, loading spinner
-- [ ] Diff/review panel: green new items, amber changed qty, yellow warnings
-- [ ] Apply button: dispatches parsed result to EstimatorContext calculator state
-- [ ] Cancel/reset button
+- [x] AIEstimatorPanel component: textarea input, submit, loading spinner
+- [x] Diff/review panel: green new items, amber changed qty, yellow warnings
+- [x] Apply button: dispatches parsed result to EstimatorContext calculator state
+- [x] Cancel/reset button
 
 ### Phase 3 — Customer-First Intake Modals
-- [ ] Refactor NewLeadModal: Step 1 customer search/create, Step 2 lead details
-- [ ] Refactor NewEstimateModal: Step 1 customer search/create, Step 2 estimate details
-- [ ] Refactor NewJobModal: Step 1 customer search/create, Step 2 job details
-- [ ] Customer badge shown at top of Step 2 (confirmed, cannot be blank)
+- [x] Refactor NewLeadModal: Step 1 customer search/create, Step 2 lead details
+- [x] Refactor NewEstimateModal: Step 1 customer search/create, Step 2 estimate details
+- [x] Refactor NewJobModal: Step 1 customer search/create, Step 2 job details
+- [x] Customer badge shown at top of Step 2 (confirmed, cannot be blank)
 
 ### Phase 4 — Wiring
-- [ ] Add "AI Estimate" button to CalculatorSection header
-- [ ] Add "AI Estimate" entry to NewMenu dropdown
-- [ ] Customer must be selected before AI chat opens
+- [x] Add "AI Estimate" button to CalculatorSection header
+- [x] Add "AI Estimate" entry to NewMenu dropdown
+- [x] Customer must be selected before AI chat opens
 
 ## AI Estimate Chat Panel
 
@@ -557,3 +557,18 @@
 - [x] Email: magic link email template (Handy Pioneers logo, LOGIN TO CUSTOMER PORTAL button, 7-day expiry notice)
 - [x] Email: new estimate notification email (Approve Estimate #XXXX, View estimate button, View all estimates link)
 - [x] Email: new invoice notification email (Review & pay invoice, amount due, due date)
+
+## Batch 2 — Continued Features
+
+- [x] Stripe webhook: handle payment_intent.succeeded → update invoice status to 'paid' in DB
+- [x] Communication tab: SMS/email log pulled from conversations/messages tables, filterable by type
+- [x] Attachments tab: photo/file upload to S3, list with preview, delete
+- [x] Reporting page: revenue chart (monthly), job funnel, top customers, avg job value, open invoices summary
+- [x] AI Estimate: wire invokeLLM with JSON schema, AIEstimatorPanel component, diff/review panel, Apply button
+- [x] Schedule: assignee + status filters in SchedulePage filter bar
+- [x] Schedule: recurrence support in EventFormModal (daily/weekly/biweekly/monthly)
+
+## Batch 2 — Follow-up Items
+
+- [ ] Schedule: expand recurring events into calendar view instances (recurrence engine)
+- [ ] Schedule: handle edit-single-occurrence vs edit-series semantics

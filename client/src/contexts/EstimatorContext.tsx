@@ -201,6 +201,8 @@ type Action =
   // ── Job attachment actions ────────────────────────────────────
   | { type: 'ADD_JOB_ATTACHMENT'; oppId: string; attachment: JobAttachment }
   | { type: 'REMOVE_JOB_ATTACHMENT'; oppId: string; attachmentId: string }
+  | { type: 'ADD_CUSTOMER_ATTACHMENT'; customerId: string; attachment: JobAttachment }
+  | { type: 'REMOVE_CUSTOMER_ATTACHMENT'; customerId: string; attachmentId: string }
   // ── Job activity actions ──────────────────────────────────────
   | { type: 'ADD_JOB_ACTIVITY'; oppId: string; event: ActivityEvent }
   // ── Lifecycle actions ──────────────────────────────────────
@@ -718,6 +720,22 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
         ...state,
         opportunities: state.opportunities.map(o =>
           o.id !== action.oppId ? o : { ...o, attachments: (o.attachments ?? []).filter(a => a.id !== action.attachmentId) }
+        ),
+      };
+
+    case 'ADD_CUSTOMER_ATTACHMENT':
+      return {
+        ...state,
+        customers: state.customers.map(c =>
+          c.id !== action.customerId ? c : { ...c, attachments: [...(c.attachments ?? []), action.attachment] }
+        ),
+      };
+
+    case 'REMOVE_CUSTOMER_ATTACHMENT':
+      return {
+        ...state,
+        customers: state.customers.map(c =>
+          c.id !== action.customerId ? c : { ...c, attachments: (c.attachments ?? []).filter(a => a.id !== action.attachmentId) }
         ),
       };
 
@@ -1457,6 +1475,9 @@ interface EstimatorContextValue {
   // Job attachments
   addJobAttachment: (oppId: string, attachment: JobAttachment) => void;
   removeJobAttachment: (oppId: string, attachmentId: string) => void;
+  // Customer-level attachments
+  addCustomerAttachment: (customerId: string, attachment: JobAttachment) => void;
+  removeCustomerAttachment: (customerId: string, attachmentId: string) => void;
   // Job activity
   addJobActivity: (oppId: string, event: Omit<ActivityEvent, 'id' | 'timestamp'>) => void;
   // User profile
@@ -1781,12 +1802,17 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'REMOVE_JOB_TASK', oppId, taskId });
   }, []);
 
-  const addJobAttachment = useCallback((oppId: string, attachment: JobAttachment) => {
+   const addJobAttachment = useCallback((oppId: string, attachment: JobAttachment) => {
     dispatch({ type: 'ADD_JOB_ATTACHMENT', oppId, attachment });
   }, []);
-
   const removeJobAttachment = useCallback((oppId: string, attachmentId: string) => {
     dispatch({ type: 'REMOVE_JOB_ATTACHMENT', oppId, attachmentId });
+  }, []);
+  const addCustomerAttachment = useCallback((customerId: string, attachment: JobAttachment) => {
+    dispatch({ type: 'ADD_CUSTOMER_ATTACHMENT', customerId, attachment });
+  }, []);
+  const removeCustomerAttachment = useCallback((customerId: string, attachmentId: string) => {
+    dispatch({ type: 'REMOVE_CUSTOMER_ATTACHMENT', customerId, attachmentId });
   }, []);
 
   const addJobActivity = useCallback((oppId: string, event: Omit<ActivityEvent, 'id' | 'timestamp'>) => {
@@ -1830,6 +1856,7 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
       approveEstimate,
       addJobTask, updateJobTask, removeJobTask,
       addJobAttachment, removeJobAttachment,
+      addCustomerAttachment, removeCustomerAttachment,
       addJobActivity,
       updateUserProfile,
       upsertCustomRole,

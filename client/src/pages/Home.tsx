@@ -19,6 +19,7 @@ import PipelinePage from '@/pages/PipelinePage';
 import EstimatorDashboard from '@/pages/EstimatorDashboard';
 import SchedulePage from '@/pages/SchedulePage';
 import InboxPage from '@/pages/InboxPage';
+import ReportingPage from '@/pages/ReportingPage';
 
 export default function Home() {
   const { state } = useEstimator();
@@ -44,6 +45,8 @@ export default function Home() {
         <SchedulePage />
       ) : state.activeSection === 'inbox' ? (
         <InboxPage />
+      ) : state.activeSection === 'reporting' ? (
+        <ReportingPage />
       ) : (
         <div className="container py-6 max-w-4xl">
           {state.activeSection === 'customer' && <CustomerSection />}

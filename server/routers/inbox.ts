@@ -12,6 +12,7 @@ import {
   insertMessage,
   listCallLogs,
   listConversations,
+  listConversationsByCustomer,
   listMessages,
   markConversationRead,
   updateConversationLastMessage,
@@ -55,6 +56,12 @@ const conversationsRouter = router({
     .mutation(async ({ input }) => {
       await markConversationRead(input.id);
       return { success: true };
+    }),
+
+  listByCustomer: protectedProcedure
+    .input(z.object({ customerId: z.string() }))
+    .query(async ({ input }) => {
+      return listConversationsByCustomer(input.customerId);
     }),
 });
 

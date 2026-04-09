@@ -79,6 +79,17 @@ export async function listConversations(limit = 50, offset = 0) {
     .offset(offset);
 }
 
+export async function listConversationsByCustomer(customerId: string, limit = 50) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(conversations)
+    .where(eq(conversations.customerId, customerId))
+    .orderBy(desc(conversations.lastMessageAt))
+    .limit(limit);
+}
+
 export async function getConversationById(id: number) {
   const db = await getDb();
   if (!db) return null;

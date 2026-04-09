@@ -214,7 +214,7 @@ export interface GlobalSettings {
   paintRate: number;
 }
 
-export type AppSection = 'customer' | 'sales' | 'calculator' | 'estimate' | 'present' | 'customers' | 'jobs' | 'job-details' | 'pipeline' | 'invoice' | 'dashboard' | 'schedule' | 'inbox';
+export type AppSection = 'customer' | 'sales' | 'calculator' | 'estimate' | 'present' | 'customers' | 'jobs' | 'job-details' | 'pipeline' | 'invoice' | 'dashboard' | 'schedule' | 'inbox' | 'reporting';
 
 // ── Schedule / Calendar Types ──────────────────────────────────
 
@@ -376,6 +376,8 @@ export interface Customer {
   activityFeed?: ActivityEvent[];
   opportunities?: Opportunity[];
   invoices?: Invoice[];
+  // Customer-level file attachments (photos, contracts, etc.)
+  attachments?: JobAttachment[];
 }
 
 export interface EstimatorState {

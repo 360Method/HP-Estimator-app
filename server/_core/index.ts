@@ -12,6 +12,7 @@ import { handleInboundSms, handleCallStatusUpdate, generateVoiceToken, isTwilioC
 import twilio from "twilio";
 import { exchangeGmailCode, pollInboundEmails } from "../gmail";
 import { addSSEClient, broadcastNewMessage } from "../sse";
+import { getPortalInvoiceByStripePaymentIntentId, updatePortalInvoicePaid } from "../portalDb";
 import { randomUUID } from "crypto";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -38,7 +39,7 @@ async function startServer() {
   const server = createServer(app);
 
   // ── Stripe webhook: MUST be registered BEFORE express.json() ──
-  app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), (req, res) => {
+  app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async (req, res) => {
     const sig = req.headers["stripe-signature"] as string;
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
     if (!webhookSecret) {
@@ -66,7 +67,19 @@ async function startServer() {
     switch (event.type) {
       case "payment_intent.succeeded": {
         const pi = event.data.object as Stripe.PaymentIntent;
-        console.log(`[Webhook] PaymentIntent succeeded: ${pi.id} amount=${pi.amount} metadata=`, pi.metadata);
+        console.log(`[Webhook] PaymentIntent succeeded: ${pi.id} amount=${pi.amount}`);
+        // Sync portal invoice status to 'paid'
+        try {
+          const inv = await getPortalInvoiceByStripePaymentIntentId(pi.id);
+          if (inv) {
+            await updatePortalInvoicePaid(inv.id, pi.amount_received, pi.id);
+            console.log(`[Webhook] Portal invoice ${inv.id} marked paid via PI ${pi.id}`);
+          } else {
+            console.log(`[Webhook] No portal invoice found for PI ${pi.id} — may be client-side only`);
+          }
+        } catch (dbErr) {
+          console.error(`[Webhook] DB update failed for PI ${pi.id}:`, dbErr);
+        }
         break;
       }
       case "payment_intent.payment_failed": {
