@@ -673,3 +673,8 @@
 - [x] Admin: RequestsPage at 'requests' section — shows all online requests with expandable cards
 - [x] Admin: Requests nav item in MetricsBar (ClipboardList icon)
 - [x] AppSection type extended with 'requests'
+
+## Bug: Booking submit — lead not appearing in customer Leads tab
+
+- [x] Diagnose: booking.submit creates DB opportunity but admin Leads tab reads from in-memory state (EstimatorContext), not DB
+- [x] Fix: "View Customer" in Requests page now fetches customer+leads from DB via tRPC, injects into EstimatorContext, then navigates — bridging DB↔localStorage gap

@@ -2,17 +2,23 @@
  * RequestsPage — Admin view of online booking requests.
  * Shows all submitted requests from /book with customer details,
  * service info, timeline, photos, and a link to the created lead.
+ *
+ * "View Customer" fetches the customer + their leads from the DB,
+ * injects them into EstimatorContext (in-memory state), then navigates
+ * to the customer profile — bridging the DB ↔ localStorage gap.
  */
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
 import {
   Loader2, Search, MapPin, Phone, Mail, Calendar,
   Image, ChevronDown, ChevronUp, ExternalLink, User,
 } from "lucide-react";
 import { useEstimator } from "@/contexts/EstimatorContext";
+import type { Customer, Opportunity, PipelineArea, OpportunityStage } from "@/lib/types";
 
 const TIMELINE_COLORS: Record<string, string> = {
   ASAP: "bg-red-100 text-red-700 border-red-200",
@@ -26,6 +32,74 @@ function formatDate(d: Date | string | null | undefined) {
     month: "short", day: "numeric", year: "numeric",
     hour: "numeric", minute: "2-digit",
   });
+}
+
+/** Convert a DB customer row + DB opportunities into the in-memory Customer shape */
+function dbToCustomer(dbCust: any, dbOpps: any[]): Customer {
+  let tags: string[] = [];
+  try { tags = JSON.parse(dbCust.tags ?? "[]"); } catch { tags = []; }
+
+  const opportunities: Opportunity[] = dbOpps.map((o: any): Opportunity => ({
+    id: o.id,
+    area: (o.area ?? "lead") as PipelineArea,
+    stage: (o.stage ?? "New Lead") as OpportunityStage,
+    title: o.title ?? "",
+    value: o.value ?? 0,
+    jobNumber: o.jobNumber ?? undefined,
+    createdAt: o.createdAt instanceof Date ? o.createdAt.toISOString() : (o.createdAt ?? new Date().toISOString()),
+    updatedAt: o.updatedAt instanceof Date ? o.updatedAt.toISOString() : (o.updatedAt ?? new Date().toISOString()),
+    notes: o.notes ?? "",
+    archived: o.archived ?? false,
+    archivedAt: o.archivedAt ?? undefined,
+    sourceLeadId: o.sourceLeadId ?? undefined,
+    sourceEstimateId: o.sourceEstimateId ?? undefined,
+    convertedToEstimateAt: o.convertedToEstimateAt ?? undefined,
+    convertedToJobAt: o.convertedToJobAt ?? undefined,
+    sentAt: o.sentAt ?? undefined,
+    wonAt: o.wonAt ?? undefined,
+    scheduledDate: o.scheduledDate ?? undefined,
+    scheduledEndDate: o.scheduledEndDate ?? undefined,
+    scheduledDuration: o.scheduledDuration ?? undefined,
+    assignedTo: o.assignedTo ?? undefined,
+    scheduleNotes: o.scheduleNotes ?? undefined,
+    tasks: (() => { try { return JSON.parse(o.tasks ?? "null") ?? undefined; } catch { return undefined; } })(),
+    attachments: (() => { try { return JSON.parse(o.attachments ?? "null") ?? undefined; } catch { return undefined; } })(),
+    jobActivity: (() => { try { return JSON.parse(o.jobActivity ?? "null") ?? undefined; } catch { return undefined; } })(),
+    clientSnapshot: (() => { try { return JSON.parse(o.clientSnapshot ?? "null") ?? undefined; } catch { return undefined; } })(),
+  }));
+
+  return {
+    id: dbCust.id,
+    firstName: dbCust.firstName ?? "",
+    lastName: dbCust.lastName ?? "",
+    displayName: dbCust.displayName ?? "",
+    company: dbCust.company ?? "",
+    mobilePhone: dbCust.mobilePhone ?? "",
+    homePhone: dbCust.homePhone ?? "",
+    workPhone: dbCust.workPhone ?? "",
+    email: dbCust.email ?? "",
+    role: dbCust.role ?? "",
+    customerType: (dbCust.customerType ?? "homeowner") as "homeowner" | "business",
+    doNotService: dbCust.doNotService ?? false,
+    street: dbCust.street ?? "",
+    unit: dbCust.unit ?? "",
+    city: dbCust.city ?? "",
+    state: dbCust.state ?? "",
+    zip: dbCust.zip ?? "",
+    addressNotes: dbCust.addressNotes ?? "",
+    customerNotes: dbCust.customerNotes ?? "",
+    billsTo: dbCust.billsTo ?? "",
+    tags,
+    leadSource: (dbCust.leadSource ?? "") as any,
+    referredBy: dbCust.referredBy ?? "",
+    sendNotifications: dbCust.sendNotifications ?? true,
+    sendMarketingOptIn: dbCust.sendMarketingOptIn ?? false,
+    defaultTaxCode: dbCust.defaultTaxCode ?? undefined,
+    createdAt: dbCust.createdAt instanceof Date ? dbCust.createdAt.toISOString() : (dbCust.createdAt ?? new Date().toISOString()),
+    lifetimeValue: dbCust.lifetimeValue ?? 0,
+    outstandingBalance: dbCust.outstandingBalance ?? 0,
+    opportunities,
+  };
 }
 
 interface RequestCardProps {
@@ -43,7 +117,7 @@ interface RequestCardProps {
     serviceType: string;
     description?: string | null;
     timeline: string;
-    photoUrls?: string | null; // JSON string
+    photoUrls?: string | null;
     smsConsent: boolean;
     customerId?: string | null;
     leadId?: string | null;
@@ -53,11 +127,36 @@ interface RequestCardProps {
 
 function RequestCard({ req }: RequestCardProps) {
   const [expanded, setExpanded] = useState(false);
-  const { setActiveCustomer, navigateToTopLevel } = useEstimator();
+  const [loading, setLoading] = useState(false);
+  const { state, addCustomer, setActiveCustomer, navigateToTopLevel } = useEstimator();
 
-  const goToCustomer = (id: string) => {
-    setActiveCustomer(id);
-    navigateToTopLevel('customers');
+  const utils = trpc.useUtils();
+
+  const goToCustomer = async (customerId: string) => {
+    setLoading(true);
+    try {
+      // Check if already in local state
+      const existing = state.customers.find(c => c.id === customerId);
+      if (!existing) {
+        // Fetch from DB and inject into local state
+        const [dbCust, dbOpps] = await Promise.all([
+          utils.customers.get.fetch({ id: customerId }),
+          utils.opportunities.list.fetch({ customerId, archived: false }),
+        ]);
+        if (!dbCust) {
+          toast.error("Customer not found in database.");
+          return;
+        }
+        const customer = dbToCustomer(dbCust, dbOpps);
+        addCustomer(customer);
+      }
+      setActiveCustomer(customerId);
+      navigateToTopLevel("customers");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to load customer.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const photos: string[] = (() => {
@@ -173,9 +272,14 @@ function RequestCard({ req }: RequestCardProps) {
                 size="sm"
                 variant="outline"
                 onClick={() => goToCustomer(req.customerId!)}
+                disabled={loading}
                 className="text-xs h-7"
               >
-                <ExternalLink className="w-3 h-3 mr-1" />
+                {loading ? (
+                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                ) : (
+                  <ExternalLink className="w-3 h-3 mr-1" />
+                )}
                 View Customer
               </Button>
             )}
