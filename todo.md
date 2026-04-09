@@ -757,3 +757,7 @@
 - [ ] Display submitted photos as thumbnail grid in LeadNurturingPanel
 - [ ] Display timeline (ASAP / Within a week / Flexible) as badge
 - [ ] Display service type and description from the request
+
+## Nav: Remove Requests from main nav
+- [x] Remove Requests item from BACKEND_NAV in MetricsBar (keep page accessible via pipeline banner)
+- [x] Remove unread badge logic tied to Requests nav icon (badge stays on Pipeline icon only)
