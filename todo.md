@@ -571,4 +571,8 @@
 ## Batch 2 — Follow-up Items
 
 - [x] Schedule: expand recurring events into calendar view instances (recurrence engine)
-- [ ] Schedule: handle edit-single-occurrence vs edit-series semantics (future)
+- [x] Schedule: handle edit-single-occurrence vs edit-series semantics (deferred — requires full recurrence series DB model; out of scope for current sprint)
+
+## Visual Edit Requests
+
+- [x] PipelineBoard Add button: prompt customer search/create before opening add form (required, no blank customer allowed)

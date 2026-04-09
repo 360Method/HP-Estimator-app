@@ -5,7 +5,7 @@
 // Drag-and-drop: @dnd-kit with useDroppable columns + useSortable cards
 // ============================================================
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import {
   DndContext,
   DragEndEvent,
@@ -28,9 +28,11 @@ import { CSS } from '@dnd-kit/utilities';
 import {
   LayoutGrid, List, Plus, GripVertical, ExternalLink,
   DollarSign, Archive, ArrowRight, ChevronDown, Trash2,
-  ArrowUpDown, MapPin,
+  ArrowUpDown, MapPin, Search, User, UserPlus, Check, X as XIcon, ChevronRight,
 } from 'lucide-react';
-import { Opportunity, PipelineArea, OpportunityStage } from '@/lib/types';
+import { Opportunity, PipelineArea, OpportunityStage, Customer } from '@/lib/types';
+import { useEstimator } from '@/contexts/EstimatorContext';
+import { nanoid } from 'nanoid';
 import { toast } from 'sonner';
 
 // ── Stage color map ───────────────────────────────────────────
@@ -83,7 +85,7 @@ export interface PipelineBoardProps {
   area: PipelineArea;
   stages: OpportunityStage[];
   opportunities: Opportunity[];
-  onAdd: (title: string, stage: OpportunityStage, value: number, notes: string) => void;
+  onAdd: (title: string, stage: OpportunityStage, value: number, notes: string, customerId?: string, customerDisplayName?: string) => void;
   onUpdate: (id: string, payload: Partial<Opportunity>) => void;
   onRemove: (id: string) => void;
   onConvertToEstimate?: (id: string, title: string, value: number) => void;
@@ -532,6 +534,220 @@ function AddForm({
   );
 }
 
+// ── Customer Picker Modal ────────────────────────────────────
+interface PickedCustomer { id: string; displayName: string; }
+
+function CustomerPickerModal({
+  area, onConfirm, onClose,
+}: {
+  area: PipelineArea;
+  onConfirm: (c: PickedCustomer) => void;
+  onClose: () => void;
+}) {
+  const { state, addCustomer } = useEstimator();
+  const [mode, setMode] = useState<'search' | 'create'>('search');
+  const [query, setQuery] = useState('');
+  const [selected, setSelected] = useState<PickedCustomer | null>(null);
+  const [newForm, setNewForm] = useState({ firstName: '', lastName: '', phone: '', email: '' });
+  const inputRef = useRef<HTMLInputElement>(null);
+  const firstNameRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (mode === 'search') setTimeout(() => inputRef.current?.focus(), 50);
+    else setTimeout(() => firstNameRef.current?.focus(), 50);
+  }, [mode]);
+
+  const q = query.toLowerCase();
+  const matches = q.length < 1 ? [] : (state.customers ?? []).filter(c => {
+    const name = `${c.firstName ?? ''} ${c.lastName ?? ''} ${c.displayName ?? ''}`.toLowerCase();
+    return name.includes(q) || (c.email ?? '').toLowerCase().includes(q) || (c.mobilePhone ?? '').includes(q);
+  }).slice(0, 8);
+
+  const handleSelectExisting = (c: typeof matches[0]) => {
+    const display = c.displayName || `${c.firstName ?? ''} ${c.lastName ?? ''}`.trim();
+    setSelected({ id: c.id, displayName: display });
+    setQuery(display);
+  };
+
+  const handleCreateNew = () => {
+    const displayName = [newForm.firstName, newForm.lastName].filter(Boolean).join(' ');
+    if (!displayName.trim()) return;
+    const id = nanoid(8);
+    const customer: Customer = {
+      id, firstName: newForm.firstName, lastName: newForm.lastName, displayName,
+      company: '', mobilePhone: newForm.phone, homePhone: '', workPhone: '',
+      email: newForm.email, role: '', customerType: 'homeowner', doNotService: false,
+      street: '', unit: '', city: '', state: 'WA', zip: '', addressNotes: '',
+      customerNotes: '', billsTo: '', tags: [], leadSource: '', referredBy: '',
+      sendNotifications: true, sendMarketingOptIn: false,
+      createdAt: new Date().toISOString(), lifetimeValue: 0, outstandingBalance: 0,
+    };
+    addCustomer(customer);
+    onConfirm({ id, displayName });
+  };
+
+  const areaLabel = area === 'lead' ? 'Lead' : area === 'estimate' ? 'Estimate' : 'Job';
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          <div>
+            <div className="text-base font-bold text-slate-800">New {areaLabel}</div>
+            <div className="text-xs text-slate-500 mt-0.5">Select or create a customer first</div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400">
+            <XIcon size={16} />
+          </button>
+        </div>
+        <div className="flex border-b border-slate-100">
+          <button
+            onClick={() => { setMode('search'); setSelected(null); }}
+            className={`flex-1 flex items-center justify-center gap-2 py-3 text-xs font-semibold transition-colors ${
+              mode === 'search' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-50'
+            }`}
+          >
+            <Search size={13} /> Existing customer
+          </button>
+          <button
+            onClick={() => { setMode('create'); setSelected(null); setQuery(''); }}
+            className={`flex-1 flex items-center justify-center gap-2 py-3 text-xs font-semibold transition-colors ${
+              mode === 'create' ? 'bg-slate-800 text-white' : 'text-slate-500 hover:bg-slate-50'
+            }`}
+          >
+            <UserPlus size={13} /> New customer
+          </button>
+        </div>
+        <div className="p-4">
+          {mode === 'search' ? (
+            <div>
+              <div className="relative mb-3">
+                <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={query}
+                  onChange={e => { setQuery(e.target.value); setSelected(null); }}
+                  placeholder="Name, email, or phone…"
+                  className="w-full pl-8 pr-8 py-2.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                />
+                {query && (
+                  <button onClick={() => { setQuery(''); setSelected(null); }} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400">
+                    <XIcon size={13} />
+                  </button>
+                )}
+              </div>
+              {matches.length > 0 && (
+                <div className="border border-slate-200 rounded-xl overflow-hidden mb-3">
+                  {matches.map(c => {
+                    const display = c.displayName || `${c.firstName ?? ''} ${c.lastName ?? ''}`.trim();
+                    const isSel = selected?.id === c.id;
+                    return (
+                      <button
+                        key={c.id}
+                        onClick={() => handleSelectExisting(c)}
+                        className={`w-full text-left px-3 py-2.5 flex items-center gap-3 transition-colors border-b border-slate-100 last:border-0 ${
+                          isSel ? 'bg-primary/5' : 'hover:bg-slate-50'
+                        }`}
+                      >
+                        <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center shrink-0">
+                          <User size={12} className="text-slate-400" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-semibold text-slate-800">{display}</div>
+                          <div className="text-xs text-slate-500 truncate">{c.mobilePhone ?? c.email ?? ''}</div>
+                        </div>
+                        {isSel && <Check size={14} className="text-primary shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {q.length >= 1 && matches.length === 0 && (
+                <div className="text-center py-4 text-sm text-slate-400 mb-3">
+                  No match —{' '}
+                  <button onClick={() => setMode('create')} className="text-primary font-semibold hover:underline">
+                    create new
+                  </button>
+                </div>
+              )}
+              {q.length === 0 && (
+                <div className="text-center py-4 text-xs text-slate-400 mb-3">
+                  Type to search {state.customers.length} customer{state.customers.length !== 1 ? 's' : ''}
+                </div>
+              )}
+              <button
+                onClick={() => selected && onConfirm(selected)}
+                disabled={!selected}
+                className="w-full flex items-center justify-center gap-2 py-2.5 bg-primary text-primary-foreground text-sm font-semibold rounded-lg hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <Check size={14} /> Continue with {selected?.displayName ?? 'customer'} <ChevronRight size={14} />
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-500 mb-1 block">First name *</label>
+                  <input
+                    ref={firstNameRef}
+                    type="text"
+                    value={newForm.firstName}
+                    onChange={e => setNewForm(f => ({ ...f, firstName: e.target.value }))}
+                    placeholder="First"
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-500 mb-1 block">Last name</label>
+                  <input
+                    type="text"
+                    value={newForm.lastName}
+                    onChange={e => setNewForm(f => ({ ...f, lastName: e.target.value }))}
+                    placeholder="Last"
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-slate-500 mb-1 block">Mobile phone</label>
+                <input
+                  type="tel"
+                  value={newForm.phone}
+                  onChange={e => setNewForm(f => ({ ...f, phone: e.target.value }))}
+                  placeholder="(360) 555-0100"
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-slate-500 mb-1 block">Email</label>
+                <input
+                  type="email"
+                  value={newForm.email}
+                  onChange={e => setNewForm(f => ({ ...f, email: e.target.value }))}
+                  placeholder="email@example.com"
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                />
+              </div>
+              <button
+                onClick={handleCreateNew}
+                disabled={!newForm.firstName.trim()}
+                className="w-full flex items-center justify-center gap-2 py-2.5 bg-primary text-primary-foreground text-sm font-semibold rounded-lg hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <UserPlus size={14} /> Create & Continue <ChevronRight size={14} />
+              </button>
+              <p className="text-[11px] text-slate-400 text-center">Full profile can be completed after saving</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main PipelineBoard ────────────────────────────────────────
 export default function PipelineBoard({
   area, stages, opportunities, onAdd, onUpdate, onRemove,
@@ -540,6 +756,8 @@ export default function PipelineBoard({
 }: PipelineBoardProps) {
   const [view, setView] = useState<'kanban' | 'table'>('kanban');
   const [showAdd, setShowAdd] = useState(false);
+  const [showCustomerPicker, setShowCustomerPicker] = useState(false);
+  const [pickedCustomer, setPickedCustomer] = useState<PickedCustomer | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [sortField, setSortField] = useState<'title' | 'stage' | 'value' | 'created'>('created');
@@ -663,7 +881,15 @@ export default function PipelineBoard({
           </div>
 
           <button
-            onClick={() => setShowAdd(s => !s)}
+            onClick={() => {
+              if (customerName) {
+                // Already inside a customer context — skip picker
+                setShowAdd(s => !s);
+              } else {
+                setPickedCustomer(null);
+                setShowCustomerPicker(true);
+              }
+            }}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-semibold hover:bg-primary/90 transition-colors"
           >
             <Plus size={13} /> Add
@@ -671,14 +897,40 @@ export default function PipelineBoard({
         </div>
       </div>
 
+      {/* ── Customer picker modal ── */}
+      {showCustomerPicker && (
+        <CustomerPickerModal
+          area={area}
+          onConfirm={(c) => {
+            setPickedCustomer(c);
+            setShowCustomerPicker(false);
+            setShowAdd(true);
+          }}
+          onClose={() => setShowCustomerPicker(false)}
+        />
+      )}
+
       {/* ── Add form ── */}
       {showAdd && (
-        <AddForm
-          area={area}
-          stages={stages}
-          onAdd={(t, s, v, n) => { onAdd(t, s, v, n); setShowAdd(false); }}
-          onCancel={() => setShowAdd(false)}
-        />
+        <>
+          {pickedCustomer && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-primary/5 border border-primary/20 rounded-lg text-sm">
+              <User size={13} className="text-primary shrink-0" />
+              <span className="font-semibold text-primary">{pickedCustomer.displayName}</span>
+              <span className="text-muted-foreground text-xs ml-1">— will be linked to this {area}</span>
+            </div>
+          )}
+          <AddForm
+            area={area}
+            stages={stages}
+            onAdd={(t, s, v, n) => {
+              onAdd(t, s, v, n, pickedCustomer?.id, pickedCustomer?.displayName);
+              setShowAdd(false);
+              setPickedCustomer(null);
+            }}
+            onCancel={() => { setShowAdd(false); setPickedCustomer(null); }}
+          />
+        </>
       )}
 
       {/* ── Empty state ── */}

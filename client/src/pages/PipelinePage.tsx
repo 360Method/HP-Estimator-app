@@ -120,7 +120,9 @@ export default function PipelinePage() {
     }
   };
 
-  const handleAdd = (title: string, stage: OpportunityStage, value: number, notes: string) => {
+  const handleAdd = (title: string, stage: OpportunityStage, value: number, notes: string, customerId?: string, customerDisplayName?: string) => {
+    // If a customer was picked in the modal, switch to that customer first
+    if (customerId) setActiveCustomer(customerId);
     addOpportunity({ area: activeTab, stage, title, value, notes, archived: false });
   };
 
