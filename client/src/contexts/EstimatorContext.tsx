@@ -8,7 +8,7 @@ import {
   LineItem, CustomLineItem, EstimateLineOverride,
   Opportunity, PipelineArea, CustomerProfile, ActivityEvent, CustomerProfileTab,
   OpportunityStage, Customer, Invoice, InvoiceLineItem, ScheduleEvent,
-  EstimateSnapshot, CustomerAddress, JobTask, JobAttachment, CustomRole,
+  EstimateSnapshot, CustomerAddress, JobTask, JobAttachment, CustomRole, LeadNote,
 } from '@/lib/types';
 import { ALL_PHASES, DEFAULTS } from '@/lib/phases';
 import { generateProjectSchedule } from '@/lib/generateProjectSchedule';
@@ -203,9 +203,14 @@ type Action =
   | { type: 'REMOVE_JOB_ATTACHMENT'; oppId: string; attachmentId: string }
   | { type: 'ADD_CUSTOMER_ATTACHMENT'; customerId: string; attachment: JobAttachment }
   | { type: 'REMOVE_CUSTOMER_ATTACHMENT'; customerId: string; attachmentId: string }
-  // ── Job activity actions ──────────────────────────────────────
+  // ── Job activity actions ────────────────────────────────────────────
   | { type: 'ADD_JOB_ACTIVITY'; oppId: string; event: ActivityEvent }
-  // ── Lifecycle actions ──────────────────────────────────────
+  // ── Lead note actions ─────────────────────────────────────────────
+  | { type: 'ADD_LEAD_NOTE'; oppId: string; note: LeadNote }
+  | { type: 'REMOVE_LEAD_NOTE'; oppId: string; noteId: string }
+  | { type: 'ADD_LEAD_ATTACHMENT'; oppId: string; attachment: JobAttachment }
+  | { type: 'REMOVE_LEAD_ATTACHMENT'; oppId: string; attachmentId: string }
+  // ── Lifecycle actions ────────────────────────────────────
   | {
       type: 'CONVERT_LEAD_TO_ESTIMATE';
       leadId: string;
@@ -747,14 +752,41 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
         ),
       };
 
-    case 'ADD_JOB_ACTIVITY':
+     case 'ADD_JOB_ACTIVITY':
       return {
         ...state,
         opportunities: state.opportunities.map(o =>
           o.id !== action.oppId ? o : { ...o, jobActivity: [action.event, ...(o.jobActivity ?? [])] }
         ),
       };
-
+    case 'ADD_LEAD_NOTE':
+      return {
+        ...state,
+        opportunities: state.opportunities.map(o =>
+          o.id !== action.oppId ? o : { ...o, leadNotes: [action.note, ...(o.leadNotes ?? [])] }
+        ),
+      };
+    case 'REMOVE_LEAD_NOTE':
+      return {
+        ...state,
+        opportunities: state.opportunities.map(o =>
+          o.id !== action.oppId ? o : { ...o, leadNotes: (o.leadNotes ?? []).filter(n => n.id !== action.noteId) }
+        ),
+      };
+    case 'ADD_LEAD_ATTACHMENT':
+      return {
+        ...state,
+        opportunities: state.opportunities.map(o =>
+          o.id !== action.oppId ? o : { ...o, leadAttachments: [...(o.leadAttachments ?? []), action.attachment] }
+        ),
+      };
+    case 'REMOVE_LEAD_ATTACHMENT':
+      return {
+        ...state,
+        opportunities: state.opportunities.map(o =>
+          o.id !== action.oppId ? o : { ...o, leadAttachments: (o.leadAttachments ?? []).filter(a => a.id !== action.attachmentId) }
+        ),
+      };
     case 'SET_ACTIVE_CUSTOMER': {
       if (!action.payload) {
         // Preserve the current section if navigating to a top-level page (dashboard, pipeline, jobs)
@@ -1502,6 +1534,11 @@ interface EstimatorContextValue {
   removeCustomerAttachment: (customerId: string, attachmentId: string) => void;
   // Job activity
   addJobActivity: (oppId: string, event: Omit<ActivityEvent, 'id' | 'timestamp'>) => void;
+  // Lead notes & attachments
+  addLeadNote: (oppId: string, note: Omit<LeadNote, 'id' | 'createdAt'>) => void;
+  removeLeadNote: (oppId: string, noteId: string) => void;
+  addLeadAttachment: (oppId: string, attachment: JobAttachment) => void;
+  removeLeadAttachment: (oppId: string, attachmentId: string) => void;
   // User profile
   updateUserProfile: (payload: Partial<import('@/lib/types').UserProfile>) => void;
   // Custom roles
@@ -1841,14 +1878,29 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'REMOVE_CUSTOMER_ATTACHMENT', customerId, attachmentId });
   }, []);
 
-  const addJobActivity = useCallback((oppId: string, event: Omit<ActivityEvent, 'id' | 'timestamp'>) => {
+   const addJobActivity = useCallback((oppId: string, event: Omit<ActivityEvent, 'id' | 'timestamp'>) => {
     dispatch({
       type: 'ADD_JOB_ACTIVITY',
       oppId,
       event: { ...event, id: nanoid(8), timestamp: new Date().toISOString() },
     });
   }, []);
-
+  const addLeadNote = useCallback((oppId: string, note: Omit<LeadNote, 'id' | 'createdAt'>) => {
+    dispatch({
+      type: 'ADD_LEAD_NOTE',
+      oppId,
+      note: { ...note, id: nanoid(8), createdAt: new Date().toISOString() },
+    });
+  }, []);
+  const removeLeadNote = useCallback((oppId: string, noteId: string) => {
+    dispatch({ type: 'REMOVE_LEAD_NOTE', oppId, noteId });
+  }, []);
+  const addLeadAttachment = useCallback((oppId: string, attachment: JobAttachment) => {
+    dispatch({ type: 'ADD_LEAD_ATTACHMENT', oppId, attachment });
+  }, []);
+  const removeLeadAttachment = useCallback((oppId: string, attachmentId: string) => {
+    dispatch({ type: 'REMOVE_LEAD_ATTACHMENT', oppId, attachmentId });
+  }, []);
   const updateUserProfile = useCallback((payload: Partial<import('@/lib/types').UserProfile>) => {
     dispatch({ type: 'UPDATE_USER_PROFILE', payload });
   }, []);
@@ -1884,6 +1936,8 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
       addJobAttachment, removeJobAttachment,
       addCustomerAttachment, removeCustomerAttachment,
       addJobActivity,
+      addLeadNote, removeLeadNote,
+      addLeadAttachment, removeLeadAttachment,
       updateUserProfile,
       upsertCustomRole,
       removeCustomRole,

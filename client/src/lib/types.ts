@@ -170,6 +170,16 @@ export interface JobTask {
   createdAt: string;      // ISO
 }
 
+// ── Lead Note ────────────────────────────────────────────────
+export type LeadContactType = 'note' | 'call' | 'sms' | 'email' | 'visit';
+export interface LeadNote {
+  id: string;
+  text: string;           // note body
+  type: LeadContactType;  // interaction type
+  createdAt: string;      // ISO
+  author?: string;        // display name of note author
+}
+
 // ── Job Attachment ───────────────────────────────────────────
 export interface JobAttachment {
   id: string;
@@ -569,6 +579,10 @@ export interface Opportunity {
   attachments?: JobAttachment[];
   // Per-job activity feed
   jobActivity?: ActivityEvent[];
+  // Lead nurturing notes (only used when area === 'lead')
+  leadNotes?: LeadNote[];
+  // Lead attachments (photos, docs from initial inquiry)
+  leadAttachments?: JobAttachment[];
   // Snapshot of customer info at time of conversion
   clientSnapshot?: {
     client: string;

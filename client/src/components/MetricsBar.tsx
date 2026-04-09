@@ -485,8 +485,13 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
 
               <div className="flex-1" />
 
-              {/* Builder section tabs — Job opportunities get Job Details tab first */}
-              {(activeOpp?.area === 'job' ? JOB_BUILDER_TABS : BUILDER_TABS).map(item => (
+              {/* Builder section tabs — Leads show only Details; Estimates get Sales/Calc/Estimate/Invoice; Jobs get Job Details/Calc/Estimate/Invoice */}
+              {(activeOpp?.area === 'lead'
+                ? BUILDER_TABS.filter(t => t.id === 'opp-details')
+                : activeOpp?.area === 'job'
+                  ? JOB_BUILDER_TABS
+                  : BUILDER_TABS
+              ).map(item => (
                 <button
                   key={item.id}
                   onClick={() => setSection(item.id)}

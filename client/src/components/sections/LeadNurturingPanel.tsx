@@ -1,0 +1,346 @@
+// ============================================================
+// LeadNurturingPanel — Full lead qualification workspace
+// Shown inside the Details tab when area === 'lead'.
+// Includes: quick-action call/SMS buttons, timestamped notes
+// log with contact-type tags, and file attachments.
+// ============================================================
+import { useState, useRef } from 'react';
+import { useEstimator } from '@/contexts/EstimatorContext';
+import { trpc } from '@/lib/trpc';
+import { nanoid } from 'nanoid';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
+import {
+  Phone, MessageSquare, Mail, FileText, Trash2,
+  Plus, Paperclip, Download, X, Clock, StickyNote,
+  Footprints, PhoneCall, MessageCircle, AtSign, MapPin,
+} from 'lucide-react';
+import type { LeadContactType, JobAttachment } from '@/lib/types';
+
+// ── Helpers ──────────────────────────────────────────────────
+function fmtDateTime(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit', hour12: true,
+  });
+}
+
+function fmtFileSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+const CONTACT_TYPES: { type: LeadContactType; label: string; icon: React.ReactNode; color: string }[] = [
+  { type: 'note',  label: 'Note',   icon: <StickyNote size={12} />,     color: 'bg-slate-100 text-slate-700 border-slate-200' },
+  { type: 'call',  label: 'Call',   icon: <PhoneCall size={12} />,      color: 'bg-green-100 text-green-700 border-green-200' },
+  { type: 'sms',   label: 'SMS',    icon: <MessageCircle size={12} />,  color: 'bg-blue-100 text-blue-700 border-blue-200' },
+  { type: 'email', label: 'Email',  icon: <AtSign size={12} />,         color: 'bg-purple-100 text-purple-700 border-purple-200' },
+  { type: 'visit', label: 'Visit',  icon: <Footprints size={12} />,     color: 'bg-amber-100 text-amber-700 border-amber-200' },
+];
+
+function ContactTypeBadge({ type }: { type: LeadContactType }) {
+  const ct = CONTACT_TYPES.find(c => c.type === type) ?? CONTACT_TYPES[0];
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${ct.color}`}>
+      {ct.icon} {ct.label}
+    </span>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────
+export default function LeadNurturingPanel() {
+  const { state, addLeadNote, removeLeadNote, addLeadAttachment, removeLeadAttachment } = useEstimator();
+  const activeOpp = state.opportunities.find(o => o.id === state.activeOpportunityId);
+  const activeCustomer = state.customers.find(c => c.id === state.activeCustomerId);
+
+  const [noteText, setNoteText] = useState('');
+  const [noteType, setNoteType] = useState<LeadContactType>('note');
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const uploadFile = trpc.uploads.uploadFile.useMutation();
+
+  if (!activeOpp || activeOpp.area !== 'lead') return null;
+
+  // Contact info for quick-action buttons
+  const phone = activeCustomer?.mobilePhone || activeCustomer?.homePhone || activeCustomer?.workPhone
+    || activeOpp.clientSnapshot?.phone || '';
+  const email = activeCustomer?.email || activeOpp.clientSnapshot?.email || '';
+
+  const notes = activeOpp.leadNotes ?? [];
+  const attachments = activeOpp.leadAttachments ?? [];
+
+  // ── Add note ──────────────────────────────────────────────
+  const handleAddNote = () => {
+    const text = noteText.trim();
+    if (!text) return;
+    addLeadNote(activeOpp.id, { text, type: noteType });
+    setNoteText('');
+  };
+
+  // ── Upload attachment ─────────────────────────────────────
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingFile(true);
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      const result = await uploadFile.mutateAsync({
+        filename: file.name,
+        mimeType: file.type || 'application/octet-stream',
+        base64,
+        folder: 'lead-attachments',
+      });
+      const attachment: JobAttachment = {
+        id: nanoid(8),
+        name: file.name,
+        url: result.url,
+        mimeType: file.type || 'application/octet-stream',
+        size: file.size,
+        uploadedAt: new Date().toISOString(),
+      };
+      addLeadAttachment(activeOpp.id, attachment);
+    } catch (err) {
+      console.error('Upload failed:', err);
+    } finally {
+      setUploadingFile(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  return (
+    <div className="space-y-5">
+      {/* ── Quick-action communication buttons ── */}
+      {(phone || email) && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm flex items-center gap-2 text-muted-foreground font-semibold uppercase tracking-wide">
+              <Phone className="w-3.5 h-3.5" /> Quick Contact
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2">
+              {phone && (
+                <>
+                  <a href={`tel:${phone}`}>
+                    <Button variant="outline" size="sm" className="gap-2 text-green-700 border-green-300 hover:bg-green-50">
+                      <Phone className="w-3.5 h-3.5" />
+                      Call {phone}
+                    </Button>
+                  </a>
+                  <a href={`sms:${phone}`}>
+                    <Button variant="outline" size="sm" className="gap-2 text-blue-700 border-blue-300 hover:bg-blue-50">
+                      <MessageSquare className="w-3.5 h-3.5" />
+                      Text {phone}
+                    </Button>
+                  </a>
+                </>
+              )}
+              {email && (
+                <a href={`mailto:${email}`}>
+                  <Button variant="outline" size="sm" className="gap-2 text-purple-700 border-purple-300 hover:bg-purple-50">
+                    <Mail className="w-3.5 h-3.5" />
+                    Email
+                  </Button>
+                </a>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Notes / Activity Log ── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm flex items-center gap-2 text-muted-foreground font-semibold uppercase tracking-wide">
+            <FileText className="w-3.5 h-3.5" /> Notes & Activity
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Add note form */}
+          <div className="space-y-2">
+            {/* Contact type selector */}
+            <div className="flex flex-wrap gap-1.5">
+              {CONTACT_TYPES.map(ct => (
+                <button
+                  key={ct.type}
+                  onClick={() => setNoteType(ct.type)}
+                  className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-all ${
+                    noteType === ct.type
+                      ? ct.color + ' ring-2 ring-offset-1 ring-current'
+                      : 'bg-muted/40 text-muted-foreground border-border hover:bg-muted'
+                  }`}
+                >
+                  {ct.icon} {ct.label}
+                </button>
+              ))}
+            </div>
+            <Textarea
+              value={noteText}
+              onChange={e => setNoteText(e.target.value)}
+              placeholder={
+                noteType === 'call'  ? 'Log a call — what was discussed?' :
+                noteType === 'sms'   ? 'Log a text message exchange...' :
+                noteType === 'email' ? 'Summarize the email thread...' :
+                noteType === 'visit' ? 'Notes from the site visit...' :
+                'Add a note about this lead...'
+              }
+              className="min-h-[80px] resize-none text-sm"
+              onKeyDown={e => {
+                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleAddNote();
+              }}
+            />
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">⌘↵ to save</span>
+              <Button size="sm" onClick={handleAddNote} disabled={!noteText.trim()} className="gap-1.5">
+                <Plus className="w-3.5 h-3.5" /> Add {CONTACT_TYPES.find(c => c.type === noteType)?.label}
+              </Button>
+            </div>
+          </div>
+
+          {/* Notes feed */}
+          {notes.length > 0 && (
+            <>
+              <Separator />
+              <div className="space-y-3">
+                {notes.map(note => (
+                  <div key={note.id} className="group relative rounded-lg border bg-card px-4 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <ContactTypeBadge type={note.type} />
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Clock className="w-3 h-3" />
+                          {fmtDateTime(note.createdAt)}
+                        </span>
+                        {note.author && (
+                          <span className="text-xs text-muted-foreground">· {note.author}</span>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => removeLeadNote(activeOpp.id, note.id)}
+                        className="opacity-0 group-hover:opacity-100 p-1 text-muted-foreground/40 hover:text-destructive transition-all flex-shrink-0"
+                        title="Delete note"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                    <p className="mt-2 text-sm text-foreground whitespace-pre-wrap leading-relaxed">
+                      {note.text}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {notes.length === 0 && (
+            <div className="text-center py-6 text-muted-foreground">
+              <StickyNote className="w-8 h-8 mx-auto mb-2 opacity-30" />
+              <p className="text-sm">No notes yet. Log calls, texts, and visits here.</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* ── Attachments ── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm flex items-center gap-2 text-muted-foreground font-semibold uppercase tracking-wide">
+              <Paperclip className="w-3.5 h-3.5" /> Attachments
+              {attachments.length > 0 && (
+                <Badge variant="secondary" className="text-xs ml-1">{attachments.length}</Badge>
+              )}
+            </CardTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs h-7"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingFile}
+            >
+              <Plus className="w-3 h-3" />
+              {uploadingFile ? 'Uploading…' : 'Add File'}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            onChange={handleFileChange}
+            accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv"
+          />
+
+          {attachments.length === 0 ? (
+            <div
+              className="border-2 border-dashed border-border rounded-lg p-8 text-center cursor-pointer hover:border-primary/40 hover:bg-muted/20 transition-colors"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Paperclip className="w-8 h-8 mx-auto mb-2 text-muted-foreground/40" />
+              <p className="text-sm text-muted-foreground">Drop files or click to upload</p>
+              <p className="text-xs text-muted-foreground/60 mt-1">Photos, PDFs, documents — max 16 MB</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {attachments.map(att => {
+                const isImage = att.mimeType.startsWith('image/');
+                return (
+                  <div key={att.id} className="group flex items-center gap-3 rounded-lg border bg-card px-3 py-2.5 hover:bg-muted/30 transition-colors">
+                    {isImage ? (
+                      <img src={att.url} alt={att.name} className="w-10 h-10 rounded object-cover flex-shrink-0 border" />
+                    ) : (
+                      <div className="w-10 h-10 rounded bg-muted flex items-center justify-center flex-shrink-0">
+                        <FileText className="w-5 h-5 text-muted-foreground" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-foreground truncate">{att.name}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {fmtFileSize(att.size)} · {fmtDateTime(att.uploadedAt)}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <a href={att.url} target="_blank" rel="noopener noreferrer" download={att.name}>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground">
+                          <Download size={13} />
+                        </Button>
+                      </a>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                        onClick={() => removeLeadAttachment(activeOpp.id, att.id)}
+                      >
+                        <X size={13} />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+              {/* Add more button at bottom */}
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-border py-2 text-xs text-muted-foreground hover:border-primary/40 hover:text-foreground transition-colors"
+                disabled={uploadingFile}
+              >
+                <Plus size={12} /> {uploadingFile ? 'Uploading…' : 'Add another file'}
+              </button>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

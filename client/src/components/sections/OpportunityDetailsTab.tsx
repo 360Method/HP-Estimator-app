@@ -15,6 +15,7 @@ import {
   Star, ChevronRight, Lock, ExternalLink, Calendar, DollarSign,
 } from 'lucide-react';
 import type { Opportunity } from '@/lib/types';
+import LeadNurturingPanel from '@/components/sections/LeadNurturingPanel';
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -315,6 +316,9 @@ export default function OpportunityDetailsTab() {
           )}
         </CardContent>
       </Card>
+
+      {/* Lead nurturing workspace — only shown for leads */}
+      {activeOpp.area === 'lead' && <LeadNurturingPanel />}
 
       {/* Lineage chain */}
       {chain.length > 1 && (

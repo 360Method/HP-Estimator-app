@@ -716,3 +716,10 @@
 - [x] After Estimate→Job conversion: navigate to new job's Details tab (not Calculator)
 - [x] Lead card shows "Converted → Estimate" badge after conversion (via lineage chain on Details tab)
 - [x] Estimate card shows "Converted → Job" badge after conversion (via lineage chain on Details tab)
+
+## Feature: Lead-specific tab restriction + Lead Nurturing panel
+
+- [x] Restrict MetricsBar tabs: leads show only Details tab (no Sales View / Calculator / Estimate / Invoice)
+- [x] Build LeadNurturingPanel component: ongoing notes, attachments folder, activity feed, call/message quick-action links
+- [x] Render LeadNurturingPanel as the body of the Details tab when activeOpp.area === 'lead'
+- [x] Call/message links use live customer phone/email from activeCustomer record
