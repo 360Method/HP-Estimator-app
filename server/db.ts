@@ -78,15 +78,18 @@ export async function getUserByOpenId(openId: string) {
 
 // ─── INBOX: CONVERSATION HELPERS ─────────────────────────────────────────────
 
-export async function listConversations(limit = 50, offset = 0) {
+export async function listConversations(limit = 50, offset = 0, customerOnly = true) {
   const db = await getDb();
   if (!db) return [];
-  return db
-    .select()
-    .from(conversations)
-    .orderBy(desc(conversations.lastMessageAt))
-    .limit(limit)
-    .offset(offset);
+  const q = db.select().from(conversations);
+  if (customerOnly) {
+    return q
+      .where(sql`${conversations.customerId} IS NOT NULL`)
+      .orderBy(desc(conversations.lastMessageAt))
+      .limit(limit)
+      .offset(offset);
+  }
+  return q.orderBy(desc(conversations.lastMessageAt)).limit(limit).offset(offset);
 }
 
 export async function listConversationsByCustomer(customerId: string, limit = 50) {

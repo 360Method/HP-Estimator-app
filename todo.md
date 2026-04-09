@@ -761,3 +761,8 @@
 ## Nav: Remove Requests from main nav
 - [x] Remove Requests item from BACKEND_NAV in MetricsBar (keep page accessible via pipeline banner)
 - [x] Remove unread badge logic tied to Requests nav icon (badge stays on Pipeline icon only)
+
+## Inbox: Customer-only filter
+- [x] Filter listConversations query to only return rows where customerId IS NOT NULL
+- [x] Update inbox router procedure to apply the filter server-side (customerOnly=true default)
+- [x] Ensure inbound Gmail only creates a conversation when sender matches a known customer (skip + mark-read otherwise)

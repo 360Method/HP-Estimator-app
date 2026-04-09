@@ -21,6 +21,7 @@ import { google } from "googleapis";
 import nodemailer from "nodemailer";
 import {
   findOrCreateConversation,
+  findCustomerByEmail,
   getGmailToken,
   incrementUnread,
   insertMessage,
@@ -258,8 +259,21 @@ export async function pollInboundEmails(fromEmail: string, afterHistoryId?: stri
         body = Buffer.from(textPart.body.data, "base64").toString("utf-8");
       }
 
-      // Find or create conversation
-      const conv = await findOrCreateConversation(null, senderEmail, senderName || null);
+      // Only process emails from known customers — skip newsletters, vendors, etc.
+      const customer = await findCustomerByEmail(senderEmail);
+      if (!customer) {
+        console.log(`[Gmail] Skipping non-customer email from ${senderEmail}: ${subject}`);
+        // Still mark as read so we don't re-process on next poll
+        await gmail.users.messages.modify({
+          userId: "me",
+          id: msgRef.id,
+          requestBody: { removeLabelIds: ["UNREAD"] },
+        });
+        continue;
+      }
+
+      // Find or create conversation linked to this customer
+      const conv = await findOrCreateConversation(null, senderEmail, senderName || null, customer.id);
 
       // Insert message (skip if already exists by gmailMessageId)
       await insertMessage({
@@ -284,7 +298,7 @@ export async function pollInboundEmails(fromEmail: string, afterHistoryId?: stri
         requestBody: { removeLabelIds: ["UNREAD"] },
       });
 
-      console.log(`[Gmail] Processed inbound email from ${senderEmail}: ${subject}`);
+      console.log(`[Gmail] Processed inbound email from ${senderEmail} (customer: ${customer.id}): ${subject}`);
     }
   } catch (err) {
     console.error("[Gmail] Poll error:", err);
