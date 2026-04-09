@@ -15,9 +15,10 @@
 import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { calcPhase, calcCustomItem, calcTotals, fmtDollar, fmtDollarCents } from '@/lib/calc';
-import { X, Printer, Mail, PenLine, RotateCcw, Check, CheckCircle2, Settings2, Eye, EyeOff, Trophy } from 'lucide-react';
+import { X, Printer, Mail, PenLine, RotateCcw, Check, CheckCircle2, Settings2, Eye, EyeOff, Trophy, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import EstimateApprovedModal from '@/components/EstimateApprovedModal';
+import SendEstimateDialog from '@/components/SendEstimateDialog';
 
 const HP_LOGO = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg';
 const HP_ADDRESS = '808 SE Chkalov Dr, 3-433\nVancouver, WA 98683';
@@ -373,6 +374,7 @@ export default function PresentSection() {
   const [cols, setCols] = useState<Record<ColKey, boolean>>(DEFAULT_COLS);
   const [showApprovedModal, setShowApprovedModal] = useState(false);
   const [pendingSignatureDataUrl, setPendingSignatureDataUrl] = useState<string | undefined>(undefined);
+  const [showSendDialog, setShowSendDialog] = useState(false);
   const docRef = useRef<HTMLDivElement>(null);
 
   const { jobInfo } = state;
@@ -422,13 +424,9 @@ export default function PresentSection() {
     setShowApprovedModal(true);
   };
 
-  const handleEmail = () => {
-    const subject = encodeURIComponent(`Handy Pioneers — Project Estimate ${jobInfo.jobNumber}`);
-    const body = encodeURIComponent(
-      `Hi ${jobInfo.client || 'there'},\n\nPlease review your project estimate from Handy Pioneers below.\n\nEstimate: ${jobInfo.jobNumber}\nTotal: ${fmtDollar(totals.totalPrice)}\n\nPlease reply to this email or call (360) 544-9858 to approve.\n\nThank you,\nHandy Pioneers\n${HP_WEB}`
-    );
-    window.open(`mailto:${jobInfo.email}?subject=${subject}&body=${body}`);
-  };
+  // Active customer for pre-filling email/phone
+  const activeCustomer = state.customers.find(c => c.id === state.activeCustomerId);
+  const depositAmount = deposit;
 
   const handlePrint = () => window.print();
   const handleClose = () => setSection('estimate');
@@ -501,8 +499,11 @@ export default function PresentSection() {
               Clear Sig
             </button>
           )}
-          <button onClick={handleEmail} className="flex items-center gap-1.5 px-3 py-1.5 border border-white/20 hover:bg-white/10 rounded text-xs font-semibold transition-colors">
-            <Mail className="w-3.5 h-3.5" /> Email
+          <button
+            onClick={() => setShowSendDialog(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-xs font-semibold transition-colors"
+          >
+            <Send className="w-3.5 h-3.5" /> Send to Customer
           </button>
           <button onClick={handlePrint} className="flex items-center gap-1.5 px-3 py-1.5 border border-white/20 hover:bg-white/10 rounded text-xs font-semibold transition-colors">
             <Printer className="w-3.5 h-3.5" /> Print / PDF
@@ -790,6 +791,23 @@ export default function PresentSection() {
 
       {/* Bottom padding for scroll */}
       <div className="h-12 no-print" />
+
+      {/* Send to Customer dialog */}
+      {showSendDialog && (
+        <SendEstimateDialog
+          estimateNumber={jobInfo.jobNumber || `HP-${Date.now().toString().slice(-6)}`}
+          customerName={activeCustomer?.name || jobInfo.client || 'Customer'}
+          jobTitle={jobInfo.scope || jobInfo.jobNumber || 'Project Estimate'}
+          totalPrice={totals.totalPrice}
+          depositLabel={depositLabel}
+          depositAmount={depositAmount}
+          scopeSummary={jobInfo.scope}
+          lineItemsText={`Estimate ${jobInfo.jobNumber} — Total: $${totals.totalPrice.toLocaleString()}`}
+          defaultEmail={activeCustomer?.email || jobInfo.email || ''}
+          defaultPhone={activeCustomer?.mobilePhone || jobInfo.phone || ''}
+          onClose={() => setShowSendDialog(false)}
+        />
+      )}
 
       {/* Estimate Approved Modal — fires after signature */}
       <EstimateApprovedModal

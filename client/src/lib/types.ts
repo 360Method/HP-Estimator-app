@@ -539,6 +539,8 @@ export interface Opportunity {
   convertedToJobAt?: string;       // ISO timestamp
   archived: boolean;               // moved to archive after Invoice Paid
   archivedAt?: string;             // ISO timestamp
+  // Send tracking
+  sentAt?: string;                  // ISO timestamp when estimate was last sent to customer
   // Approval / Won tracking
   wonAt?: string;                  // ISO timestamp when estimate was signed/approved
   signedEstimateDataUrl?: string;  // base64 PNG snapshot of the signed estimate document

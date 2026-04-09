@@ -12,10 +12,11 @@ import { ALL_PHASES } from '@/lib/phases';
 import { LineItem, PhaseGroup } from '@/lib/types';
 import {
   Copy, Printer, ChevronDown, ChevronUp, AlertTriangle,
-  CheckCircle2, XCircle, Mail, Presentation, X, FileText,
+  CheckCircle2, XCircle, Mail, Presentation, X, FileText, Send,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import AddressMapPreview from '@/components/AddressMapPreview';
+import SendEstimateDialog from '@/components/SendEstimateDialog';
 
 const HP_LOGO = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg';
 
@@ -294,11 +295,12 @@ function EstimateHeader({ jobInfo, estimateNumber, today }: {
 
 // ─── Main component ───────────────────────────────────────────
 export default function EstimateSection() {
-  const { state, setSummaryNotes, setClientNote, setSection } = useEstimator();
+  const { state, setSummaryNotes, setClientNote, setSection, updateOpportunity } = useEstimator();
   const [showMatLabor, setShowMatLabor] = useState(false);
   const [showAudit, setShowAudit] = useState(false);
   const [expandedPhases, setExpandedPhases] = useState<Set<number>>(new Set());
   const [showTC, setShowTC] = useState(false);
+  const [showSendDialog, setShowSendDialog] = useState(false);
 
   const { phaseResults, customResults, totals } = useMemo(() => {
     const phaseResults = state.phases.map(p => calcPhase(p, state.global));
@@ -426,17 +428,38 @@ export default function EstimateSection() {
     toast.success('Estimate copied to clipboard');
   };
 
-  const handleEmail = () => {
-    const subject = encodeURIComponent(`Handy Pioneers — Project Estimate #${estimateNumber}`);
-    const body = encodeURIComponent(generatePlainText());
-    const to = state.jobInfo.email ? encodeURIComponent(state.jobInfo.email) : '';
-    window.open(`mailto:${to}?subject=${subject}&body=${body}`, '_blank');
-  };
+  // Deposit amount for dialog
+  const depositAmount = state.depositType === 'pct'
+    ? (totals.totalPrice * state.depositValue) / 100
+    : state.depositValue;
+
+  // Active customer for pre-filling email/phone
+  const activeCustomer = state.customers.find(c => c.id === state.activeCustomerId);
 
   // ─── Render ─────────────────────────────────────────────────
   return (
     <div className="space-y-6 pb-16">
       {showTC && <TCModal onClose={() => setShowTC(false)} />}
+      {showSendDialog && (
+        <SendEstimateDialog
+          estimateNumber={estimateNumber}
+          customerName={activeCustomer?.name || state.jobInfo.client || 'Customer'}
+          jobTitle={state.jobInfo.scope || state.jobInfo.jobNumber || 'Project Estimate'}
+          totalPrice={totals.totalPrice}
+          depositLabel={depositLabel}
+          depositAmount={depositAmount}
+          scopeSummary={state.jobInfo.scope}
+          lineItemsText={generatePlainText()}
+          defaultEmail={activeCustomer?.email || state.jobInfo.email || ''}
+          defaultPhone={activeCustomer?.mobilePhone || state.jobInfo.phone || ''}
+          onClose={() => setShowSendDialog(false)}
+          onSent={() => {
+            if (state.activeOpportunityId) {
+              updateOpportunity(state.activeOpportunityId, { sentAt: new Date().toISOString() });
+            }
+          }}
+        />
+      )}
 
       {/* Action buttons */}
       <div className="flex gap-2 flex-wrap no-print">
@@ -446,8 +469,11 @@ export default function EstimateSection() {
         <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm font-semibold hover:bg-muted transition-colors">
           <Printer className="w-4 h-4" />Print
         </button>
-        <button onClick={handleEmail} className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm font-semibold hover:bg-muted transition-colors">
-          <Mail className="w-4 h-4" />Email
+        <button
+          onClick={() => setShowSendDialog(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors"
+        >
+          <Send className="w-4 h-4" />Send to Customer
         </button>
         <button onClick={() => setSection('present')} className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-lg text-sm font-semibold hover:bg-slate-700 transition-colors">
           <Presentation className="w-4 h-4" />Present

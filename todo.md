@@ -576,3 +576,15 @@
 ## Visual Edit Requests
 
 - [x] PipelineBoard Add button: prompt customer search/create before opening add form (required, no blank customer allowed)
+
+## Send Estimate to Customer (In-App Email + SMS)
+
+- [x] Server: sendEstimate tRPC procedure — email via Gmail API + SMS via Twilio
+- [x] Server: build estimate HTML email template (SOW + line items + totals + approve link)
+- [x] Server: build estimate SMS body (short link or summary + portal link)
+- [x] Frontend: SendEstimateDialog component — to/email/phone pre-filled from customer, channel toggles (email, SMS, both), subject + message preview, Send button
+- [x] Frontend: "Send to Customer" button in EstimateSection header
+- [x] Frontend: "Send to Customer" button in PresentSection (estimate preview)
+- [x] Frontend: replace existing mailto/sms: fallback with SendEstimateDialog
+- [x] Frontend: success toast + opportunity.sentAt timestamp after send
+- [x] Vitest: test sendEstimate procedure input validation
