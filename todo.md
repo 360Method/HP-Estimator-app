@@ -770,3 +770,7 @@
 ## Bug: Google Maps SDK load failure in AddressMapPreview
 - [x] Add /api/maps/sdk Express route that fetches SDK server-side with Bearer auth and streams it back
 - [x] Update googleMapsLoader.ts to load from /api/maps/sdk (same-origin, no auth header needed in browser)
+
+## Bug: NotFoundError removeChild DOM conflict (Maps SDK vs React)
+- [x] Rewrote AddressMapPreview to create the map container div imperatively (outside React reconciler)
+- [x] Maps SDK owns its own div; React never tries to removeChild nodes it didn't create

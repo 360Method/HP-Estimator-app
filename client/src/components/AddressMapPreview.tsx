@@ -5,6 +5,13 @@
  * Uses the shared SDK loader (no duplicate script injection).
  * Uses classic google.maps.Marker (NOT AdvancedMarkerElement) for
  * iOS Safari / WebKit compatibility.
+ *
+ * DOM isolation strategy:
+ * - React owns only the outer wrapper div and the overlay divs (loading/error).
+ * - The Google Maps SDK owns a dedicated inner div that is created imperatively
+ *   via document.createElement and appended/removed outside React's reconciler.
+ * - This prevents the "removeChild: node is not a child" error that occurs when
+ *   the Maps SDK injects its own child nodes into a div that React also manages.
  */
 
 /// <reference types="@types/google.maps" />
@@ -43,7 +50,10 @@ export default function AddressMapPreview({
   className,
   showLink = true,
 }: AddressMapPreviewProps) {
-  const mapContainerRef = useRef<HTMLDivElement>(null);
+  // React owns this outer wrapper — it never has React-managed children
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  // The actual map container is created imperatively so Maps SDK owns it fully
+  const mapDivRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   // Use classic Marker — AdvancedMarkerElement has known iOS Safari crashes
   const markerRef = useRef<google.maps.Marker | null>(null);
@@ -66,10 +76,23 @@ export default function AddressMapPreview({
 
     let cancelled = false;
 
+    // Create the map container div imperatively — outside React's reconciler
+    const mapDiv = document.createElement('div');
+    mapDiv.style.width = '100%';
+    mapDiv.style.height = height;
+    mapDiv.style.position = 'absolute';
+    mapDiv.style.inset = '0';
+    mapDivRef.current = mapDiv;
+
+    // Append to wrapper once it's mounted
+    if (wrapperRef.current) {
+      wrapperRef.current.appendChild(mapDiv);
+    }
+
     async function init() {
       try {
         await loadMapsSDK();
-        if (cancelled || !mapContainerRef.current) return;
+        if (cancelled || !mapDivRef.current) return;
 
         let lat = propLat;
         let lng = propLng;
@@ -90,29 +113,19 @@ export default function AddressMapPreview({
           lng = result.geometry.location.lng();
         }
 
-        if (cancelled || !mapContainerRef.current) return;
+        if (cancelled || !mapDivRef.current) return;
 
         const center = { lat: lat!, lng: lng! };
 
-        if (!mapRef.current) {
-          mapRef.current = new window.google.maps.Map(mapContainerRef.current, {
-            center,
-            zoom: 16,
-            // No mapId — required to avoid AdvancedMarker dependency on iOS
-            disableDefaultUI: true,
-            zoomControl: false,
-            gestureHandling: 'cooperative',
-            clickableIcons: false,
-          });
-        } else {
-          mapRef.current.setCenter(center);
-        }
-
-        // Remove old marker safely
-        if (markerRef.current) {
-          markerRef.current.setMap(null);
-          markerRef.current = null;
-        }
+        mapRef.current = new window.google.maps.Map(mapDivRef.current, {
+          center,
+          zoom: 16,
+          // No mapId — required to avoid AdvancedMarker dependency on iOS
+          disableDefaultUI: true,
+          zoomControl: false,
+          gestureHandling: 'cooperative',
+          clickableIcons: false,
+        });
 
         // Classic Marker — fully supported on all browsers including iOS Safari
         markerRef.current = new window.google.maps.Marker({
@@ -132,11 +145,18 @@ export default function AddressMapPreview({
 
     return () => {
       cancelled = true;
-      // Clean up marker on unmount to prevent callbacks on detached DOM
+      // Detach marker before removing the div
       if (markerRef.current) {
         markerRef.current.setMap(null);
         markerRef.current = null;
       }
+      // Remove the imperatively-created map div from the DOM
+      // This happens outside React's reconciler so no removeChild conflict
+      if (mapDivRef.current && mapDivRef.current.parentNode) {
+        mapDivRef.current.parentNode.removeChild(mapDivRef.current);
+      }
+      mapDivRef.current = null;
+      mapRef.current = null;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, propLat, propLng]);
@@ -145,13 +165,14 @@ export default function AddressMapPreview({
 
   return (
     <div className={cn('rounded-lg overflow-hidden border border-border', className)}>
+      {/* wrapperRef is the stable outer div React owns — no React children inside */}
       <div
-        ref={mapContainerRef}
-        style={{ height }}
-        className="w-full bg-slate-100 relative"
+        ref={wrapperRef}
+        style={{ height, position: 'relative' }}
+        className="w-full bg-slate-100"
       >
         {loading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-slate-100">
+          <div className="absolute inset-0 flex items-center justify-center bg-slate-100 z-10 pointer-events-none">
             <div className="flex flex-col items-center gap-2 text-muted-foreground">
               <MapPin size={20} className="animate-bounce text-primary" />
               <span className="text-xs">Loading map…</span>
@@ -159,7 +180,7 @@ export default function AddressMapPreview({
           </div>
         )}
         {error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-slate-100">
+          <div className="absolute inset-0 flex items-center justify-center bg-slate-100 z-10 pointer-events-none">
             <div className="flex flex-col items-center gap-1 text-muted-foreground text-center px-4">
               <MapPin size={18} className="opacity-40" />
               <span className="text-xs">Map unavailable</span>
