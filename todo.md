@@ -591,15 +591,15 @@
 
 ## Batch 4 — Portal Invite, Sent Badge, Live Reporting
 
-- [ ] Wire "Invite to Customer Portal" button to portal.sendMagicLink tRPC mutation
-- [ ] Add Sent badge (date chip) to Pipeline cards and Jobs list cards when sentAt is set
-- [ ] Connect Reporting page to live DB-backed tRPC queries (invoices, opportunities)
+- [x] Wire "Invite to Customer Portal" button to portal.sendMagicLink tRPC mutation
+- [x] Add Sent badge (date chip) to Pipeline cards and Jobs list cards when sentAt is set
+- [x] Connect Reporting page to live DB-backed tRPC queries (invoices, opportunities)
 
 ## Reporting — Snapshot Sync
 
-- [ ] DB schema: add snapshotOpportunities and snapshotInvoices tables to drizzle/schema.ts
-- [ ] Run pnpm db:push after schema changes
-- [ ] Server: reporting.syncSnapshot tRPC mutation (upsert opportunities + invoices from local state)
-- [ ] Server: reporting.getMetrics tRPC query (monthly revenue, funnel, top customers, open invoices)
-- [ ] Client: auto-sync on app load and on any opportunity/invoice change (debounced 5s)
-- [ ] Client: ReportingPage reads from trpc.reporting.getMetrics instead of local state
+- [x] DB schema: add snapshotOpportunities and snapshotInvoices tables to drizzle/schema.ts
+- [x] Run pnpm db:push after schema changes
+- [x] Server: reporting.syncSnapshot tRPC mutation (upsert opportunities + invoices from local state)
+- [x] Server: reporting.getMetrics tRPC query (monthly revenue, funnel, top customers, open invoices)
+- [x] Client: auto-sync on app load and on any opportunity/invoice change (debounced 5s)
+- [x] Client: ReportingPage reads from trpc.reporting.getMetrics instead of local state

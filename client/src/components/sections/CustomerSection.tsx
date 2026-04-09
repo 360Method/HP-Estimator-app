@@ -11,7 +11,7 @@
 //   Leads/Estimates/Jobs tabs: Pipeline tracker with Convert/Archive lifecycle buttons
 // ============================================================
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { trpc } from '@/lib/trpc';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import {
@@ -540,6 +540,24 @@ export default function CustomerSection() {
 
   const [newTag, setNewTag] = useState('');
   const [editingContact, setEditingContact] = useState(false);
+  // Local draft for contact info — prevents global dispatch on every keystroke
+  const [contactDraft, setContactDraft] = useState({ client: '', companyName: '', phone: '', email: '' });
+  // Sync draft from global state when entering edit mode
+  useEffect(() => {
+    if (editingContact) {
+      setContactDraft({ client: jobInfo.client, companyName: jobInfo.companyName, phone: jobInfo.phone, email: jobInfo.email });
+    }
+  }, [editingContact]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Local draft for Job Details text fields — flush to global onBlur to avoid keystroke dispatches
+  const [jobDetailsDraft, setJobDetailsDraft] = useState({ estimator: '', jobNumber: '', scope: '' });
+  // Sync job details draft whenever the active opportunity changes or jobInfo changes externally
+  const prevOpportunityId = useRef(state.activeOpportunityId);
+  useEffect(() => {
+    if (state.activeOpportunityId !== prevOpportunityId.current || !editingContact) {
+      prevOpportunityId.current = state.activeOpportunityId;
+      setJobDetailsDraft({ estimator: jobInfo.estimator, jobNumber: jobInfo.jobNumber, scope: jobInfo.scope });
+    }
+  }, [state.activeOpportunityId, jobInfo.estimator, jobInfo.jobNumber, jobInfo.scope, editingContact]); // eslint-disable-line react-hooks/exhaustive-deps
   const [newNote, setNewNote] = useState('');
   // Multi-address state
   const [addingAddress, setAddingAddress] = useState(false);
@@ -667,25 +685,25 @@ export default function CustomerSection() {
               <div className="space-y-2">
                 <div>
                   <label className="block text-[10px] text-muted-foreground mb-1">Name</label>
-                  <input type="text" value={jobInfo.client} onChange={e => setJobInfo({ client: e.target.value })}
+                  <input type="text" value={contactDraft.client} onChange={e => setContactDraft(d => ({ ...d, client: e.target.value }))}
                     placeholder="Jane Smith" className="field-input w-full text-sm" />
                 </div>
                 <div>
                   <label className="block text-[10px] text-muted-foreground mb-1">Company</label>
-                  <input type="text" value={jobInfo.companyName} onChange={e => setJobInfo({ companyName: e.target.value })}
+                  <input type="text" value={contactDraft.companyName} onChange={e => setContactDraft(d => ({ ...d, companyName: e.target.value }))}
                     placeholder="Acme Corp" className="field-input w-full text-sm" />
                 </div>
                 <div>
                   <label className="block text-[10px] text-muted-foreground mb-1">Phone</label>
-                  <input type="tel" value={jobInfo.phone} onChange={e => setJobInfo({ phone: e.target.value })}
+                  <input type="tel" value={contactDraft.phone} onChange={e => setContactDraft(d => ({ ...d, phone: e.target.value }))}
                     placeholder="(360) 555-0100" className="field-input w-full text-sm" />
                 </div>
                 <div>
                   <label className="block text-[10px] text-muted-foreground mb-1">Email</label>
-                  <input type="email" value={jobInfo.email} onChange={e => setJobInfo({ email: e.target.value })}
+                  <input type="email" value={contactDraft.email} onChange={e => setContactDraft(d => ({ ...d, email: e.target.value }))}
                     placeholder="jane@example.com" className="field-input w-full text-sm" />
                 </div>
-                <button onClick={() => setEditingContact(false)}
+                <button onClick={() => { setJobInfo(contactDraft); setEditingContact(false); }}
                   className="w-full px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-semibold hover:bg-primary/90 transition-colors">
                   Save Contact
                 </button>
@@ -914,7 +932,7 @@ export default function CustomerSection() {
             </div>
             <div>
               <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Estimator</label>
-              <input type="text" value={jobInfo.estimator} onChange={e => setJobInfo({ estimator: e.target.value })}
+              <input type="text" value={jobDetailsDraft.estimator} onChange={e => setJobDetailsDraft(d => ({ ...d, estimator: e.target.value }))} onBlur={() => setJobInfo({ estimator: jobDetailsDraft.estimator })}
                 placeholder="e.g. Mike, Sarah" className="field-input w-full" />
             </div>
             <div>
@@ -931,11 +949,11 @@ export default function CustomerSection() {
             </div>
             <div>
               <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Job Number</label>
-              <input type="text" value={jobInfo.jobNumber} onChange={e => setJobInfo({ jobNumber: e.target.value })} className="field-input w-full" />
+              <input type="text" value={jobDetailsDraft.jobNumber} onChange={e => setJobDetailsDraft(d => ({ ...d, jobNumber: e.target.value }))} onBlur={() => setJobInfo({ jobNumber: jobDetailsDraft.jobNumber })} className="field-input w-full" />
             </div>
             <div className="sm:col-span-2">
               <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Scope of Work</label>
-              <textarea value={jobInfo.scope} onChange={e => setJobInfo({ scope: e.target.value })}
+              <textarea value={jobDetailsDraft.scope} onChange={e => setJobDetailsDraft(d => ({ ...d, scope: e.target.value }))} onBlur={() => setJobInfo({ scope: jobDetailsDraft.scope })}
                 placeholder="e.g. Full trim package — install new baseboard, door casing, and window casing throughout main floor."
                 rows={3} className="field-input w-full resize-none" />
             </div>
@@ -1172,129 +1190,7 @@ export default function CustomerSection() {
     </div>
   );
 
-  // ── Communication Tab ──
-  const CommunicationTab = ({ customerId }: { customerId: string }) => {
-    const { data: convos, isLoading } = trpc.inbox.conversations.listByCustomer.useQuery(
-      { customerId },
-      { enabled: !!customerId }
-    );
-    if (isLoading) return <div className="py-16 text-center text-muted-foreground text-sm">Loading messages...</div>;
-    if (!convos || convos.length === 0) return (
-      <div className="text-center py-16 text-muted-foreground border-2 border-dashed border-border rounded-xl">
-        <MessageSquare className="w-8 h-8 mx-auto mb-3 opacity-30" />
-        <div className="text-base font-semibold mb-1">No Messages Yet</div>
-        <div className="text-sm">SMS, email, and notes will appear here.</div>
-      </div>
-    );
-    return (
-      <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Conversations</h3>
-        {convos.map(conv => (
-          <div key={conv.id} className="rounded-xl border bg-card p-4 flex items-start gap-3">
-            <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-              <MessageSquare size={15} className="text-primary" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-semibold text-sm">{conv.contactName ?? conv.contactPhone ?? conv.contactEmail ?? 'Unknown'}</span>
-                {conv.channels && <Badge variant="outline" className="text-xs capitalize">{conv.channels}</Badge>}
-                {(conv.unreadCount ?? 0) > 0 && (
-                  <Badge className="bg-primary text-primary-foreground text-xs">{conv.unreadCount} unread</Badge>
-                )}
-              </div>
-              {conv.lastMessagePreview && (
-                <p className="text-xs text-muted-foreground mt-0.5 truncate">{conv.lastMessagePreview}</p>
-              )}
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {conv.lastMessageAt ? new Date(conv.lastMessageAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'No messages'}
-              </p>
-            </div>
-            <button
-              type="button"
-              className="shrink-0 text-xs text-primary hover:underline"
-              onClick={() => { setSection('inbox' as any); }}
-            >
-              Open
-            </button>
-          </div>
-        ))}
-      </div>
-    );
-  };
-
-  // ── Customer Attachments Tab ──
-  const CustomerAttachmentsTab = ({ customerId }: { customerId: string }) => {
-    const attachFileRef = useRef<HTMLInputElement>(null);
-    const { addCustomerAttachment, removeCustomerAttachment } = useEstimator();
-    const uploadFile = trpc.uploads.uploadFile.useMutation();
-    const customer = customers.find(c => c.id === customerId);
-    const files = customer?.attachments ?? [];
-
-    const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const picked = Array.from(e.target.files ?? []);
-      if (attachFileRef.current) attachFileRef.current.value = '';
-      for (const file of picked) {
-        if (file.size > 16 * 1024 * 1024) { toast.error(`"${file.name}" exceeds 16 MB`); continue; }
-        try {
-          const base64 = await new Promise<string>((res, rej) => {
-            const r = new FileReader();
-            r.onload = ev => res(ev.target?.result as string);
-            r.onerror = rej;
-            r.readAsDataURL(file);
-          });
-          toast.loading(`Uploading "${file.name}"...`, { id: file.name });
-          const result = await uploadFile.mutateAsync({ filename: file.name, mimeType: file.type || 'application/octet-stream', base64, folder: 'customer-attachments' });
-          addCustomerAttachment(customerId, { id: nanoid(8), name: file.name, url: result.url, mimeType: file.type, size: file.size, uploadedAt: new Date().toISOString() });
-          toast.success(`"${file.name}" uploaded`, { id: file.name });
-        } catch { toast.error(`Failed to upload "${file.name}"`, { id: file.name }); }
-      }
-    };
-
-    return (
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Files & Photos</h3>
-          <button type="button" onClick={() => attachFileRef.current?.click()}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-semibold hover:bg-primary/90 transition-colors">
-            <Plus size={13} /> Upload File
-          </button>
-          <input ref={attachFileRef} type="file" multiple className="hidden" onChange={handleUpload} />
-        </div>
-        {files.length === 0 ? (
-          <div className="text-center py-16 text-muted-foreground border-2 border-dashed border-border rounded-xl">
-            <Paperclip className="w-8 h-8 mx-auto mb-3 opacity-30" />
-            <div className="text-base font-semibold mb-1">No Files Yet</div>
-            <div className="text-sm">Upload photos, contracts, or any customer documents.</div>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {files.map(f => (
-              <div key={f.id} className="rounded-xl border bg-card p-3 flex items-center gap-3">
-                <div className="w-10 h-10 rounded border bg-muted flex items-center justify-center shrink-0 overflow-hidden">
-                  {f.mimeType.startsWith('image/') ? (
-                    <img src={f.url} alt={f.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <FileText className="w-4 h-4 text-muted-foreground" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{f.name}</p>
-                  <p className="text-xs text-muted-foreground">{(f.size / 1024).toFixed(1)} KB · {new Date(f.uploadedAt).toLocaleDateString()}</p>
-                </div>
-                <a href={f.url} target="_blank" rel="noreferrer" className="shrink-0 text-xs text-primary hover:underline flex items-center gap-1">
-                  <Download size={12} /> View
-                </a>
-                <button type="button" onClick={() => removeCustomerAttachment(customerId, f.id)}
-                  className="shrink-0 text-xs text-destructive hover:underline flex items-center gap-1">
-                  <Trash2 size={12} /> Remove
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  };
+  // (CommunicationTab and CustomerAttachmentsTab are defined as top-level components below CustomerSection)
 
   return (
     <div className="space-y-0">
@@ -1401,7 +1297,7 @@ export default function CustomerSection() {
         {(activeCustomerTab === 'leads' || activeCustomerTab === 'estimates' || activeCustomerTab === 'jobs') && <PipelineTab />}
         {activeCustomerTab === 'invoices' && <InvoiceSection />}
         {activeCustomerTab === 'communication' && (
-          <CommunicationTab customerId={activeCustomerId ?? ''} />
+          <CommunicationTab customerId={activeCustomerId ?? ''} onOpenInbox={() => setSection('inbox' as any)} />
         )}
         {activeCustomerTab === 'attachments' && (
           <CustomerAttachmentsTab customerId={activeCustomerId ?? ''} />
@@ -1512,6 +1408,132 @@ export default function CustomerSection() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Top-level tab components (must NOT be defined inside CustomerSection) ────
+// These use hooks (useQuery, useMutation, useRef) so React requires them to be
+// stable function references — i.e., defined at module scope, not inside a render.
+
+function CommunicationTab({ customerId, onOpenInbox }: { customerId: string; onOpenInbox: () => void }) {
+  const { data: convos, isLoading } = trpc.inbox.conversations.listByCustomer.useQuery(
+    { customerId },
+    { enabled: !!customerId }
+  );
+  if (isLoading) return <div className="py-16 text-center text-muted-foreground text-sm">Loading messages...</div>;
+  if (!convos || convos.length === 0) return (
+    <div className="text-center py-16 text-muted-foreground border-2 border-dashed border-border rounded-xl">
+      <MessageSquare className="w-8 h-8 mx-auto mb-3 opacity-30" />
+      <div className="text-base font-semibold mb-1">No Messages Yet</div>
+      <div className="text-sm">SMS, email, and notes will appear here.</div>
+    </div>
+  );
+  return (
+    <div className="space-y-3">
+      <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Conversations</h3>
+      {convos.map(conv => (
+        <div key={conv.id} className="rounded-xl border bg-card p-4 flex items-start gap-3">
+          <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+            <MessageSquare size={15} className="text-primary" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-semibold text-sm">{conv.contactName ?? conv.contactPhone ?? conv.contactEmail ?? 'Unknown'}</span>
+              {conv.channels && <Badge variant="outline" className="text-xs capitalize">{conv.channels}</Badge>}
+              {(conv.unreadCount ?? 0) > 0 && (
+                <Badge className="bg-primary text-primary-foreground text-xs">{conv.unreadCount} unread</Badge>
+              )}
+            </div>
+            {conv.lastMessagePreview && (
+              <p className="text-xs text-muted-foreground mt-0.5 truncate">{conv.lastMessagePreview}</p>
+            )}
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {conv.lastMessageAt ? new Date(conv.lastMessageAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'No messages'}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="shrink-0 text-xs text-primary hover:underline"
+            onClick={onOpenInbox}
+          >
+            Open
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CustomerAttachmentsTab({ customerId }: { customerId: string }) {
+  const attachFileRef = useRef<HTMLInputElement>(null);
+  const { state, addCustomerAttachment, removeCustomerAttachment } = useEstimator();
+  const uploadFile = trpc.uploads.uploadFile.useMutation();
+  const customer = state.customers.find(c => c.id === customerId);
+  const files = customer?.attachments ?? [];
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const picked = Array.from(e.target.files ?? []);
+    if (attachFileRef.current) attachFileRef.current.value = '';
+    for (const file of picked) {
+      if (file.size > 16 * 1024 * 1024) { toast.error(`"${file.name}" exceeds 16 MB`); continue; }
+      try {
+        const base64 = await new Promise<string>((res, rej) => {
+          const r = new FileReader();
+          r.onload = ev => res(ev.target?.result as string);
+          r.onerror = rej;
+          r.readAsDataURL(file);
+        });
+        toast.loading(`Uploading "${file.name}"...`, { id: file.name });
+        const result = await uploadFile.mutateAsync({ filename: file.name, mimeType: file.type || 'application/octet-stream', base64, folder: 'customer-attachments' });
+        addCustomerAttachment(customerId, { id: nanoid(8), name: file.name, url: result.url, mimeType: file.type, size: file.size, uploadedAt: new Date().toISOString() });
+        toast.success(`"${file.name}" uploaded`, { id: file.name });
+      } catch { toast.error(`Failed to upload "${file.name}"`, { id: file.name }); }
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Files & Photos</h3>
+        <button type="button" onClick={() => attachFileRef.current?.click()}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-semibold hover:bg-primary/90 transition-colors">
+          <Plus size={13} /> Upload File
+        </button>
+        <input ref={attachFileRef} type="file" multiple className="hidden" onChange={handleUpload} />
+      </div>
+      {files.length === 0 ? (
+        <div className="text-center py-16 text-muted-foreground border-2 border-dashed border-border rounded-xl">
+          <Paperclip className="w-8 h-8 mx-auto mb-3 opacity-30" />
+          <div className="text-base font-semibold mb-1">No Files Yet</div>
+          <div className="text-sm">Upload photos, contracts, or any customer documents.</div>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {files.map(f => (
+            <div key={f.id} className="rounded-xl border bg-card p-3 flex items-center gap-3">
+              <div className="w-10 h-10 rounded border bg-muted flex items-center justify-center shrink-0 overflow-hidden">
+                {f.mimeType.startsWith('image/') ? (
+                  <img src={f.url} alt={f.name} className="w-full h-full object-cover" />
+                ) : (
+                  <FileText className="w-4 h-4 text-muted-foreground" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{f.name}</p>
+                <p className="text-xs text-muted-foreground">{(f.size / 1024).toFixed(1)} KB · {new Date(f.uploadedAt).toLocaleDateString()}</p>
+              </div>
+              <a href={f.url} target="_blank" rel="noreferrer" className="shrink-0 text-xs text-primary hover:underline flex items-center gap-1">
+                <Download size={12} /> View
+              </a>
+              <button type="button" onClick={() => removeCustomerAttachment(customerId, f.id)}
+                className="shrink-0 text-xs text-destructive hover:underline flex items-center gap-1">
+                <Trash2 size={12} /> Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
