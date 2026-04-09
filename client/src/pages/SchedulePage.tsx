@@ -797,20 +797,57 @@ export default function SchedulePage() {
     setDraggingId(null);
   }
 
-  function handleDropOnDay(targetDay: Date) {
+  // targetHour: when dropping on a time-slot cell, pass the hour for precision
+  function handleDropOnDay(targetDay: Date, targetHour?: number) {
     const ev = dragEventRef.current;
     if (!ev) return;
     const origStart = new Date(ev.start);
     const origEnd = new Date(ev.end);
     const duration = origEnd.getTime() - origStart.getTime();
     const newStart = new Date(targetDay);
-    newStart.setHours(origStart.getHours(), origStart.getMinutes(), 0, 0);
+    // Use time-slot hour if provided (week/day views), else preserve original time
+    if (targetHour !== undefined) {
+      newStart.setHours(targetHour, 0, 0, 0);
+    } else {
+      newStart.setHours(origStart.getHours(), origStart.getMinutes(), 0, 0);
+    }
     const newEnd = new Date(newStart.getTime() + duration);
-    // Don't update synth events (they're derived from opportunity.scheduledDate)
     if (!ev.id.startsWith('synth-')) {
       updateScheduleEvent(ev.id, { start: newStart.toISOString(), end: newEnd.toISOString() });
     }
     handleDragEnd();
+  }
+
+  // ── Resize (drag bottom handle to extend end time) ────────
+  const resizeEventRef = useRef<ScheduleEvent | null>(null);
+  const resizeStartYRef = useRef<number>(0);
+  const resizeOrigEndRef = useRef<Date>(new Date());
+  const [resizingId, setResizingId] = useState<string | null>(null);
+
+  function handleResizeStart(e: React.MouseEvent, ev: ScheduleEvent) {
+    e.stopPropagation();
+    e.preventDefault();
+    resizeEventRef.current = ev;
+    resizeStartYRef.current = e.clientY;
+    resizeOrigEndRef.current = new Date(ev.end);
+    setResizingId(ev.id);
+
+    // Commit only on mouseup — no live updates to avoid excessive re-renders
+    function onMouseUp(ue: MouseEvent) {
+      const deltaY = ue.clientY - resizeStartYRef.current;
+      const deltaHours = deltaY / 56; // 56px per hour (h-14)
+      const deltaMs = deltaHours * 3600 * 1000;
+      const newEnd = new Date(resizeOrigEndRef.current.getTime() + deltaMs);
+      const minEnd = new Date(new Date(resizeEventRef.current!.start).getTime() + 30 * 60 * 1000);
+      if (newEnd > minEnd && !resizeEventRef.current!.id.startsWith('synth-')) {
+        updateScheduleEvent(resizeEventRef.current!.id, { end: newEnd.toISOString() });
+      }
+      setResizingId(null);
+      resizeEventRef.current = null;
+      document.removeEventListener('mouseup', onMouseUp);
+    }
+
+    document.addEventListener('mouseup', onMouseUp);
   }
 
   // ── Filter toggle ─────────────────────────────────────────
@@ -1099,8 +1136,6 @@ export default function SchedulePage() {
                     <div
                       key={di}
                       className={`border-r border-gray-200 relative ${isToday ? 'bg-blue-50/20' : ''}`}
-                      onDragOver={e => e.preventDefault()}
-                      onDrop={() => handleDropOnDay(day)}
                     >
                       {HOURS.map(h => (
                         <div
@@ -1108,6 +1143,8 @@ export default function SchedulePage() {
                           className={`h-14 border-b border-gray-100 hover:bg-blue-50/30 cursor-pointer transition-colors ${
                             h < WORK_HOURS.start || h >= WORK_HOURS.end ? 'bg-gray-50/30' : ''
                           }`}
+                          onDragOver={e => e.preventDefault()}
+                          onDrop={() => handleDropOnDay(day, h)}
                           onClick={() => {
                             const d = new Date(day);
                             d.setHours(h, 0, 0, 0);
@@ -1131,11 +1168,21 @@ export default function SchedulePage() {
                             onDragStart={e => { e.stopPropagation(); handleDragStart(ev); }}
                             onDragEnd={handleDragEnd}
                             onClick={e => { e.stopPropagation(); setSelectedEvent(ev); }}
-                            className={`absolute left-0.5 right-0.5 rounded border-l-2 px-1 py-0.5 cursor-pointer hover:opacity-80 transition-opacity ${c.bg} ${c.border} ${c.text} ${draggingId === ev.id ? 'opacity-40' : ''}`}
+                            className={`absolute left-0.5 right-0.5 rounded border-l-2 px-1 py-0.5 cursor-pointer hover:opacity-80 transition-opacity ${c.bg} ${c.border} ${c.text} ${draggingId === ev.id ? 'opacity-40' : ''} ${resizingId === ev.id ? 'ring-1 ring-blue-400' : ''}`}
                             style={{ top: `${top}px`, height: `${height}px`, zIndex: 10 }}
                           >
                             <div className="text-[10px] font-semibold truncate">{ev.title}</div>
                             <div className="text-[9px] opacity-70">{formatTime(ev.start)}</div>
+                            {/* Resize handle */}
+                            {!ev.id.startsWith('synth-') && height > 28 && (
+                              <div
+                                className="absolute bottom-0 left-0 right-0 h-2 cursor-s-resize flex items-center justify-center opacity-0 hover:opacity-100 group-hover:opacity-100"
+                                onMouseDown={e => handleResizeStart(e, ev)}
+                                onClick={e => e.stopPropagation()}
+                              >
+                                <div className="w-6 h-0.5 rounded-full bg-current opacity-50" />
+                              </div>
+                            )}
                           </div>
                         );
                       })}
@@ -1212,6 +1259,8 @@ export default function SchedulePage() {
                         className={`h-16 border-b border-gray-100 px-2 py-1 space-y-0.5 cursor-pointer hover:bg-blue-50/20 transition-colors ${
                           h < WORK_HOURS.start || h >= WORK_HOURS.end ? 'bg-gray-50/30' : ''
                         }`}
+                        onDragOver={e => e.preventDefault()}
+                        onDrop={() => handleDropOnDay(currentDate, h)}
                         onClick={() => {
                           const d = new Date(currentDate);
                           d.setHours(h, 0, 0, 0);
@@ -1219,7 +1268,14 @@ export default function SchedulePage() {
                         }}
                       >
                         {hourEvents.map(ev => (
-                          <div key={ev.id} onClick={e => { e.stopPropagation(); setSelectedEvent(ev); }}>
+                          <div
+                            key={ev.id}
+                            draggable={!ev.id.startsWith('synth-')}
+                            onDragStart={e => { e.stopPropagation(); handleDragStart(ev); }}
+                            onDragEnd={handleDragEnd}
+                            onClick={e => { e.stopPropagation(); setSelectedEvent(ev); }}
+                            className={draggingId === ev.id ? 'opacity-40' : ''}
+                          >
                             <EventChip event={ev} customer={getCustomer(ev.customerId)} onClick={() => setSelectedEvent(ev)} />
                           </div>
                         ))}

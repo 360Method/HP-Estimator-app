@@ -93,8 +93,8 @@
 ## Schedule Tab — Future Improvements
 
 - [x] Add assignee and status filters to SchedulePage filter bar
-- [ ] Upgrade drag-reschedule to support time-slot precision in week/day views
-- [ ] Add event resize support (drag end time to adjust duration)
+- [x] Upgrade drag-reschedule to support time-slot precision in week/day views
+- [x] Add event resize support (drag end time to adjust duration)
 - [x] Add recurrence support in EventFormModal (daily/weekly/biweekly/monthly)
 - [x] Add "Schedule" date fields to JobDetailsSection (service date, estimated duration)
 - [x] Auto-create schedule event when job is created or estimate is scheduled
