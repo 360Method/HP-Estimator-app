@@ -158,17 +158,21 @@ export default function OpportunityDetailsTab() {
     setSection('opp-details');
   };
 
-  // Contact info: prefer clientSnapshot (frozen at conversion time), fall back to state.jobInfo
+  // Contact info: prefer live customer record (always up-to-date),
+  // fall back to clientSnapshot (frozen at conversion), then jobInfo.
+  const activeCustomer = state.customers.find(c => c.id === state.activeCustomerId);
   const snap = activeOpp.clientSnapshot;
   const contact = {
-    name: snap?.client || state.jobInfo.client || '—',
-    company: snap?.companyName || state.jobInfo.companyName || '',
-    phone: snap?.phone || state.jobInfo.phone || '—',
-    email: snap?.email || state.jobInfo.email || '—',
-    address: snap?.address || state.jobInfo.address || '',
-    city: snap?.city || state.jobInfo.city || '',
-    stateAbbr: snap?.state || state.jobInfo.state || '',
-    zip: snap?.zip || state.jobInfo.zip || '',
+    name: activeCustomer
+      ? [activeCustomer.firstName, activeCustomer.lastName].filter(Boolean).join(' ') || activeCustomer.displayName || '—'
+      : snap?.client || state.jobInfo.client || '—',
+    company: activeCustomer?.company || snap?.companyName || state.jobInfo.companyName || '',
+    phone: activeCustomer?.mobilePhone || activeCustomer?.homePhone || activeCustomer?.workPhone || snap?.phone || state.jobInfo.phone || '—',
+    email: activeCustomer?.email || snap?.email || state.jobInfo.email || '—',
+    address: activeCustomer?.street || snap?.address || state.jobInfo.address || '',
+    city: activeCustomer?.city || snap?.city || state.jobInfo.city || '',
+    stateAbbr: activeCustomer?.state || snap?.state || state.jobInfo.state || '',
+    zip: activeCustomer?.zip || snap?.zip || state.jobInfo.zip || '',
     scope: snap?.scope || state.jobInfo.scope || '',
     jobType: snap?.jobType || state.jobInfo.jobType || '',
   };
