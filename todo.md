@@ -511,3 +511,49 @@
 - [ ] Check server logs for errors when sending outbound SMS
 - [ ] Verify sendSms helper and tRPC procedure
 - [ ] Fix and verify end-to-end
+
+## Customer Portal (client.handypioneers.com)
+
+- [x] DB: portal_customers table (id, name, email, phone, address, stripeCustomerId, referralCode, referredBy, createdAt)
+- [x] DB: portal_tokens table (id, customerId, token, expiresAt, usedAt) — magic link tokens
+- [x] DB: portal_sessions table (id, customerId, sessionToken, expiresAt) — portal session cookies
+- [x] DB: portal_estimates table (id, customerId, estimateNumber, title, status, totalAmount, depositAmount, depositPercent, lineItemsJson, sentAt, approvedAt, signatureDataUrl, signerName, declinedAt, expiresAt, createdAt)
+- [x] DB: portal_invoices table (id, customerId, estimateId, invoiceNumber, type, status, amountDue, amountPaid, dueDate, stripePaymentIntentId, paidAt, lineItemsJson, createdAt)
+- [x] DB: portal_appointments table (id, customerId, title, scheduledAt, scheduledEndAt, address, techName, status, notes, createdAt)
+- [x] DB: portal_messages table (id, customerId, senderRole, body, createdAt) — in-portal messaging
+- [x] DB: portal_gallery table (id, customerId, jobId, imageUrl, caption, createdAt)
+- [x] DB: portal_referrals table (id, referrerId, referredEmail, referredCustomerId, status, rewardAmount, createdAt)
+- [x] DB migration: run pnpm db:push after schema changes
+- [x] Backend: portal auth middleware (portalProcedure) using session cookie
+- [x] Backend: sendMagicLink procedure — generate token, send email via Gmail
+- [x] Backend: verifyMagicLink procedure — validate token, create session, set cookie
+- [x] Backend: portal.me procedure — return current portal customer
+- [x] Backend: portal.estimates.list + getById procedures
+- [x] Backend: portal.estimates.approve procedure — save signature, update status, trigger deposit Stripe payment intent
+- [x] Backend: portal.estimates.decline procedure
+- [x] Backend: portal.invoices.list + getById + createPaymentIntent procedures
+- [x] Backend: portal.appointments.list procedure
+- [x] Backend: portal.gallery.list procedure
+- [x] Backend: portal.messages.list + send procedures
+- [x] Backend: portal.wallet.getCard + saveCard (Stripe SetupIntent) + deleteCard procedures
+- [x] Backend: portal.referrals.getCode + list procedures
+- [x] Backend: HP admin — sendEstimateToPortal procedure (writes to portal_estimates + sends magic link email)
+- [x] Backend: HP admin — sendInvoiceToPortal procedure (writes to portal_invoices + sends email)
+- [x] Frontend: /portal/login — magic link request form (enter email)
+- [x] Frontend: /portal/verify — token verification landing page
+- [x] Frontend: portal layout shell — HP logo header, sidebar nav (Appointments, Invoices, Estimates, Gallery, Wallet, Referral), Send a message + Book online buttons
+- [x] Frontend: /portal/appointments — upcoming/past tabs, date/time/type/address/tech table
+- [x] Frontend: /portal/estimates — list with status badges, unread count badge on nav
+- [x] Frontend: /portal/estimates/:id — estimate detail with line items, Approve/Decline buttons
+- [x] Frontend: Approve estimate modal — typed/drawn signature canvas, "I agree" checkbox, Approve CTA
+- [x] Frontend: Deposit payment page — Stripe Elements, Google Pay, credit card, bank payment options
+- [x] Frontend: /portal/invoices — list with status, amount due
+- [x] Frontend: /portal/invoices/:id — invoice detail with tip selector, payment method, invoice summary PDF preview
+- [x] Frontend: /portal/gallery — photo grid by job
+- [x] Frontend: /portal/wallet — saved card display, add card via Stripe SetupIntent, delete card
+- [x] Frontend: /portal/referral — referral code display, share link, referred friends list, reward status
+- [x] Frontend: Send a message modal — compose + thread view
+- [x] HP admin integration: "Send to Portal" button on estimate/invoice cards
+- [x] Email: magic link email template (Handy Pioneers logo, LOGIN TO CUSTOMER PORTAL button, 7-day expiry notice)
+- [x] Email: new estimate notification email (Approve Estimate #XXXX, View estimate button, View all estimates link)
+- [x] Email: new invoice notification email (Review & pay invoice, amount due, due date)

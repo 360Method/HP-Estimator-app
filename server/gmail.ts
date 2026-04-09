@@ -112,29 +112,70 @@ async function getGmailClient(email: string) {
 // ─── Send Email ───────────────────────────────────────────────────────────────
 
 export async function sendEmail(params: {
-  fromEmail: string;
+  fromEmail?: string;
   to: string;
   subject: string;
-  body: string;
+  body?: string;
+  html?: string;
   threadId?: string;
   inReplyTo?: string;
 }): Promise<{ messageId: string; threadId: string }> {
-  const gmail = await getGmailClient(params.fromEmail);
-
-  // Build RFC 2822 message
-  const headers = [
-    `From: Handy Pioneers <${params.fromEmail}>`,
-    `To: ${params.to}`,
-    `Subject: ${params.subject}`,
-    `Content-Type: text/plain; charset=utf-8`,
-  ];
-  if (params.inReplyTo) {
-    headers.push(`In-Reply-To: ${params.inReplyTo}`);
-    headers.push(`References: ${params.inReplyTo}`);
+  // Use help@ as default sender if no fromEmail provided
+  const fromEmail = params.fromEmail || "help@handypioneers.com";
+  let gmail: ReturnType<typeof google.gmail>;
+  try {
+    gmail = await getGmailClient(fromEmail);
+  } catch {
+    // Gmail not connected — log and skip silently
+    console.warn("[Gmail] sendEmail: not connected, skipping");
+    return { messageId: "", threadId: "" };
   }
 
-  const raw = Buffer.from(headers.join("\r\n") + "\r\n\r\n" + params.body)
-    .toString("base64url");
+  const boundary = `boundary_${Date.now()}`;
+  const plainText = params.body ?? (params.html ? params.html.replace(/<[^>]+>/g, "") : "");
+
+  let rawBody: string;
+  if (params.html) {
+    // Multipart/alternative: plain + HTML
+    const headers = [
+      `From: Handy Pioneers <${fromEmail}>`,
+      `To: ${params.to}`,
+      `Subject: ${params.subject}`,
+      `MIME-Version: 1.0`,
+      `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    ];
+    if (params.inReplyTo) {
+      headers.push(`In-Reply-To: ${params.inReplyTo}`);
+      headers.push(`References: ${params.inReplyTo}`);
+    }
+    rawBody = [
+      headers.join("\r\n"),
+      "",
+      `--${boundary}`,
+      `Content-Type: text/plain; charset=utf-8`,
+      "",
+      plainText,
+      `--${boundary}`,
+      `Content-Type: text/html; charset=utf-8`,
+      "",
+      params.html,
+      `--${boundary}--`,
+    ].join("\r\n");
+  } else {
+    const headers = [
+      `From: Handy Pioneers <${fromEmail}>`,
+      `To: ${params.to}`,
+      `Subject: ${params.subject}`,
+      `Content-Type: text/plain; charset=utf-8`,
+    ];
+    if (params.inReplyTo) {
+      headers.push(`In-Reply-To: ${params.inReplyTo}`);
+      headers.push(`References: ${params.inReplyTo}`);
+    }
+    rawBody = headers.join("\r\n") + "\r\n\r\n" + plainText;
+  }
+
+  const raw = Buffer.from(rawBody).toString("base64url");
 
   const response = await gmail.users.messages.send({
     userId: "me",

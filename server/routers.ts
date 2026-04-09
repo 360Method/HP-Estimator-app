@@ -6,6 +6,7 @@ import { paymentsRouter } from "./routers/payments";
 import { estimateRouter } from "./routers/estimate";
 import { inboxRouter } from "./routers/inbox";
 import { gmailRouter } from "./routers/gmail";
+import { portalRouter } from "./routers/portal";
 
 export const appRouter = router({
   // if you need to use socket.io, read and register route in server/_core/index.ts
@@ -14,6 +15,7 @@ export const appRouter = router({
   estimate: estimateRouter,
   inbox: inboxRouter,
   gmail: gmailRouter,
+  portal: portalRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {

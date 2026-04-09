@@ -1,0 +1,351 @@
+/**
+ * Portal DB helpers — query functions for the customer portal tables.
+ * All functions return raw Drizzle rows.
+ */
+import { getDb } from "./db";
+import { eq, and, gt, desc } from "drizzle-orm";
+import {
+  portalCustomers,
+  portalTokens,
+  portalSessions,
+  portalEstimates,
+  portalInvoices,
+  portalAppointments,
+  portalMessages,
+  portalGallery,
+  portalReferrals,
+  type InsertPortalCustomer,
+  type InsertPortalToken,
+  type InsertPortalSession,
+  type InsertPortalEstimate,
+  type InsertPortalInvoice,
+  type InsertPortalAppointment,
+  type InsertPortalMessage,
+  type InsertPortalGalleryItem,
+  type InsertPortalReferral,
+} from "../drizzle/schema";
+
+async function d() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db;
+}
+
+// ─── CUSTOMERS ────────────────────────────────────────────────────────────────
+
+export async function findPortalCustomerByEmail(email: string) {
+  const db = await d();
+  const rows = await db
+    .select()
+    .from(portalCustomers)
+    .where(eq(portalCustomers.email, email.toLowerCase().trim()))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function findPortalCustomerById(id: number) {
+  const db = await d();
+  const rows = await db
+    .select()
+    .from(portalCustomers)
+    .where(eq(portalCustomers.id, id))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function findPortalCustomerByHpId(hpCustomerId: string) {
+  const db = await d();
+  const rows = await db
+    .select()
+    .from(portalCustomers)
+    .where(eq(portalCustomers.hpCustomerId, hpCustomerId))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function upsertPortalCustomer(data: InsertPortalCustomer) {
+  const existing = data.email
+    ? await findPortalCustomerByEmail(data.email)
+    : null;
+  if (existing) {
+    const db = await d();
+    await db
+      .update(portalCustomers)
+      .set({ name: data.name, phone: data.phone, address: data.address })
+      .where(eq(portalCustomers.id, existing.id));
+    return existing;
+  }
+  const db = await d();
+  const result = await db.insert(portalCustomers).values(data);
+  const newId = Number((result as any).insertId ?? (result as any)[0]?.insertId);
+  return findPortalCustomerById(newId);
+}
+
+export async function updatePortalCustomerStripeId(customerId: number, stripeCustomerId: string) {
+  const db = await d();
+  await db
+    .update(portalCustomers)
+    .set({ stripeCustomerId })
+    .where(eq(portalCustomers.id, customerId));
+}
+
+// ─── MAGIC LINK TOKENS ────────────────────────────────────────────────────────
+
+export async function createPortalToken(data: InsertPortalToken) {
+  const db = await d();
+  await db.insert(portalTokens).values(data);
+}
+
+export async function findValidPortalToken(token: string) {
+  const db = await d();
+  const rows = await db
+    .select()
+    .from(portalTokens)
+    .where(
+      and(
+        eq(portalTokens.token, token),
+        gt(portalTokens.expiresAt, new Date()),
+      )
+    )
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function markPortalTokenUsed(id: number) {
+  const db = await d();
+  await db
+    .update(portalTokens)
+    .set({ usedAt: new Date() })
+    .where(eq(portalTokens.id, id));
+}
+
+// ─── SESSIONS ─────────────────────────────────────────────────────────────────
+
+export async function createPortalSession(data: InsertPortalSession) {
+  const db = await d();
+  await db.insert(portalSessions).values(data);
+}
+
+export async function findValidPortalSession(sessionToken: string) {
+  const db = await d();
+  const rows = await db
+    .select()
+    .from(portalSessions)
+    .where(
+      and(
+        eq(portalSessions.sessionToken, sessionToken),
+        gt(portalSessions.expiresAt, new Date()),
+      )
+    )
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function deletePortalSession(sessionToken: string) {
+  const db = await d();
+  await db
+    .delete(portalSessions)
+    .where(eq(portalSessions.sessionToken, sessionToken));
+}
+
+// ─── ESTIMATES ────────────────────────────────────────────────────────────────
+
+export async function createPortalEstimate(data: InsertPortalEstimate) {
+  const db = await d();
+  const result = await db.insert(portalEstimates).values(data);
+  const newId = Number((result as any).insertId ?? (result as any)[0]?.insertId);
+  return getPortalEstimateById(newId);
+}
+
+export async function getPortalEstimatesByCustomer(customerId: number) {
+  const db = await d();
+  return db
+    .select()
+    .from(portalEstimates)
+    .where(eq(portalEstimates.customerId, customerId))
+    .orderBy(desc(portalEstimates.sentAt));
+}
+
+export async function getPortalEstimateById(id: number) {
+  const db = await d();
+  const rows = await db
+    .select()
+    .from(portalEstimates)
+    .where(eq(portalEstimates.id, id))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function updatePortalEstimateStatus(
+  id: number,
+  status: string,
+  extra?: Partial<typeof portalEstimates.$inferInsert>
+) {
+  const db = await d();
+  await db
+    .update(portalEstimates)
+    .set({ status, ...extra })
+    .where(eq(portalEstimates.id, id));
+}
+
+export async function markPortalEstimateViewed(id: number) {
+  const est = await getPortalEstimateById(id);
+  if (est && !est.viewedAt) {
+    const db = await d();
+    await db
+      .update(portalEstimates)
+      .set({ viewedAt: new Date(), status: "viewed" })
+      .where(eq(portalEstimates.id, id));
+  }
+}
+
+// ─── INVOICES ─────────────────────────────────────────────────────────────────
+
+export async function createPortalInvoice(data: InsertPortalInvoice) {
+  const db = await d();
+  const result = await db.insert(portalInvoices).values(data);
+  const newId = Number((result as any).insertId ?? (result as any)[0]?.insertId);
+  return getPortalInvoiceById(newId);
+}
+
+export async function getPortalInvoicesByCustomer(customerId: number) {
+  const db = await d();
+  return db
+    .select()
+    .from(portalInvoices)
+    .where(eq(portalInvoices.customerId, customerId))
+    .orderBy(desc(portalInvoices.sentAt));
+}
+
+export async function getPortalInvoiceById(id: number) {
+  const db = await d();
+  const rows = await db
+    .select()
+    .from(portalInvoices)
+    .where(eq(portalInvoices.id, id))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function updatePortalInvoicePaid(
+  id: number,
+  amountPaid: number,
+  stripePaymentIntentId?: string
+) {
+  const db = await d();
+  await db
+    .update(portalInvoices)
+    .set({
+      status: "paid",
+      amountPaid,
+      paidAt: new Date(),
+      ...(stripePaymentIntentId ? { stripePaymentIntentId } : {}),
+    })
+    .where(eq(portalInvoices.id, id));
+}
+
+export async function markPortalInvoiceViewed(id: number) {
+  const inv = await getPortalInvoiceById(id);
+  if (inv && !inv.viewedAt) {
+    const db = await d();
+    await db
+      .update(portalInvoices)
+      .set({ viewedAt: new Date() })
+      .where(eq(portalInvoices.id, id));
+  }
+}
+
+// ─── APPOINTMENTS ─────────────────────────────────────────────────────────────
+
+export async function createPortalAppointment(data: InsertPortalAppointment) {
+  const db = await d();
+  const result = await db.insert(portalAppointments).values(data);
+  const newId = Number((result as any).insertId ?? (result as any)[0]?.insertId);
+  const rows = await db
+    .select()
+    .from(portalAppointments)
+    .where(eq(portalAppointments.id, newId))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function getPortalAppointmentsByCustomer(customerId: number) {
+  const db = await d();
+  return db
+    .select()
+    .from(portalAppointments)
+    .where(eq(portalAppointments.customerId, customerId))
+    .orderBy(desc(portalAppointments.scheduledAt));
+}
+
+// ─── MESSAGES ─────────────────────────────────────────────────────────────────
+
+export async function createPortalMessage(data: InsertPortalMessage) {
+  const db = await d();
+  await db.insert(portalMessages).values(data);
+}
+
+export async function getPortalMessagesByCustomer(customerId: number) {
+  const db = await d();
+  return db
+    .select()
+    .from(portalMessages)
+    .where(eq(portalMessages.customerId, customerId))
+    .orderBy(portalMessages.createdAt);
+}
+
+export async function getUnreadPortalMessageCount(customerId: number) {
+  const db = await d();
+  const rows = await db
+    .select()
+    .from(portalMessages)
+    .where(
+      and(
+        eq(portalMessages.customerId, customerId),
+        eq(portalMessages.senderRole, "customer"),
+      )
+    );
+  return rows.filter((m) => !m.readAt).length;
+}
+
+// ─── GALLERY ──────────────────────────────────────────────────────────────────
+
+export async function addPortalGalleryItem(data: InsertPortalGalleryItem) {
+  const db = await d();
+  await db.insert(portalGallery).values(data);
+}
+
+export async function getPortalGalleryByCustomer(customerId: number) {
+  const db = await d();
+  return db
+    .select()
+    .from(portalGallery)
+    .where(eq(portalGallery.customerId, customerId))
+    .orderBy(desc(portalGallery.createdAt));
+}
+
+// ─── REFERRALS ────────────────────────────────────────────────────────────────
+
+export async function createPortalReferral(data: InsertPortalReferral) {
+  const db = await d();
+  await db.insert(portalReferrals).values(data);
+}
+
+export async function getPortalReferralsByReferrer(referrerId: number) {
+  const db = await d();
+  return db
+    .select()
+    .from(portalReferrals)
+    .where(eq(portalReferrals.referrerId, referrerId))
+    .orderBy(desc(portalReferrals.createdAt));
+}
+
+export async function generateReferralCode(name: string): Promise<string> {
+  const base = name
+    .split(" ")[0]
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 8);
+  const suffix = Math.random().toString(36).slice(2, 5).toUpperCase();
+  return `${base}-${suffix}`;
+}
