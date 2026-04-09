@@ -67,7 +67,7 @@ const STATIC_INTEGRATIONS: StaticIntegration[] = [
 function GmailRow() {
   const { data: gmailStatus, isLoading, refetch } = trpc.gmail.status.useQuery();
   const { data: authUrlData, isLoading: loadingUrl } = trpc.gmail.getAuthUrl.useQuery(
-    undefined,
+    { origin: typeof window !== 'undefined' ? window.location.origin : undefined },
     { enabled: gmailStatus?.configured === true && !gmailStatus?.connected }
   );
   const [location] = useLocation();

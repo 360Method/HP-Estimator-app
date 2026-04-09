@@ -47,8 +47,11 @@ export function isGmailConfigured() {
 }
 
 /** Generate the Google OAuth consent URL */
-export function getGmailAuthUrl(state?: string): string {
-  const oauth2 = getOAuth2Client();
+export function getGmailAuthUrl(state?: string, redirectUri?: string): string {
+  const clientId = process.env.GMAIL_CLIENT_ID!;
+  const clientSecret = process.env.GMAIL_CLIENT_SECRET!;
+  const finalRedirectUri = redirectUri || process.env.GMAIL_REDIRECT_URI || "https://pro.handypioneers.com/api/gmail/callback";
+  const oauth2 = new google.auth.OAuth2(clientId, clientSecret, finalRedirectUri);
   return oauth2.generateAuthUrl({
     access_type: "offline",
     scope: [
@@ -57,13 +60,17 @@ export function getGmailAuthUrl(state?: string): string {
       "https://www.googleapis.com/auth/gmail.modify",
     ],
     prompt: "consent",
-    state: state || "",
+    // Encode redirectUri in state so callback knows which URI to use
+    state: JSON.stringify({ state: state || "", redirectUri: finalRedirectUri }),
   });
 }
 
 /** Exchange auth code for tokens and persist them */
-export async function exchangeGmailCode(code: string): Promise<string> {
-  const oauth2 = getOAuth2Client();
+export async function exchangeGmailCode(code: string, redirectUri?: string): Promise<string> {
+  const clientId = process.env.GMAIL_CLIENT_ID!;
+  const clientSecret = process.env.GMAIL_CLIENT_SECRET!;
+  const finalRedirectUri = redirectUri || process.env.GMAIL_REDIRECT_URI || "https://pro.handypioneers.com/api/gmail/callback";
+  const oauth2 = new google.auth.OAuth2(clientId, clientSecret, finalRedirectUri);
   const { tokens } = await oauth2.getToken(code);
   oauth2.setCredentials(tokens);
 

@@ -24,12 +24,18 @@ export const gmailRouter = router({
   }),
 
   /** Get the Google OAuth consent URL to connect Gmail */
-  getAuthUrl: protectedProcedure.query(() => {
-    if (!isGmailConfigured()) {
-      throw new Error("Gmail OAuth not configured. Add GMAIL_CLIENT_ID and GMAIL_CLIENT_SECRET in Settings → Secrets.");
-    }
-    return { url: getGmailAuthUrl() };
-  }),
+  getAuthUrl: protectedProcedure
+    .input(z.object({ origin: z.string().optional() }))
+    .query(({ input }) => {
+      if (!isGmailConfigured()) {
+        throw new Error("Gmail OAuth not configured. Add GMAIL_CLIENT_ID and GMAIL_CLIENT_SECRET in Settings \u2192 Secrets.");
+      }
+      // Build redirect URI from the frontend origin so OAuth works on any domain
+      const redirectUri = input.origin
+        ? `${input.origin}/api/gmail/callback`
+        : undefined;
+      return { url: getGmailAuthUrl(undefined, redirectUri) };
+    }),
 
   /** Send a formatted invoice email to a customer (no conversation ID required) */
   sendInvoice: protectedProcedure

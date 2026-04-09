@@ -169,16 +169,26 @@ async function startServer() {
   // ── Gmail OAuth callback ───────────────────────────────────────────────────────────────────
   app.get("/api/gmail/callback", async (req, res) => {
     const code = req.query.code as string;
+    const rawState = req.query.state as string | undefined;
     if (!code) { res.status(400).send("Missing code"); return; }
+    // Parse redirectUri from state (encoded by getGmailAuthUrl)
+    let redirectUri: string | undefined;
+    let origin = "";
     try {
-      const email = await exchangeGmailCode(code);
+      if (rawState) {
+        const parsed = JSON.parse(rawState);
+        redirectUri = parsed.redirectUri;
+        if (redirectUri) origin = new URL(redirectUri).origin;
+      }
+    } catch { /* state was plain string or empty, ignore */ }
+    try {
+      const email = await exchangeGmailCode(code, redirectUri);
       console.log(`[Gmail] Connected account: ${email}`);
-      // Store the connected email in env for reference
       process.env.GMAIL_CONNECTED_EMAIL = email;
-      res.redirect("/?gmail=connected");
+      res.redirect(`${origin}/?gmail=connected`);
     } catch (err) {
       console.error("[Gmail] OAuth callback error:", err);
-      res.redirect("/?gmail=error");
+      res.redirect(`${origin}/?gmail=error`);
     }
   });
 

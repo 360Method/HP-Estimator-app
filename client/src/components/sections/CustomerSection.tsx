@@ -703,7 +703,14 @@ export default function CustomerSection() {
                   <input type="email" value={contactDraft.email} onChange={e => setContactDraft(d => ({ ...d, email: e.target.value }))}
                     placeholder="jane@example.com" className="field-input w-full text-sm" />
                 </div>
-                <button onClick={() => { setJobInfo(contactDraft); setEditingContact(false); }}
+                <button onClick={() => {
+                  if (contactDraft.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactDraft.email)) {
+                    toast.error('Invalid email — check for missing @ or typos');
+                    return;
+                  }
+                  setJobInfo(contactDraft);
+                  setEditingContact(false);
+                }}
                   className="w-full px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-semibold hover:bg-primary/90 transition-colors">
                   Save Contact
                 </button>
