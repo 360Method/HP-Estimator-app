@@ -450,6 +450,7 @@ export default function EstimateSection() {
           depositAmount={depositAmount}
           scopeSummary={state.jobInfo.scope}
           lineItemsText={generatePlainText()}
+          customerId={activeCustomer?.id}
           defaultEmail={activeCustomer?.email || state.jobInfo.email || ''}
           defaultPhone={activeCustomer?.mobilePhone || state.jobInfo.phone || ''}
           onClose={() => setShowSendDialog(false)}

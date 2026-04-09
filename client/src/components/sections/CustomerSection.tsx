@@ -609,6 +609,7 @@ export default function CustomerSection() {
       customerName: jobInfo.client,
       customerPhone: jobInfo.phone || undefined,
       hpCustomerId: activeCustomerId || undefined,
+      origin: window.location.origin,
     });
   };
 

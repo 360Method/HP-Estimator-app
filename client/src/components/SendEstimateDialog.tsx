@@ -18,6 +18,7 @@ export interface SendEstimateDialogProps {
   scopeSummary?: string;
   lineItemsText?: string;
   portalUrl?: string;
+  customerId?: number;
   // Pre-filled from customer profile
   defaultEmail?: string;
   defaultPhone?: string;
@@ -35,6 +36,7 @@ export default function SendEstimateDialog({
   scopeSummary,
   lineItemsText,
   portalUrl,
+  customerId,
   defaultEmail = '',
   defaultPhone = '',
   onClose,
@@ -91,6 +93,8 @@ export default function SendEstimateDialog({
       scopeSummary,
       lineItemsText,
       portalUrl,
+      customerId,
+      origin: window.location.origin,
     });
   };
 

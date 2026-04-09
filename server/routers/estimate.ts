@@ -1,8 +1,10 @@
 import { z } from "zod";
+import { randomBytes } from "crypto";
 import { publicProcedure, router } from "../_core/trpc";
 import { invokeLLM } from "../_core/llm";
 import { sendEmail } from "../gmail";
 import { sendSms, isTwilioConfigured } from "../twilio";
+import { createPortalToken } from "../portalDb";
 
 // ─── Catalog: all line items the AI can reference ──────────────────────────
 const CATALOG = [
@@ -294,10 +296,25 @@ export const estimateRouter = router({
         scopeSummary: z.string().optional(),
         lineItemsText: z.string().optional(),
         portalUrl: z.string().optional(),
+        customerId: z.number().optional(),
+        origin: z.string().optional(),
       })
     )
     .mutation(async ({ input }) => {
       const results: { email?: string; sms?: string; errors: string[] } = { errors: [] };
+
+      // Auto-generate portalUrl if customerId + origin provided but portalUrl is not
+      let portalUrl = input.portalUrl;
+      if (!portalUrl && input.customerId && input.origin) {
+        try {
+          const token = randomBytes(32).toString('hex');
+          const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+          await createPortalToken({ customerId: input.customerId, token, expiresAt });
+          portalUrl = `${input.origin}/portal/auth?token=${token}&redirect=/portal/estimates`;
+        } catch (e) {
+          console.warn('[estimate.send] Could not generate portal token:', e);
+        }
+      }
       const fmt = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
       // ── Email ──────────────────────────────────────────────────────────────
@@ -312,8 +329,8 @@ export const estimateRouter = router({
           const lineItemsBlock = input.lineItemsText
             ? `<div style="margin:20px 0;"><h3 style="margin:0 0 8px;font-size:14px;color:#374151;">Estimate Details</h3><pre style="margin:0;font-size:12px;color:#374151;white-space:pre-wrap;font-family:monospace;">${input.lineItemsText}</pre></div>`
             : "";
-          const approveBtn = input.portalUrl
-            ? `<div style="text-align:center;margin:28px 0;"><a href="${input.portalUrl}" style="background:#1e3a5f;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">Review &amp; Approve Estimate</a></div>`
+          const approveBtn = portalUrl
+            ? `<div style="text-align:center;margin:28px 0;"><a href="${portalUrl}" style="background:#1e3a5f;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">Review &amp; Approve Estimate</a></div>`
             : "";
 
           const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:0;padding:0;background:#f9fafb;"><div style="max-width:600px;margin:32px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);"><div style="background:#1e3a5f;padding:28px 32px;"><div style="color:#fff;font-size:22px;font-weight:700;">Handy Pioneers</div><div style="color:#93c5fd;font-size:13px;margin-top:4px;">Licensed &amp; Insured · Vancouver, WA · HANDYP*761NH</div></div><div style="padding:32px;"><p style="margin:0 0 16px;font-size:16px;color:#111827;">Hi ${input.customerName},</p><p style="margin:0 0 24px;color:#4b5563;line-height:1.6;">Thank you for the opportunity to work with you. Please find your project estimate below.</p><div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:20px;margin-bottom:24px;"><div style="font-size:13px;color:#0369a1;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px;">Estimate Summary</div><table style="width:100%;border-collapse:collapse;"><tr><td style="padding:4px 0;color:#6b7280;">Estimate #</td><td style="padding:4px 0;text-align:right;font-weight:600;">${input.estimateNumber}</td></tr><tr><td style="padding:4px 0;color:#6b7280;">Project</td><td style="padding:4px 0;text-align:right;">${input.jobTitle}</td></tr><tr><td style="padding:4px 0;color:#6b7280;">Total</td><td style="padding:4px 0;text-align:right;font-size:18px;font-weight:700;color:#111827;">$${fmt(input.totalPrice)}</td></tr>${depositLine}</table></div>${scopeBlock}${lineItemsBlock}${approveBtn}<p style="margin:24px 0 0;color:#6b7280;font-size:13px;">Questions? Call or text us at <a href="tel:+13605449858" style="color:#1e3a5f;">(360) 544-9858</a> or reply to this email.</p></div><div style="background:#f9fafb;padding:20px 32px;border-top:1px solid #e5e7eb;"><p style="margin:0;font-size:12px;color:#9ca3af;text-align:center;">Handy Pioneers, LLC · Vancouver, WA · <a href="https://handypioneers.com" style="color:#6b7280;">handypioneers.com</a></p></div></div></body></html>`;
@@ -342,7 +359,7 @@ export const estimateRouter = router({
               input.depositLabel && input.depositAmount
                 ? `Deposit: ${input.depositLabel} — $${fmt(input.depositAmount)}`
                 : null,
-              input.portalUrl ? `View & approve: ${input.portalUrl}` : "Reply or call (360) 544-9858 to approve.",
+              portalUrl ? `View & approve: ${portalUrl}` : "Reply or call (360) 544-9858 to approve.",
             ].filter(Boolean) as string[];
             const res = await sendSms(input.toPhone, parts.join("\n"));
             results.sms = res.sid;

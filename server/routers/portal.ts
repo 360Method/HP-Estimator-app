@@ -681,6 +681,7 @@ export const portalRouter = router({
         customerName: z.string(),
         customerPhone: z.string().optional(),
         hpCustomerId: z.string().optional(),
+        origin: z.string().optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -697,7 +698,7 @@ export const portalRouter = router({
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
       await createPortalToken({ customerId: customer.id, token, expiresAt });
 
-      const baseUrl = process.env.PORTAL_BASE_URL ?? 'https://client.handypioneers.com';
+      const baseUrl = input.origin ?? process.env.PORTAL_BASE_URL ?? 'https://pro.handypioneers.com';
       const portalUrl = `${baseUrl}/portal/auth?token=${token}`;
 
       try {

@@ -118,6 +118,12 @@ async function getGmailClient(email: string) {
 
 // ─── Send Email ───────────────────────────────────────────────────────────────
 
+/** RFC 2047 encode a subject so non-ASCII chars (em dash, etc.) survive all mail clients */
+function encodeSubject(subject: string): string {
+  if (!/[^\x00-\x7F]/.test(subject)) return subject;
+  return `=?UTF-8?B?${Buffer.from(subject, 'utf-8').toString('base64')}?=`;
+}
+
 export async function sendEmail(params: {
   fromEmail?: string;
   to: string;
@@ -147,7 +153,7 @@ export async function sendEmail(params: {
     const headers = [
       `From: Handy Pioneers <${fromEmail}>`,
       `To: ${params.to}`,
-      `Subject: ${params.subject}`,
+      `Subject: ${encodeSubject(params.subject)}`,
       `MIME-Version: 1.0`,
       `Content-Type: multipart/alternative; boundary="${boundary}"`,
     ];
@@ -172,7 +178,7 @@ export async function sendEmail(params: {
     const headers = [
       `From: Handy Pioneers <${fromEmail}>`,
       `To: ${params.to}`,
-      `Subject: ${params.subject}`,
+      `Subject: ${encodeSubject(params.subject)}`,
       `Content-Type: text/plain; charset=utf-8`,
     ];
     if (params.inReplyTo) {
