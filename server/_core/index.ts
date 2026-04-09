@@ -11,6 +11,7 @@ import Stripe from "stripe";
 import { handleInboundSms, handleCallStatusUpdate, generateVoiceToken, isTwilioConfigured } from "../twilio";
 import twilio from "twilio";
 import { exchangeGmailCode, pollInboundEmails } from "../gmail";
+import { getFirstGmailToken } from "../db";
 import { addSSEClient, broadcastNewMessage } from "../sse";
 import { getPortalInvoiceByStripePaymentIntentId, updatePortalInvoicePaid } from "../portalDb";
 import { randomUUID } from "crypto";
@@ -222,5 +223,15 @@ async function startServer() {
     console.log(`Server running on http://localhost:${port}/`);
   });
 }
+
+// Bootstrap GMAIL_CONNECTED_EMAIL from DB so it survives server restarts
+getFirstGmailToken()
+  .then(token => {
+    if (token?.email) {
+      process.env.GMAIL_CONNECTED_EMAIL = token.email;
+      console.log(`[Gmail] Restored connected account from DB: ${token.email}`);
+    }
+  })
+  .catch(err => console.warn("[Gmail] Could not restore connected email:", err));
 
 startServer().catch(console.error);

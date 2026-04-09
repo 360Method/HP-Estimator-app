@@ -225,6 +225,14 @@ export async function getGmailToken(email: string) {
   return rows[0] ?? null;
 }
 
+/** Return the first connected Gmail account (used at startup to restore GMAIL_CONNECTED_EMAIL) */
+export async function getFirstGmailToken() {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(gmailTokens).limit(1);
+  return rows[0] ?? null;
+}
+
 export async function upsertGmailToken(
   email: string,
   accessToken: string,

@@ -700,11 +700,20 @@ export const portalRouter = router({
       const baseUrl = process.env.PORTAL_BASE_URL ?? 'https://client.handypioneers.com';
       const portalUrl = `${baseUrl}/portal/auth?token=${token}`;
 
-      await sendEmail({
-        to: customer.email,
-        subject: 'Your Handy Pioneers Customer Portal Invitation',
-        html: buildMagicLinkEmail(customer.name, portalUrl),
-      }).catch(() => null);
+      try {
+        await sendEmail({
+          to: customer.email,
+          subject: 'Your Handy Pioneers Customer Portal Invitation',
+          html: buildMagicLinkEmail(customer.name, portalUrl),
+        });
+      } catch (err: any) {
+        const msg = err?.message ?? 'Email failed';
+        console.error('[Portal] Failed to send invite email:', msg);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `Portal invite created but email failed: ${msg}. Go to Settings → Integrations to connect Gmail.`,
+        });
+      }
 
       return { sent: true, portalCustomerId: customer.id };
     }),
