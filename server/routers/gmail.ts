@@ -31,6 +31,58 @@ export const gmailRouter = router({
     return { url: getGmailAuthUrl() };
   }),
 
+  /** Send a formatted invoice email to a customer (no conversation ID required) */
+  sendInvoice: protectedProcedure
+    .input(z.object({
+      toEmail: z.string().email(),
+      toName: z.string().optional(),
+      invoiceNumber: z.string(),
+      invoiceType: z.enum(["deposit", "final"]),
+      invoiceTotal: z.number(),
+      dueDate: z.string(),
+      jobTitle: z.string().optional(),
+      paymentLink: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const fromEmail = process.env.GMAIL_CONNECTED_EMAIL || "help@handypioneers.com";
+      const token = await getGmailToken(fromEmail);
+      if (!token) throw new Error("Gmail not connected. Please connect your Gmail account in Settings → Integrations.");
+
+      const typeLabel = input.invoiceType === "deposit" ? "Deposit Invoice" : "Final Invoice";
+      const subject = `${typeLabel} ${input.invoiceNumber} — Handy Pioneers`;
+      const greeting = input.toName ? `Hi ${input.toName},` : "Hello,";
+      const dueFmt = new Date(input.dueDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+      const amtFmt = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(input.invoiceTotal);
+
+      const body = [
+        greeting,
+        "",
+        `Please find your ${typeLabel.toLowerCase()} attached for ${input.jobTitle ? `"${input.jobTitle}"` : "your project"}.`,
+        "",
+        `  Invoice #: ${input.invoiceNumber}`,
+        `  Amount Due: ${amtFmt}`,
+        `  Due Date: ${dueFmt}`,
+        "",
+        input.paymentLink ? `To pay online, visit: ${input.paymentLink}` : "Please contact us to arrange payment.",
+        "",
+        "Thank you for choosing Handy Pioneers!",
+        "",
+        "Best regards,",
+        "Handy Pioneers",
+        "help@handypioneers.com",
+        "(360) 910-0555",
+      ].join("\n");
+
+      const { messageId } = await sendEmail({
+        fromEmail,
+        to: input.toEmail,
+        subject,
+        body,
+      });
+
+      return { messageId, subject };
+    }),
+
   /** Send an email from the connected Gmail account */
   sendEmail: protectedProcedure
     .input(z.object({

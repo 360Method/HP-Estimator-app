@@ -51,7 +51,7 @@ export function broadcastSSE(event: string, data: unknown) {
   const payload = JSON.stringify(data);
   const dead: string[] = [];
 
-  for (const [id, client] of clients) {
+  for (const [id, client] of Array.from(clients)) {
     try {
       client.res.write(`event: ${event}\ndata: ${payload}\n\n`);
     } catch {

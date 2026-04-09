@@ -91,7 +91,7 @@ async function startServer() {
       if (authToken) {
         const sig = req.headers["x-twilio-signature"] as string;
         const forwardedProto = (req.headers["x-forwarded-proto"] as string) || req.protocol;
-        const forwardedHost = (req.headers["x-forwarded-host"] as string) || req.get("host");
+        const forwardedHost = (req.headers["x-forwarded-host"] as string) || req.get("host") || "localhost";
         const proto = forwardedProto.split(",")[0].trim(); // take first if comma-separated
         const host = forwardedHost.split(",")[0].trim();
         const url = `${proto}://${host}/api/twilio/sms`;

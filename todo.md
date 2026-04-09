@@ -30,12 +30,12 @@
 
 ## Pending / Future
 
-- [ ] Final invoice auto-generation on job completion (Archive Job)
+- [x] Final invoice auto-generation on job completion (Archive Job)
 - [x] Invoice PDF export / print (InvoicePrintView with print-only isolation)
-- [ ] Send invoice to customer via email
+- [x] Send invoice to customer via email
 - [ ] Stripe webhook → update invoice status in DB (currently client-side only)
 - [ ] PayPal JS SDK integration (replace redirect flow with in-page approval)
-- [ ] Deposit % configurable per-job (currently defaults to 50%)
+- [x] Deposit % configurable per-job (currently defaults to 50%)
 - [ ] Tax rate per-customer or per-region
 - [ ] Communication tab (SMS/email log)
 - [ ] Attachments tab (photo uploads)
@@ -87,8 +87,8 @@
 - [x] Wire Schedule into Home.tsx routing
 - [x] Synthesize schedule events from opportunities with scheduledDate (auto-derived)
 - [x] Vitest unit tests for schedule reducer (7 tests passing)
-- [ ] Add "Schedule" date fields to JobDetailsSection (service date, estimated duration)
-- [ ] Auto-create schedule event when job is created or estimate is scheduled
+- [x] Add "Schedule" date fields to JobDetailsSection (service date, estimated duration)
+- [x] Auto-create schedule event when job is created or estimate is scheduled
 
 ## Schedule Tab — Future Improvements
 
@@ -141,7 +141,7 @@
 - [x] Add deposit config UI in GlobalSettingsPanel (CalculatorSection): % / $ toggle, value input, quick presets 25/33/50%, live amount preview
 - [x] Update PresentSection to use configured deposit (depositLabel + computed amount)
 - [x] Update EstimateSection terms list and plain-text export to use configured deposit label
-- [ ] Update auto-deposit invoice generation to use configured deposit amount (currently defaults to 50%)
+- [x] Update auto-deposit invoice generation to use configured deposit amount (currently defaults to 50%)
 
 ## Estimate Approval Workflow (Post-Signature)
 

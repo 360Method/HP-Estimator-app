@@ -88,7 +88,7 @@ export default function JobDetailsSection() {
     state, setJobInfo, updateOpportunity, setSection, setScheduleFilter,
     addJobTask, updateJobTask, removeJobTask,
     addJobAttachment, removeJobAttachment,
-    addJobActivity,
+    addJobActivity, updateOpportunitySchedule,
   } = useEstimator();
   const { jobInfo, activeOpportunityId, opportunities, customers, activeCustomerId } = state;
 
@@ -350,13 +350,38 @@ export default function JobDetailsSection() {
               </span>
             </p>
           )}
+          {/* Service date fields */}
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                <Calendar size={10} className="inline mr-0.5" /> Service Start
+              </label>
+              <input
+                type="date"
+                value={activeOpp.scheduledDate ? activeOpp.scheduledDate.split('T')[0] : ''}
+                onChange={e => updateOpportunitySchedule(activeOpp.id, { scheduledDate: e.target.value ? new Date(e.target.value).toISOString() : undefined })}
+                className="field-input w-full text-xs"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                <Calendar size={10} className="inline mr-0.5" /> Service End
+              </label>
+              <input
+                type="date"
+                value={activeOpp.scheduledEndDate ? activeOpp.scheduledEndDate.split('T')[0] : ''}
+                onChange={e => updateOpportunitySchedule(activeOpp.id, { scheduledEndDate: e.target.value ? new Date(e.target.value).toISOString() : undefined })}
+                className="field-input w-full text-xs"
+              />
+            </div>
+          </div>
           {/* Schedule deep-link */}
           {(() => {
             const linkedEvents = state.scheduleEvents.filter(e => e.opportunityId === activeOpp.id);
             return (
               <button
                 onClick={() => { setScheduleFilter(activeOpp.id); setSection('schedule'); }}
-                className="mt-3 w-full flex items-center justify-between rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/30 px-3 py-2 text-xs hover:bg-sky-100 dark:hover:bg-sky-900/40 transition-colors"
+                className="mt-2 w-full flex items-center justify-between rounded-lg border border-sky-200 dark:border-sky-800 bg-sky-50 dark:bg-sky-950/30 px-3 py-2 text-xs hover:bg-sky-100 dark:hover:bg-sky-900/40 transition-colors"
               >
                 <div className="flex items-center gap-2 text-sky-700 dark:text-sky-400">
                   <CalendarDays size={14} />

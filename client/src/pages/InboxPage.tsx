@@ -45,7 +45,7 @@ interface Message {
   conversationId: number;
   channel: Channel;
   direction: 'inbound' | 'outbound';
-  body: string;
+  body: string | null;
   subject: string | null;
   status: string | null;
   isInternal: boolean;
@@ -1021,7 +1021,7 @@ export default function InboxPage() {
               <div className="flex items-center gap-1 mb-2">
                 {(['sms', 'email', 'note'] as Channel[]).map(ch => {
                   const Icon = CHANNEL_ICONS[ch];
-                  const labels = { sms: 'SMS', email: 'Email', note: 'Note' };
+                  const labels: Record<string, string> = { sms: 'SMS', email: 'Email', note: 'Note' };
                   return (
                     <button
                       key={ch}

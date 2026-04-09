@@ -917,7 +917,7 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
         action.newJobId,
       );
 
-      // Auto-create a deposit invoice (50% default) linked to the new job
+      // Auto-create a deposit invoice using configured deposit settings
       const year = new Date().getFullYear();
       const existingInvoices = state.activeCustomerId
         ? (state.customers.find(c => c.id === state.activeCustomerId)?.invoices ?? [])
@@ -927,10 +927,17 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
         (sum, c) => sum + (c.invoices?.length ?? 0), 0
       );
       const invoiceNum = `INV-${year}-${String(globalInvoiceCount + 1).padStart(3, '0')}`;
-      const subtotal = action.value * 0.5;
+      // Use configured depositType/depositValue (default: 50%)
+      const depositPct = state.depositType === 'pct' ? state.depositValue : null;
+      const subtotal = state.depositType === 'pct'
+        ? Math.round(action.value * state.depositValue / 100 * 100) / 100
+        : state.depositValue;
+      const depositLabel = state.depositType === 'pct'
+        ? `${state.depositValue}% Deposit`
+        : `Deposit ($${state.depositValue.toLocaleString('en-US', { minimumFractionDigits: 2 })})`;
       const depositLineItem: InvoiceLineItem = {
         id: nanoid(8),
-        description: '50% Deposit',
+        description: depositLabel,
         qty: 1,
         unitPrice: subtotal,
         total: subtotal,
@@ -947,7 +954,7 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
         taxRate: 0,
         taxAmount: 0,
         total: subtotal,
-        depositPercent: 50,
+        depositPercent: depositPct ?? undefined,
         issuedAt: new Date().toISOString(),
         dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
         payments: [],
@@ -965,6 +972,26 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
           )
         : state.customers;
 
+      // Auto-create a placeholder schedule event for the new job (start: 1 week from now)
+      const jobStartDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const jobEndDate = new Date(jobStartDate.getTime() + 24 * 60 * 60 * 1000); // 1 day default
+      const autoScheduleEvent: ScheduleEvent = {
+        id: nanoid(8),
+        type: 'job',
+        title: action.newJobTitle,
+        start: jobStartDate.toISOString(),
+        end: jobEndDate.toISOString(),
+        allDay: true,
+        opportunityId: action.newJobId,
+        customerId: state.activeCustomerId ?? '',
+        assignedTo: [],
+        notes: `Auto-created from estimate: ${estimate.title}`,
+        completed: false,
+        color: '#3b82f6',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
       return {
         ...state,
         opportunities: state.opportunities
@@ -974,6 +1001,7 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
         activeCustomerTab: 'jobs',
         activityFeed: [event, ...state.activityFeed],
         customers: syncedCustomers,
+        scheduleEvents: [...state.scheduleEvents, autoScheduleEvent],
       };
     }
 
@@ -999,13 +1027,59 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
         action.jobId,
       );
 
+      // Auto-generate a final invoice if one doesn't already exist for this job
+      const existingCustomerInvoices = state.activeCustomerId
+        ? (state.customers.find(c => c.id === state.activeCustomerId)?.invoices ?? [])
+        : [];
+      const jobInvoices = existingCustomerInvoices.filter(inv => inv.opportunityId === action.jobId);
+      const alreadyHasFinal = jobInvoices.some(inv => inv.type === 'final');
+      const depositPaid = jobInvoices.filter(inv => inv.type === 'deposit').reduce((s, inv) => s + inv.amountPaid, 0);
+      const finalBalance = Math.max(0, action.value - depositPaid);
+
+      let updatedInvoices = existingCustomerInvoices;
+      if (!alreadyHasFinal && finalBalance > 0) {
+        const archiveYear = new Date().getFullYear();
+        const globalInvCount = state.customers.reduce((sum, c) => sum + (c.invoices?.length ?? 0), 0);
+        const finalInvNum = `INV-${archiveYear}-${String(globalInvCount + 1).padStart(3, '0')}`;
+        const finalInvoice: Invoice = {
+          id: nanoid(8),
+          type: 'final',
+          status: 'due',
+          invoiceNumber: finalInvNum,
+          customerId: state.activeCustomerId ?? '',
+          opportunityId: action.jobId,
+          sourceEstimateId: job.sourceEstimateId,
+          subtotal: finalBalance,
+          taxRate: 0,
+          taxAmount: 0,
+          total: finalBalance,
+          issuedAt: new Date().toISOString(),
+          dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+          payments: [],
+          amountPaid: 0,
+          balance: finalBalance,
+          lineItems: [{
+            id: nanoid(8),
+            description: `Final Payment — ${job.title || 'Project'}`,
+            qty: 1,
+            unitPrice: finalBalance,
+            total: finalBalance,
+            notes: depositPaid > 0 ? `Remaining balance after ${fmtDollarSimple(depositPaid)} deposit` : undefined,
+          }],
+          notes: 'Balance due upon project completion.',
+          internalNotes: `Auto-generated on job archive. Job: ${job.jobNumber ?? action.jobId}`,
+          paymentTerms: 'Due within 14 days',
+        };
+        updatedInvoices = [...existingCustomerInvoices, finalInvoice];
+      }
+
       const archivedOpps = state.opportunities.map(o => o.id === action.jobId ? archivedJob : o);
       const archivedFeed = [event, ...state.activityFeed];
       const newProfile = { ...state.customerProfile, lifetimeValue: newLifetimeValue };
       const syncedCustomers = state.activeCustomerId
         ? state.customers.map(c =>
             c.id === state.activeCustomerId
-              ? { ...c, opportunities: archivedOpps, activityFeed: archivedFeed, profile: newProfile, lifetimeValue: newLifetimeValue }
+              ? { ...c, opportunities: archivedOpps, activityFeed: archivedFeed, profile: newProfile, lifetimeValue: newLifetimeValue, invoices: updatedInvoices }
               : c
           )
         : state.customers;

@@ -255,6 +255,30 @@ function InvoiceCard({
   const createIntent = trpc.payments.createStripeIntent.useMutation();
   const createPaypalOrder = trpc.payments.createPaypalOrder.useMutation();
   const capturePaypalOrder = trpc.payments.capturePaypalOrder.useMutation();
+  const sendInvoiceMutation = trpc.gmail.sendInvoice.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Invoice emailed: ${data.subject}`);
+      // Mark invoice as 'sent' if it was draft
+      if (invoice.status === 'draft') {
+        onUpdate({ ...invoice, status: 'sent' as InvoiceStatus });
+      }
+    },
+    onError: (err) => toast.error(`Email failed: ${err.message}`),
+  });
+
+  const handleSendToCustomer = () => {
+    const email = customer?.email;
+    if (!email) { toast.error('No email address on file for this customer'); return; }
+    sendInvoiceMutation.mutate({
+      toEmail: email,
+      toName: customer?.firstName ? `${customer.firstName} ${customer.lastName ?? ''}`.trim() : undefined,
+      invoiceNumber: invoice.invoiceNumber,
+      invoiceType: invoice.type,
+      invoiceTotal: invoice.total,
+      dueDate: invoice.dueDate,
+      jobTitle: opportunity?.title,
+    });
+  };
 
   const balance = invoice.balance;
   const isPaid = invoice.status === 'paid';
@@ -631,8 +655,17 @@ function InvoiceCard({
             >
               <Printer className="w-3 h-3" /> Print / PDF
             </Button>
-            <Button size="sm" variant="ghost" className="text-xs gap-1">
-              <Send className="w-3 h-3" /> Send to Customer
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-xs gap-1"
+              onClick={handleSendToCustomer}
+              disabled={sendInvoiceMutation.isPending || isPaid}
+            >
+              {sendInvoiceMutation.isPending
+                ? <span className="animate-spin w-3 h-3 border border-current border-t-transparent rounded-full" />
+                : <Send className="w-3 h-3" />}
+              {invoice.status === 'sent' ? 'Resend' : 'Send to Customer'}
             </Button>
           </div>
 
