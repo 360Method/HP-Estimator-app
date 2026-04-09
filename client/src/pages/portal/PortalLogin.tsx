@@ -3,14 +3,14 @@
  * Two modes:
  *  1. /portal/login — shows email form to request a magic link
  *  2. /portal/auth?token=xxx — validates token, sets session, redirects to /portal/appointments
+ *
+ * Visual style: matches handypioneers.com — dark forest green, warm gold CTA, serif headings
  */
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Loader2, Mail, CheckCircle } from "lucide-react";
+import { Loader2, Mail, CheckCircle, ArrowRight } from "lucide-react";
 
 const HP_LOGO = "https://cdn.manus.space/webdev-static-assets/hp-logo.png";
 
@@ -47,94 +47,201 @@ export default function PortalLogin() {
   // Token validation in progress
   if (token) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: "linear-gradient(135deg, #1a2e1a 0%, #2d4a2d 60%, #1a2e1a 100%)" }}
+      >
         <div className="text-center space-y-3">
-          <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto" />
-          <p className="text-gray-600">Signing you in…</p>
+          <Loader2 className="w-8 h-8 animate-spin mx-auto" style={{ color: "#c8922a" }} />
+          <p style={{ color: "rgba(255,255,255,0.7)", fontFamily: "Georgia, serif" }}>Signing you in…</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 w-full max-w-md p-8">
-        {/* Logo */}
-        <div className="text-center mb-8">
+    <div
+      className="min-h-screen flex flex-col"
+      style={{ background: "linear-gradient(160deg, #1a2e1a 0%, #2d4a2d 50%, #1f3a1f 100%)" }}
+    >
+      {/* Subtle texture overlay */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.02'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E\")",
+        }}
+      />
+
+      {/* Top bar */}
+      <div className="relative z-10 flex items-center justify-between px-6 py-4" style={{ borderBottom: "1px solid rgba(200,146,42,0.2)" }}>
+        <a href="https://handypioneers.com" target="_blank" rel="noopener noreferrer" className="flex items-center gap-3">
           <img
             src={HP_LOGO}
             alt="Handy Pioneers"
-            className="h-16 w-auto object-contain mx-auto mb-4"
+            className="h-10 w-auto object-contain"
             onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
           />
-          <h1 className="text-xl font-bold text-gray-900">Customer Portal</h1>
-          <p className="text-sm text-gray-500 mt-1">Handy Pioneers</p>
+          <div>
+            <div style={{ color: "#ffffff", fontFamily: "Georgia, serif", fontWeight: 700, fontSize: "1rem", lineHeight: 1.1 }}>
+              Handy Pioneers
+            </div>
+            <div style={{ color: "rgba(255,255,255,0.5)", fontSize: "0.65rem", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+              Reliable Renovations, Trusted Results
+            </div>
+          </div>
+        </a>
+        <a
+          href="tel:3605449858"
+          style={{ color: "rgba(255,255,255,0.6)", fontSize: "0.8rem", fontFamily: "Georgia, serif" }}
+          className="hidden sm:block hover:opacity-100 transition-opacity"
+        >
+          (360) 544-9858
+        </a>
+      </div>
+
+      {/* Main content */}
+      <div className="relative z-10 flex-1 flex items-center justify-center p-6">
+        <div className="w-full max-w-md">
+          {/* Header */}
+          <div className="text-center mb-8">
+            <div
+              className="inline-block px-3 py-1 rounded-full mb-4 text-xs font-semibold tracking-widest uppercase"
+              style={{ background: "rgba(200,146,42,0.15)", color: "#c8922a", border: "1px solid rgba(200,146,42,0.3)" }}
+            >
+              Client Portal
+            </div>
+            <h1
+              className="text-3xl sm:text-4xl mb-2"
+              style={{ color: "#ffffff", fontFamily: "Georgia, serif", fontWeight: 700, lineHeight: 1.2 }}
+            >
+              Welcome Back
+            </h1>
+            <p style={{ color: "rgba(255,255,255,0.55)", fontSize: "0.9rem", fontFamily: "Georgia, serif" }}>
+              Access your appointments, estimates, and invoices
+            </p>
+          </div>
+
+          {/* Card */}
+          <div
+            className="rounded-xl p-8"
+            style={{
+              background: "rgba(255,255,255,0.05)",
+              border: "1px solid rgba(255,255,255,0.1)",
+              backdropFilter: "blur(12px)",
+            }}
+          >
+            {sent ? (
+              <div className="text-center space-y-5">
+                <div
+                  className="w-16 h-16 rounded-full flex items-center justify-center mx-auto"
+                  style={{ background: "rgba(200,146,42,0.15)", border: "1px solid rgba(200,146,42,0.3)" }}
+                >
+                  <CheckCircle className="w-8 h-8" style={{ color: "#c8922a" }} />
+                </div>
+                <div>
+                  <h2 style={{ color: "#ffffff", fontFamily: "Georgia, serif", fontSize: "1.25rem", fontWeight: 700 }}>
+                    Check your inbox
+                  </h2>
+                  <p style={{ color: "rgba(255,255,255,0.6)", fontSize: "0.875rem", marginTop: "0.5rem" }}>
+                    We sent a secure login link to{" "}
+                    <span style={{ color: "#c8922a", fontWeight: 600 }}>{email}</span>.
+                    Click the link to sign in — it expires in 7 days.
+                  </p>
+                </div>
+                <p style={{ color: "rgba(255,255,255,0.35)", fontSize: "0.75rem" }}>
+                  Didn't receive it? Check your spam folder or{" "}
+                  <button
+                    style={{ color: "#c8922a", textDecoration: "underline", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                    onClick={() => setSent(false)}
+                  >
+                    try again
+                  </button>.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-5">
+                <div>
+                  <label
+                    htmlFor="portal-email"
+                    style={{ color: "rgba(255,255,255,0.7)", fontSize: "0.8rem", fontWeight: 600, letterSpacing: "0.05em", textTransform: "uppercase", display: "block", marginBottom: "0.5rem" }}
+                  >
+                    Email Address
+                  </label>
+                  <input
+                    id="portal-email"
+                    type="email"
+                    placeholder="Enter your email address"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && email) {
+                        requestMagicLink.mutate({ email });
+                      }
+                    }}
+                    style={{
+                      width: "100%",
+                      padding: "0.75rem 1rem",
+                      borderRadius: "0.5rem",
+                      background: "rgba(255,255,255,0.08)",
+                      border: "1px solid rgba(255,255,255,0.15)",
+                      color: "#ffffff",
+                      fontSize: "0.9rem",
+                      outline: "none",
+                      transition: "border-color 0.2s",
+                    }}
+                    onFocus={(e) => { e.target.style.borderColor = "rgba(200,146,42,0.6)"; }}
+                    onBlur={(e) => { e.target.style.borderColor = "rgba(255,255,255,0.15)"; }}
+                  />
+                </div>
+
+                <button
+                  disabled={!email || requestMagicLink.isPending}
+                  onClick={() => requestMagicLink.mutate({ email })}
+                  className="w-full flex items-center justify-center gap-2 py-3 px-6 rounded-lg font-semibold transition-all duration-200"
+                  style={{
+                    background: email && !requestMagicLink.isPending ? "#c8922a" : "rgba(200,146,42,0.4)",
+                    color: "#ffffff",
+                    border: "none",
+                    cursor: email && !requestMagicLink.isPending ? "pointer" : "not-allowed",
+                    fontSize: "0.9rem",
+                    letterSpacing: "0.04em",
+                    textTransform: "uppercase",
+                    fontWeight: 700,
+                  }}
+                  onMouseEnter={(e) => { if (email && !requestMagicLink.isPending) (e.currentTarget as HTMLButtonElement).style.background = "#b07820"; }}
+                  onMouseLeave={(e) => { if (email && !requestMagicLink.isPending) (e.currentTarget as HTMLButtonElement).style.background = "#c8922a"; }}
+                >
+                  {requestMagicLink.isPending ? (
+                    <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</>
+                  ) : (
+                    <><Mail className="w-4 h-4" /> Send Login Link <ArrowRight className="w-4 h-4 ml-1" /></>
+                  )}
+                </button>
+
+                {/* First-time user note */}
+                <p style={{ color: "rgba(255,255,255,0.35)", fontSize: "0.75rem", textAlign: "center", lineHeight: 1.5 }}>
+                  If this is your first time logging into the portal, please reach out to Handy Pioneers directly for your first-time login link.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Footer contact */}
+          <div className="text-center mt-6 space-y-1">
+            <p style={{ color: "rgba(255,255,255,0.3)", fontSize: "0.7rem", letterSpacing: "0.04em" }}>
+              (360) 544-9858 &nbsp;·&nbsp; help@handypioneers.com &nbsp;·&nbsp; Vancouver, WA
+            </p>
+            <a
+              href="https://handypioneers.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: "rgba(200,146,42,0.5)", fontSize: "0.7rem", textDecoration: "none" }}
+              className="hover:opacity-100 transition-opacity"
+            >
+              handypioneers.com
+            </a>
+          </div>
         </div>
-
-        {sent ? (
-          <div className="text-center space-y-4">
-            <CheckCircle className="w-12 h-12 text-green-500 mx-auto" />
-            <h2 className="text-lg font-semibold text-gray-900">Check your email</h2>
-            <p className="text-sm text-gray-600">
-              We sent a magic link to <strong>{email}</strong>. Click the link to sign in — it expires in 7 days.
-            </p>
-            <p className="text-xs text-gray-400">
-              Didn't receive it? Check your spam folder or{" "}
-              <button
-                className="text-blue-600 underline"
-                onClick={() => setSent(false)}
-              >
-                try again
-              </button>.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-5">
-            <div>
-              <p className="text-sm text-gray-700 mb-4">
-                At Handy Pioneers, we provide our customers with a portal to access their appointments, view and pay invoices, and review estimates. Enter your email to receive a secure login link.
-              </p>
-              <p className="text-xs text-gray-500 mb-4">
-                This magic link will expire in 7 days. If you click on an expired link, please check your inbox for a new, updated link.
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              <Input
-                type="email"
-                placeholder="Your email address"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && email) {
-                    requestMagicLink.mutate({ email });
-                  }
-                }}
-                className="text-sm"
-              />
-              <Button
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                disabled={!email || requestMagicLink.isPending}
-                onClick={() => requestMagicLink.mutate({ email })}
-              >
-                {requestMagicLink.isPending ? (
-                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Sending…</>
-                ) : (
-                  <><Mail className="w-4 h-4 mr-2" /> LOGIN TO CUSTOMER PORTAL</>
-                )}
-              </Button>
-            </div>
-
-            <div className="border-t border-gray-100 pt-4 text-center text-xs text-gray-400 space-y-1">
-              <p>(360) 544-9858 | help@handypioneers.com</p>
-              <p>http://handypioneers.com</p>
-              <p>808 SE Chkalov Dr, 3-433, Vancouver, WA 98683</p>
-              <a href="https://handypioneers.com/terms" className="text-blue-500 underline">
-                Handy Pioneers Terms &amp; Conditions
-              </a>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

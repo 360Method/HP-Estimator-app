@@ -620,3 +620,11 @@
 ## Sign Out Fix
 
 - [x] Fix MetricsBar Sign Out: call trpc.auth.logout mutation then redirect to show AdminLogin (not just reload)
+
+## OAuth Login Fix
+
+- [ ] Fix getLoginUrl in const.ts: state must encode origin+returnPath (e.g. btoa(origin + "|" + returnPath)), not the callback URL — the SDK decodes state as the redirectUri which breaks token exchange
+
+## Portal Login Redesign
+
+- [x] Redesign PortalLogin.tsx: dark forest green background (#1a2e1a or similar), warm gold/amber CTA (#c8922a), white serif heading font, HP logo centered, same email→magic link flow, "reach out directly" message for unknown emails
