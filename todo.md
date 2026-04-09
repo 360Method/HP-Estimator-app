@@ -678,3 +678,10 @@
 
 - [x] Diagnose: booking.submit creates DB opportunity but admin Leads tab reads from in-memory state (EstimatorContext), not DB
 - [x] Fix: "View Customer" in Requests page now fetches customer+leads from DB via tRPC, injects into EstimatorContext, then navigates — bridging DB↔localStorage gap
+
+## Feature: Persist DB customers into local state on login
+
+- [x] Add tRPC procedure: customers.listWithOpportunities — returns all customers with their opportunities in one call
+- [x] Create useDbSync hook: runs once after auth, fetches all DB customers+opps, merges into EstimatorContext (DB wins for new records, local wins for existing to preserve unsaved work)
+- [x] Wire useDbSync into Home.tsx (AdminApp component) so it fires on authenticated load
+- [x] Add MERGE_DB_CUSTOMERS reducer action to EstimatorContext

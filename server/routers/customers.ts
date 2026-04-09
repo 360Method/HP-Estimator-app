@@ -15,6 +15,7 @@ import {
   listCustomerAddresses,
   createCustomerAddress,
   deleteCustomerAddress,
+  listOpportunities,
 } from "../db";
 import { nanoid } from "nanoid";
 
@@ -52,6 +53,31 @@ export const customersRouter = router({
     .input(z.object({ search: z.string().optional(), limit: z.number().default(200), offset: z.number().default(0) }))
     .query(async ({ input }) => {
       return listCustomers(input.search, input.limit, input.offset);
+    }),
+
+  /**
+   * List all customers with their opportunities (leads, estimates, jobs).
+   * Used for the on-login DB→state sync so the admin Customers list is
+   * always populated from the database without manual navigation.
+   */
+  listWithOpportunities: protectedProcedure
+    .input(z.object({ limit: z.number().default(500) }))
+    .query(async ({ input }) => {
+      const [allCustomers, allOpps] = await Promise.all([
+        listCustomers(undefined, input.limit, 0),
+        listOpportunities(undefined, undefined, false, 2000),
+      ]);
+      // Group opportunities by customerId for O(n) lookup
+      const oppsByCustomer = new Map<string, typeof allOpps>();
+      for (const opp of allOpps) {
+        const list = oppsByCustomer.get(opp.customerId) ?? [];
+        list.push(opp);
+        oppsByCustomer.set(opp.customerId, list);
+      }
+      return allCustomers.map(c => ({
+        ...c,
+        opportunities: oppsByCustomer.get(c.id) ?? [],
+      }));
     }),
 
   /** Get a single customer by ID, with addresses */

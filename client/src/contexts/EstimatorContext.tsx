@@ -251,7 +251,15 @@ type Action =
     }
   | { type: 'UPDATE_USER_PROFILE'; payload: Partial<import('@/lib/types').UserProfile> }
   | { type: 'UPSERT_CUSTOM_ROLE'; role: CustomRole }
-  | { type: 'REMOVE_CUSTOM_ROLE'; id: string };
+  | { type: 'REMOVE_CUSTOM_ROLE'; id: string }
+  /**
+   * Merge DB-sourced customers into local state.
+   * - New customers (not in local state) are added.
+   * - Existing customers (already in local state) are skipped to preserve
+   *   any unsaved local edits (e.g. in-progress estimates).
+   * - Opportunities from DB are merged per-customer the same way.
+   */
+  | { type: 'MERGE_DB_CUSTOMERS'; payload: Customer[] };
 
 function makeActivity(
   type: ActivityEvent['type'],
@@ -1373,6 +1381,16 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
     case 'REMOVE_CUSTOM_ROLE':
       return { ...state, customRoles: state.customRoles.filter(r => r.id !== action.id) };
 
+    case 'MERGE_DB_CUSTOMERS': {
+      // Build a set of IDs already in local state for O(1) lookup
+      const localIds = new Set(state.customers.map(c => c.id));
+      // Only add customers that don't exist locally — preserve local edits
+      const newCustomers = action.payload.filter(c => !localIds.has(c.id));
+      if (newCustomers.length === 0) return state;
+      // Prepend new customers; existing ones stay untouched
+      return { ...state, customers: [...newCustomers, ...state.customers] };
+    }
+
     case 'UPDATE_OPPORTUNITY_SCHEDULE': {
       const now = new Date().toISOString();
       const updatedOpps = state.opportunities.map(o =>
@@ -1436,6 +1454,7 @@ interface EstimatorContextValue {
   archiveJob: (jobId: string, value: number) => void;
   setActiveOpportunity: (id: string | null) => void;
   addCustomer: (customer: Customer) => void;
+  mergeDbCustomers: (customers: Customer[]) => void;
   updateCustomer: (id: string, payload: Partial<Customer>) => void;
   setActiveCustomer: (id: string | null) => void;
   addCustomerAddress: (customerId: string, address: CustomerAddress) => void;
@@ -1704,6 +1723,10 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'ADD_CUSTOMER', payload: customer });
   }, []);
 
+  const mergeDbCustomers = useCallback((customers: Customer[]) => {
+    dispatch({ type: 'MERGE_DB_CUSTOMERS', payload: customers });
+  }, []);
+
   const updateCustomer = useCallback((id: string, payload: Partial<Customer>) => {
     dispatch({ type: 'UPDATE_CUSTOMER', id, payload });
   }, []);
@@ -1846,7 +1869,7 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
       setCustomerProfile, addActivityEvent, setCustomerTab,
       convertLeadToEstimate, convertEstimateToJob, archiveJob,
       setActiveOpportunity,
-      addCustomer, updateCustomer, setActiveCustomer,
+      addCustomer, mergeDbCustomers, updateCustomer, setActiveCustomer,
       addCustomerAddress, updateCustomerAddress, removeCustomerAddress, setPrimaryAddress,
       navigateToTopLevel,
       reset,

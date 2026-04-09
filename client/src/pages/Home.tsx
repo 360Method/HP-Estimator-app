@@ -5,6 +5,7 @@
 import { useMemo } from 'react';
 import { useAuth } from '@/_core/hooks/useAuth';
 import { useEstimator } from '@/contexts/EstimatorContext';
+import { useDbSync } from '@/hooks/useDbSync';
 import { calcPhase, calcTotals } from '@/lib/calc';
 import MetricsBar from '@/components/MetricsBar';
 import CustomerSection from '@/components/sections/CustomerSection';
@@ -50,6 +51,8 @@ export default function Home() {
  */
 function AdminApp() {
   const { state } = useEstimator();
+  // Sync DB customers into local state once on authenticated load
+  useDbSync(true);
 
   const totals = useMemo(() => {
     const phaseResults = state.phases.map(p => calcPhase(p, state.global));
