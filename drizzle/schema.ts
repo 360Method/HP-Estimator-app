@@ -421,6 +421,8 @@ export const onlineRequests = mysqlTable("onlineRequests", {
   customerId: varchar("customerId", { length: 64 }),
   /** Linked lead ID (set after submit) */
   leadId: varchar("leadId", { length: 64 }),
+  /** Set when an admin opens/views this request — used for unread badge */
+  readAt: timestamp("readAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type OnlineRequest = typeof onlineRequests.$inferSelect;

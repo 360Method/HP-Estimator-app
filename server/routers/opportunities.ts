@@ -11,7 +11,11 @@ import {
   createOpportunity,
   updateOpportunity,
   deleteOpportunity,
+  findOrCreateConversation,
+  insertMessage,
+  updateConversationLastMessage,
 } from "../db";
+import { sendSms, isTwilioConfigured } from "../twilio";
 import { nanoid } from "nanoid";
 
 const OpportunityInput = z.object({
@@ -118,5 +122,42 @@ export const opportunitiesRouter = router({
       if (input.area) update.area = input.area;
       await updateOpportunity(input.id, update);
       return { success: true };
+    }),
+
+  /**
+   * Quick-send an SMS from the lead panel.
+   * Finds or creates an inbox conversation for the contact, then sends via Twilio.
+   */
+  quickSendSms: protectedProcedure
+    .input(z.object({
+      to: z.string().min(7),
+      body: z.string().min(1).max(1600),
+      contactName: z.string().optional(),
+      customerId: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      if (!isTwilioConfigured()) {
+        throw new Error("Twilio not configured. Add credentials in Settings \u2192 Secrets.");
+      }
+      const conversation = await findOrCreateConversation(
+        input.to,
+        null,
+        input.contactName ?? null,
+        input.customerId,
+      );
+      const { sid, status } = await sendSms(input.to, input.body);
+      const msg = await insertMessage({
+        conversationId: conversation.id,
+        channel: "sms",
+        direction: "outbound",
+        body: input.body,
+        status,
+        twilioSid: sid,
+        isInternal: false,
+        sentAt: new Date(),
+        sentByUserId: ctx.user?.id,
+      });
+      await updateConversationLastMessage(conversation.id, input.body, "sms");
+      return { success: true, messageId: msg.id, conversationId: conversation.id };
     }),
 });

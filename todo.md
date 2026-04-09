@@ -723,3 +723,37 @@
 - [x] Build LeadNurturingPanel component: ongoing notes, attachments folder, activity feed, call/message quick-action links
 - [x] Render LeadNurturingPanel as the body of the Details tab when activeOpp.area === 'lead'
 - [x] Call/message links use live customer phone/email from activeCustomer record
+
+## Feature: Lead Status Switcher + Next-Action CTA + Online Request Notifications
+
+### DB / Schema
+- [x] Add `readAt` timestamp column to `onlineRequests` table (migration)
+- [x] Add `markRead` procedure to booking router (sets readAt on a request)
+- [x] Add `unreadCount` query to booking router (count of requests with readAt IS NULL)
+
+### Server: standalone SMS for leads (no conversation required)
+- [x] Add `opportunities.quickSendSms` tRPC procedure: send SMS via Twilio, find/create inbox conversation, log note on lead
+- [ ] Add `leads.sendEmail` tRPC procedure: send email via Gmail helper, log note on lead
+
+### Pipeline: unread badge
+- [x] PipelinePage: blue banner with animated bell + unreadCount when on Leads tab, links to Requests page
+- [x] MetricsBar pipeline/requests nav icons: badge from unreadCount query (polls every 60s)
+- [x] RequestsPage: "New" badge on unread cards; auto-marks read when card is expanded
+
+### LeadNurturingPanel: status switcher + next-action CTA
+- [x] Inline stage switcher at top of LeadNurturingPanel (pill buttons for all LEAD_STAGES)
+- [x] Calls updateOpportunity locally + trpc.opportunities.moveStage server sync
+- [x] "Next Action" CTA banner: context-aware guidance based on current stage
+- [x] Convert-to-Estimate button visible when stage is Won
+
+### LeadNurturingPanel: one-tap communication
+- [x] Call button: tel: link + log 'call' note automatically
+- [x] SMS button: opens compose modal, sends via trpc.opportunities.quickSendSms, logs note
+- [x] Email button: mailto link + log 'email' note automatically
+- [x] All actions show toast confirmation
+
+### Online request → lead: rich data display
+- [ ] When lead has onlineRequestId, show "From Online Request" banner with request details
+- [ ] Display submitted photos as thumbnail grid in LeadNurturingPanel
+- [ ] Display timeline (ASAP / Within a week / Flexible) as badge
+- [ ] Display service type and description from the request

@@ -122,6 +122,7 @@ interface RequestCardProps {
     customerId?: string | null;
     leadId?: string | null;
     createdAt: Date | string | null;
+    readAt?: Date | string | null;
   };
 }
 
@@ -129,8 +130,11 @@ function RequestCard({ req }: RequestCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
   const { state, addCustomer, setActiveCustomer } = useEstimator();
-
   const utils = trpc.useUtils();
+  const markRead = trpc.booking.markRead.useMutation({
+    onSuccess: () => utils.booking.unreadCount.invalidate(),
+  });
+  const isUnread = !req.readAt;
 
   const goToCustomer = async (customerId: string) => {
     setLoading(true);
@@ -175,9 +179,16 @@ function RequestCard({ req }: RequestCardProps) {
             <User className="w-4 h-4 text-gray-500" />
           </div>
           <div className="min-w-0">
-            <p className="font-semibold text-gray-900 truncate">
-              {req.firstName} {req.lastName}
-            </p>
+            <div className="flex items-center gap-2">
+              <p className="font-semibold text-gray-900 truncate">
+                {req.firstName} {req.lastName}
+              </p>
+              {isUnread && (
+                <span className="inline-flex items-center rounded-full bg-blue-500 px-1.5 py-0.5 text-[9px] font-bold text-white uppercase tracking-wide">
+                  New
+                </span>
+              )}
+            </div>
             <p className="text-xs text-gray-400">{formatDate(req.createdAt)}</p>
           </div>
         </div>
@@ -188,7 +199,11 @@ function RequestCard({ req }: RequestCardProps) {
             {req.timeline}
           </span>
           <button
-            onClick={() => setExpanded((p) => !p)}
+            onClick={() => {
+              const opening = !expanded;
+              setExpanded((p) => !p);
+              if (opening && isUnread) markRead.mutate({ id: req.id });
+            }}
             className="text-gray-400 hover:text-gray-600 transition-colors"
           >
             {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}

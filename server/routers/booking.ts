@@ -14,6 +14,8 @@ import {
   createOpportunity,
   createOnlineRequest,
   listOnlineRequests,
+  markOnlineRequestRead,
+  countUnreadOnlineRequests,
 } from "../db";
 import { notifyOwner } from "../_core/notification";
 import { nanoid } from "nanoid";
@@ -166,4 +168,19 @@ export const bookingRouter = router({
   listRequests: protectedProcedure
     .input(z.object({ limit: z.number().default(100) }))
     .query(async ({ input }) => listOnlineRequests(input.limit)),
+
+  /** Count unread (not yet viewed) online requests — used for pipeline badge */
+  unreadCount: protectedProcedure
+    .query(async () => {
+      const count = await countUnreadOnlineRequests();
+      return { count };
+    }),
+
+  /** Mark a single request as read when admin opens it */
+  markRead: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      await markOnlineRequestRead(input.id);
+      return { success: true };
+    }),
 });

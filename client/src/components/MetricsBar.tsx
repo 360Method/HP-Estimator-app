@@ -81,6 +81,12 @@ const BACKEND_NAV: { icon: React.ElementType; label: string; section: AppSection
 export default function MetricsBar({ totals }: MetricsBarProps) {
   const { totalHard, totalPrice, totalGP, totalGM } = totals;
   const { state, setSection, setActiveOpportunity, setActiveCustomer, addCustomer, reset, navigateToTopLevel } = useEstimator();
+  // Unread online requests badge — poll every 60s
+  const { data: unreadData } = trpc.booking.unreadCount.useQuery(undefined, {
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+  const unreadCount = unreadData?.count ?? 0;
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [showNewMenu, setShowNewMenu] = useState(false);
@@ -283,23 +289,33 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
           {/* Backend module nav icons — desktop */}
           {!searchOpen && (
             <nav className="hidden md:flex items-center gap-0.5">
-              {BACKEND_NAV.map(({ icon: Icon, label, section }) => (
-                <button
-                  key={label}
-                  onClick={() => handleNavClick(section, label)}
-                  title={label}
-                  className={`relative flex flex-col items-center gap-0.5 px-2.5 py-1.5 rounded-lg transition-colors group ${
-                    section && state.activeSection === section
-                      ? 'text-primary bg-primary/5'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  <span className="absolute top-full mt-1 bg-foreground text-background px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50">
-                    {label}
-                  </span>
-                </button>
-              ))}
+              {BACKEND_NAV.map(({ icon: Icon, label, section }) => {
+                const showBadge = unreadCount > 0 && (label === 'Pipeline' || label === 'Requests');
+                return (
+                  <button
+                    key={label}
+                    onClick={() => handleNavClick(section, label)}
+                    title={label}
+                    className={`relative flex flex-col items-center gap-0.5 px-2.5 py-1.5 rounded-lg transition-colors group ${
+                      section && state.activeSection === section
+                        ? 'text-primary bg-primary/5'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                    }`}
+                  >
+                    <div className="relative">
+                      <Icon className="w-4 h-4" />
+                      {showBadge && (
+                        <span className="absolute -top-1.5 -right-1.5 flex items-center justify-center min-w-[14px] h-3.5 rounded-full bg-red-500 text-white text-[8px] font-bold leading-none px-0.5">
+                          {unreadCount > 9 ? '9+' : unreadCount}
+                        </span>
+                      )}
+                    </div>
+                    <span className="absolute top-full mt-1 bg-foreground text-background px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-50">
+                      {label}
+                    </span>
+                  </button>
+                );
+              })}
             </nav>
           )}
 
@@ -392,20 +408,30 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
       {showMobileNav && (
         <div className="md:hidden border-t border-border bg-white">
           <div className="px-3 py-2 grid grid-cols-4 gap-1">
-            {BACKEND_NAV.map(({ icon: Icon, label, section }) => (
-              <button
-                key={label}
-                onClick={() => handleNavClick(section, label)}
-                className={`flex flex-col items-center gap-1 px-2 py-2.5 rounded-xl text-[10px] font-semibold transition-colors ${
-                  section && state.activeSection === section
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                }`}
-              >
-                <Icon className="w-5 h-5" />
-                {label}
-              </button>
-            ))}
+            {BACKEND_NAV.map(({ icon: Icon, label, section }) => {
+              const showBadge = unreadCount > 0 && (label === 'Pipeline' || label === 'Requests');
+              return (
+                <button
+                  key={label}
+                  onClick={() => handleNavClick(section, label)}
+                  className={`relative flex flex-col items-center gap-1 px-2 py-2.5 rounded-xl text-[10px] font-semibold transition-colors ${
+                    section && state.activeSection === section
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  }`}
+                >
+                  <div className="relative">
+                    <Icon className="w-5 h-5" />
+                    {showBadge && (
+                      <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[14px] h-3.5 rounded-full bg-red-500 text-white text-[8px] font-bold leading-none px-0.5">
+                        {unreadCount > 9 ? '9+' : unreadCount}
+                      </span>
+                    )}
+                  </div>
+                  {label}
+                </button>
+              );
+            })}
             <button
               onClick={() => { handleBackendNav('Settings'); setShowMobileNav(false); }}
               className="flex flex-col items-center gap-1 px-2 py-2.5 rounded-xl text-[10px] font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"

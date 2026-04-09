@@ -503,3 +503,22 @@ export async function listOnlineRequests(limit = 100) {
   const { onlineRequests } = await import("../drizzle/schema");
   return db.select().from(onlineRequests).orderBy(desc(onlineRequests.createdAt)).limit(limit);
 }
+
+export async function markOnlineRequestRead(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  const { onlineRequests } = await import("../drizzle/schema");
+  await db.update(onlineRequests)
+    .set({ readAt: new Date() })
+    .where(eq(onlineRequests.id, id));
+}
+
+export async function countUnreadOnlineRequests() {
+  const db = await getDb();
+  if (!db) return 0;
+  const { onlineRequests } = await import("../drizzle/schema");
+  const rows = await db.select({ id: onlineRequests.id })
+    .from(onlineRequests)
+    .where(sql`${onlineRequests.readAt} IS NULL`);
+  return rows.length;
+}

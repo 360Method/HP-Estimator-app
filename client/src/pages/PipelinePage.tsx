@@ -11,7 +11,8 @@ import {
   PipelineArea, OpportunityStage, Opportunity,
 } from '@/lib/types';
 import PipelineBoard from '@/components/PipelineBoard';
-import { Star, FileText, Briefcase, TrendingUp, DollarSign } from 'lucide-react';
+import { trpc } from '@/lib/trpc';
+import { Star, FileText, Briefcase, TrendingUp, DollarSign, Bell, ArrowRight } from 'lucide-react';
 
 type PipelineTab = 'lead' | 'estimate' | 'job';
 
@@ -31,7 +32,7 @@ export default function PipelinePage() {
     state,
     addOpportunity, updateOpportunity, removeOpportunity,
     convertLeadToEstimate, convertEstimateToJob, archiveJob,
-    setActiveOpportunity, setActiveCustomer, setSection,
+    setActiveOpportunity, setActiveCustomer, setSection, navigateToTopLevel,
   } = useEstimator();
 
   const [activeTab, setActiveTab] = useState<PipelineTab>('lead');
@@ -126,8 +127,31 @@ export default function PipelinePage() {
     addOpportunity({ area: activeTab, stage, title, value, notes, archived: false });
   };
 
+  const unreadQuery = trpc.booking.unreadCount.useQuery(undefined, { refetchInterval: 30_000 });
+  const unreadCount = unreadQuery.data?.count ?? 0;
+
   return (
     <div className="min-h-screen bg-background">
+
+      {/* ── New online requests banner ── */}
+      {activeTab === 'lead' && unreadCount > 0 && (
+        <div className="bg-blue-600 text-white px-4 py-2.5">
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Bell className="w-4 h-4 animate-pulse" />
+              <span className="text-sm font-semibold">
+                {unreadCount} new online request{unreadCount !== 1 ? 's' : ''} waiting for review
+              </span>
+            </div>
+            <button
+              onClick={() => navigateToTopLevel('requests')}
+              className="flex items-center gap-1 text-xs font-semibold bg-white/20 hover:bg-white/30 rounded-full px-3 py-1 transition-colors"
+            >
+              View Requests <ArrowRight size={12} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Page header ── */}
       <div className="bg-white border-b border-border px-4 sm:px-6 py-5">
