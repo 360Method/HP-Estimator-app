@@ -743,9 +743,18 @@ export default function CustomerSection() {
                 {/* Customer portal invite */}
                 <div className="pt-2 border-t border-border">
                   {customerProfile.portalInviteSent ? (
-                    <div className="flex items-center gap-1.5 text-xs text-emerald-700">
-                      <CheckCircle2 size={12} />
-                      <span>Portal invite sent {customerProfile.portalInvitedAt ? fmtDate(customerProfile.portalInvitedAt) : ''}</span>
+                    <div className="flex items-center gap-2 text-xs">
+                      <div className="flex items-center gap-1.5 text-emerald-700">
+                        <CheckCircle2 size={12} />
+                        <span>Portal invite sent {customerProfile.portalInvitedAt ? fmtDate(customerProfile.portalInvitedAt) : ''}</span>
+                      </div>
+                      <button
+                        onClick={sendPortalInvite}
+                        disabled={inviteToPortalMutation.isPending}
+                        className="text-primary hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {inviteToPortalMutation.isPending ? 'Sending…' : 'Resend'}
+                      </button>
                     </div>
                   ) : (
                     <button onClick={sendPortalInvite}
