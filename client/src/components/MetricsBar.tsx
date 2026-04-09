@@ -31,6 +31,8 @@ import NewEventModal from '@/components/intakes/NewEventModal';
 import NewIntakeModal from '@/components/intakes/NewIntakeModal';
 import NewLeadModal from '@/components/intakes/NewLeadModal';
 import UserMenu, { UserMenuAction } from '@/components/UserMenu';
+import { trpc } from '@/lib/trpc';
+import { getLoginUrl } from '@/const';
 import MyAccountPage from '@/pages/MyAccountPage';
 import MyTasksPage from '@/pages/MyTasksPage';
 import HelpPage from '@/pages/HelpPage';
@@ -86,13 +88,21 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
   const newBtnRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
+  const logoutMutation = trpc.auth.logout.useMutation({
+    onSettled: () => {
+      // Always clear local state and redirect to login regardless of server response
+      reset();
+      window.location.href = getLoginUrl();
+    },
+  });
+
   const handleUserMenuSelect = (action: UserMenuAction) => {
     if (action === 'my-account') setOverlay('account');
     else if (action === 'my-tasks') setOverlay('tasks');
     else if (action === 'help') setOverlay('help');
     else if (action === 'keyboard-shortcuts') setOverlay('shortcuts');
     else if (action === 'settings') setOverlay('settings');
-    else if (action === 'sign-out') { reset(); window.location.reload(); }
+    else if (action === 'sign-out') logoutMutation.mutate();
   };
 
   const [aiEstimateOpen, setAiEstimateOpen] = useState(false);

@@ -616,3 +616,7 @@
 - [x] Build HCP-style branded login page (AdminLogin.tsx) — split layout, left: HP logo + Google sign-in button, right: branded illustration/message
 - [x] Wire AdminLogin as the unauthenticated gate for pro.handypioneers.com (show instead of Home when not logged in)
 - [x] Show 403 access-denied screen when authenticated but email not on allowlist
+
+## Sign Out Fix
+
+- [x] Fix MetricsBar Sign Out: call trpc.auth.logout mutation then redirect to show AdminLogin (not just reload)
