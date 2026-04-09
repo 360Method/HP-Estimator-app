@@ -70,7 +70,7 @@ const BACKEND_NAV: { icon: React.ElementType; label: string; section: AppSection
   { icon: Inbox,           label: 'Inbox',      section: 'inbox' as AppSection },
   { icon: DollarSign,      label: 'Financials', section: null        },
   { icon: BarChart2,       label: 'Reporting',  section: 'reporting' as AppSection },
-  { icon: Megaphone,       label: 'Marketing',  section: null        },
+  { icon: Megaphone,       label: 'Marketing',  section: 'marketing' as AppSection },
 ];
 
 export default function MetricsBar({ totals }: MetricsBarProps) {
@@ -184,6 +184,8 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
     if (section === 'dashboard') { handleGoToDashboard(); return; }
     if (section === 'schedule') { handleGoToSchedule(); return; }
     if (section === 'inbox') { handleGoToInbox(); return; }
+    if (section === 'reporting') { setSection('reporting'); return; }
+    if (section === 'marketing') { setSection('marketing'); return; }
     handleBackendNav(label);
   };
 

@@ -792,6 +792,38 @@ export default function CustomerSection() {
           </div>
         </div>
 
+        {/* Default Tax Rate */}
+        <div className="card-section">
+          <div className="card-section-header text-xs font-semibold uppercase tracking-wider">
+            <DollarSign size={13} />
+            <span>Default Tax Rate</span>
+          </div>
+          <div className="card-section-body">
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-muted-foreground">Tax jurisdiction for invoices</label>
+              <select
+                value={customerProfile.defaultTaxCode || '0603'}
+                onChange={e => setCustomerProfile({ defaultTaxCode: e.target.value })}
+                className="w-full px-2 py-1.5 text-xs border border-border rounded bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary/30"
+              >
+                <option value="none">No Tax (0%)</option>
+                <option value="0600">Clark County Unincorp. Areas (8.0%)</option>
+                <option value="0666">Clark County Unincorp. PTBA (8.7%)</option>
+                <option value="0601">Battle Ground (8.9%)</option>
+                <option value="0602">Camas (8.8%)</option>
+                <option value="0611">La Center (8.8%)</option>
+                <option value="0604">Ridgefield (8.8%)</option>
+                <option value="0603">Vancouver (8.9%) — Default</option>
+                <option value="0605">Washougal (8.6%)</option>
+                <option value="0607">Woodland (7.9%)</option>
+                <option value="0606">Yacolt (8.5%)</option>
+                <option value="custom">Custom rate…</option>
+              </select>
+              <p className="text-xs text-muted-foreground">Pre-fills the tax selector when creating invoices for this customer.</p>
+            </div>
+          </div>
+        </div>
+
         {/* Customer Tags */}
         <div className="card-section">
           <div className="card-section-header text-xs font-semibold uppercase tracking-wider">

@@ -34,13 +34,13 @@
 - [x] Invoice PDF export / print (InvoicePrintView with print-only isolation)
 - [x] Send invoice to customer via email
 - [x] Stripe webhook → update invoice status in DB (currently client-side only)
-- [ ] PayPal JS SDK integration (replace redirect flow with in-page approval)
+- [x] PayPal JS SDK integration (replace redirect flow with in-page approval)
 - [x] Deposit % configurable per-job (currently defaults to 50%)
-- [ ] Tax rate per-customer or per-region
+- [x] Tax rate per-customer or per-region
 - [x] Communication tab (SMS/email log)
 - [x] Attachments tab (photo uploads)
 - [x] Reporting / analytics page
-- [ ] Marketing tab
+- [x] Marketing tab
 - [x] Dashboard overview page (world-class EstimatorDashboard with KPIs, funnel, charts, activity)
 
 ## In Progress
@@ -570,5 +570,5 @@
 
 ## Batch 2 — Follow-up Items
 
-- [ ] Schedule: expand recurring events into calendar view instances (recurrence engine)
-- [ ] Schedule: handle edit-single-occurrence vs edit-series semantics
+- [x] Schedule: expand recurring events into calendar view instances (recurrence engine)
+- [ ] Schedule: handle edit-single-occurrence vs edit-series semantics (future)

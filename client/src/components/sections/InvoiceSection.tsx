@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { loadStripe, StripeElementsOptions } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js';
 import { trpc } from '@/lib/trpc';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { Invoice, PaymentRecord, PaymentMethod, InvoiceStatus, Customer, Opportunity } from '@/lib/types';
@@ -318,42 +319,24 @@ function InvoiceCard({
     toast.success('Payment received via Stripe!');
   };
 
-  // ── PayPal flow ──────────────────────────────────────────────
-  const handlePayPalClick = async () => {
-    if (!paypalClientId) { toast.error('PayPal not configured'); return; }
-    try {
-      const result = await createPaypalOrder.mutateAsync({
-        amountUsd: balance.toFixed(2),
-        invoiceId: invoice.id,
-        invoiceNumber: invoice.invoiceNumber,
-      });
-      // Open PayPal approval URL in new tab
-      const base = 'https://www.sandbox.paypal.com/checkoutnow?token=';
-      window.open(`${base}${result.orderId}`, '_blank');
-      // Poll for capture (simplified — in production use PayPal JS SDK)
-      const orderId = result.orderId;
-      toast.info('Complete payment in the PayPal window, then click "Confirm PayPal Payment" below.');
-      onUpdate({ ...invoice, paypalOrderId: orderId });
-    } catch {
-      toast.error('Failed to create PayPal order');
-    }
-  };
+  // ── PayPal in-page flow ──────────────────────────────────────
+  const [showPayPalButtons, setShowPayPalButtons] = useState(false);
 
-  const handlePayPalConfirm = async () => {
-    if (!invoice.paypalOrderId) return;
+  const handlePayPalApprove = async (orderId: string) => {
     try {
-      const result = await capturePaypalOrder.mutateAsync({ orderId: invoice.paypalOrderId });
+      const result = await capturePaypalOrder.mutateAsync({ orderId });
       if (result.status === 'COMPLETED') {
         const payment: PaymentRecord = {
           id: nanoid(8),
           method: 'paypal',
           amount: balance,
           paidAt: new Date().toISOString(),
-          reference: result.orderId,
+          reference: orderId,
           note: 'PayPal payment',
         };
         applyPayment(payment);
         toast.success('PayPal payment captured!');
+        setShowPayPalButtons(false);
       } else {
         toast.error(`PayPal status: ${result.status}`);
       }
@@ -609,28 +592,14 @@ function InvoiceCard({
                     </Button>
                   )}
                   {paypalClientId && (
-                    <>
-                      <Button
-                        variant="outline"
-                        className="flex items-center gap-2 justify-start text-blue-700 border-blue-300"
-                        onClick={handlePayPalClick}
-                        disabled={createPaypalOrder.isPending}
-                      >
-                        <span className="font-bold text-sm">PP</span>
-                        {createPaypalOrder.isPending ? 'Loading…' : 'Pay with PayPal'}
-                      </Button>
-                      {invoice.paypalOrderId && (
-                        <Button
-                          variant="outline"
-                          className="flex items-center gap-2 justify-start text-green-700 border-green-300"
-                          onClick={handlePayPalConfirm}
-                          disabled={capturePaypalOrder.isPending}
-                        >
-                          <CheckCircle2 className="w-4 h-4" />
-                          Confirm PayPal
-                        </Button>
-                      )}
-                    </>
+                    <Button
+                      variant="outline"
+                      className="flex items-center gap-2 justify-start text-blue-700 border-blue-300"
+                      onClick={() => setShowPayPalButtons(v => !v)}
+                    >
+                      <span className="font-bold text-sm">PP</span>
+                      {showPayPalButtons ? 'Hide PayPal' : 'Pay with PayPal'}
+                    </Button>
                   )}
                   <Button
                     variant="outline"
@@ -640,6 +609,34 @@ function InvoiceCard({
                     <Banknote className="w-4 h-4" />
                     Record Payment
                   </Button>
+                </div>
+              )}
+
+              {/* PayPal in-page SDK buttons */}
+              {showPayPalButtons && paypalClientId && (
+                <div className="border rounded-lg p-4 bg-blue-50 dark:bg-blue-950/20">
+                  <p className="text-xs text-muted-foreground mb-3">Complete PayPal payment below:</p>
+                  <PayPalScriptProvider options={{ clientId: paypalClientId, currency: 'USD' }}>
+                    <PayPalButtons
+                      style={{ layout: 'vertical', color: 'blue', shape: 'rect', label: 'pay' }}
+                      createOrder={async () => {
+                        const result = await createPaypalOrder.mutateAsync({
+                          amountUsd: balance.toFixed(2),
+                          invoiceId: invoice.id,
+                          invoiceNumber: invoice.invoiceNumber,
+                        });
+                        return result.orderId;
+                      }}
+                      onApprove={async (data) => {
+                        await handlePayPalApprove(data.orderID);
+                      }}
+                      onError={(err) => {
+                        console.error('[PayPal]', err);
+                        toast.error('PayPal error — please try again');
+                      }}
+                      onCancel={() => setShowPayPalButtons(false)}
+                    />
+                  </PayPalScriptProvider>
                 </div>
               )}
             </div>
@@ -715,6 +712,7 @@ function CreateInvoiceDialog({
   defaultTotal,
   defaultType,
   invoiceNumber,
+  defaultTaxCode,
 }: {
   open: boolean;
   onClose: () => void;
@@ -722,10 +720,11 @@ function CreateInvoiceDialog({
   defaultTotal: number;
   defaultType: 'deposit' | 'final';
   invoiceNumber: string;
+  defaultTaxCode?: string;
 }) {
   const [type, setType] = useState<'deposit' | 'final'>(defaultType);
   const [depositPct, setDepositPct] = useState(50);
-  const [taxRateCode, setTaxRateCode] = useState('0603'); // default: Vancouver 8.9%
+  const [taxRateCode, setTaxRateCode] = useState(defaultTaxCode || '0603'); // pre-fill from customer default
   const [customTaxPct, setCustomTaxPct] = useState(8.9);
   const selectedPreset = CLARK_COUNTY_TAX_RATES.find(r => r.code === taxRateCode);
   const taxRate = taxRateCode === 'custom'
@@ -1030,6 +1029,7 @@ export default function InvoiceSection() {
         defaultTotal={estimateValue}
         defaultType={createType}
         invoiceNumber={nextInvoiceNumber()}
+        defaultTaxCode={customer?.defaultTaxCode}
       />
     </div>
   );

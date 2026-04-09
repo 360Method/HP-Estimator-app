@@ -637,6 +637,60 @@ export default function SchedulePage() {
     });
     events = [...events, ...synthEvents];
 
+    // Expand recurring events into instances within a 90-day window
+    const windowStart = new Date();
+    windowStart.setDate(windowStart.getDate() - 30); // include past 30 days
+    const windowEnd = new Date();
+    windowEnd.setDate(windowEnd.getDate() + 90);
+
+    const expandedEvents: ScheduleEvent[] = [];
+    events.forEach(ev => {
+      if (!ev.recurrence) {
+        expandedEvents.push(ev);
+        return;
+      }
+      const { frequency, endDate } = ev.recurrence;
+      const recEnd = endDate ? new Date(endDate) : windowEnd;
+      const effectiveEnd = recEnd < windowEnd ? recEnd : windowEnd;
+
+      const stepMs: Record<string, number> = {
+        daily: 86400000,
+        weekly: 7 * 86400000,
+        biweekly: 14 * 86400000,
+        monthly: 0, // handled separately
+      };
+
+      const baseStart = new Date(ev.start);
+      const baseEnd = new Date(ev.end);
+      const durationMs = baseEnd.getTime() - baseStart.getTime();
+
+      let instanceStart = new Date(baseStart);
+      let instanceIndex = 0;
+      while (instanceStart <= effectiveEnd) {
+        if (instanceStart >= windowStart) {
+          const instanceEnd = new Date(instanceStart.getTime() + durationMs);
+          expandedEvents.push({
+            ...ev,
+            id: instanceIndex === 0 ? ev.id : `${ev.id}-r${instanceIndex}`,
+            start: instanceStart.toISOString(),
+            end: instanceEnd.toISOString(),
+            _isRecurrenceInstance: instanceIndex > 0,
+            _parentId: ev.id,
+          } as ScheduleEvent & { _isRecurrenceInstance?: boolean; _parentId?: string });
+        }
+        instanceIndex++;
+        if (frequency === 'monthly') {
+          const next = new Date(instanceStart);
+          next.setMonth(next.getMonth() + 1);
+          instanceStart = next;
+        } else {
+          instanceStart = new Date(instanceStart.getTime() + stepMs[frequency]);
+        }
+        if (instanceIndex > 365) break; // safety cap
+      }
+    });
+    events = expandedEvents;
+
     // Apply filters
     if (filterTypes.size > 0) {
       events = events.filter(e => filterTypes.has(e.type));

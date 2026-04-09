@@ -148,6 +148,8 @@ export interface CustomerProfile {
   portalInvitedAt: string | null;
   // Private notes
   privateNotes: string;
+  // Tax
+  defaultTaxCode?: string;   // e.g. '0603' for Vancouver WA 8.9%
   // Account metadata
   createdAt: string;            // ISO date
   lifetimeValue: number;        // total $ of approved jobs
@@ -214,7 +216,7 @@ export interface GlobalSettings {
   paintRate: number;
 }
 
-export type AppSection = 'customer' | 'sales' | 'calculator' | 'estimate' | 'present' | 'customers' | 'jobs' | 'job-details' | 'pipeline' | 'invoice' | 'dashboard' | 'schedule' | 'inbox' | 'reporting';
+export type AppSection = 'customer' | 'sales' | 'calculator' | 'estimate' | 'present' | 'customers' | 'jobs' | 'job-details' | 'pipeline' | 'invoice' | 'dashboard' | 'schedule' | 'inbox' | 'reporting' | 'marketing';
 
 // ── Schedule / Calendar Types ──────────────────────────────────
 
@@ -378,6 +380,8 @@ export interface Customer {
   invoices?: Invoice[];
   // Customer-level file attachments (photos, contracts, etc.)
   attachments?: JobAttachment[];
+  // Default tax code for this customer (e.g. '0603' for Vancouver WA 8.9%)
+  defaultTaxCode?: string;
 }
 
 export interface EstimatorState {

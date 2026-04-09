@@ -463,7 +463,7 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
       if (state.activeCustomerId) {
         const syncedCustomers = state.customers.map(c =>
           c.id === state.activeCustomerId
-            ? { ...c, profile: newProfile, lifetimeValue: newProfile.lifetimeValue, outstandingBalance: newProfile.outstandingBalance, tags: newProfile.tags, leadSource: newProfile.leadSource, customerNotes: newProfile.privateNotes }
+            ? { ...c, profile: newProfile, lifetimeValue: newProfile.lifetimeValue, outstandingBalance: newProfile.outstandingBalance, tags: newProfile.tags, leadSource: newProfile.leadSource, customerNotes: newProfile.privateNotes, ...(newProfile.defaultTaxCode !== undefined ? { defaultTaxCode: newProfile.defaultTaxCode } : {}) }
             : c
         );
         return { ...state, customerProfile: newProfile, customers: syncedCustomers };
