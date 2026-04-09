@@ -206,6 +206,43 @@ async function startServer() {
     }
   });
 
+  // ── Google Maps JS SDK proxy ─────────────────────────────────────────────────────────────────
+  // The Manus forge proxy requires Authorization: Bearer header which <script> tags can't send.
+  // This route fetches the SDK server-side (with auth) and streams it back to the browser.
+  app.get("/api/maps/sdk", async (req, res) => {
+    const forgeUrl = (process.env.BUILT_IN_FORGE_API_URL || "https://forge.manus.ai").replace(/\/+$/, "");
+    const forgeKey = process.env.VITE_FRONTEND_FORGE_API_KEY || process.env.BUILT_IN_FORGE_API_KEY || "";
+    const libraries = (req.query.libraries as string) || "places,geocoding,geometry";
+    const v = (req.query.v as string) || "weekly";
+    // Determine origin from Referer or X-Forwarded headers
+    const referer = req.headers.referer || "";
+    const forwardedProto = (req.headers["x-forwarded-proto"] as string || req.protocol).split(",")[0].trim();
+    const forwardedHost = (req.headers["x-forwarded-host"] as string || req.get("host") || "localhost").split(",")[0].trim();
+    const origin = referer ? new URL(referer).origin : `${forwardedProto}://${forwardedHost}`;
+    const sdkUrl = `${forgeUrl}/v1/maps/proxy/maps/api/js?key=${forgeKey}&v=${v}&libraries=${libraries}`;
+    try {
+      const upstream = await fetch(sdkUrl, {
+        headers: {
+          Authorization: `Bearer ${forgeKey}`,
+          Origin: origin,
+        },
+      });
+      if (!upstream.ok) {
+        const body = await upstream.text();
+        console.error(`[Maps SDK proxy] Upstream error ${upstream.status}: ${body}`);
+        res.status(502).send("Maps SDK unavailable");
+        return;
+      }
+      res.set("Content-Type", "application/javascript; charset=utf-8");
+      res.set("Cache-Control", "public, max-age=3600");
+      const text = await upstream.text();
+      res.send(text);
+    } catch (err) {
+      console.error("[Maps SDK proxy] Error:", err);
+      res.status(502).send("Maps SDK proxy error");
+    }
+  });
+
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));

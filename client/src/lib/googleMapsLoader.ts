@@ -10,11 +10,9 @@
 
 /// <reference types="@types/google.maps" />
 
-const API_KEY = import.meta.env.VITE_FRONTEND_FORGE_API_KEY as string;
-const FORGE_BASE_URL =
-  (import.meta.env.VITE_FRONTEND_FORGE_API_URL as string) ||
-  'https://forge.manus.ai';
-const MAPS_PROXY_URL = `${FORGE_BASE_URL}/v1/maps/proxy`;
+// The Maps JS SDK is served via our own Express proxy at /api/maps/sdk
+// which adds the required Authorization: Bearer header that <script> tags cannot send.
+const MAPS_SDK_URL = '/api/maps/sdk';
 
 // Use globalThis so the promise survives HMR module re-evaluation
 declare global {
@@ -54,7 +52,7 @@ export function loadMapsSDK(): Promise<void> {
     script.id = 'google-maps-sdk';
     // NOTE: Do NOT include 'marker' library — AdvancedMarkerElement has known
     // instability on iOS Safari WebKit. We use classic Marker instead.
-    script.src = `${MAPS_PROXY_URL}/maps/api/js?key=${API_KEY}&v=weekly&libraries=places,geocoding,geometry`;
+    script.src = `${MAPS_SDK_URL}?v=weekly&libraries=places,geocoding,geometry`;
     script.async = true;
     script.defer = true;
     // crossOrigin omitted intentionally — Safari is stricter about CORS on

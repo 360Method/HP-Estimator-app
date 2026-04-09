@@ -733,7 +733,7 @@
 
 ### Server: standalone SMS for leads (no conversation required)
 - [x] Add `opportunities.quickSendSms` tRPC procedure: send SMS via Twilio, find/create inbox conversation, log note on lead
-- [ ] Add `leads.sendEmail` tRPC procedure: send email via Gmail helper, log note on lead
+- [x] Add `leads.sendEmail` tRPC procedure: superseded — Email button uses mailto: which opens native mail client and auto-logs the contact note; no server-side send needed
 
 ### Pipeline: unread badge
 - [x] PipelinePage: blue banner with animated bell + unreadCount when on Leads tab, links to Requests page
@@ -766,3 +766,7 @@
 - [x] Filter listConversations query to only return rows where customerId IS NOT NULL
 - [x] Update inbox router procedure to apply the filter server-side (customerOnly=true default)
 - [x] Ensure inbound Gmail only creates a conversation when sender matches a known customer (skip + mark-read otherwise)
+
+## Bug: Google Maps SDK load failure in AddressMapPreview
+- [x] Add /api/maps/sdk Express route that fetches SDK server-side with Bearer auth and streams it back
+- [x] Update googleMapsLoader.ts to load from /api/maps/sdk (same-origin, no auth header needed in browser)
