@@ -13,7 +13,7 @@
 const API_KEY = import.meta.env.VITE_FRONTEND_FORGE_API_KEY as string;
 const FORGE_BASE_URL =
   (import.meta.env.VITE_FRONTEND_FORGE_API_URL as string) ||
-  'https://forge.butterfly-effect.dev';
+  'https://forge.manus.ai';
 const MAPS_PROXY_URL = `${FORGE_BASE_URL}/v1/maps/proxy`;
 
 // Use globalThis so the promise survives HMR module re-evaluation

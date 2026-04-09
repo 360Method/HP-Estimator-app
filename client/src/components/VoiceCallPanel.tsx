@@ -11,7 +11,7 @@ import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
 import {
   Phone, PhoneOff, PhoneIncoming, Mic, MicOff,
-  Volume2, VolumeX, Loader2,
+  Loader2, AlertTriangle, RefreshCw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -29,15 +29,15 @@ interface VoiceCallPanelProps {
 export default function VoiceCallPanel({ toNumber, toName, onCallEnd }: VoiceCallPanelProps) {
   const [callState, setCallState] = useState<CallState>('idle');
   const [isMuted, setIsMuted] = useState(false);
-  const [isSpeakerOff, setIsSpeakerOff] = useState(false);
   const [duration, setDuration] = useState(0);
   const [incomingCall, setIncomingCall] = useState<Call | null>(null);
+  const [deviceError, setDeviceError] = useState<string | null>(null);
   const deviceRef = useRef<Device | null>(null);
   const activeCallRef = useRef<Call | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
 
-  const { data: tokenData, isError: tokenError } = trpc.inbox.twilio.voiceToken.useQuery(undefined, {
+  const { data: tokenData, isError: tokenError, refetch: refetchToken } = trpc.inbox.twilio.voiceToken.useQuery(undefined, {
     retry: false,
     staleTime: 50 * 60 * 1000, // 50 min (token valid 1hr)
   });
@@ -46,16 +46,18 @@ export default function VoiceCallPanel({ toNumber, toName, onCallEnd }: VoiceCal
   useEffect(() => {
     if (!tokenData?.token) return;
 
+    setDeviceError(null);
+
     const device = new Device(tokenData.token, {
       logLevel: 1,
       codecPreferences: ['opus', 'pcmu'] as any,
-      // Specify edge to avoid 53000 signaling connection errors.
       // 'roaming' lets Twilio pick the closest edge automatically.
       edge: 'roaming',
     });
 
     device.on('registered', () => {
       console.log('[Voice] Device registered');
+      setDeviceError(null);
     });
 
     device.on('incoming', (call: Call) => {
@@ -67,9 +69,21 @@ export default function VoiceCallPanel({ toNumber, toName, onCallEnd }: VoiceCal
       });
     });
 
-    device.on('error', (err) => {
+    device.on('error', (err: any) => {
+      // err may be a TwilioError object (with .code) or a plain Error
+      const code = err?.code ?? err?.twilioError?.code ?? 0;
+      const msg = err?.message ?? err?.twilioError?.message ?? String(err);
       console.error('[Voice] Device error:', err);
-      toast.error(`Call error: ${err.message}`);
+
+      if (code === 31202 || code === 20101) {
+        // JWT signature validation failed — token may be stale or API key mismatch
+        setDeviceError('Voice token invalid. Click to retry.');
+      } else if (code === 53000) {
+        // Generic signaling error — usually transient
+        setDeviceError('Signaling error. Click to retry.');
+      } else {
+        setDeviceError(msg || 'Voice error. Click to retry.');
+      }
       setCallState('idle');
     });
 
@@ -95,10 +109,9 @@ export default function VoiceCallPanel({ toNumber, toName, onCallEnd }: VoiceCal
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
-    const secs = Math.floor((Date.now() - startTimeRef.current) / 1000);
-    onCallEnd?.(secs);
+    if (onCallEnd) onCallEnd(duration);
     setDuration(0);
-  }, [onCallEnd]);
+  }, [duration, onCallEnd]);
 
   // ── Call setup helpers ────────────────────────────────────────────────────
   const wireCallEvents = useCallback((call: Call) => {
@@ -138,7 +151,7 @@ export default function VoiceCallPanel({ toNumber, toName, onCallEnd }: VoiceCal
       wireCallEvents(call);
       setCallState('ringing');
     } catch (err: any) {
-      toast.error(`Failed to connect: ${err.message}`);
+      toast.error(`Failed to connect: ${err?.message ?? String(err)}`);
       setCallState('idle');
     }
   }, [wireCallEvents]);
@@ -183,6 +196,29 @@ export default function VoiceCallPanel({ toNumber, toName, onCallEnd }: VoiceCal
         <Phone className="w-3.5 h-3.5" />
         <span>Voice calling requires Twilio setup</span>
       </div>
+    );
+  }
+
+  // ── Device error — show retry button ─────────────────────────────────────
+  if (deviceError) {
+    return (
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => {
+          setDeviceError(null);
+          // Destroy old device before refetching token
+          deviceRef.current?.destroy();
+          deviceRef.current = null;
+          refetchToken();
+        }}
+        className="gap-2 text-amber-600 border-amber-200 hover:bg-amber-50 text-xs"
+        title={deviceError}
+      >
+        <AlertTriangle className="w-3.5 h-3.5" />
+        <RefreshCw className="w-3.5 h-3.5" />
+        Retry Voice
+      </Button>
     );
   }
 
