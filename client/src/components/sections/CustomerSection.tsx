@@ -372,7 +372,7 @@ function OpportunityCard({
       {/* Conversion modals */}
       {showConvertToEstimateModal && onConvertToEstimate && (
         <ConvertToEstimateModal
-          opp={opp}
+          lead={opp}
           onConfirm={(title, value) => {
             onConvertToEstimate(opp.id, title, value);
             setShowConvertToEstimateModal(false);
@@ -383,7 +383,7 @@ function OpportunityCard({
       )}
       {showConvertToJobModal && onConvertToJob && (
         <ConvertToJobModal
-          opp={opp}
+          estimate={opp}
           onConfirm={(title, value) => {
             onConvertToJob(opp.id, title, value);
             setShowConvertToJobModal(false);

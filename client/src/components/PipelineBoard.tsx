@@ -273,7 +273,7 @@ function KanbanCard({
       {/* Conversion modals */}
       {showConvertToEstimateModal && onConvertToEstimate && (
         <ConvertToEstimateModal
-          opp={opp}
+          lead={opp}
           onConfirm={(title, value) => {
             onConvertToEstimate(opp.id, title, value);
             setShowConvertToEstimateModal(false);
@@ -284,7 +284,7 @@ function KanbanCard({
       )}
       {showConvertToJobModal && onConvertToJob && (
         <ConvertToJobModal
-          opp={opp}
+          estimate={opp}
           onConfirm={(title, value) => {
             onConvertToJob(opp.id, title, value);
             setShowConvertToJobModal(false);
@@ -489,7 +489,7 @@ function TableRow({
     </tr>
     {showConvertToEstimateModal && onConvertToEstimate && (
       <ConvertToEstimateModal
-        opp={opp}
+        lead={opp}
         onConfirm={(title, value) => {
           onConvertToEstimate(opp.id, title, value);
           setShowConvertToEstimateModal(false);
@@ -500,7 +500,7 @@ function TableRow({
     )}
     {showConvertToJobModal && onConvertToJob && (
       <ConvertToJobModal
-        opp={opp}
+        estimate={opp}
         onConfirm={(title, value) => {
           onConvertToJob(opp.id, title, value);
           setShowConvertToJobModal(false);
