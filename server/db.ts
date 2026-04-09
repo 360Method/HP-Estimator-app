@@ -522,3 +522,11 @@ export async function countUnreadOnlineRequests() {
     .where(sql`${onlineRequests.readAt} IS NULL`);
   return rows.length;
 }
+
+export async function getOnlineRequestById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const { onlineRequests } = await import("../drizzle/schema");
+  const rows = await db.select().from(onlineRequests).where(eq(onlineRequests.id, id)).limit(1);
+  return rows[0] ?? null;
+}

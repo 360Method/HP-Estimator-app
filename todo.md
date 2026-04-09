@@ -753,10 +753,10 @@
 - [x] All actions show toast confirmation
 
 ### Online request → lead: rich data display
-- [ ] When lead has onlineRequestId, show "From Online Request" banner with request details
-- [ ] Display submitted photos as thumbnail grid in LeadNurturingPanel
-- [ ] Display timeline (ASAP / Within a week / Flexible) as badge
-- [ ] Display service type and description from the request
+- [x] When lead has onlineRequestId, show "From Online Request" banner with request details
+- [x] Display submitted photos as thumbnail grid in LeadNurturingPanel
+- [x] Display timeline (ASAP / Within a week / Flexible) as badge
+- [x] Display service type and description from the request
 
 ## Nav: Remove Requests from main nav
 - [x] Remove Requests item from BACKEND_NAV in MetricsBar (keep page accessible via pipeline banner)

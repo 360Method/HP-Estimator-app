@@ -583,6 +583,8 @@ export interface Opportunity {
   leadNotes?: LeadNote[];
   // Lead attachments (photos, docs from initial inquiry)
   leadAttachments?: JobAttachment[];
+  // If this lead was created from an online booking request, link to it
+  onlineRequestId?: number;
   // Snapshot of customer info at time of conversion
   clientSnapshot?: {
     client: string;

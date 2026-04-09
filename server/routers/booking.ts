@@ -16,6 +16,7 @@ import {
   listOnlineRequests,
   markOnlineRequestRead,
   countUnreadOnlineRequests,
+  getOnlineRequestById,
 } from "../db";
 import { notifyOwner } from "../_core/notification";
 import { nanoid } from "nanoid";
@@ -183,4 +184,9 @@ export const bookingRouter = router({
       await markOnlineRequestRead(input.id);
       return { success: true };
     }),
+
+  /** Fetch a single online request by ID — used by LeadNurturingPanel */
+  getRequest: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input }) => getOnlineRequestById(input.id)),
 });

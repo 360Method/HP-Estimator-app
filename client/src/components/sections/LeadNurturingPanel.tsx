@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import type { LeadContactType, LeadStage, JobAttachment } from '@/lib/types';
 import { LEAD_STAGES } from '@/lib/types';
+import { Globe, Camera, Clock as ClockIcon, Wrench, ChevronDown, ChevronUp } from 'lucide-react';
 
 // ── Helpers ──────────────────────────────────────────────────
 function fmtDateTime(iso: string) {
@@ -95,6 +96,13 @@ export default function LeadNurturingPanel() {
   const [smsOpen, setSmsOpen] = useState(false);
   const [smsBody, setSmsBody] = useState('');
   const [smsSending, setSmsSending] = useState(false);
+
+  const onlineRequestId = activeOpp.onlineRequestId;
+  const { data: onlineRequest } = trpc.booking.getRequest.useQuery(
+    { id: onlineRequestId! },
+    { enabled: !!onlineRequestId },
+  );
+  const [photosExpanded, setPhotosExpanded] = useState(false);
 
   if (!activeOpp || activeOpp.area !== 'lead') return null;
 
@@ -199,8 +207,92 @@ export default function LeadNurturingPanel() {
     toast.success('Lead converted to Estimate');
   };
 
+  // Parse photo URLs from online request
+  const requestPhotos: string[] = (() => {
+    if (!onlineRequest?.photoUrls) return [];
+    try { return JSON.parse(onlineRequest.photoUrls); } catch { return []; }
+  })();
+
+  const timelineLabel: Record<string, string> = {
+    'ASAP': '🔴 ASAP',
+    'Within a week': '🟡 Within a week',
+    'Flexible': '🟢 Flexible',
+  };
+
   return (
     <div className="space-y-4">
+
+      {/* ── ONLINE REQUEST BANNER ─────────────────────────────── */}
+      {onlineRequest && (
+        <Card className="border-2 border-sky-200 bg-sky-50/60">
+          <CardHeader className="pb-2 pt-4">
+            <CardTitle className="text-xs font-semibold uppercase tracking-widest text-sky-700 flex items-center gap-1.5">
+              <Globe className="w-3.5 h-3.5" /> From Online Request
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pb-4 space-y-3">
+            {/* Service + Timeline row */}
+            <div className="flex flex-wrap gap-2">
+              <span className="inline-flex items-center gap-1 rounded-full bg-white border border-sky-200 px-2.5 py-1 text-xs font-semibold text-sky-800">
+                <Wrench size={11} /> {onlineRequest.serviceType}
+              </span>
+              {onlineRequest.timeline && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-white border border-sky-200 px-2.5 py-1 text-xs font-semibold text-sky-800">
+                  <ClockIcon size={11} /> {timelineLabel[onlineRequest.timeline] ?? onlineRequest.timeline}
+                </span>
+              )}
+              {onlineRequest.smsConsent && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-green-50 border border-green-200 px-2.5 py-1 text-xs font-semibold text-green-700">
+                  SMS OK
+                </span>
+              )}
+            </div>
+
+            {/* Description */}
+            {onlineRequest.description && (
+              <p className="text-sm text-foreground leading-relaxed bg-white rounded-lg border border-sky-100 px-3 py-2.5">
+                {onlineRequest.description}
+              </p>
+            )}
+
+            {/* Address */}
+            <p className="text-xs text-muted-foreground">
+              {[onlineRequest.street, onlineRequest.unit, onlineRequest.city, onlineRequest.state, onlineRequest.zip]
+                .filter(Boolean).join(', ')}
+            </p>
+
+            {/* Photos */}
+            {requestPhotos.length > 0 && (
+              <div>
+                <button
+                  className="flex items-center gap-1.5 text-xs font-semibold text-sky-700 mb-2 hover:text-sky-900 transition-colors"
+                  onClick={() => setPhotosExpanded(p => !p)}
+                >
+                  <Camera size={12} /> {requestPhotos.length} photo{requestPhotos.length !== 1 ? 's' : ''} submitted
+                  {photosExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                </button>
+                {photosExpanded && (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {requestPhotos.map((url, i) => (
+                      <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                        <img
+                          src={url}
+                          alt={`Photo ${i + 1}`}
+                          className="w-full h-28 object-cover rounded-lg border border-sky-200 hover:opacity-90 transition-opacity"
+                        />
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <p className="text-[10px] text-muted-foreground">
+              Submitted {new Date(onlineRequest.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ── STATUS SWITCHER ─────────────────────────────────── */}
       <Card className="border-2 border-primary/10">
