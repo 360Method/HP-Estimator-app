@@ -685,3 +685,11 @@
 - [x] Create useDbSync hook: runs once after auth, fetches all DB customers+opps, merges into EstimatorContext (DB wins for new records, local wins for existing to preserve unsaved work)
 - [x] Wire useDbSync into Home.tsx (AdminApp component) so it fires on authenticated load
 - [x] Add MERGE_DB_CUSTOMERS reducer action to EstimatorContext
+
+## Bug: Customer context lost when opening/closing opportunity
+
+- [x] Trace: find where activeCustomerId is cleared when opening a lead/estimate/job
+- [x] Fix: opening an opportunity always preserves activeCustomerId (SET_ACTIVE_OPPORTUNITY spreads state)
+- [x] Fix: "Profile" back-link returns to correct customer — root cause was RequestsPage calling navigateToTopLevel('customers') which cleared activeCustomerId
+- [x] Fix: breadcrumb now derives customer name from customer record (firstName+lastName), not jobInfo.client — MetricsBar and CustomerSection both fixed
+- [x] Fix: SET_SECTION only changes activeSection, never touches activeCustomerId — tabs are safe

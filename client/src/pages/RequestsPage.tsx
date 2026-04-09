@@ -128,7 +128,7 @@ interface RequestCardProps {
 function RequestCard({ req }: RequestCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { state, addCustomer, setActiveCustomer, navigateToTopLevel } = useEstimator();
+  const { state, addCustomer, setActiveCustomer } = useEstimator();
 
   const utils = trpc.useUtils();
 
@@ -150,8 +150,9 @@ function RequestCard({ req }: RequestCardProps) {
         const customer = dbToCustomer(dbCust, dbOpps);
         addCustomer(customer);
       }
+      // setActiveCustomer already sets activeSection='customer' and loads the profile.
+      // Do NOT call navigateToTopLevel here — it would clear activeCustomerId back to null.
       setActiveCustomer(customerId);
-      navigateToTopLevel("customers");
     } catch (e: any) {
       toast.error(e?.message ?? "Failed to load customer.");
     } finally {

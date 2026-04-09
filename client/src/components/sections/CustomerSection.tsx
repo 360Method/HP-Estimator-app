@@ -566,7 +566,15 @@ export default function CustomerSection() {
   const [addrLatLng, setAddrLatLng] = useState<{ lat?: number; lng?: number }>({}); // for map preview in form
 
   // ── Derived ──
-  const displayName = jobInfo.client || 'New Customer';
+  // Prefer the customer record's name fields so DB-synced customers always show
+  // the correct name, even when jobInfo.client hasn't been populated yet.
+  const customerFullName = activeCustomer
+    ? ([activeCustomer.firstName, activeCustomer.lastName].filter(Boolean).join(' ') ||
+       activeCustomer.displayName ||
+       activeCustomer.company ||
+       '')
+    : '';
+  const displayName = customerFullName || jobInfo.client || 'New Customer';
   const areaMap: Record<CustomerProfileTab, PipelineArea | null> = {
     profile: null, leads: 'lead', estimates: 'estimate', jobs: 'job',
     invoices: null, communication: null, attachments: null, notes: null,
