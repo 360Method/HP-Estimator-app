@@ -634,21 +634,21 @@
 - [x] Add `service_zip_codes` table to drizzle schema (id, zip, createdAt)
 - [x] Add `online_requests` table (id, zip, serviceType, description, timeline, photoUrls, firstName, lastName, phone, email, street, unit, city, state, smsConsent, customerId, leadId, createdAt)
 - [x] Run pnpm db:push to migrate new tables
-- [ ] Add tRPC public procedure: request.checkZip (check zip against service_zip_codes)
-- [ ] Add tRPC public procedure: request.submit (create/match customer, create lead, notifyOwner)
-- [ ] Add tRPC protected procedures: zipCodes.list, zipCodes.add, zipCodes.remove
-- [ ] Build 5-step booking wizard at /book route (mobile-first, HP dark green brand)
+- [x] Add tRPC public procedure: request.checkZip (check zip against service_zip_codes)
+- [x] Add tRPC public procedure: request.submit (create/match customer, create lead, notifyOwner)
+- [x] Add tRPC protected procedures: zipCodes.list, zipCodes.add, zipCodes.remove
+- [x] Build 5-step booking wizard at /book route (mobile-first, HP dark green brand)
   - Step 1: Zip code check with "not in area" fallback screen
   - Step 2: Service type (General Inquiry) + description (2000 char) + photo upload (up to 5, S3) + timeline picker (ASAP / Within a week / Flexible)
   - Step 3: Contact details (first, last, phone, email, address fields, zip pre-filled, SMS consent checkbox)
   - Step 4: Confirmation review summary
   - Step 5: Success → redirect to https://handypioneers.com/thankyou
-- [ ] Wire submit: match customer by email, link or create, create lead in "New Lead" stage
-- [ ] notifyOwner on new submission with customer name, zip, description preview
-- [ ] Add zip code management UI in Settings → Service Area
-- [ ] Add "Book Online" button/link in MetricsBar or nav pointing to /book
-- [ ] Register /book route in App.tsx (public, no auth required)
-- [ ] Write vitest tests for request.checkZip and request.submit
+- [x] Wire submit: match customer by email, link or create, create lead in "New Lead" stage
+- [x] notifyOwner on new submission with customer name, zip, description preview
+- [x] Add zip code management UI in Settings → Service Area
+- [x] Add "Book Online" button/link in MetricsBar or nav pointing to /book (Requests nav item + /book route)
+- [x] Register /book route in App.tsx (public, no auth required)
+- [x] Write vitest tests for request.checkZip and request.submit (8 tests passing)
 
 ## Online Booking Wizard & DB-Backed Lead Pipeline
 
