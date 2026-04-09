@@ -26,6 +26,7 @@ import MarketingPage from '@/pages/MarketingPage';
 import AdminLogin from '@/pages/AdminLogin';
 import AdminAccessDenied from '@/pages/AdminAccessDenied';
 import RequestsPage from '@/pages/RequestsPage';
+import OpportunityDetailsTab from '@/components/sections/OpportunityDetailsTab';
 
 export default function Home() {
   const { user, loading } = useAuth();
@@ -84,6 +85,7 @@ function AdminApp() {
       ) : (
         <div className="container py-6 max-w-4xl">
           {state.activeSection === 'customer' && <CustomerSection />}
+          {state.activeSection === 'opp-details' && <OpportunityDetailsTab />}
           {state.activeSection === 'sales' && <SalesSection />}
           {state.activeSection === 'calculator' && <CalculatorSection />}
           {state.activeSection === 'estimate' && <EstimateSection />}

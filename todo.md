@@ -693,3 +693,14 @@
 - [x] Fix: "Profile" back-link returns to correct customer — root cause was RequestsPage calling navigateToTopLevel('customers') which cleared activeCustomerId
 - [x] Fix: breadcrumb now derives customer name from customer record (firstName+lastName), not jobInfo.client — MetricsBar and CustomerSection both fixed
 - [x] Fix: SET_SECTION only changes activeSection, never touches activeCustomerId — tabs are safe
+
+## Feature: Opportunity Details Tab
+
+- [x] Audit: confirm sourceLeadId, sourceEstimateId, wonAt fields on Opportunity; confirm BUILDER_TABS and JOB_BUILDER_TABS arrays in MetricsBar
+- [x] Build OpportunityDetailsTab component: contact info (name, phone, email), address, opportunity title/description/notes, lineage chain
+- [x] Lineage chain: "Won from Lead #XXXX" → "Won from Estimate #XXXX" → current job — each item is a clickable link that opens the ancestor opportunity
+- [x] Approved estimate ancestors (wonAt set) open in read-only mode (locked banner shown on Details tab)
+- [x] Add 'opp-details' as first tab in BUILDER_TABS and JOB_BUILDER_TABS in MetricsBar
+- [x] Wire 'opp-details' section in Home.tsx routing → render OpportunityDetailsTab
+- [x] When opening an opportunity, default to 'opp-details' tab — updated CustomerSection, PipelinePage, JobsListPage
+- [x] Read-only mode: locked banner shown when viewing an approved estimate (wonAt set); ancestor navigation opens Details tab

@@ -112,11 +112,11 @@ export default function PipelinePage() {
       // Small delay to let the customer load into working state
       setTimeout(() => {
         setActiveOpportunity(id);
-        setSection(opp.area === 'job' ? 'job-details' : 'sales');
+        setSection('opp-details');
       }, 60);
     } else {
       setActiveOpportunity(id);
-      setSection(opp.area === 'job' ? 'job-details' : 'sales');
+      setSection('opp-details');
     }
   };
 

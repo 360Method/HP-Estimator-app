@@ -1196,11 +1196,7 @@ export default function CustomerSection() {
         onArchive={area === 'job' ? archiveJob : undefined}
         onOpen={(id) => {
           setActiveOpportunity(id);
-          if (area === 'lead' || area === 'estimate') {
-            setSection('sales');
-          } else {
-            setSection('job-details');
-          }
+          setSection('opp-details');
         }}
         compact
       />

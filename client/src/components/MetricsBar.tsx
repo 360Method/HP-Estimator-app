@@ -50,13 +50,15 @@ interface MetricsBarProps {
 }
 
 const BUILDER_TABS: { id: AppSection; icon: string; label: string; shortLabel: string }[] = [
-  { id: 'sales',      icon: '🛍', label: 'Sales View', shortLabel: 'Sales'    },
-  { id: 'calculator', icon: '🧮', label: 'Calculator',  shortLabel: 'Calc'     },
-  { id: 'estimate',   icon: '📄', label: 'Estimate',    shortLabel: 'Estimate' },
-  { id: 'invoice',    icon: '💳', label: 'Invoice',     shortLabel: 'Invoice'  },
+  { id: 'opp-details', icon: '📌', label: 'Details',    shortLabel: 'Details'  },
+  { id: 'sales',       icon: '🛍', label: 'Sales View', shortLabel: 'Sales'    },
+  { id: 'calculator',  icon: '🧮', label: 'Calculator', shortLabel: 'Calc'     },
+  { id: 'estimate',    icon: '📄', label: 'Estimate',   shortLabel: 'Estimate' },
+  { id: 'invoice',     icon: '💳', label: 'Invoice',    shortLabel: 'Invoice'  },
 ];
 
 const JOB_BUILDER_TABS: { id: AppSection; icon: string; label: string; shortLabel: string }[] = [
+  { id: 'opp-details', icon: '📌', label: 'Details',    shortLabel: 'Details'  },
   { id: 'job-details', icon: '📋', label: 'Job Details', shortLabel: 'Job'     },
   { id: 'calculator',  icon: '🧮', label: 'Calculator',  shortLabel: 'Calc'    },
   { id: 'estimate',    icon: '📄', label: 'Estimate',    shortLabel: 'Estimate'},

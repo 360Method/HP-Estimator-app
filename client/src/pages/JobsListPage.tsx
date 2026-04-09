@@ -168,12 +168,12 @@ export default function JobsListPage() {
       // After customer loads, open the opportunity
       setTimeout(() => {
         setActiveOpportunity(row.opp.id);
-        setSection('calculator');
+        setSection('opp-details');
       }, 50);
     } else {
       // Fallback: just open the opportunity in current context
       setActiveOpportunity(row.opp.id);
-      setSection('calculator');
+      setSection('opp-details');
     }
   };
 
