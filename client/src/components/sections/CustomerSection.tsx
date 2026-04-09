@@ -1293,8 +1293,8 @@ export default function CustomerSection() {
 
       {/* ── Tab Content ── */}
       <div className="max-w-6xl mx-auto px-4 py-6">
-        {activeCustomerTab === 'profile' && <ProfileTab />}
-        {(activeCustomerTab === 'leads' || activeCustomerTab === 'estimates' || activeCustomerTab === 'jobs') && <PipelineTab />}
+        {activeCustomerTab === 'profile' && ProfileTab()}
+        {(activeCustomerTab === 'leads' || activeCustomerTab === 'estimates' || activeCustomerTab === 'jobs') && PipelineTab()}
         {activeCustomerTab === 'invoices' && <InvoiceSection />}
         {activeCustomerTab === 'communication' && (
           <CommunicationTab customerId={activeCustomerId ?? ''} onOpenInbox={() => setSection('inbox' as any)} />
