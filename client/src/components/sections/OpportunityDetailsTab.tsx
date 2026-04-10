@@ -108,7 +108,9 @@ function LineageNode({ opp, isCurrent, isReadOnly, onClick }: LineageNodeProps) 
 // ── Main component ────────────────────────────────────────────
 
 export default function OpportunityDetailsTab() {
-  const { state, setActiveOpportunity, setSection, navigateToTopLevel } = useEstimator();
+  const { state, setActiveOpportunity, setSection, navigateToTopLevel, convertLeadToEstimate } = useEstimator();
+  // MUST be before any early return (Rules of Hooks)
+  const [showConvertModal, setShowConvertModal] = useState(false);
 
   const activeOpp = state.opportunities.find(o => o.id === state.activeOpportunityId);
   if (!activeOpp) return null;
