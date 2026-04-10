@@ -220,6 +220,8 @@ type Action =
       newEstimateId: string;
       newEstimateTitle: string;
       value: number;
+      transferNotes?: LeadNote[];
+      transferAttachments?: JobAttachment[];
     }
   | {
       type: 'CONVERT_ESTIMATE_TO_JOB';
@@ -935,6 +937,9 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
         sourceLeadId: action.leadId,
         archived: false,
         clientSnapshot: lead.clientSnapshot,
+        // Transfer lead data if user opted in
+        leadNotes: action.transferNotes ?? [],
+        leadAttachments: action.transferAttachments ?? [],
       };
 
       const event = makeActivity(
@@ -1508,7 +1513,7 @@ interface EstimatorContextValue {
   removeOpportunity: (id: string) => void;
   setPipelineArea: (area: PipelineArea) => void;
    // ── Lifecycle ──────────────────────────────────────────
-  convertLeadToEstimate: (leadId: string, estimateTitle: string, value: number) => void;
+  convertLeadToEstimate: (leadId: string, estimateTitle: string, value: number, transferNotes?: LeadNote[], transferAttachments?: JobAttachment[]) => void;
   convertEstimateToJob: (estimateId: string, jobTitle: string, value: number) => void;
   archiveJob: (jobId: string, value: number) => void;
   setActiveOpportunity: (id: string | null) => void;
@@ -1759,13 +1764,15 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'SET_CUSTOMER_TAB', payload: tab }), []);
 
   // ── Lifecycle callbacks ────────────────────────────────────
-  const convertLeadToEstimate = useCallback((leadId: string, estimateTitle: string, value: number) => {
+  const convertLeadToEstimate = useCallback((leadId: string, estimateTitle: string, value: number, transferNotes?: LeadNote[], transferAttachments?: JobAttachment[]) => {
     dispatch({
       type: 'CONVERT_LEAD_TO_ESTIMATE',
       leadId,
       newEstimateId: nanoid(8),
       newEstimateTitle: estimateTitle,
       value,
+      transferNotes,
+      transferAttachments,
     });
   }, []);
 

@@ -790,3 +790,11 @@
 - [x] PresentSection: apply phaseOverrides (customTitle, customDescription, customBullets) when rendering trade cards
 - [x] EstimateSection (customer PDF view): apply phaseOverrides to trade card title, description, and SOW bullets (displayTitle/displayDescription/displayBullets already in place)
 - [x] AI rewrite prompt: contractor-direct, no filler words, 1-2 sentences max per bullet, plain declarative language
+
+## Feature: Estimate/Job Details Tab — Source of Truth Upgrade
+- [x] Build EstimateDetailsPanel component: editable scope/notes, quick-contact (Call/SMS/Email), activity notes log, file attachments, linked lead banner, address map
+- [x] Add `updateOpportunityNotes` callback to EstimatorContext (saves notes field inline)
+- [x] Extend CONVERT_LEAD_TO_ESTIMATE reducer to accept transferNotes + transferAttachments flags
+- [x] Update ConversionModal: add transfer step asking user to copy lead notes/attachments into estimate
+- [x] Wire EstimateDetailsPanel into OpportunityDetailsTab for area === 'estimate' and area === 'job'
+- [x] Linked lead banner in EstimateDetailsPanel: shows source lead notes, photos, online request data (read-only)

@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import type { Opportunity } from '@/lib/types';
 import LeadNurturingPanel from '@/components/sections/LeadNurturingPanel';
+import EstimateDetailsPanel from '@/components/sections/EstimateDetailsPanel';
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -319,6 +320,9 @@ export default function OpportunityDetailsTab() {
 
       {/* Lead nurturing workspace — only shown for leads */}
       {activeOpp.area === 'lead' && <LeadNurturingPanel />}
+
+      {/* Estimate / job details panel — stage switcher, notes, attachments, contact */}
+      {(activeOpp.area === 'estimate' || activeOpp.area === 'job') && <EstimateDetailsPanel />}
 
       {/* Lineage chain */}
       {chain.length > 1 && (

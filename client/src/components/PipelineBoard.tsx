@@ -31,7 +31,7 @@ import {
   ArrowUpDown, MapPin, Search, User, UserPlus, Check, X as XIcon, ChevronRight,
   SendHorizonal,
 } from 'lucide-react';
-import { Opportunity, PipelineArea, OpportunityStage, Customer } from '@/lib/types';
+import { Opportunity, PipelineArea, OpportunityStage, Customer, LeadNote, JobAttachment } from '@/lib/types';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { nanoid } from 'nanoid';
 import { toast } from 'sonner';
@@ -90,7 +90,7 @@ export interface PipelineBoardProps {
   onAdd: (title: string, stage: OpportunityStage, value: number, notes: string, customerId?: string, customerDisplayName?: string) => void;
   onUpdate: (id: string, payload: Partial<Opportunity>) => void;
   onRemove: (id: string) => void;
-  onConvertToEstimate?: (id: string, title: string, value: number) => void;
+  onConvertToEstimate?: (id: string, title: string, value: number, transferNotes?: LeadNote[], transferAttachments?: JobAttachment[]) => void;
   onConvertToJob?: (id: string, title: string, value: number) => void;
   onArchive?: (id: string, value: number) => void;
   onOpen?: (id: string) => void;
@@ -109,7 +109,7 @@ function KanbanCard({
   stages: OpportunityStage[];
   onUpdate: (id: string, payload: Partial<Opportunity>) => void;
   onRemove: (id: string) => void;
-  onConvertToEstimate?: (id: string, title: string, value: number) => void;
+  onConvertToEstimate?: (id: string, title: string, value: number, transferNotes?: LeadNote[], transferAttachments?: JobAttachment[]) => void;
   onConvertToJob?: (id: string, title: string, value: number) => void;
   onArchive?: (id: string, value: number) => void;
   onOpen?: (id: string) => void;
@@ -274,8 +274,8 @@ function KanbanCard({
       {showConvertToEstimateModal && onConvertToEstimate && (
         <ConvertToEstimateModal
           lead={opp}
-          onConfirm={(title, value) => {
-            onConvertToEstimate(opp.id, title, value);
+          onConfirm={(title, value, transferNotes, transferAttachments) => {
+            onConvertToEstimate(opp.id, title, value, transferNotes, transferAttachments);
             setShowConvertToEstimateModal(false);
             toast.success('Lead converted to Estimate');
           }}
@@ -310,7 +310,7 @@ function KanbanColumn({
   stages: OpportunityStage[];
   onUpdate: (id: string, payload: Partial<Opportunity>) => void;
   onRemove: (id: string) => void;
-  onConvertToEstimate?: (id: string, title: string, value: number) => void;
+  onConvertToEstimate?: (id: string, title: string, value: number, transferNotes?: LeadNote[], transferAttachments?: JobAttachment[]) => void;
   onConvertToJob?: (id: string, title: string, value: number) => void;
   onArchive?: (id: string, value: number) => void;
   onOpen?: (id: string) => void;
@@ -381,7 +381,7 @@ function TableRow({
   stages: OpportunityStage[];
   onUpdate: (id: string, payload: Partial<Opportunity>) => void;
   onRemove: (id: string) => void;
-  onConvertToEstimate?: (id: string, title: string, value: number) => void;
+  onConvertToEstimate?: (id: string, title: string, value: number, transferNotes?: LeadNote[], transferAttachments?: JobAttachment[]) => void;
   onConvertToJob?: (id: string, title: string, value: number) => void;
   onArchive?: (id: string, value: number) => void;
   onOpen?: (id: string) => void;
@@ -490,8 +490,8 @@ function TableRow({
     {showConvertToEstimateModal && onConvertToEstimate && (
       <ConvertToEstimateModal
         lead={opp}
-        onConfirm={(title, value) => {
-          onConvertToEstimate(opp.id, title, value);
+        onConfirm={(title, value, transferNotes, transferAttachments) => {
+          onConvertToEstimate(opp.id, title, value, transferNotes, transferAttachments);
           setShowConvertToEstimateModal(false);
           toast.success('Lead converted to Estimate');
         }}

@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import type { LeadContactType, LeadStage, JobAttachment } from '@/lib/types';
 import { LEAD_STAGES } from '@/lib/types';
+import { ConvertToEstimateModal } from '@/components/ConversionModal';
 import { Globe, Camera, Clock as ClockIcon, Wrench, ChevronDown, ChevronUp } from 'lucide-react';
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -201,10 +202,9 @@ export default function LeadNurturingPanel() {
   };
 
   // ── Convert to estimate ───────────────────────────────────
+  const [showConvertModal, setShowConvertModal] = useState(false);
   const handleConvert = () => {
-    const title = activeOpp.title || `Estimate for ${activeCustomer?.displayName ?? 'Customer'}`;
-    convertLeadToEstimate(activeOpp.id, title, activeOpp.value ?? 0);
-    toast.success('Lead converted to Estimate');
+    setShowConvertModal(true);
   };
 
   // Parse photo URLs from online request
@@ -595,6 +595,19 @@ export default function LeadNurturingPanel() {
           )}
         </CardContent>
       </Card>
+
+      {/* Convert to Estimate modal with transfer prompt */}
+      {showConvertModal && (
+        <ConvertToEstimateModal
+          lead={activeOpp}
+          onConfirm={(title, value, transferNotes, transferAttachments) => {
+            convertLeadToEstimate(activeOpp.id, title, value, transferNotes, transferAttachments);
+            setShowConvertModal(false);
+            toast.success('Lead converted to Estimate');
+          }}
+          onClose={() => setShowConvertModal(false)}
+        />
+      )}
     </div>
   );
 }

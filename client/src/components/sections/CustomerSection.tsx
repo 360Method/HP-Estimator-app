@@ -18,7 +18,7 @@ import { useEstimator } from '@/contexts/EstimatorContext';
 import {
   JOB_TYPES, LEAD_STAGES, ESTIMATE_STAGES, JOB_STAGES,
   PipelineArea, OpportunityStage, LeadStage, EstimateStage, JobStage,
-  CustomerProfileTab, LeadSource,
+  CustomerProfileTab, LeadSource, LeadNote, JobAttachment,
 } from '@/lib/types';
 import {
   User, MapPin, Phone, Mail, Calendar, Briefcase, Hash, Building2,
@@ -231,7 +231,7 @@ function OpportunityCard({
   area: PipelineArea;
   onUpdate: (id: string, payload: Partial<{ stage: OpportunityStage; title: string; value: number; notes: string }>) => void;
   onRemove: (id: string) => void;
-  onConvertToEstimate?: (id: string, title: string, value: number) => void;
+  onConvertToEstimate?: (id: string, title: string, value: number, transferNotes?: LeadNote[], transferAttachments?: JobAttachment[]) => void;
   onConvertToJob?: (id: string, title: string, value: number) => void;
   onArchive?: (id: string, value: number) => void;
   onOpen?: (id: string) => void;
@@ -373,8 +373,8 @@ function OpportunityCard({
       {showConvertToEstimateModal && onConvertToEstimate && (
         <ConvertToEstimateModal
           lead={opp}
-          onConfirm={(title, value) => {
-            onConvertToEstimate(opp.id, title, value);
+          onConfirm={(title, value, transferNotes, transferAttachments) => {
+            onConvertToEstimate(opp.id, title, value, transferNotes, transferAttachments);
             setShowConvertToEstimateModal(false);
             toast.success('Lead converted to Estimate');
           }}
@@ -411,7 +411,7 @@ function PipelineAreaPanel({
   onAdd: (title: string, stage: OpportunityStage, value: number, notes: string) => void;
   onUpdate: (id: string, payload: Partial<{ stage: OpportunityStage; title: string; value: number; notes: string }>) => void;
   onRemove: (id: string) => void;
-  onConvertToEstimate?: (id: string, title: string, value: number) => void;
+  onConvertToEstimate?: (id: string, title: string, value: number, transferNotes?: LeadNote[], transferAttachments?: JobAttachment[]) => void;
   onConvertToJob?: (id: string, title: string, value: number) => void;
   onArchive?: (id: string, value: number) => void;
   onOpen?: (id: string) => void;
