@@ -861,3 +861,8 @@
 - [x] Auto-title: intake modal title field pre-populated with "Lead — {name}" / "Estimate — {name}" / "Job — {name}" when opened from customer profile
 - [x] Post-save navigation: after saving from customer-profile Add flow, navigate directly to new opportunity detail view
 - [x] Global + New pre-fill: when estimator is inside a customer profile, global + New → Lead/Estimate/Job opens intake modal pre-filled with active customer
+
+## Feature: Opportunity Detail UX
+- [x] Back-to-customer breadcrumb in opportunity detail view (opp-details section)
+- [x] Duplicate opportunity warning in intake modals when opened from customer profile
+- [x] Convert to Estimate button in lead detail view (pre-fills estimate modal with lead line items + notes)

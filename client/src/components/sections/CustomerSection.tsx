@@ -566,6 +566,7 @@ export default function CustomerSection() {
   const [editingContact, setEditingContact] = useState(false);
   // Intake modal state — opened from PipelineTab Add button
   const [intakeModal, setIntakeModal] = useState<'lead' | 'estimate' | 'job' | null>(null);
+  const [showDuplicateWarning, setShowDuplicateWarning] = useState<{ area: 'lead' | 'estimate' | 'job'; existing: string } | null>(null);
   // Local draft for contact info — prevents global dispatch on every keystroke
   const [contactDraft, setContactDraft] = useState({ client: '', companyName: '', phone: '', email: '' });
   // Sync draft from global state when entering edit mode
@@ -1237,7 +1238,21 @@ export default function CustomerSection() {
           setSection('opp-details');
         }}
         customerName={displayName}
-        onOpenIntakeModal={() => setIntakeModal(area === 'lead' ? 'lead' : area === 'estimate' ? 'estimate' : 'job')}
+        onOpenIntakeModal={() => {
+          const targetArea = area === 'lead' ? 'lead' : area === 'estimate' ? 'estimate' : 'job';
+          // Check for existing open (non-archived) opportunities in this area for this customer
+          const existing = opportunities.find(o =>
+            o.area === targetArea &&
+            !o.archived &&
+            (o.clientSnapshot?.client === (customerFullName || activeCustomer?.displayName) ||
+             (activeCustomer && o.clientSnapshot?.client === (activeCustomer.displayName || [activeCustomer.firstName, activeCustomer.lastName].filter(Boolean).join(' '))))
+          );
+          if (existing) {
+            setShowDuplicateWarning({ area: targetArea, existing: existing.title });
+          } else {
+            setIntakeModal(targetArea);
+          }
+        }}
         compact
       />
     );
@@ -1496,6 +1511,43 @@ export default function CustomerSection() {
         prefill={intakePrefill}
         onSaved={(oppId) => { setIntakeModal(null); setActiveOpportunity(oppId); setSection('opp-details'); }}
       />
+    )}
+
+    {/* Duplicate opportunity warning */}
+    {showDuplicateWarning && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <div className="bg-background border border-border rounded-xl shadow-xl p-6 max-w-sm w-full mx-4">
+          <div className="flex items-start gap-3 mb-4">
+            <div className="flex-shrink-0 w-9 h-9 rounded-full bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center">
+              <span className="text-amber-600 text-lg">⚠</span>
+            </div>
+            <div>
+              <p className="font-semibold text-foreground">Existing {showDuplicateWarning.area} found</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                <span className="font-medium text-foreground">&ldquo;{showDuplicateWarning.existing}&rdquo;</span> is already open for this customer. Create another anyway?
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2 justify-end">
+            <button
+              onClick={() => setShowDuplicateWarning(null)}
+              className="px-4 py-2 text-sm rounded-lg border border-border hover:bg-muted transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                const area = showDuplicateWarning.area;
+                setShowDuplicateWarning(null);
+                setIntakeModal(area);
+              }}
+              className="px-4 py-2 text-sm rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+            >
+              Create Anyway
+            </button>
+          </div>
+        </div>
+      </div>
     )}
     </>
   );

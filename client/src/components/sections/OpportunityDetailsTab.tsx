@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import {
   User, Phone, Mail, MapPin, FileText, Briefcase,
-  Star, ChevronRight, Lock, ExternalLink, Calendar, DollarSign,
+  Star, ChevronRight, Lock, ExternalLink, Calendar, DollarSign, ArrowLeft,
 } from 'lucide-react';
 import type { Opportunity } from '@/lib/types';
 import LeadNurturingPanel from '@/components/sections/LeadNurturingPanel';
@@ -108,7 +108,7 @@ function LineageNode({ opp, isCurrent, isReadOnly, onClick }: LineageNodeProps) 
 // ── Main component ────────────────────────────────────────────
 
 export default function OpportunityDetailsTab() {
-  const { state, setActiveOpportunity, setSection } = useEstimator();
+  const { state, setActiveOpportunity, setSection, navigateToTopLevel } = useEstimator();
 
   const activeOpp = state.opportunities.find(o => o.id === state.activeOpportunityId);
   if (!activeOpp) return null;
@@ -184,8 +184,33 @@ export default function OpportunityDetailsTab() {
 
   const isApproved = !!activeOpp.wonAt;
 
+  // Back-to-customer: navigate to the customer profile if we know the active customer
+  const handleBackToCustomer = () => {
+    if (state.activeCustomerId) {
+      setActiveOpportunity(null);
+      setSection('customer');
+    } else {
+      navigateToTopLevel('customers');
+    }
+  };
+
+  const backLabel = activeCustomer
+    ? ([activeCustomer.firstName, activeCustomer.lastName].filter(Boolean).join(' ') || activeCustomer.displayName || activeCustomer.company || 'Customer')
+    : 'Customer';
+
   return (
     <div className="container py-6 max-w-3xl space-y-6">
+
+      {/* Back-to-customer breadcrumb */}
+      {(state.activeCustomerId || activeCustomer) && (
+        <button
+          onClick={handleBackToCustomer}
+          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors -mt-2"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          <span>Back to <span className="font-medium text-foreground">{backLabel}</span></span>
+        </button>
+      )}
 
       {/* Approved / locked banner */}
       {isApproved && (
@@ -357,6 +382,18 @@ export default function OpportunityDetailsTab() {
             })}
           </CardContent>
         </Card>
+      )}
+
+      {/* Convert to Estimate modal */}
+      {showConvertModal && activeOpp.area === 'lead' && (
+        <ConvertToEstimateModal
+          lead={activeOpp}
+          onConfirm={(title, value, transferNotes, transferAttachments) => {
+            convertLeadToEstimate(activeOpp.id, title, value, transferNotes, transferAttachments);
+            setShowConvertModal(false);
+          }}
+          onClose={() => setShowConvertModal(false)}
+        />
       )}
 
     </div>
