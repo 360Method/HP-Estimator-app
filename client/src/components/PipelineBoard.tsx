@@ -96,6 +96,8 @@ export interface PipelineBoardProps {
   onOpen?: (id: string) => void;
   customerName?: string;
   compact?: boolean;
+  /** When provided, clicking Add opens the full intake modal instead of the inline form */
+  onOpenIntakeModal?: () => void;
 }
 
 // ── Kanban Card (draggable) ───────────────────────────────────
@@ -819,7 +821,7 @@ function CustomerPickerModal({
 export default function PipelineBoard({
   area, stages, opportunities, onAdd, onUpdate, onRemove,
   onConvertToEstimate, onConvertToJob, onArchive, onOpen,
-  customerName, compact = false,
+  customerName, compact = false, onOpenIntakeModal,
 }: PipelineBoardProps) {
   const [view, setView] = useState<'kanban' | 'table'>('kanban');
   const [showAdd, setShowAdd] = useState(false);
@@ -949,7 +951,10 @@ export default function PipelineBoard({
 
           <button
             onClick={() => {
-              if (customerName) {
+              if (onOpenIntakeModal) {
+                // Customer-profile context: open full intake modal pre-filled with this customer
+                onOpenIntakeModal();
+              } else if (customerName) {
                 // Already inside a customer context — skip picker
                 setShowAdd(s => !s);
               } else {

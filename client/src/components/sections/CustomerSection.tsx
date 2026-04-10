@@ -13,6 +13,9 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { ConvertToEstimateModal, ConvertToJobModal } from '@/components/ConversionModal';
+import NewLeadModal from '@/components/intakes/NewLeadModal';
+import NewEstimateModal from '@/components/intakes/NewEstimateModal';
+import NewJobModal from '@/components/intakes/NewJobModal';
 import { trpc } from '@/lib/trpc';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import {
@@ -561,6 +564,8 @@ export default function CustomerSection() {
 
   const [newTag, setNewTag] = useState('');
   const [editingContact, setEditingContact] = useState(false);
+  // Intake modal state — opened from PipelineTab Add button
+  const [intakeModal, setIntakeModal] = useState<'lead' | 'estimate' | 'job' | null>(null);
   // Local draft for contact info — prevents global dispatch on every keystroke
   const [contactDraft, setContactDraft] = useState({ client: '', companyName: '', phone: '', email: '' });
   // Sync draft from global state when entering edit mode
@@ -1197,6 +1202,18 @@ export default function CustomerSection() {
   );
 
   // ── Pipeline tab content ──
+  // Build prefill object from the active customer for intake modals
+  const intakePrefill = activeCustomer ? {
+    id: activeCustomer.id,
+    displayName: customerFullName || activeCustomer.displayName,
+    phone: activeCustomer.mobilePhone || activeCustomer.homePhone || activeCustomer.workPhone,
+    email: activeCustomer.email,
+    address: activeCustomer.street,
+    city: activeCustomer.city,
+    state: activeCustomer.state,
+    zip: activeCustomer.zip,
+  } : undefined;
+
   const PipelineTab = () => {
     const area = areaMap[activeCustomerTab] as PipelineArea;
     const areaStages: OpportunityStage[] =
@@ -1219,6 +1236,8 @@ export default function CustomerSection() {
           setActiveOpportunity(id);
           setSection('opp-details');
         }}
+        customerName={displayName}
+        onOpenIntakeModal={() => setIntakeModal(area === 'lead' ? 'lead' : area === 'estimate' ? 'estimate' : 'job')}
         compact
       />
     );
@@ -1235,6 +1254,7 @@ export default function CustomerSection() {
   // (CommunicationTab and CustomerAttachmentsTab are defined as top-level components below CustomerSection)
 
   return (
+    <>
     <div className="space-y-0">
 
       {/* ── Customer Header ── */}
@@ -1454,6 +1474,18 @@ export default function CustomerSection() {
         )}
       </div>
     </div>
+
+    {/* ── Intake modals opened from customer profile Add button ── */}
+    {intakeModal === 'lead' && intakePrefill && (
+      <NewLeadModal onClose={() => setIntakeModal(null)} prefill={intakePrefill} />
+    )}
+    {intakeModal === 'estimate' && intakePrefill && (
+      <NewEstimateModal onClose={() => setIntakeModal(null)} prefill={intakePrefill} />
+    )}
+    {intakeModal === 'job' && intakePrefill && (
+      <NewJobModal onClose={() => setIntakeModal(null)} prefill={intakePrefill} />
+    )}
+    </>
   );
 }
 

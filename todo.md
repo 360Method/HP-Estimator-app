@@ -852,3 +852,7 @@
 - [x] Add portal.resendInvoice procedure: re-generate magic link + resend email
 - [x] CustomerPortalTab: show "Viewed" badge with timestamp when viewedAt is set
 - [x] CustomerPortalTab: add Resend button on each estimate and invoice card
+
+## Feature: Customer Profile — Pre-fill Add Modals
+- [x] PipelineBoard Add button inside CustomerSection: open NewLeadModal / NewEstimateModal / NewJobModal pre-filled with active customer (skip customer search gate)
+- [x] Pass activeCustomer as prefill from PipelineTab → PipelineBoard → intake modal
