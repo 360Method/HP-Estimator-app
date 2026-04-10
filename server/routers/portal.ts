@@ -9,6 +9,7 @@ import { router, publicProcedure, protectedProcedure } from "../_core/trpc";
 import {
   findPortalCustomerByEmail,
   findPortalCustomerById,
+  findPortalCustomerByHpId,
   upsertPortalCustomer,
   createPortalToken,
   findValidPortalToken,
@@ -717,6 +718,29 @@ export const portalRouter = router({
       }
 
       return { sent: true, portalCustomerId: customer.id };
+    }),
+
+  /** Customer-facing: unified document list (estimates + invoices) */
+  getDocuments: portalProcedure.query(async ({ ctx }) => {
+    const [estimates, invoices] = await Promise.all([
+      getPortalEstimatesByCustomer(ctx.portalCustomer.id),
+      getPortalInvoicesByCustomer(ctx.portalCustomer.id),
+    ]);
+    return { estimates, invoices };
+  }),
+
+  /** HP-side: get all portal data for a customer by HP customer ID */
+  getCustomerPortalData: hpProcedure
+    .input(z.object({ hpCustomerId: z.string() }))
+    .query(async ({ input }) => {
+      const portalCustomer = await findPortalCustomerByHpId(input.hpCustomerId);
+      if (!portalCustomer) return { customer: null, estimates: [], invoices: [], appointments: [] };
+      const [estimates, invoices, appointments] = await Promise.all([
+        getPortalEstimatesByCustomer(portalCustomer.id),
+        getPortalInvoicesByCustomer(portalCustomer.id),
+        getPortalAppointmentsByCustomer(portalCustomer.id),
+      ]);
+      return { customer: portalCustomer, estimates, invoices, appointments };
     }),
 });
 

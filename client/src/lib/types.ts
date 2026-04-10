@@ -226,7 +226,7 @@ export interface ChangeOrder {
   rejectedReason?: string;
 }
 
-export type CustomerProfileTab = 'profile' | 'leads' | 'estimates' | 'jobs' | 'invoices' | 'communication' | 'attachments' | 'notes';
+export type CustomerProfileTab = 'profile' | 'leads' | 'estimates' | 'jobs' | 'invoices' | 'communication' | 'attachments' | 'notes' | 'portal';
 
 export interface JobInfo {
   client: string;

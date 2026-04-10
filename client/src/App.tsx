@@ -20,6 +20,7 @@ import PortalInvoiceDetail from "./pages/portal/PortalInvoiceDetail";
 import PortalEstimates from "./pages/portal/PortalEstimates";
 import PortalEstimateDetail from "./pages/portal/PortalEstimateDetail";
 import PortalGallery from "./pages/portal/PortalGallery";
+import PortalDocuments from "./pages/portal/PortalDocuments";
 import PortalWallet from "./pages/portal/PortalWallet";
 import PortalReferral from "./pages/portal/PortalReferral";
 import PortalMessages from "./pages/portal/PortalMessages";
@@ -60,6 +61,7 @@ function Router() {
       <Route path="/portal/invoices" component={PortalInvoices} />
       <Route path="/portal/estimates/:id" component={PortalEstimateDetail} />
       <Route path="/portal/estimates" component={PortalEstimates} />
+      <Route path="/portal/documents" component={PortalDocuments} />
       <Route path="/portal/gallery" component={PortalGallery} />
       <Route path="/portal/wallet" component={PortalWallet} />
       <Route path="/portal/referral" component={PortalReferral} />

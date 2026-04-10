@@ -830,3 +830,13 @@
 ## Bug Fixes: Mobile UI — Estimate Header + Modal Scroll
 - [x] PresentSection header: button text overflows outside button bounds on mobile — fix with flex-shrink-0, whitespace-nowrap, and responsive sizing
 - [x] EstimateApprovedModal invoice confirmation step: no scroll — add overflow-y-auto to modal body so user can scroll full content
+
+## Feature: Customer Portal Document Flow
+- [ ] estimate.send: upsert portal customer + create portal estimate record + magic-link CTA to specific estimate
+- [ ] gmail.sendInvoice: upsert portal customer + create portal invoice record + magic-link CTA in email
+- [ ] PortalLogin: honor ?redirect= param after token verification (navigate to redirect path, not /portal/appointments)
+- [ ] portal.getCustomerPortalData HP-side procedure: return portal estimates + invoices by hpCustomerId
+- [ ] CustomerProfileTab type: add 'portal' value
+- [ ] CustomerSection: add 'portal' tab showing portal estimates, invoices, and attachments for the customer
+- [ ] PortalLayout sidebar: add Documents nav item
+- [ ] PortalDocuments page: list all estimates + invoices shared with customer, with status badges and action buttons

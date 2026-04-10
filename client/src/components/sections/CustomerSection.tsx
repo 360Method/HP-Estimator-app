@@ -51,6 +51,7 @@ const CUSTOMER_TABS: { key: CustomerProfileTab; label: string; icon: React.React
   { key: 'communication', label: 'Communication', icon: <MessageSquare size={13} /> },
   { key: 'attachments', label: 'Attachments', icon: <Paperclip size={13} /> },
   { key: 'notes', label: 'Notes', icon: <Edit3 size={13} /> },
+  { key: 'portal', label: 'Portal', icon: <ExternalLink size={13} /> },
 ];
 
 const STAGE_COLORS: Record<string, string> = {
@@ -597,7 +598,7 @@ export default function CustomerSection() {
   const displayName = customerFullName || jobInfo.client || 'New Customer';
   const areaMap: Record<CustomerProfileTab, PipelineArea | null> = {
     profile: null, leads: 'lead', estimates: 'estimate', jobs: 'job',
-    invoices: null, communication: null, attachments: null, notes: null,
+    invoices: null, communication: null, attachments: null, notes: null, portal: null,
   };
 
   const handleTabClick = (tab: CustomerProfileTab) => {
@@ -1343,6 +1344,9 @@ export default function CustomerSection() {
         {activeCustomerTab === 'attachments' && (
           <CustomerAttachmentsTab customerId={activeCustomerId ?? ''} />
         )}
+        {activeCustomerTab === 'portal' && (
+          <CustomerPortalTab customerId={activeCustomerId ?? ''} />
+        )}
         {activeCustomerTab === 'attachments_LEGACY_UNUSED' && (
           <div className="space-y-4">
             {/* Signed Estimate Copies */}
@@ -1573,6 +1577,140 @@ function CustomerAttachmentsTab({ customerId }: { customerId: string }) {
               </button>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Customer Portal Tab ──────────────────────────────────────
+function CustomerPortalTab({ customerId }: { customerId: string }) {
+  const { data, isLoading } = trpc.portal.getCustomerPortalData.useQuery(
+    { hpCustomerId: customerId },
+    { enabled: !!customerId }
+  );
+
+  if (isLoading) {
+    return <div className="py-16 text-center text-muted-foreground text-sm">Loading portal data…</div>;
+  }
+
+  if (!data?.customer) {
+    return (
+      <div className="text-center py-16 text-muted-foreground border-2 border-dashed border-border rounded-xl">
+        <ExternalLink className="w-8 h-8 mx-auto mb-3 opacity-30" />
+        <div className="text-base font-semibold mb-1">No Portal Account Yet</div>
+        <div className="text-sm">Send an estimate or invoice to this customer to create their portal.</div>
+      </div>
+    );
+  }
+
+  const { customer, estimates, invoices, appointments } = data;
+  const portalBase = 'https://client.handypioneers.com';
+
+  return (
+    <div className="space-y-5">
+      {/* Portal customer header */}
+      <div className="rounded-xl border bg-card p-4 flex items-center gap-4">
+        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+          <User size={18} className="text-primary" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-sm truncate">{customer.name}</p>
+          <p className="text-xs text-muted-foreground truncate">{customer.email}</p>
+        </div>
+        <a
+          href={`${portalBase}/portal/estimates`}
+          target="_blank"
+          rel="noreferrer"
+          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-semibold hover:bg-primary/90 transition-colors"
+        >
+          <ExternalLink size={12} /> Open Portal
+        </a>
+      </div>
+
+      {/* Estimates */}
+      <div>
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+          Estimates ({estimates.length})
+        </h3>
+        {estimates.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No estimates sent to portal yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {estimates.map((est: any) => (
+              <div key={est.id} className="rounded-xl border bg-card p-3 flex items-center gap-3">
+                <FileText size={16} className="text-muted-foreground shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{est.estimateNumber} — {est.title}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Sent {est.sentAt ? fmtDate(new Date(est.sentAt).toISOString()) : '—'} ·{' '}
+                    {est.viewedAt ? 'Viewed' : 'Not viewed'}
+                  </p>
+                </div>
+                <Badge className={
+                  est.status === 'approved' ? 'bg-emerald-100 text-emerald-800' :
+                  est.status === 'declined' ? 'bg-red-100 text-red-700' :
+                  'bg-sky-100 text-sky-700'
+                }>
+                  {est.status}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Invoices */}
+      <div>
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+          Invoices ({invoices.length})
+        </h3>
+        {invoices.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No invoices sent to portal yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {invoices.map((inv: any) => (
+              <div key={inv.id} className="rounded-xl border bg-card p-3 flex items-center gap-3">
+                <DollarSign size={16} className="text-muted-foreground shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{inv.invoiceNumber} — {inv.jobTitle ?? inv.type}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {fmtDollar((inv.amountDue ?? 0) / 100)} ·{' '}
+                    Due {inv.dueDate ? fmtDate(new Date(inv.dueDate).toISOString()) : '—'}
+                  </p>
+                </div>
+                <Badge className={
+                  inv.status === 'paid' ? 'bg-emerald-100 text-emerald-800' :
+                  inv.status === 'due' ? 'bg-orange-100 text-orange-700' :
+                  'bg-sky-100 text-sky-700'
+                }>
+                  {inv.status}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Appointments */}
+      {appointments.length > 0 && (
+        <div>
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+            Appointments ({appointments.length})
+          </h3>
+          <div className="space-y-2">
+            {appointments.map((apt: any) => (
+              <div key={apt.id} className="rounded-xl border bg-card p-3 flex items-center gap-3">
+                <Calendar size={16} className="text-muted-foreground shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{apt.title}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {apt.startTime ? fmtDate(new Date(apt.startTime).toISOString()) : '—'}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

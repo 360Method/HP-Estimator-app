@@ -19,9 +19,10 @@ export default function PortalLogin() {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
 
-  // Check for token in URL
+  // Check for token and redirect in URL
   const params = new URLSearchParams(window.location.search);
   const token = params.get("token");
+  const redirectPath = params.get("redirect") || "/portal/appointments";
 
   const requestMagicLink = trpc.portal.sendMagicLink.useMutation({
     onSuccess: () => setSent(true),
@@ -30,7 +31,7 @@ export default function PortalLogin() {
 
   const validateToken = trpc.portal.verifyToken.useMutation({
     onSuccess: () => {
-      navigate("/portal/appointments");
+      navigate(redirectPath);
     },
     onError: (err) => {
       toast.error(err.message || "Invalid or expired link. Please request a new one.");

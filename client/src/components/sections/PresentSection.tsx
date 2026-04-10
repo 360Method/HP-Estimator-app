@@ -818,6 +818,7 @@ export default function PresentSection() {
           lineItemsText={`Estimate ${jobInfo.jobNumber} — Total: $${totals.totalPrice.toLocaleString()}`}
           defaultEmail={activeCustomer?.email || jobInfo.email || ''}
           defaultPhone={activeCustomer?.mobilePhone || jobInfo.phone || ''}
+          hpCustomerId={activeCustomer?.id}
           onClose={() => setShowSendDialog(false)}
         />
       )}

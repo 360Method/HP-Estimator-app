@@ -273,6 +273,7 @@ function InvoiceCard({
     sendInvoiceMutation.mutate({
       toEmail: email,
       toName: customer?.firstName ? `${customer.firstName} ${customer.lastName ?? ''}`.trim() : undefined,
+      hpCustomerId: customer?.id,
       invoiceNumber: invoice.invoiceNumber,
       invoiceType: invoice.type,
       invoiceTotal: invoice.total,

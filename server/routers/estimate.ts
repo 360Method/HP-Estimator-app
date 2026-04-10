@@ -4,7 +4,7 @@ import { publicProcedure, protectedProcedure, router } from "../_core/trpc";
 import { invokeLLM } from "../_core/llm";
 import { sendEmail } from "../gmail";
 import { sendSms, isTwilioConfigured } from "../twilio";
-import { createPortalToken } from "../portalDb";
+import { createPortalToken, upsertPortalCustomer, createPortalEstimate, generateReferralCode } from "../portalDb";
 
 // ─── Catalog: all line items the AI can reference ──────────────────────────
 const CATALOG = [
@@ -363,23 +363,48 @@ export const estimateRouter = router({
         lineItemsText: z.string().optional(),
         portalUrl: z.string().optional(),
         customerId: z.number().optional(),
+        hpCustomerId: z.string().optional(),
         origin: z.string().optional(),
       })
     )
     .mutation(async ({ input }) => {
       const results: { email?: string; sms?: string; errors: string[] } = { errors: [] };
 
-      // Auto-generate portalUrl using the customer portal base URL
+      // ── Portal: upsert customer + create estimate record + magic link ──────
       let portalUrl = input.portalUrl;
-      if (!portalUrl && input.customerId) {
+      if (input.toEmail) {
         try {
-          const token = randomBytes(32).toString('hex');
-          const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
-          await createPortalToken({ customerId: input.customerId, token, expiresAt });
-          const portalBase = process.env.PORTAL_BASE_URL ?? 'https://client.handypioneers.com';
-          portalUrl = `${portalBase}/portal/auth?token=${token}&redirect=/portal/estimates`;
+          const portalCustomer = await upsertPortalCustomer({
+            email: input.toEmail.toLowerCase().trim(),
+            name: input.customerName,
+            hpCustomerId: input.hpCustomerId,
+            referralCode: await generateReferralCode(input.customerName),
+          });
+          if (portalCustomer) {
+            const depositPct = input.depositAmount && input.totalPrice > 0
+              ? Math.round((input.depositAmount / input.totalPrice) * 100)
+              : 50;
+            const portalEst = await createPortalEstimate({
+              customerId: portalCustomer.id,
+              estimateNumber: input.estimateNumber,
+              title: input.jobTitle,
+              status: 'sent',
+              totalAmount: Math.round(input.totalPrice * 100),
+              depositAmount: Math.round((input.depositAmount ?? input.totalPrice * 0.5) * 100),
+              depositPercent: depositPct,
+              lineItemsJson: input.lineItemsText ? JSON.stringify([{ description: input.lineItemsText }]) : undefined,
+              scopeOfWork: input.scopeSummary,
+              expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+              sentAt: new Date(),
+            });
+            const token = randomBytes(32).toString('hex');
+            const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+            await createPortalToken({ customerId: portalCustomer.id, token, expiresAt });
+            const portalBase = process.env.PORTAL_BASE_URL ?? 'https://client.handypioneers.com';
+            portalUrl = `${portalBase}/portal/auth?token=${token}&redirect=/portal/estimates/${portalEst?.id}`;
+          }
         } catch (e) {
-          console.warn('[estimate.send] Could not generate portal token:', e);
+          console.warn('[estimate.send] Portal upsert failed (non-fatal):', e);
         }
       }
       const fmt = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

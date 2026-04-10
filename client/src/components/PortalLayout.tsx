@@ -24,6 +24,7 @@ import {
   LogOut,
   Menu,
   X,
+  FolderOpen,
 } from "lucide-react";
 
 const HP_LOGO = "https://cdn.manus.space/webdev-static-assets/hp-logo.png";
@@ -39,6 +40,7 @@ const mainNav: NavItem[] = [
   { label: "Appointments", path: "/portal/appointments", icon: <Calendar className="w-4 h-4" /> },
   { label: "Invoices", path: "/portal/invoices", icon: <FileText className="w-4 h-4" /> },
   { label: "Estimates", path: "/portal/estimates", icon: <ClipboardList className="w-4 h-4" /> },
+  { label: "Documents", path: "/portal/documents", icon: <FolderOpen className="w-4 h-4" /> },
   { label: "Gallery", path: "/portal/gallery", icon: <Images className="w-4 h-4" /> },
 ];
 
