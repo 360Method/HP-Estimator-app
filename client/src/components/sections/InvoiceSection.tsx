@@ -718,6 +718,7 @@ function InvoiceCard({
         invoice={invoice}
         customer={customer}
         opportunity={opportunity}
+        onCollectPayment={() => { setExpanded(true); setShowManual(true); }}
       />
     </Card>
   );
@@ -730,12 +731,14 @@ function CustomerInvoiceViewModal({
   invoice,
   customer,
   opportunity,
+  onCollectPayment,
 }: {
   open: boolean;
   onClose: () => void;
   invoice: Invoice;
   customer: Customer | undefined;
   opportunity: Opportunity | null;
+  onCollectPayment?: () => void;
 }) {
   const isPaid = invoice.status === 'paid';
   const balance = invoice.balance;
@@ -751,7 +754,6 @@ function CustomerInvoiceViewModal({
             <Eye className="w-4 h-4 text-blue-600" />
             Customer Invoice View
           </DialogTitle>
-          <p className="text-xs text-muted-foreground">This is what the customer sees — no internal cost or margin data.</p>
         </DialogHeader>
 
         <div className="space-y-5 py-2">
@@ -896,8 +898,16 @@ function CustomerInvoiceViewModal({
           )}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2">
           <Button variant="outline" onClick={onClose}>Close</Button>
+          {!isPaid && balance > 0 && onCollectPayment && (
+            <Button
+              className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+              onClick={() => { onClose(); onCollectPayment(); }}
+            >
+              <CreditCard className="w-4 h-4" /> Collect Payment — {fmt(balance)}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
