@@ -5,6 +5,7 @@
 // links. Approved estimates open in read-only mode.
 // ============================================================
 
+import { useState } from 'react';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,11 +13,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import {
   User, Phone, Mail, MapPin, FileText, Briefcase,
-  Star, ChevronRight, Lock, ExternalLink, Calendar, DollarSign, ArrowLeft,
+  Star, ChevronRight, Lock, ExternalLink, Calendar, DollarSign, ArrowLeft, ArrowRight,
 } from 'lucide-react';
 import type { Opportunity } from '@/lib/types';
 import LeadNurturingPanel from '@/components/sections/LeadNurturingPanel';
 import EstimateDetailsPanel from '@/components/sections/EstimateDetailsPanel';
+import { ConvertToEstimateModal } from '@/components/ConversionModal';
 
 // ── Helpers ──────────────────────────────────────────────────
 
