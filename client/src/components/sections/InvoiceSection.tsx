@@ -28,7 +28,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
   CreditCard, DollarSign, CheckCircle2, Clock, AlertCircle, FileText,
-  Plus, Printer, Send, ChevronRight, Banknote, Smartphone, PenLine, ShieldCheck,
+  Plus, Printer, Send, ChevronRight, Banknote, Smartphone, PenLine, ShieldCheck, Eye,
 } from 'lucide-react';
 
 // ── Clark County WA Tax Rates (WA DOR Q2 2026) ───────────────────
@@ -250,6 +250,7 @@ function InvoiceCard({
   const [showPayPal, setShowPayPal] = useState(false);
   const [showManual, setShowManual] = useState(false);
   const [showPayPrompt, setShowPayPrompt] = useState(false);
+  const [showCustomerView, setShowCustomerView] = useState(false);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
 
@@ -644,7 +645,7 @@ function InvoiceCard({
           )}
 
           {/* Actions */}
-          <div className="flex gap-2 pt-1">
+          <div className="flex flex-wrap gap-2 pt-1">
             <Button
               size="sm"
               variant="ghost"
@@ -664,6 +665,14 @@ function InvoiceCard({
                 ? <span className="animate-spin w-3 h-3 border border-current border-t-transparent rounded-full" />
                 : <Send className="w-3 h-3" />}
               {invoice.status === 'sent' ? 'Resend' : 'Send to Customer'}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-xs gap-1 border-blue-300 text-blue-700 hover:bg-blue-50"
+              onClick={() => setShowCustomerView(true)}
+            >
+              <Eye className="w-3 h-3" /> Customer View
             </Button>
           </div>
 
@@ -701,7 +710,197 @@ function InvoiceCard({
         onClose={() => setShowManual(false)}
         onRecord={handleManualPayment}
       />
+
+      {/* Customer-facing invoice view modal */}
+      <CustomerInvoiceViewModal
+        open={showCustomerView}
+        onClose={() => setShowCustomerView(false)}
+        invoice={invoice}
+        customer={customer}
+        opportunity={opportunity}
+      />
     </Card>
+  );
+}
+
+// ── Customer-Facing Invoice View Modal ───────────────────────
+function CustomerInvoiceViewModal({
+  open,
+  onClose,
+  invoice,
+  customer,
+  opportunity,
+}: {
+  open: boolean;
+  onClose: () => void;
+  invoice: Invoice;
+  customer: Customer | undefined;
+  opportunity: Opportunity | null;
+}) {
+  const isPaid = invoice.status === 'paid';
+  const balance = invoice.balance;
+  const companyName = 'Handy Pioneers';
+  const companyPhone = '(360) 555-0100';
+  const companyEmail = 'info@handypioneers.com';
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Eye className="w-4 h-4 text-blue-600" />
+            Customer Invoice View
+          </DialogTitle>
+          <p className="text-xs text-muted-foreground">This is what the customer sees — no internal cost or margin data.</p>
+        </DialogHeader>
+
+        <div className="space-y-5 py-2">
+          {/* Company + Invoice header */}
+          <div className="flex flex-col sm:flex-row sm:justify-between gap-3">
+            <div>
+              <div className="font-bold text-lg">{companyName}</div>
+              <div className="text-xs text-muted-foreground">{companyPhone}</div>
+              <div className="text-xs text-muted-foreground">{companyEmail}</div>
+            </div>
+            <div className="sm:text-right">
+              <div className="font-semibold text-sm">{invoice.invoiceNumber}</div>
+              <div className="text-xs text-muted-foreground">Issued {fmtDate(invoice.issuedAt)}</div>
+              <div className="text-xs text-muted-foreground">Due {fmtDate(invoice.dueDate)}</div>
+              <Badge className={`text-xs mt-1 ${STATUS_COLORS[invoice.status]}`}>
+                {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
+              </Badge>
+            </div>
+          </div>
+
+          {/* Bill To */}
+          {customer && (
+            <div className="bg-muted/30 rounded-lg p-3">
+              <div className="text-xs font-semibold text-muted-foreground uppercase mb-1">Bill To</div>
+              <div className="font-medium text-sm">{customer.name}</div>
+              {customer.address && <div className="text-xs text-muted-foreground">{customer.address}</div>}
+              {customer.email && <div className="text-xs text-muted-foreground">{customer.email}</div>}
+              {customer.phone && <div className="text-xs text-muted-foreground">{customer.phone}</div>}
+            </div>
+          )}
+
+          {/* Job reference */}
+          {opportunity && (
+            <div className="text-xs text-muted-foreground">
+              Re: <span className="font-medium text-foreground">{opportunity.title}</span>
+              {opportunity.jobNumber && <> · Job #{opportunity.jobNumber}</>}
+            </div>
+          )}
+
+          {/* Line items */}
+          <div className="rounded-lg border overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="text-left p-2 font-medium">Description</th>
+                  <th className="text-right p-2 font-medium w-12">Qty</th>
+                  <th className="text-right p-2 font-medium w-20">Unit</th>
+                  <th className="text-right p-2 font-medium w-20">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {invoice.lineItems.map(item => (
+                  <tr key={item.id} className="border-t">
+                    <td className="p-2">{item.description}</td>
+                    <td className="p-2 text-right">{item.qty}</td>
+                    <td className="p-2 text-right">{fmt(item.unitPrice)}</td>
+                    <td className="p-2 text-right font-medium">{fmt(item.total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Totals */}
+          <div className="space-y-1 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Subtotal</span>
+              <span>{fmt(invoice.subtotal)}</span>
+            </div>
+            {invoice.taxRate > 0 && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Tax ({(invoice.taxRate * 100).toFixed(1)}%)</span>
+                <span>{fmt(invoice.taxAmount)}</span>
+              </div>
+            )}
+            <Separator />
+            <div className="flex justify-between font-bold text-base">
+              <span>Invoice Total</span>
+              <span>{fmt(invoice.total)}</span>
+            </div>
+            {invoice.amountPaid > 0 && (
+              <>
+                <div className="flex justify-between text-green-600">
+                  <span>Amount Paid</span>
+                  <span>-{fmt(invoice.amountPaid)}</span>
+                </div>
+                <div className="flex justify-between font-bold text-lg text-yellow-700">
+                  <span>Balance Due</span>
+                  <span>{fmt(balance)}</span>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Paid banner */}
+          {isPaid && (
+            <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg p-3 text-green-700">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span className="text-sm font-semibold">Paid in Full</span>
+              {invoice.paidAt && <span className="text-xs text-green-600 ml-auto">{fmtDate(invoice.paidAt)}</span>}
+            </div>
+          )}
+
+          {/* Balance due banner */}
+          {!isPaid && balance > 0 && (
+            <div className="flex items-center gap-2 bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-yellow-800">
+              <Clock className="w-4 h-4 shrink-0" />
+              <div>
+                <div className="text-sm font-semibold">Balance Due: {fmt(balance)}</div>
+                <div className="text-xs text-yellow-700">Due by {fmtDate(invoice.dueDate)}</div>
+              </div>
+            </div>
+          )}
+
+          {/* Payment history */}
+          {invoice.payments.length > 0 && (
+            <div>
+              <div className="text-xs font-semibold text-muted-foreground uppercase mb-2">Payment History</div>
+              <div className="space-y-1">
+                {invoice.payments.map(p => (
+                  <div key={p.id} className="flex items-center justify-between text-sm bg-green-50 rounded p-2">
+                    <div className="flex items-center gap-2">
+                      {METHOD_ICONS[p.method]}
+                      <span className="capitalize">{p.method}</span>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-medium text-green-700">{fmt(p.amount)}</div>
+                      <div className="text-xs text-muted-foreground">{fmtDate(p.paidAt)}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Notes visible to customer */}
+          {invoice.notes && (
+            <div className="text-sm text-muted-foreground bg-muted/30 rounded p-3">
+              <div className="text-xs font-semibold uppercase mb-1">Notes</div>
+              {invoice.notes}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Close</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
