@@ -856,3 +856,8 @@
 ## Feature: Customer Profile — Pre-fill Add Modals
 - [x] PipelineBoard Add button inside CustomerSection: open NewLeadModal / NewEstimateModal / NewJobModal pre-filled with active customer (skip customer search gate)
 - [x] Pass activeCustomer as prefill from PipelineTab → PipelineBoard → intake modal
+
+## Feature: Intake Modal UX Improvements
+- [x] Auto-title: intake modal title field pre-populated with "Lead — {name}" / "Estimate — {name}" / "Job — {name}" when opened from customer profile
+- [x] Post-save navigation: after saving from customer-profile Add flow, navigate directly to new opportunity detail view
+- [x] Global + New pre-fill: when estimator is inside a customer profile, global + New → Lead/Estimate/Job opens intake modal pre-filled with active customer

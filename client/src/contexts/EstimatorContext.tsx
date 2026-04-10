@@ -182,7 +182,7 @@ type Action =
   | { type: 'REMOVE_PHASE_OVERRIDE'; phaseId: number }
   | { type: 'SET_SIGNATURE'; payload: { signature: string; signedBy: string } }
   | { type: 'CLEAR_SIGNATURE' }
-  | { type: 'ADD_OPPORTUNITY'; payload: Omit<Opportunity, 'id' | 'createdAt' | 'updatedAt'> }
+  | { type: 'ADD_OPPORTUNITY'; payload: Omit<Opportunity, 'id' | 'createdAt' | 'updatedAt'> & { id?: string } }
   | { type: 'UPDATE_OPPORTUNITY'; id: string; payload: Partial<Opportunity> }
   | { type: 'REMOVE_OPPORTUNITY'; id: string }
   | { type: 'SET_PIPELINE_AREA'; payload: PipelineArea }
@@ -454,7 +454,7 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
     case 'ADD_OPPORTUNITY': {
       const newOpp: Opportunity = {
         ...action.payload,
-        id: nanoid(8),
+        id: action.payload.id ?? nanoid(8),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -1692,7 +1692,7 @@ interface EstimatorContextValue {
   removePhaseOverride: (phaseId: number) => void;
   setSignature: (signature: string, signedBy: string) => void;
   clearSignature: () => void;
-  addOpportunity: (payload: Omit<Opportunity, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  addOpportunity: (payload: Omit<Opportunity, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => void;
   updateOpportunity: (id: string, payload: Partial<Opportunity>) => void;
   removeOpportunity: (id: string) => void;
   setPipelineArea: (area: PipelineArea) => void;
@@ -1939,7 +1939,7 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
   const setSignature = useCallback((signature: string, signedBy: string) =>
     dispatch({ type: 'SET_SIGNATURE', payload: { signature, signedBy } }), []);
   const clearSignature = useCallback(() => dispatch({ type: 'CLEAR_SIGNATURE' }), []);
-  const addOpportunity = useCallback((payload: Omit<Opportunity, 'id' | 'createdAt' | 'updatedAt'>) =>
+  const addOpportunity = useCallback((payload: Omit<Opportunity, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) =>
     dispatch({ type: 'ADD_OPPORTUNITY', payload }), []);
   const updateOpportunity = useCallback((id: string, payload: Partial<Opportunity>) =>
     dispatch({ type: 'UPDATE_OPPORTUNITY', id, payload }), []);

@@ -1477,13 +1477,25 @@ export default function CustomerSection() {
 
     {/* ── Intake modals opened from customer profile Add button ── */}
     {intakeModal === 'lead' && intakePrefill && (
-      <NewLeadModal onClose={() => setIntakeModal(null)} prefill={intakePrefill} />
+      <NewLeadModal
+        onClose={() => setIntakeModal(null)}
+        prefill={intakePrefill}
+        onSaved={(oppId) => { setIntakeModal(null); setActiveOpportunity(oppId); setSection('opp-details'); }}
+      />
     )}
     {intakeModal === 'estimate' && intakePrefill && (
-      <NewEstimateModal onClose={() => setIntakeModal(null)} prefill={intakePrefill} />
+      <NewEstimateModal
+        onClose={() => setIntakeModal(null)}
+        prefill={intakePrefill}
+        onSaved={(oppId) => { setIntakeModal(null); setActiveOpportunity(oppId); setSection('opp-details'); }}
+      />
     )}
     {intakeModal === 'job' && intakePrefill && (
-      <NewJobModal onClose={() => setIntakeModal(null)} prefill={intakePrefill} />
+      <NewJobModal
+        onClose={() => setIntakeModal(null)}
+        prefill={intakePrefill}
+        onSaved={(oppId) => { setIntakeModal(null); setActiveOpportunity(oppId); setSection('opp-details'); }}
+      />
     )}
     </>
   );

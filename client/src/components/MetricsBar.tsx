@@ -472,13 +472,30 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
       )}
 
       {/* ── Intake Modals ── */}
-      {activeModal === 'customer'      && <NewCustomerModal onClose={closeModal} onCreated={handleNewCustomerCreated} />}
-      {activeModal === 'job'           && <NewJobModal onClose={closeModal} />}
-      {activeModal === 'recurring-job' && <NewRecurringJobModal onClose={closeModal} />}
-      {activeModal === 'estimate'      && <NewEstimateModal onClose={closeModal} />}
-      {activeModal === 'event'         && <NewEventModal onClose={closeModal} />}
-      {activeModal === 'intake'        && <NewIntakeModal onClose={closeModal} />}
-      {activeModal === 'lead'          && <NewLeadModal onClose={closeModal} />}
+      {/* When inside a customer profile, pre-fill the active customer into intake modals */}
+      {(() => {
+        const customerPrefill = activeCustomerRecord ? {
+          id: activeCustomerRecord.id,
+          displayName: activeCustomerDisplayName,
+          phone: activeCustomerRecord.mobilePhone || activeCustomerRecord.homePhone || activeCustomerRecord.workPhone || '',
+          email: activeCustomerRecord.email || '',
+          address: activeCustomerRecord.street || '',
+          city: activeCustomerRecord.city || '',
+          state: activeCustomerRecord.state || '',
+          zip: activeCustomerRecord.zip || '',
+        } : undefined;
+        return (
+          <>
+            {activeModal === 'customer'      && <NewCustomerModal onClose={closeModal} onCreated={handleNewCustomerCreated} />}
+            {activeModal === 'job'           && <NewJobModal onClose={closeModal} prefill={customerPrefill} onSaved={(oppId) => { closeModal(); setActiveOpportunity(oppId); setSection('opp-details'); }} />}
+            {activeModal === 'recurring-job' && <NewRecurringJobModal onClose={closeModal} />}
+            {activeModal === 'estimate'      && <NewEstimateModal onClose={closeModal} prefill={customerPrefill} onSaved={(oppId) => { closeModal(); setActiveOpportunity(oppId); setSection('opp-details'); }} />}
+            {activeModal === 'event'         && <NewEventModal onClose={closeModal} />}
+            {activeModal === 'intake'        && <NewIntakeModal onClose={closeModal} />}
+            {activeModal === 'lead'          && <NewLeadModal onClose={closeModal} prefill={customerPrefill} onSaved={(oppId) => { closeModal(); setActiveOpportunity(oppId); setSection('opp-details'); }} />}
+          </>
+        );
+      })()}
 
       {/* ── AI Estimate Chat drawer ── */}
       <AIEstimateChat open={aiEstimateOpen} onClose={() => setAiEstimateOpen(false)} />

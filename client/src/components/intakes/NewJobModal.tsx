@@ -14,7 +14,7 @@ import IntakeShell, {
   CustomerSearchBox, SidebarSection, PrivateNotesPanel, LineItemsPanel, LineItem, SelectedCustomer,
 } from './IntakeShell';
 
-export default function NewJobModal({ onClose, prefill }: { onClose: () => void; prefill?: any }) {
+export default function NewJobModal({ onClose, prefill, onSaved }: { onClose: () => void; prefill?: any; onSaved?: (oppId: string) => void }) {
   const { addOpportunity, addCustomer, setActiveCustomer, addScheduleEvent } = useEstimator();
   const [customer, setCustomer] = useState(prefill?.displayName ?? '');
   const [selectedCustomer, setSelectedCustomer] = useState<SelectedCustomer | null>(
@@ -43,11 +43,10 @@ export default function NewJobModal({ onClose, prefill }: { onClose: () => void;
       addCustomer({ id: customerId, displayName: customer.trim(), firstName: '', lastName: '', company: '', mobilePhone: '', homePhone: '', workPhone: '', email: '', role: '', customerType: 'homeowner', doNotService: false, street: '', unit: '', city: '', state: 'WA', zip: '', addressNotes: '', customerNotes: '', billsTo: '', tags: [], leadSource: '', referredBy: '', sendNotifications: true, sendMarketingOptIn: false, createdAt: new Date().toISOString(), lifetimeValue: 0, outstandingBalance: 0 });
     }
     const totalValue = items.reduce((s, i) => s + i.qty * i.unitPrice, 0);
-    // We can't pass id to addOpportunity (it generates its own), so we use a stable ref
-    // and rely on the fact that the new opp will be the last one added for this customer.
-    // Instead, we'll add the schedule event using a predictable title match after creation.
+    const oppId = nanoid(8);
     const newJobTitle = `Job — ${customer.trim()}`;
     addOpportunity({
+      id: oppId,
       area: 'job',
       stage: 'New Job',
       title: `Job — ${customer.trim()}`,
@@ -79,6 +78,7 @@ export default function NewJobModal({ onClose, prefill }: { onClose: () => void;
     setActiveCustomer(customerId);
     toast.success('Job created');
     onClose();
+    onSaved?.(oppId);
   };
 
   const leftPanel = (

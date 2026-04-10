@@ -14,7 +14,7 @@ import IntakeShell, {
   CustomerSearchBox, SidebarSection, PrivateNotesPanel, LineItemsPanel, LineItem, SelectedCustomer,
 } from './IntakeShell';
 
-export default function NewEstimateModal({ onClose, prefill }: { onClose: () => void; prefill?: any }) {
+export default function NewEstimateModal({ onClose, prefill, onSaved }: { onClose: () => void; prefill?: any; onSaved?: (oppId: string) => void }) {
   const { addOpportunity, addCustomer, setActiveCustomer } = useEstimator();
   const [customer, setCustomer] = useState(prefill?.displayName ?? '');
   const [selectedCustomer, setSelectedCustomer] = useState<SelectedCustomer | null>(
@@ -41,7 +41,9 @@ export default function NewEstimateModal({ onClose, prefill }: { onClose: () => 
       addCustomer({ id: customerId, displayName: customer.trim(), firstName: '', lastName: '', company: '', mobilePhone: '', homePhone: '', workPhone: '', email: '', role: '', customerType: 'homeowner', doNotService: false, street: '', unit: '', city: '', state: 'WA', zip: '', addressNotes: '', customerNotes: '', billsTo: '', tags: [], leadSource: '', referredBy: '', sendNotifications: true, sendMarketingOptIn: false, createdAt: new Date().toISOString(), lifetimeValue: 0, outstandingBalance: 0 });
     }
     const totalValue = items.reduce((s, i) => s + i.qty * i.unitPrice, 0);
+    const oppId = nanoid(8);
     addOpportunity({
+      id: oppId,
       area: 'estimate',
       stage: 'Draft',
       title: `Estimate — ${customer.trim()}`,
@@ -53,6 +55,7 @@ export default function NewEstimateModal({ onClose, prefill }: { onClose: () => 
     setActiveCustomer(customerId);
     toast.success('Estimate created');
     onClose();
+    onSaved?.(oppId);
   };
 
   const leftPanel = (
