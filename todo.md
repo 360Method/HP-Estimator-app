@@ -798,3 +798,14 @@
 - [x] Update ConversionModal: add transfer step asking user to copy lead notes/attachments into estimate
 - [x] Wire EstimateDetailsPanel into OpportunityDetailsTab for area === 'estimate' and area === 'job'
 - [x] Linked lead banner in EstimateDetailsPanel: shows source lead notes, photos, online request data (read-only)
+
+## Feature: World-Class Job Details Page
+- [x] Add ChangeOrder type to types.ts
+- [x] Add changeOrders, parentJobId, isChangeOrder, coNumber fields to Opportunity type
+- [x] Add CREATE_CHANGE_ORDER, UPDATE_CHANGE_ORDER, UPDATE_SOW action types and reducers
+- [x] Update APPROVE_ESTIMATE reducer to handle isChangeOrder estimates (updates parent job CO record instead of creating new job)
+- [x] Rebuild JobDetailsSection: job header, full history timeline, signed estimate viewer, editable SOW, tasks, pricing summary, unified attachments, change orders panel, internal notes
+- [x] Build CreateChangeOrderModal inline in JobDetailsSection
+- [x] Wire change order creation: opens estimate tab with pre-populated phases from job's estimateSnapshot
+- [x] CO estimates appear with "CO" badge in PipelineBoard estimate cards
+- [x] Change Orders panel on job shows each CO's status and lets PM open it

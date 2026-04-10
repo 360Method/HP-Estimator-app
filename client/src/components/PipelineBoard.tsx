@@ -160,7 +160,14 @@ function KanbanCard({
               {customerName}
             </div>
           )}
-          <div className="text-sm font-semibold text-foreground truncate">{opp.title}</div>
+          <div className="flex items-center gap-1.5">
+            <div className="text-sm font-semibold text-foreground truncate flex-1">{opp.title}</div>
+            {opp.isChangeOrder && (
+              <span className="flex-shrink-0 px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-400 text-[9px] font-bold uppercase tracking-wider">
+                CO
+              </span>
+            )}
+          </div>
           {opp.value > 0 && (
             <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
               <DollarSign size={10} />

@@ -262,6 +262,21 @@ type Action =
   | { type: 'UPDATE_USER_PROFILE'; payload: Partial<import('@/lib/types').UserProfile> }
   | { type: 'UPSERT_CUSTOM_ROLE'; role: CustomRole }
   | { type: 'REMOVE_CUSTOM_ROLE'; id: string }
+  | {
+      type: 'CREATE_CHANGE_ORDER';
+      jobId: string;
+      coEstimateId: string;
+      coNumber: string;
+      reason: string;
+      scopeSummary: string;
+    }
+  | {
+      type: 'UPDATE_CHANGE_ORDER';
+      jobId: string;
+      coId: string;
+      patch: Partial<import('@/lib/types').ChangeOrder>;
+    }
+  | { type: 'UPDATE_SOW'; oppId: string; sowDocument: string }
   /**
    * Merge DB-sourced customers into local state.
    * - New customers (not in local state) are added.
@@ -1185,6 +1200,65 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
       const estimate = state.opportunities.find(o => o.id === action.estimateId);
       if (!estimate) return state;
 
+      // ── Change Order approval path ─────────────────────────────
+      // If this estimate is a CO, update the parent job's ChangeOrder record
+      // instead of creating a new job.
+      if (estimate.isChangeOrder && estimate.parentJobId) {
+        const now = new Date().toISOString();
+        const parentJob = state.opportunities.find(o => o.id === estimate.parentJobId);
+        if (!parentJob) return state;
+
+        const wonCOEstimate: Opportunity = {
+          ...estimate,
+          stage: 'Approved' as OpportunityStage,
+          wonAt: now,
+          updatedAt: now,
+          ...(action.signedEstimateDataUrl ? { signedEstimateDataUrl: action.signedEstimateDataUrl } : {}),
+          ...(action.signedEstimateFilename ? { signedEstimateFilename: action.signedEstimateFilename } : {}),
+        };
+
+        // Update the ChangeOrder record on the parent job
+        const updatedCOs = (parentJob.changeOrders ?? []).map(co =>
+          co.estimateId === estimate.id
+            ? { ...co, status: 'approved' as import('@/lib/types').ChangeOrderStatus, valueDelta: action.totalPrice, approvedAt: now }
+            : co
+        );
+
+        const coApprovalEvent = makeActivity(
+          'change_order_approved',
+          `Change Order ${estimate.coNumber ?? ''} Approved`,
+          `Value: +$${action.totalPrice.toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
+          estimate.id,
+        );
+
+        const updatedParentJob: Opportunity = {
+          ...parentJob,
+          changeOrders: updatedCOs,
+          jobActivity: [coApprovalEvent, ...(parentJob.jobActivity ?? [])],
+          updatedAt: now,
+        };
+
+        const updatedOpps = state.opportunities
+          .map(o => o.id === estimate.id ? wonCOEstimate : o)
+          .map(o => o.id === estimate.parentJobId ? updatedParentJob : o);
+
+        const syncedCustomers = state.activeCustomerId
+          ? state.customers.map(c =>
+              c.id === state.activeCustomerId ? { ...c, opportunities: updatedOpps } : c
+            )
+          : state.customers;
+
+        return {
+          ...state,
+          opportunities: updatedOpps,
+          customers: syncedCustomers,
+          activeOpportunityId: estimate.parentJobId,
+          activePipelineArea: 'job',
+          activeSection: 'job-details',
+        };
+      }
+      // ── End Change Order approval path ────────────────────────
+
       const now = new Date().toISOString();
       const year = new Date().getFullYear();
 
@@ -1476,6 +1550,111 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
       return { ...state, opportunities: updatedOpps, customers: syncedCustomers };
     }
 
+    case 'CREATE_CHANGE_ORDER': {
+      const now = new Date().toISOString();
+      const job = state.opportunities.find(o => o.id === action.jobId);
+      if (!job) return state;
+
+      // Create a new estimate opportunity for the CO, pre-populated from the job's snapshot
+      const coEstimate: Opportunity = {
+        id: action.coEstimateId,
+        area: 'estimate',
+        stage: 'Draft' as OpportunityStage,
+        title: `${action.coNumber} — ${action.reason}`,
+        value: 0,
+        notes: action.scopeSummary,
+        createdAt: now,
+        updatedAt: now,
+        archived: false,
+        isChangeOrder: true,
+        parentJobId: action.jobId,
+        coNumber: action.coNumber,
+        clientSnapshot: job.clientSnapshot,
+        // Pre-populate with job's estimate snapshot so estimator has a starting point
+        estimateSnapshot: job.estimateSnapshot,
+      };
+
+      // Add a ChangeOrder record to the job
+      const newCO: import('@/lib/types').ChangeOrder = {
+        id: nanoid(8),
+        coNumber: action.coNumber,
+        estimateId: action.coEstimateId,
+        reason: action.reason,
+        scopeSummary: action.scopeSummary,
+        valueDelta: 0,
+        status: 'draft',
+        createdAt: now,
+      };
+
+      const coActivityEvent = makeActivity(
+        'change_order_created',
+        `Change Order ${action.coNumber} Created`,
+        action.reason,
+        action.coEstimateId,
+      );
+
+      const updatedJob: Opportunity = {
+        ...job,
+        changeOrders: [...(job.changeOrders ?? []), newCO],
+        jobActivity: [coActivityEvent, ...(job.jobActivity ?? [])],
+        updatedAt: now,
+      };
+
+      const updatedOpps = state.opportunities
+        .map(o => o.id === action.jobId ? updatedJob : o)
+        .concat(coEstimate);
+
+      const syncedCustomers = state.activeCustomerId
+        ? state.customers.map(c =>
+            c.id === state.activeCustomerId ? { ...c, opportunities: updatedOpps } : c
+          )
+        : state.customers;
+
+      return {
+        ...state,
+        opportunities: updatedOpps,
+        customers: syncedCustomers,
+        activeOpportunityId: action.coEstimateId,
+        activePipelineArea: 'estimate',
+        activeSection: 'estimate',
+      };
+    }
+
+    case 'UPDATE_CHANGE_ORDER': {
+      const now = new Date().toISOString();
+      const updatedOpps = state.opportunities.map(o => {
+        if (o.id !== action.jobId) return o;
+        return {
+          ...o,
+          changeOrders: (o.changeOrders ?? []).map(co =>
+            co.id === action.coId ? { ...co, ...action.patch } : co
+          ),
+          updatedAt: now,
+        };
+      });
+      const syncedCustomers = state.activeCustomerId
+        ? state.customers.map(c =>
+            c.id === state.activeCustomerId ? { ...c, opportunities: updatedOpps } : c
+          )
+        : state.customers;
+      return { ...state, opportunities: updatedOpps, customers: syncedCustomers };
+    }
+
+    case 'UPDATE_SOW': {
+      const now = new Date().toISOString();
+      const updatedOpps = state.opportunities.map(o =>
+        o.id === action.oppId
+          ? { ...o, sowDocument: action.sowDocument, sowGeneratedAt: now, updatedAt: now }
+          : o
+      );
+      const syncedCustomers = state.activeCustomerId
+        ? state.customers.map(c =>
+            c.id === state.activeCustomerId ? { ...c, opportunities: updatedOpps } : c
+          )
+        : state.customers;
+      return { ...state, opportunities: updatedOpps, customers: syncedCustomers };
+    }
+
     default:
       return state;
   }
@@ -1573,6 +1752,11 @@ interface EstimatorContextValue {
   // Custom roles
   upsertCustomRole: (role: CustomRole) => void;
   removeCustomRole: (id: string) => void;
+  // Change orders
+  createChangeOrder: (jobId: string, reason: string, scopeSummary: string) => void;
+  updateChangeOrder: (jobId: string, coId: string, patch: Partial<import('@/lib/types').ChangeOrder>) => void;
+  // SOW editing
+  updateSow: (oppId: string, sowDocument: string) => void;
 }
 
 const EstimatorContext = createContext<EstimatorContextValue | null>(null);
@@ -1948,6 +2132,29 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'REMOVE_CUSTOM_ROLE', id });
   }, []);
 
+  const createChangeOrder = useCallback((jobId: string, reason: string, scopeSummary: string) => {
+    const job = state.opportunities.find(o => o.id === jobId);
+    if (!job) return;
+    const existingCOs = job.changeOrders?.length ?? 0;
+    const coNumber = `CO-${String(existingCOs + 1).padStart(3, '0')}`;
+    dispatch({
+      type: 'CREATE_CHANGE_ORDER',
+      jobId,
+      coEstimateId: nanoid(8),
+      coNumber,
+      reason,
+      scopeSummary,
+    });
+  }, [state.opportunities]);
+
+  const updateChangeOrder = useCallback((jobId: string, coId: string, patch: Partial<import('@/lib/types').ChangeOrder>) => {
+    dispatch({ type: 'UPDATE_CHANGE_ORDER', jobId, coId, patch });
+  }, []);
+
+  const updateSow = useCallback((oppId: string, sowDocument: string) => {
+    dispatch({ type: 'UPDATE_SOW', oppId, sowDocument });
+  }, []);
+
   return (
     <EstimatorContext.Provider value={{
       state, setSection, setJobInfo, setGlobal, updateItem,
@@ -1977,6 +2184,9 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
       updateUserProfile,
       upsertCustomRole,
       removeCustomRole,
+      createChangeOrder,
+      updateChangeOrder,
+      updateSow,
     }}>
       {children}
     </EstimatorContext.Provider>

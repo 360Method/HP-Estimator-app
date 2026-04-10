@@ -201,11 +201,29 @@ export interface JobAttachment {
 
 export interface ActivityEvent {
   id: string;
-  type: 'estimate_created' | 'estimate_sent' | 'estimate_approved' | 'job_created' | 'note_added' | 'call_logged' | 'payment_received' | 'stage_changed';
+  type: 'estimate_created' | 'estimate_sent' | 'estimate_approved' | 'job_created' | 'note_added' | 'call_logged' | 'payment_received' | 'stage_changed' | 'change_order_created' | 'change_order_approved' | 'sow_edited' | 'sow_updated' | 'attachment_added';
   title: string;
   description: string;
   timestamp: string;  // ISO
   linkedId?: string;  // estimate/job ID
+  author?: string;    // who performed the action
+}
+
+// ── Change Order ─────────────────────────────────────────────
+export type ChangeOrderStatus = 'draft' | 'sent' | 'approved' | 'rejected';
+export interface ChangeOrder {
+  id: string;
+  coNumber: string;         // e.g. "CO-001"
+  estimateId: string;       // the linked estimate opportunity ID
+  reason: string;           // brief reason for the change
+  scopeSummary: string;     // one-sentence scope description
+  valueDelta: number;       // positive = added cost, negative = credit
+  status: ChangeOrderStatus;
+  createdAt: string;        // ISO
+  sentAt?: string;          // ISO
+  approvedAt?: string;      // ISO
+  rejectedAt?: string;      // ISO
+  rejectedReason?: string;
 }
 
 export type CustomerProfileTab = 'profile' | 'leads' | 'estimates' | 'jobs' | 'invoices' | 'communication' | 'attachments' | 'notes';
@@ -595,6 +613,12 @@ export interface Opportunity {
   leadAttachments?: JobAttachment[];
   // If this lead was created from an online booking request, link to it
   onlineRequestId?: number;
+  // Change orders (only on job opportunities)
+  changeOrders?: ChangeOrder[];
+  // If this estimate is a change order, link back to the parent job
+  parentJobId?: string;
+  isChangeOrder?: boolean;    // true = this estimate is a CO, not a primary estimate
+  coNumber?: string;          // e.g. "CO-001" — set when isChangeOrder is true
   // Snapshot of customer info at time of conversion
   clientSnapshot?: {
     client: string;
