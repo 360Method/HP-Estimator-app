@@ -445,22 +445,27 @@ export default function PresentSection() {
   return (
     <div className="fixed inset-0 z-50 bg-gray-800/95 overflow-y-auto print:bg-white print:overflow-visible print:static print:inset-auto print:block">
       {/* ── Toolbar (hidden on print) ── */}
-      <div className="no-print sticky top-0 z-10 bg-gray-900 text-white px-3 py-2.5 flex items-center gap-2 shadow-lg min-w-0">
-        <button onClick={handleClose} className="flex-shrink-0 p-1.5 rounded hover:bg-white/10 transition-colors">
-          <X className="w-4 h-4" />
-        </button>
-        <div className="flex-1 min-w-0 text-sm font-semibold truncate">
-          Present Estimate — {jobInfo.client || 'Client'} · {jobInfo.jobNumber}
+      <div className="no-print sticky top-0 z-10 bg-gray-900 text-white shadow-lg">
+        {/* Row 1: back + title */}
+        <div className="flex items-center gap-2 px-3 pt-2.5 pb-1 min-w-0">
+          <button onClick={handleClose} className="flex-shrink-0 p-1.5 rounded hover:bg-white/10 transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+          <div className="flex-1 min-w-0 text-sm font-semibold truncate">
+            Present — {jobInfo.client || 'Client'} · {jobInfo.jobNumber}
+          </div>
         </div>
-        <div className="flex-shrink-0 flex items-center gap-1.5">
+        {/* Row 2: action buttons — wraps on very small screens */}
+        <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2.5">
           {/* Column visibility toggle */}
           <div className="relative">
             <button
               onClick={() => setShowColPanel(s => !s)}
-              className={`whitespace-nowrap flex items-center gap-1.5 px-2.5 py-1.5 border rounded text-xs font-semibold transition-colors ${showColPanel ? 'bg-white/20 border-white/40' : 'border-white/20 hover:bg-white/10'}`}
+              className={`flex items-center gap-1 px-2 py-1.5 border rounded text-xs font-semibold transition-colors ${showColPanel ? 'bg-white/20 border-white/40' : 'border-white/20 hover:bg-white/10'}`}
               title="Customize visible columns"
             >
-              <Settings2 className="w-3.5 h-3.5" /> Columns
+              <Settings2 className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Columns</span>
             </button>
             {showColPanel && (
               <ColVisPanel
@@ -472,41 +477,47 @@ export default function PresentSection() {
           </div>
 
           {state.signature ? (
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 text-emerald-400 text-xs font-semibold">
-                <CheckCircle2 className="w-4 h-4" />
-                Signed by {state.signedBy}
+            <>
+              <div className="flex items-center gap-1 text-emerald-400 text-xs font-semibold">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Signed by {state.signedBy}</span>
+                <span className="sm:hidden">Signed</span>
               </div>
               <button
                 onClick={() => setShowApprovedModal(true)}
-                className="whitespace-nowrap flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-500 hover:bg-amber-600 rounded text-xs font-semibold text-white transition-colors"
+                className="flex items-center gap-1 px-2 py-1.5 bg-amber-500 hover:bg-amber-600 rounded text-xs font-semibold text-white transition-colors"
               >
                 <Trophy className="w-3.5 h-3.5" />
-                Approve Estimate
+                <span className="hidden sm:inline">Approve Estimate</span>
+                <span className="sm:hidden">Approve</span>
               </button>
-            </div>
+              <button onClick={() => clearSignature()} className="px-2 py-1.5 text-xs border border-white/20 hover:bg-white/10 rounded transition-colors">
+                <span className="hidden sm:inline">Clear Sig</span>
+                <X className="w-3.5 h-3.5 sm:hidden" />
+              </button>
+            </>
           ) : (
             <button
               onClick={() => setShowSigPad(s => !s)}
-              className="whitespace-nowrap flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 rounded text-xs font-semibold transition-colors"
+              className="flex items-center gap-1 px-2 py-1.5 bg-emerald-600 hover:bg-emerald-700 rounded text-xs font-semibold transition-colors"
             >
               <PenLine className="w-3.5 h-3.5" />
-              Sign Now
-            </button>
-          )}
-          {state.signature && (
-            <button onClick={() => clearSignature()} className="whitespace-nowrap px-2 py-1.5 text-xs border border-white/20 hover:bg-white/10 rounded transition-colors">
-              Clear Sig
+              <span className="hidden sm:inline">Sign Now</span>
+              <span className="sm:hidden">Sign</span>
             </button>
           )}
           <button
             onClick={() => setShowSendDialog(true)}
-            className="whitespace-nowrap flex items-center gap-1.5 px-2.5 py-1.5 bg-green-600 hover:bg-green-700 rounded text-xs font-semibold transition-colors"
+            className="flex items-center gap-1 px-2 py-1.5 bg-green-600 hover:bg-green-700 rounded text-xs font-semibold transition-colors"
           >
-            <Send className="w-3.5 h-3.5" /> Send to Customer
+            <Send className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Send to Customer</span>
+            <span className="sm:hidden">Send</span>
           </button>
-          <button onClick={handlePrint} className="whitespace-nowrap flex items-center gap-1.5 px-2.5 py-1.5 border border-white/20 hover:bg-white/10 rounded text-xs font-semibold transition-colors">
-            <Printer className="w-3.5 h-3.5" /> Print / PDF
+          <button onClick={handlePrint} className="flex items-center gap-1 px-2 py-1.5 border border-white/20 hover:bg-white/10 rounded text-xs font-semibold transition-colors">
+            <Printer className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Print / PDF</span>
+            <span className="sm:hidden">Print</span>
           </button>
         </div>
       </div>
