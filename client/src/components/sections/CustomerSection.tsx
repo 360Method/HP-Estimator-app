@@ -1585,10 +1585,25 @@ function CustomerAttachmentsTab({ customerId }: { customerId: string }) {
 
 // ─── Customer Portal Tab ──────────────────────────────────────
 function CustomerPortalTab({ customerId }: { customerId: string }) {
+  const utils = trpc.useUtils();
   const { data, isLoading } = trpc.portal.getCustomerPortalData.useQuery(
     { hpCustomerId: customerId },
     { enabled: !!customerId }
   );
+  const resendEstimate = trpc.portal.resendEstimate.useMutation({
+    onSuccess: () => {
+      toast.success('Estimate email resent!');
+      utils.portal.getCustomerPortalData.invalidate({ hpCustomerId: customerId });
+    },
+    onError: (err) => toast.error(`Resend failed: ${err.message}`),
+  });
+  const resendInvoice = trpc.portal.resendInvoice.useMutation({
+    onSuccess: () => {
+      toast.success('Invoice email resent!');
+      utils.portal.getCustomerPortalData.invalidate({ hpCustomerId: customerId });
+    },
+    onError: (err) => toast.error(`Resend failed: ${err.message}`),
+  });
 
   if (isLoading) {
     return <div className="py-16 text-center text-muted-foreground text-sm">Loading portal data…</div>;
@@ -1638,22 +1653,48 @@ function CustomerPortalTab({ customerId }: { customerId: string }) {
         ) : (
           <div className="space-y-2">
             {estimates.map((est: any) => (
-              <div key={est.id} className="rounded-xl border bg-card p-3 flex items-center gap-3">
-                <FileText size={16} className="text-muted-foreground shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{est.estimateNumber} — {est.title}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Sent {est.sentAt ? fmtDate(new Date(est.sentAt).toISOString()) : '—'} ·{' '}
-                    {est.viewedAt ? 'Viewed' : 'Not viewed'}
-                  </p>
+              <div key={est.id} className="rounded-xl border bg-card p-3 flex flex-col gap-2">
+                <div className="flex items-start gap-3">
+                  <FileText size={16} className="text-muted-foreground shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{est.estimateNumber} — {est.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Sent {est.sentAt ? fmtDate(new Date(est.sentAt).toISOString()) : '—'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {est.viewedAt && (
+                      <span
+                        title={`Viewed ${fmtDate(new Date(est.viewedAt).toISOString())}`}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold"
+                      >
+                        <CheckCircle2 size={11} /> Viewed
+                      </span>
+                    )}
+                    <Badge className={
+                      est.status === 'approved' ? 'bg-emerald-100 text-emerald-800' :
+                      est.status === 'declined' ? 'bg-red-100 text-red-700' :
+                      'bg-sky-100 text-sky-700'
+                    }>
+                      {est.status}
+                    </Badge>
+                  </div>
                 </div>
-                <Badge className={
-                  est.status === 'approved' ? 'bg-emerald-100 text-emerald-800' :
-                  est.status === 'declined' ? 'bg-red-100 text-red-700' :
-                  'bg-sky-100 text-sky-700'
-                }>
-                  {est.status}
-                </Badge>
+                <div className="flex items-center justify-between pl-7">
+                  {est.viewedAt ? (
+                    <p className="text-xs text-emerald-600">Viewed {fmtRelative(new Date(est.viewedAt).toISOString())}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Not yet viewed</p>
+                  )}
+                  <button
+                    onClick={() => resendEstimate.mutate({ estimateId: est.id })}
+                    disabled={resendEstimate.isPending}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-border text-xs font-medium hover:bg-muted transition-colors disabled:opacity-50"
+                  >
+                    <RefreshCw size={11} className={resendEstimate.isPending ? 'animate-spin' : ''} />
+                    Resend
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -1670,22 +1711,48 @@ function CustomerPortalTab({ customerId }: { customerId: string }) {
         ) : (
           <div className="space-y-2">
             {invoices.map((inv: any) => (
-              <div key={inv.id} className="rounded-xl border bg-card p-3 flex items-center gap-3">
-                <DollarSign size={16} className="text-muted-foreground shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{inv.invoiceNumber} — {inv.jobTitle ?? inv.type}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {fmtDollar((inv.amountDue ?? 0) / 100)} ·{' '}
-                    Due {inv.dueDate ? fmtDate(new Date(inv.dueDate).toISOString()) : '—'}
-                  </p>
+              <div key={inv.id} className="rounded-xl border bg-card p-3 flex flex-col gap-2">
+                <div className="flex items-start gap-3">
+                  <DollarSign size={16} className="text-muted-foreground shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{inv.invoiceNumber} — {inv.jobTitle ?? inv.type}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {fmtDollar((inv.amountDue ?? 0) / 100)} · Due {inv.dueDate ? fmtDate(new Date(inv.dueDate).toISOString()) : '—'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {inv.viewedAt && (
+                      <span
+                        title={`Viewed ${fmtDate(new Date(inv.viewedAt).toISOString())}`}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold"
+                      >
+                        <CheckCircle2 size={11} /> Viewed
+                      </span>
+                    )}
+                    <Badge className={
+                      inv.status === 'paid' ? 'bg-emerald-100 text-emerald-800' :
+                      inv.status === 'due' ? 'bg-orange-100 text-orange-700' :
+                      'bg-sky-100 text-sky-700'
+                    }>
+                      {inv.status}
+                    </Badge>
+                  </div>
                 </div>
-                <Badge className={
-                  inv.status === 'paid' ? 'bg-emerald-100 text-emerald-800' :
-                  inv.status === 'due' ? 'bg-orange-100 text-orange-700' :
-                  'bg-sky-100 text-sky-700'
-                }>
-                  {inv.status}
-                </Badge>
+                <div className="flex items-center justify-between pl-7">
+                  {inv.viewedAt ? (
+                    <p className="text-xs text-emerald-600">Viewed {fmtRelative(new Date(inv.viewedAt).toISOString())}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Not yet viewed</p>
+                  )}
+                  <button
+                    onClick={() => resendInvoice.mutate({ invoiceId: inv.id })}
+                    disabled={resendInvoice.isPending}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-border text-xs font-medium hover:bg-muted transition-colors disabled:opacity-50"
+                  >
+                    <RefreshCw size={11} className={resendInvoice.isPending ? 'animate-spin' : ''} />
+                    Resend
+                  </button>
+                </div>
               </div>
             ))}
           </div>

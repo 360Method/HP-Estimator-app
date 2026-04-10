@@ -729,6 +729,48 @@ export const portalRouter = router({
     return { estimates, invoices };
   }),
 
+  /** HP staff: resend estimate magic-link email */
+  resendEstimate: hpProcedure
+    .input(z.object({ estimateId: z.number() }))
+    .mutation(async ({ input }) => {
+      const est = await getPortalEstimateById(input.estimateId);
+      if (!est) throw new TRPCError({ code: 'NOT_FOUND' });
+      const customer = await findPortalCustomerById(est.customerId);
+      if (!customer) throw new TRPCError({ code: 'NOT_FOUND' });
+      const token = randomBytes(32).toString('hex');
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      await createPortalToken({ customerId: customer.id, token, expiresAt });
+      const baseUrl = process.env.PORTAL_BASE_URL ?? 'https://client.handypioneers.com';
+      const estimateUrl = `${baseUrl}/portal/auth?token=${token}&redirect=/portal/estimates/${est.id}`;
+      await sendEmail({
+        to: customer.email,
+        subject: `Approve Estimate ${est.estimateNumber} from Handy Pioneers`,
+        html: buildEstimateEmail(customer.name, est.estimateNumber, est.title, estimateUrl, baseUrl),
+      });
+      return { sent: true };
+    }),
+
+  /** HP staff: resend invoice magic-link email */
+  resendInvoice: hpProcedure
+    .input(z.object({ invoiceId: z.number() }))
+    .mutation(async ({ input }) => {
+      const inv = await getPortalInvoiceById(input.invoiceId);
+      if (!inv) throw new TRPCError({ code: 'NOT_FOUND' });
+      const customer = await findPortalCustomerById(inv.customerId);
+      if (!customer) throw new TRPCError({ code: 'NOT_FOUND' });
+      const token = randomBytes(32).toString('hex');
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      await createPortalToken({ customerId: customer.id, token, expiresAt });
+      const baseUrl = process.env.PORTAL_BASE_URL ?? 'https://client.handypioneers.com';
+      const invoiceUrl = `${baseUrl}/portal/auth?token=${token}&redirect=/portal/invoices/${inv.id}`;
+      await sendEmail({
+        to: customer.email,
+        subject: `Invoice ${inv.invoiceNumber} from Handy Pioneers`,
+        html: buildInvoiceEmail(customer.name, inv.invoiceNumber, inv.amountDue, invoiceUrl, baseUrl),
+      });
+      return { sent: true };
+    }),
+
   /** HP-side: get all portal data for a customer by HP customer ID */
   getCustomerPortalData: hpProcedure
     .input(z.object({ hpCustomerId: z.string() }))
