@@ -923,24 +923,26 @@ export default function InvoiceSection() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold">Invoices</h2>
-            {activeOpp?.jobNumber && (
-              <span className="text-xs font-mono bg-muted text-muted-foreground px-2 py-0.5 rounded-full">
-                {activeOpp.jobNumber}
-              </span>
+      <div className="flex flex-col gap-2">
+        <div className="flex items-start justify-between gap-2 min-w-0">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-lg font-semibold">Invoices</h2>
+              {activeOpp?.jobNumber && (
+                <span className="text-xs font-mono bg-muted text-muted-foreground px-2 py-0.5 rounded-full">
+                  {activeOpp.jobNumber}
+                </span>
+              )}
+            </div>
+            {activeOpp && (
+              <p className="text-sm text-muted-foreground truncate">
+                {activeOpp.title}
+                {estimateValue > 0 && <> · <span className="font-medium text-foreground">{fmt(estimateValue)}</span> contract</>}
+              </p>
             )}
           </div>
-          {activeOpp && (
-            <p className="text-sm text-muted-foreground">
-              {activeOpp.title}
-              {estimateValue > 0 && <> · <span className="font-medium text-foreground">{fmt(estimateValue)}</span> contract</>}
-            </p>
-          )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {!hasDeposit && (
             <Button
               size="sm"
