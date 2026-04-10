@@ -310,15 +310,14 @@ export default function JobDetailsSection() {
 
   // ── Derived display values ─────────────────────────────────
   const snap = activeOpp.clientSnapshot;
-  const displayName = snap?.client
-    || (activeCustomer ? `${activeCustomer.firstName ?? ''} ${activeCustomer.lastName ?? ''}`.trim() : activeOpp.title);
-  const displayCompany = snap?.companyName || activeCustomer?.company || '';
-  const displayPhone = snap?.phone || activeCustomer?.mobilePhone || activeCustomer?.homePhone || '';
-  const displayEmail = snap?.email || activeCustomer?.email || '';
-  const displayAddress = snap?.address || jobInfo.address || '';
-  const displayCity = snap?.city || jobInfo.city || '';
-  const displayState = snap?.state || jobInfo.state || '';
-  const displayZip = snap?.zip || jobInfo.zip || '';
+  const displayName = (activeCustomer ? `${activeCustomer.firstName ?? ''} ${activeCustomer.lastName ?? ''}`.trim() : '') || snap?.client || activeOpp.title;
+  const displayCompany = activeCustomer?.company || snap?.companyName || '';
+  const displayPhone = activeCustomer?.mobilePhone || activeCustomer?.homePhone || snap?.phone || '';
+  const displayEmail = activeCustomer?.email || snap?.email || '';
+  const displayAddress = activeCustomer?.street || snap?.address || jobInfo.address || '';
+  const displayCity = activeCustomer?.city || snap?.city || jobInfo.city || '';
+  const displayState = activeCustomer?.state || snap?.state || jobInfo.state || '';
+  const displayZip = activeCustomer?.zip || snap?.zip || jobInfo.zip || '';
   const fullAddress = [displayAddress, displayCity, displayState, displayZip].filter(Boolean).join(', ');
   const mapsUrl = fullAddress
     ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress)}`
