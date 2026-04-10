@@ -743,12 +743,28 @@ export default function JobDetailsSection() {
         </div>
 
         {changeOrders.some(co => co.status === 'approved') && (
-          <div className="rounded-lg border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-950/20 p-3 flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <GitBranch size={13} className="text-orange-500" />
-              <span className="text-xs font-semibold text-orange-700 dark:text-orange-400">Revised Total (with approved COs)</span>
+          <div className="rounded-lg border border-orange-200 dark:border-orange-800 bg-orange-50 dark:bg-orange-950/20 p-3 mb-3 space-y-2">
+            <p className="text-[10px] font-semibold text-orange-600 dark:text-orange-400 uppercase tracking-wider flex items-center gap-1.5">
+              <GitBranch size={10} /> Change Order Adjustments
+            </p>
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-xs py-0.5">
+                <span className="text-muted-foreground">Base Contract</span>
+                <span className="font-semibold text-foreground">${fmt$(totalPrice)}</span>
+              </div>
+              {changeOrders.filter(co => co.status === 'approved').map((co, idx) => (
+                <div key={co.id} className="flex items-center justify-between text-xs py-0.5 border-t border-orange-200/60 dark:border-orange-800/60">
+                  <span className="text-orange-700 dark:text-orange-400">CO-{String(idx + 1).padStart(3, '0')}: {co.reason}</span>
+                  <span className={`font-semibold ${co.valueDelta >= 0 ? 'text-orange-700 dark:text-orange-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
+                    {co.valueDelta >= 0 ? '+' : ''}{fmt$(co.valueDelta)}
+                  </span>
+                </div>
+              ))}
             </div>
-            <span className="text-base font-bold text-orange-700 dark:text-orange-300">${fmt$(totalWithCOs)}</span>
+            <div className="flex items-center justify-between pt-1 border-t border-orange-300 dark:border-orange-700">
+              <span className="text-xs font-bold text-orange-700 dark:text-orange-400">Contract Value incl. COs</span>
+              <span className="text-base font-bold text-orange-700 dark:text-orange-300">${fmt$(totalWithCOs)}</span>
+            </div>
           </div>
         )}
 

@@ -32,6 +32,9 @@ import {
   ClipboardList,
   CalendarDays,
   Clock,
+  StickyNote,
+  Paperclip,
+  ArrowRight,
 } from 'lucide-react';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { Opportunity } from '@/lib/types';
@@ -53,7 +56,7 @@ interface Props {
   signedEstimateFilename?: string;
 }
 
-type Step = 1 | 2 | 3;
+type Step = 1 | 2 | 3 | 4;
 
 export default function EstimateApprovedModal({
   open,
@@ -72,6 +75,8 @@ export default function EstimateApprovedModal({
   const { state, approveEstimate, setSection, setActiveOpportunity } = useEstimator();
   const [step, setStep] = useState<Step>(1);
   const [jobMode, setJobMode] = useState<'new' | 'existing'>('new');
+  const [transferNotes, setTransferNotes] = useState(true);
+  const [transferAttachments, setTransferAttachments] = useState(true);
   const [newJobTitle, setNewJobTitle] = useState(
     estimateTitle ? `Job — ${estimateTitle.replace(/^Estimate\s*[—-]\s*/i, '')}` : 'New Job'
   );
@@ -128,7 +133,15 @@ export default function EstimateApprovedModal({
 
   function handleProceedToStep3() {
     if (jobMode === 'existing' && !existingJobId) return;
-    setStep(3);
+    // Only show transfer step for new jobs when there's something to transfer
+    const estimateOpp = state.opportunities.find(o => o.id === estimateId);
+    const hasNotes = (estimateOpp?.leadNotes?.length ?? 0) > 0;
+    const hasAttachments = (estimateOpp?.leadAttachments?.length ?? 0) > 0;
+    if (jobMode === 'new' && (hasNotes || hasAttachments)) {
+      setStep(4);
+    } else {
+      setStep(3);
+    }
   }
 
   function handleFinish() {
@@ -149,6 +162,8 @@ export default function EstimateApprovedModal({
       depositType: state.depositType,
       depositValue: state.depositValue,
     });
+    // Resolve transfer data from the estimate opportunity
+    const estimateOpp = state.opportunities.find(o => o.id === estimateId);
     approveEstimate({
       estimateId,
       jobMode,
@@ -162,6 +177,8 @@ export default function EstimateApprovedModal({
       signedEstimateFilename,
       sowDocument,
       jobStartDate: jobStartDateStr,
+      transferNotes: (transferNotes && estimateOpp?.leadNotes?.length) ? estimateOpp.leadNotes : undefined,
+      transferAttachments: (transferAttachments && estimateOpp?.leadAttachments?.length) ? estimateOpp.leadAttachments : undefined,
     });
     onClose();
     // Navigate to the jobs tab
@@ -357,6 +374,87 @@ export default function EstimateApprovedModal({
             </div>
           </>
         )}
+
+        {/* ── Step 4: Transfer Prompt ──────────────────────── */}
+        {step === 4 && (() => {
+          const estimateOpp = state.opportunities.find(o => o.id === estimateId);
+          const noteCount = estimateOpp?.leadNotes?.length ?? 0;
+          const attachCount = estimateOpp?.leadAttachments?.length ?? 0;
+          return (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <ArrowRight className="w-5 h-5 text-primary" />
+                  Transfer Estimate Data to Job
+                </DialogTitle>
+                <DialogDescription>
+                  Carry over notes and attachments from this estimate into the new job's Details tab.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-3 py-2">
+                {/* Notes toggle */}
+                {noteCount > 0 && (
+                  <button
+                    onClick={() => setTransferNotes(v => !v)}
+                    className={`w-full rounded-lg border-2 p-4 text-left transition-all flex items-start gap-3 ${
+                      transferNotes ? 'border-primary bg-primary/5' : 'border-border'
+                    }`}
+                  >
+                    <div className={`mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 ${
+                      transferNotes ? 'border-primary bg-primary' : 'border-muted-foreground'
+                    }`}>
+                      {transferNotes && <CheckCircle2 className="w-3 h-3 text-white" />}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <StickyNote className="w-4 h-4 text-muted-foreground" />
+                        <span className="font-semibold text-sm">Copy Activity Notes</span>
+                        <Badge variant="secondary" className="text-xs">{noteCount} note{noteCount !== 1 ? 's' : ''}</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">All logged calls, SMS, emails, and notes from this estimate will appear in the job's Details tab.</p>
+                    </div>
+                  </button>
+                )}
+
+                {/* Attachments toggle */}
+                {attachCount > 0 && (
+                  <button
+                    onClick={() => setTransferAttachments(v => !v)}
+                    className={`w-full rounded-lg border-2 p-4 text-left transition-all flex items-start gap-3 ${
+                      transferAttachments ? 'border-primary bg-primary/5' : 'border-border'
+                    }`}
+                  >
+                    <div className={`mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 ${
+                      transferAttachments ? 'border-primary bg-primary' : 'border-muted-foreground'
+                    }`}>
+                      {transferAttachments && <CheckCircle2 className="w-3 h-3 text-white" />}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <Paperclip className="w-4 h-4 text-muted-foreground" />
+                        <span className="font-semibold text-sm">Copy Attachments</span>
+                        <Badge variant="secondary" className="text-xs">{attachCount} file{attachCount !== 1 ? 's' : ''}</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">Photos and documents uploaded during the estimate will appear in the job's Details tab.</p>
+                    </div>
+                  </button>
+                )}
+
+                <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
+                  The original estimate record is not modified — this only copies the data into the new job.
+                </div>
+              </div>
+
+              <div className="flex justify-between pt-2">
+                <Button variant="outline" onClick={() => setStep(2)}>Back</Button>
+                <Button onClick={() => setStep(3)} className="gap-1">
+                  Review Invoices <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
+            </>
+          );
+        })()}
 
         {/* ── Step 3: Invoice Summary + Schedule Preview ────── */}
         {step === 3 && (

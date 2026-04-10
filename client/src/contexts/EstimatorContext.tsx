@@ -258,6 +258,8 @@ type Action =
       signedEstimateFilename?: string;
       sowDocument?: string;           // generated SOW text to attach to job
       jobStartDate?: string;          // ISO date string for project start (defaults to today+7)
+      transferNotes?: LeadNote[];       // estimate notes to copy into new job
+      transferAttachments?: JobAttachment[]; // estimate attachments to copy into new job
     }
   | { type: 'UPDATE_USER_PROFILE'; payload: Partial<import('@/lib/types').UserProfile> }
   | { type: 'UPSERT_CUSTOM_ROLE'; role: CustomRole }
@@ -1307,6 +1309,9 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
           ...(action.signedEstimateDataUrl ? { jobSignedEstimateDataUrl: action.signedEstimateDataUrl } : {}),
           ...(action.signedEstimateFilename ? { jobSignedEstimateFilename: action.signedEstimateFilename } : {}),
           ...(action.sowDocument ? { sowDocument: action.sowDocument, sowGeneratedAt: now } : {}),
+          // Transfer notes and attachments from estimate if requested
+          ...(action.transferNotes?.length ? { leadNotes: action.transferNotes.map(n => ({ ...n, id: nanoid(8) })) } : {}),
+          ...(action.transferAttachments?.length ? { leadAttachments: action.transferAttachments.map(a => ({ ...a, id: nanoid(8) })) } : {}),
         };
       }
 
@@ -1729,6 +1734,8 @@ interface EstimatorContextValue {
     signedEstimateFilename?: string;
     sowDocument?: string;
     jobStartDate?: string;
+    transferNotes?: LeadNote[];
+    transferAttachments?: JobAttachment[];
   }) => void;
   // Job tasks
   addJobTask: (oppId: string, task: JobTask) => void;
@@ -2050,6 +2057,8 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
     signedEstimateFilename?: string;
     sowDocument?: string;
     jobStartDate?: string;
+    transferNotes?: LeadNote[];
+    transferAttachments?: JobAttachment[];
   }) => {
     const newJobId = nanoid(8);
     // Persist the signed estimate PNG to its own localStorage key so the main

@@ -813,3 +813,7 @@
 ## Bug Fixes: React key + nested button errors
 - [x] Fix duplicate key `W0WQ__ru` — prefixed allAttachments uid with source (`lead-`, `est-`, `job-`) to prevent ID collisions
 - [x] Fix nested `<button>` inside `<button>` — moved rightSlot outside CollapsibleTrigger into a sibling div
+
+## Feature: CO Value Rollup + Estimate→Job Transfer Prompt
+- [x] CO value rollup: individual CO line items with delta amounts + revised total shown in Job Details Pricing Summary
+- [x] Estimate→Job transfer prompt: Step 4 added to EstimateApprovedModal (notes + attachments toggles, only shown when there is data to transfer)
