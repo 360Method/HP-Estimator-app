@@ -9,7 +9,7 @@
 //   6. Linked lead banner — read-only reference to source lead
 //   7. Map preview
 // ============================================================
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { trpc } from '@/lib/trpc';
 import { nanoid } from 'nanoid';
@@ -26,8 +26,76 @@ import {
   Plus, Paperclip, Download, X, StickyNote,
   PhoneCall, MessageCircle, AtSign, Footprints,
   Zap, Edit3, Check, ChevronDown, ChevronUp,
-  Link2, Camera,
+  Link2, Camera, ChevronRight,
 } from 'lucide-react';
+
+// ── Lightbox ──────────────────────────────────────────────────
+function Lightbox({ images, index, onClose }: { images: string[]; index: number; onClose: () => void }) {
+  const [current, setCurrent] = useState(index);
+  const hasPrev = current > 0;
+  const hasNext = current < images.length - 1;
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowLeft' && current > 0) setCurrent(c => c - 1);
+      if (e.key === 'ArrowRight' && current < images.length - 1) setCurrent(c => c + 1);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [current, images.length, onClose]);
+  return (
+    <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center" onClick={onClose}>
+      <button
+        className="absolute top-4 right-4 z-10 text-white/70 hover:text-white bg-black/40 rounded-full p-2 transition-colors"
+        onClick={onClose}
+      >
+        <X size={20} />
+      </button>
+      {images.length > 1 && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 text-white/70 text-xs font-medium bg-black/40 px-3 py-1 rounded-full">
+          {current + 1} / {images.length}
+        </div>
+      )}
+      {hasPrev && (
+        <button
+          className="absolute left-3 top-1/2 -translate-y-1/2 z-10 text-white/70 hover:text-white bg-black/40 rounded-full p-3 transition-colors"
+          onClick={e => { e.stopPropagation(); setCurrent(c => c - 1); }}
+        >
+          <ChevronRight size={22} className="rotate-180" />
+        </button>
+      )}
+      <img
+        src={images[current]}
+        alt={`Attachment ${current + 1}`}
+        className="max-w-[90vw] max-h-[85vh] rounded-lg object-contain shadow-2xl"
+        onClick={e => e.stopPropagation()}
+      />
+      {hasNext && (
+        <button
+          className="absolute right-3 top-1/2 -translate-y-1/2 z-10 text-white/70 hover:text-white bg-black/40 rounded-full p-3 transition-colors"
+          onClick={e => { e.stopPropagation(); setCurrent(c => c + 1); }}
+        >
+          <ChevronRight size={22} />
+        </button>
+      )}
+      {images.length > 1 && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 max-w-[90vw] overflow-x-auto pb-1" onClick={e => e.stopPropagation()}>
+          {images.map((url, i) => (
+            <button
+              key={i}
+              onClick={() => setCurrent(i)}
+              className={`flex-shrink-0 w-12 h-8 rounded overflow-hidden border-2 transition-all ${
+                i === current ? 'border-white opacity-100' : 'border-white/30 opacity-50 hover:opacity-80'
+              }`}
+            >
+              <img src={url} alt="" className="w-full h-full object-cover" />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 import type { LeadContactType, JobAttachment, EstimateStage, JobStage } from '@/lib/types';
 import { ESTIMATE_STAGES, JOB_STAGES } from '@/lib/types';
 import AddressMapPreview from '@/components/AddressMapPreview';
@@ -215,6 +283,16 @@ function EstimateDetailsPanelInner({
   // Linked lead banner
   const [leadBannerOpen, setLeadBannerOpen] = useState(true);
   const [leadPhotosOpen, setLeadPhotosOpen] = useState(false);
+
+  // Lightbox
+  const [lightboxImages, setLightboxImages] = useState<string[]>([]);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+  const openLightbox = (images: string[], idx: number) => { setLightboxImages(images); setLightboxIndex(idx); };
+  const closeLightbox = () => setLightboxImages([]);
+
+  // Precompute image URLs for lightbox
+  const mainImageUrls = attachments.filter(a => a.mimeType?.startsWith('image/')).map(a => a.url);
+  const leadImageUrls = (sourceLead?.leadAttachments ?? []).filter(a => a.mimeType?.startsWith('image/')).map(a => a.url);
 
   // ── Handlers ────────────────────────────────────────────────
   async function handleStageChange(stage: string) {
@@ -460,26 +538,28 @@ function EstimateDetailsPanelInner({
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-sky-600 mb-2">Lead Attachments</p>
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {(sourceLead.leadAttachments ?? []).map(att => {
+                    {(sourceLead.leadAttachments ?? []).map((att, idx) => {
                       const isImg = att.mimeType.startsWith('image/');
                       return (
-                        <a
+                        <div
                           key={att.id}
-                          href={att.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
                           className="group relative rounded-lg border border-sky-200 overflow-hidden hover:border-sky-400 transition-colors"
                         >
                           {isImg ? (
-                            <img src={att.url} alt={att.name} className="w-full h-24 object-cover" />
+                            <button
+                              className="w-full"
+                              onClick={() => openLightbox(leadImageUrls, leadImageUrls.indexOf(att.url))}
+                            >
+                              <img src={att.url} alt={att.name} className="w-full h-24 object-cover hover:opacity-90 transition-opacity" />
+                            </button>
                           ) : (
-                            <div className="w-full h-24 bg-sky-50 flex flex-col items-center justify-center gap-1">
+                            <a href={att.url} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center justify-center h-24 bg-sky-50 hover:bg-sky-100 transition-colors gap-1">
                               <Paperclip size={20} className="text-sky-400" />
                               <span className="text-[10px] text-sky-600 font-medium truncate px-2 max-w-full">{att.name}</span>
-                            </div>
+                            </a>
                           )}
-                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
-                        </a>
+                          <div className="absolute inset-0 pointer-events-none" />
+                        </div>
                       );
                     })}
                   </div>
@@ -687,9 +767,9 @@ function EstimateDetailsPanelInner({
                 return (
                   <div key={att.id} className="group relative rounded-lg border border-border overflow-hidden">
                     {isImg ? (
-                      <a href={att.url} target="_blank" rel="noopener noreferrer">
+                      <button className="w-full" onClick={() => openLightbox(mainImageUrls, mainImageUrls.indexOf(att.url))}>
                         <img src={att.url} alt={att.name} className="w-full h-24 object-cover hover:opacity-90 transition-opacity" />
-                      </a>
+                      </button>
                     ) : (
                       <a href={att.url} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center justify-center h-24 bg-muted/30 hover:bg-muted/50 transition-colors gap-1">
                         <Download size={20} className="text-muted-foreground" />
@@ -735,6 +815,11 @@ function EstimateDetailsPanelInner({
             />
           </CardContent>
         </Card>
+      )}
+
+      {/* Lightbox */}
+      {lightboxImages.length > 0 && (
+        <Lightbox images={lightboxImages} index={lightboxIndex} onClose={closeLightbox} />
       )}
     </div>
   );

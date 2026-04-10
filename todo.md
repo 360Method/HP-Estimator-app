@@ -817,3 +817,12 @@
 ## Feature: CO Value Rollup + Estimate→Job Transfer Prompt
 - [x] CO value rollup: individual CO line items with delta amounts + revised total shown in Job Details Pricing Summary
 - [x] Estimate→Job transfer prompt: Step 4 added to EstimateApprovedModal (notes + attachments toggles, only shown when there is data to transfer)
+
+## Feature: Lightbox + Job Completion + CO Badge
+- [ ] Build AttachmentLightbox component: full-screen overlay, prev/next nav, keyboard arrows, close on Escape/backdrop click
+- [ ] Wire lightbox into JobDetailsSection attachment grid
+- [ ] Wire lightbox into EstimateDetailsPanel attachment grid
+- [ ] Job completion workflow: "Mark Job Complete" button on Job Details header
+- [ ] JobCompleteModal: final invoice summary, customer sign-off signature canvas, confirm button
+- [ ] COMPLETE_JOB reducer action: set stage to 'completed', save completion signature, mark final invoice as signed
+- [ ] CO status badge on Job Details header: yellow "CO Pending" badge when any CO is in 'sent' or 'pending_approval' status

@@ -13,7 +13,7 @@
 //   • Internal notes (crew-only)
 //   • Change orders panel (create, track, open)
 // ============================================================
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { trpc } from '@/lib/trpc';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import {
@@ -221,19 +221,289 @@ function CreateChangeOrderModal({
 }
 
 // ── Lightbox ──────────────────────────────────────────────────
-function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
+function Lightbox({ images, index, onClose }: { images: string[]; index: number; onClose: () => void }) {
+  const [current, setCurrent] = useState(index);
+  const hasPrev = current > 0;
+  const hasNext = current < images.length - 1;
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowLeft' && current > 0) setCurrent(c => c - 1);
+      if (e.key === 'ArrowRight' && current < images.length - 1) setCurrent(c => c + 1);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [current, images.length, onClose]);
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={onClose}>
-      <button className="absolute top-4 right-4 text-white/80 hover:text-white" onClick={onClose}>
-        <X size={24} />
+    <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center" onClick={onClose}>
+      {/* Close */}
+      <button
+        className="absolute top-4 right-4 z-10 text-white/70 hover:text-white bg-black/40 rounded-full p-2 transition-colors"
+        onClick={onClose}
+      >
+        <X size={20} />
       </button>
+      {/* Counter */}
+      {images.length > 1 && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 text-white/70 text-xs font-medium bg-black/40 px-3 py-1 rounded-full">
+          {current + 1} / {images.length}
+        </div>
+      )}
+      {/* Prev */}
+      {hasPrev && (
+        <button
+          className="absolute left-3 top-1/2 -translate-y-1/2 z-10 text-white/70 hover:text-white bg-black/40 rounded-full p-3 transition-colors"
+          onClick={e => { e.stopPropagation(); setCurrent(c => c - 1); }}
+        >
+          <ChevronRight size={22} className="rotate-180" />
+        </button>
+      )}
+      {/* Image */}
       <img
-        src={src}
-        alt="Attachment preview"
-        className="max-w-full max-h-[90vh] rounded-lg object-contain"
+        src={images[current]}
+        alt={`Attachment ${current + 1}`}
+        className="max-w-[90vw] max-h-[85vh] rounded-lg object-contain shadow-2xl"
         onClick={e => e.stopPropagation()}
       />
+      {/* Next */}
+      {hasNext && (
+        <button
+          className="absolute right-3 top-1/2 -translate-y-1/2 z-10 text-white/70 hover:text-white bg-black/40 rounded-full p-3 transition-colors"
+          onClick={e => { e.stopPropagation(); setCurrent(c => c + 1); }}
+        >
+          <ChevronRight size={22} />
+        </button>
+      )}
+      {/* Thumbnail strip */}
+      {images.length > 1 && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 max-w-[90vw] overflow-x-auto pb-1" onClick={e => e.stopPropagation()}>
+          {images.map((url, i) => (
+            <button
+              key={i}
+              onClick={() => setCurrent(i)}
+              className={`flex-shrink-0 w-12 h-8 rounded overflow-hidden border-2 transition-all ${
+                i === current ? 'border-white opacity-100' : 'border-white/30 opacity-50 hover:opacity-80'
+              }`}
+            >
+              <img src={url} alt="" className="w-full h-full object-cover" />
+            </button>
+          ))}
+        </div>
+      )}
     </div>
+  );
+}
+// ── Job Complete Modal ─────────────────────────────────────────
+function JobCompleteModal({
+  open, onClose, onConfirm, jobTitle, balanceDue,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onConfirm: (signature: string | null, signedBy: string) => void;
+  jobTitle: string;
+  balanceDue: number;
+}) {
+  const [step, setStep] = useState<1 | 2>(1);
+  const [signedBy, setSignedBy] = useState('');
+  const [mode, setMode] = useState<'draw' | 'adopt'>('draw');
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [hasStrokes, setHasStrokes] = useState(false);
+  const lastPos = useRef<{ x: number; y: number } | null>(null);
+  const [adoptName, setAdoptName] = useState('');
+  const previewRef = useRef<HTMLCanvasElement>(null);
+  const fmtBal = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  // Load cursive font
+  useEffect(() => {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&display=swap';
+    document.head.appendChild(link);
+    return () => { if (document.head.contains(link)) document.head.removeChild(link); };
+  }, []);
+
+  // Adopt preview
+  useEffect(() => {
+    if (mode !== 'adopt') return;
+    const canvas = previewRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (!adoptName.trim()) return;
+    ctx.font = `italic 56px 'Dancing Script', cursive`;
+    ctx.fillStyle = '#1a1a2e';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(adoptName.trim(), 16, canvas.height / 2);
+  }, [adoptName, mode]);
+
+  const getPos = (e: React.MouseEvent | React.TouchEvent, canvas: HTMLCanvasElement) => {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    if ('touches' in e) {
+      const t = e.touches[0];
+      return { x: (t.clientX - rect.left) * scaleX, y: (t.clientY - rect.top) * scaleY };
+    }
+    return { x: ((e as React.MouseEvent).clientX - rect.left) * scaleX, y: ((e as React.MouseEvent).clientY - rect.top) * scaleY };
+  };
+  const startDraw = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    setIsDrawing(true);
+    lastPos.current = getPos(e, canvas);
+  };
+  const draw = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    if (!isDrawing) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx || !lastPos.current) return;
+    const pos = getPos(e, canvas);
+    ctx.beginPath();
+    ctx.moveTo(lastPos.current.x, lastPos.current.y);
+    ctx.lineTo(pos.x, pos.y);
+    ctx.strokeStyle = '#1a1a2e';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+    lastPos.current = pos;
+    setHasStrokes(true);
+  };
+  const endDraw = () => { setIsDrawing(false); lastPos.current = null; };
+  const clearCanvas = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setHasStrokes(false);
+  };
+
+  const handleConfirm = () => {
+    if (!signedBy.trim()) { toast.error('Enter the customer name'); return; }
+    let sig: string | null = null;
+    if (mode === 'draw') {
+      if (!hasStrokes) { toast.error('Draw a signature or use Skip'); return; }
+      sig = canvasRef.current?.toDataURL('image/png') ?? null;
+    } else {
+      if (!adoptName.trim()) { toast.error('Type your name to adopt a signature'); return; }
+      const c = document.createElement('canvas');
+      c.width = 600; c.height = 120;
+      const ctx = c.getContext('2d');
+      if (ctx) {
+        ctx.font = `italic 56px 'Dancing Script', cursive`;
+        ctx.fillStyle = '#1a1a2e';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(adoptName.trim(), 16, 60);
+      }
+      sig = c.toDataURL('image/png');
+    }
+    onConfirm(sig, signedBy.trim());
+  };
+
+  // Reset on close
+  useEffect(() => {
+    if (!open) {
+      setStep(1); setSignedBy(''); setMode('draw');
+      setHasStrokes(false); setAdoptName('');
+    }
+  }, [open]);
+
+  if (!open) return null;
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <CheckCircle2 size={18} className="text-emerald-500" />
+            Mark Job Complete
+          </DialogTitle>
+        </DialogHeader>
+        {step === 1 ? (
+          <div className="space-y-4">
+            <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg p-4">
+              <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">{jobTitle}</p>
+              {balanceDue > 0 ? (
+                <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-1">
+                  Final invoice of <strong>${fmtBal(balanceDue)}</strong> will be generated.
+                </p>
+              ) : (
+                <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-1">Balance fully paid — no new invoice.</p>
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground">This moves the job to <strong>Completed</strong> and generates the final invoice. Proceed to collect customer sign-off?</p>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={onClose}>Cancel</Button>
+              <Button onClick={() => setStep(2)} className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1">
+                Collect Sign-Off <ChevronRight size={14} />
+              </Button>
+            </DialogFooter>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Customer Name *</label>
+              <input
+                value={signedBy}
+                onChange={e => setSignedBy(e.target.value)}
+                placeholder="Full name"
+                className="mt-1 w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+              />
+            </div>
+            <div className="flex gap-1 bg-muted rounded-lg p-1 w-fit">
+              <button
+                onClick={() => setMode('draw')}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                  mode === 'draw' ? 'bg-white dark:bg-card shadow text-foreground' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >✏️ Draw</button>
+              <button
+                onClick={() => setMode('adopt')}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                  mode === 'adopt' ? 'bg-white dark:bg-card shadow text-foreground' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >Aa Adopt</button>
+            </div>
+            {mode === 'draw' ? (
+              <div>
+                <canvas
+                  ref={canvasRef}
+                  width={560} height={120}
+                  className="w-full border-2 border-dashed border-border rounded-lg bg-white cursor-crosshair touch-none"
+                  onMouseDown={startDraw} onMouseMove={draw} onMouseUp={endDraw} onMouseLeave={endDraw}
+                  onTouchStart={startDraw} onTouchMove={draw} onTouchEnd={endDraw}
+                />
+                <button onClick={clearCanvas} className="text-xs text-muted-foreground hover:text-foreground mt-1 underline">Clear</button>
+              </div>
+            ) : (
+              <div>
+                <input
+                  value={adoptName}
+                  onChange={e => setAdoptName(e.target.value)}
+                  placeholder="Type name to adopt signature"
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                />
+                {adoptName.trim() && (
+                  <canvas ref={previewRef} width={560} height={100} className="w-full mt-2 border border-border rounded-lg bg-white" />
+                )}
+              </div>
+            )}
+            <p className="text-[11px] text-muted-foreground">By signing, the customer confirms the work is complete and satisfactory.</p>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => onConfirm(null, signedBy.trim() || 'Skipped')}>Skip Signature</Button>
+              <Button onClick={handleConfirm} className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1">
+                <CheckCircle2 size={14} /> Complete Job
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -245,7 +515,7 @@ export default function JobDetailsSection() {
     addJobAttachment, removeJobAttachment,
     addJobActivity,
     createChangeOrder, updateChangeOrder, updateSow,
-    setActiveOpportunity, setPipelineArea,
+    setActiveOpportunity, setPipelineArea, archiveJob,
   } = useEstimator();
 
   const uploadFile = trpc.uploads.uploadFile.useMutation();
@@ -295,7 +565,16 @@ export default function JobDetailsSection() {
   const [smsSending, setSmsSending] = useState(false);
 
   // Lightbox
-  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
+  const [lightboxImages, setLightboxImages] = useState<string[]>([]);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+  const openLightbox = (images: string[], index: number) => {
+    setLightboxImages(images);
+    setLightboxIndex(index);
+  };
+  const closeLightbox = () => setLightboxImages([]);
+
+  // Job complete modal
+  const [showCompleteModal, setShowCompleteModal] = useState(false);
 
   // File upload ref
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -324,6 +603,28 @@ export default function JobDetailsSection() {
     : null;
 
   const stageColor = STAGE_COLORS[activeOpp.stage] ?? 'bg-slate-100 text-slate-700';
+
+  // CO pending badge
+  const pendingCOs = changeOrders.filter(co => co.status === 'sent' || co.status === 'draft');
+  const hasPendingCO = pendingCOs.length > 0;
+
+  // Image list for lightbox
+  const imageAttachments = allAttachments.filter(a => a.mimeType?.startsWith('image/'));
+  const imageUrls = imageAttachments.map(a => a.url);
+
+  // Job complete handler
+  const handleJobComplete = (signature: string | null, signedBy: string) => {
+    archiveJob(activeOpp.id, totalWithCOs);
+    addJobActivity(activeOpp.id, {
+      type: 'job_created',
+      title: 'Job completed',
+      description: signature
+        ? `Customer sign-off collected from ${signedBy}.`
+        : `Completed without signature. Signed by: ${signedBy}.`,
+    });
+    setShowCompleteModal(false);
+    toast.success('Job marked complete — final invoice generated');
+  };
 
   // Pricing
   const snap2 = activeOpp.estimateSnapshot;
@@ -504,13 +805,28 @@ export default function JobDetailsSection() {
           <span className="flex items-center gap-1.5">
             <Briefcase size={12} />
             {activeOpp.stage}
+            {hasPendingCO && (
+              <span className="ml-1 px-1.5 py-0.5 rounded-full bg-yellow-400/90 text-yellow-900 text-[9px] font-bold uppercase tracking-wide animate-pulse">
+                CO Pending
+              </span>
+            )}
           </span>
-          {activeOpp.jobNumber && (
-            <span className="flex items-center gap-1 opacity-80">
-              <Hash size={11} />
-              {activeOpp.jobNumber}
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {activeOpp.jobNumber && (
+              <span className="flex items-center gap-1 opacity-80">
+                <Hash size={11} />
+                {activeOpp.jobNumber}
+              </span>
+            )}
+            {activeOpp.stage !== 'Completed' && activeOpp.stage !== 'Invoice Sent' && activeOpp.stage !== 'Invoice Paid' && (
+              <button
+                onClick={() => setShowCompleteModal(true)}
+                className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold uppercase tracking-wide transition-colors"
+              >
+                <CheckCircle2 size={10} /> Complete
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="card-section-body">
@@ -1165,7 +1481,7 @@ export default function JobDetailsSection() {
               <div className="grid grid-cols-4 gap-2">
                 {allAttachments.filter(a => a.mimeType?.startsWith('image/')).map(a => (
                   <div key={a.uid ?? a.id} className="relative group">
-                    <button onClick={() => setLightboxSrc(a.url)} className="w-full">
+                    <button onClick={() => openLightbox(imageUrls, imageUrls.indexOf(a.url))} className="w-full">
                       <img src={a.url} alt={a.name} className="w-full aspect-square object-cover rounded-lg border hover:opacity-80 transition-opacity" />
                     </button>
                     <div className="absolute top-1 left-1">
@@ -1333,8 +1649,19 @@ export default function JobDetailsSection() {
         </DialogContent>
       </Dialog>
 
+      {/* Job Complete Modal */}
+      <JobCompleteModal
+        open={showCompleteModal}
+        onClose={() => setShowCompleteModal(false)}
+        onConfirm={handleJobComplete}
+        jobTitle={activeOpp.title || displayName || 'Job'}
+        balanceDue={Math.max(0, totalWithCOs - depositAmount)}
+      />
+
       {/* Lightbox */}
-      {lightboxSrc && <Lightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}
+      {lightboxImages.length > 0 && (
+        <Lightbox images={lightboxImages} index={lightboxIndex} onClose={closeLightbox} />
+      )}
     </div>
   );
 }
