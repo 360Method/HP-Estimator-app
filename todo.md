@@ -832,11 +832,14 @@
 - [x] EstimateApprovedModal invoice confirmation step: no scroll — add overflow-y-auto to modal body so user can scroll full content
 
 ## Feature: Customer Portal Document Flow
-- [ ] estimate.send: upsert portal customer + create portal estimate record + magic-link CTA to specific estimate
-- [ ] gmail.sendInvoice: upsert portal customer + create portal invoice record + magic-link CTA in email
-- [ ] PortalLogin: honor ?redirect= param after token verification (navigate to redirect path, not /portal/appointments)
-- [ ] portal.getCustomerPortalData HP-side procedure: return portal estimates + invoices by hpCustomerId
-- [ ] CustomerProfileTab type: add 'portal' value
-- [ ] CustomerSection: add 'portal' tab showing portal estimates, invoices, and attachments for the customer
-- [ ] PortalLayout sidebar: add Documents nav item
-- [ ] PortalDocuments page: list all estimates + invoices shared with customer, with status badges and action buttons
+- [x] estimate.send: upsert portal customer + create portal estimate record + magic-link CTA to specific estimate
+- [x] gmail.sendInvoice: upsert portal customer + create portal invoice record + magic-link CTA in email
+- [x] PortalLogin: honor ?redirect= param after token verification (navigate to redirect path, not /portal/appointments)
+- [x] portal.getCustomerPortalData HP-side procedure: return portal estimates + invoices by hpCustomerId
+- [x] CustomerProfileTab type: add 'portal' value
+- [x] CustomerSection: add 'portal' tab showing portal estimates, invoices, and appointments for the customer
+- [x] PortalLayout sidebar: add Documents nav item
+- [x] PortalDocuments page: list all estimates + invoices shared with customer, with status badges and action buttons
+
+## Bug Fix: estimate.send customerId type mismatch
+- [x] Fix estimate.send: removed z.number() customerId field from schema; EstimateSection and SendEstimateDialog now pass hpCustomerId (string) correctly

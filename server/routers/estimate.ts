@@ -362,7 +362,6 @@ export const estimateRouter = router({
         scopeSummary: z.string().optional(),
         lineItemsText: z.string().optional(),
         portalUrl: z.string().optional(),
-        customerId: z.number().optional(),
         hpCustomerId: z.string().optional(),
         origin: z.string().optional(),
       })

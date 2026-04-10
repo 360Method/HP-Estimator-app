@@ -18,7 +18,6 @@ export interface SendEstimateDialogProps {
   scopeSummary?: string;
   lineItemsText?: string;
   portalUrl?: string;
-  customerId?: number;
   hpCustomerId?: string;
   // Pre-filled from customer profile
   defaultEmail?: string;
@@ -37,7 +36,6 @@ export default function SendEstimateDialog({
   scopeSummary,
   lineItemsText,
   portalUrl,
-  customerId,
   hpCustomerId,
   defaultEmail = '',
   defaultPhone = '',
@@ -95,7 +93,6 @@ export default function SendEstimateDialog({
       scopeSummary,
       lineItemsText,
       portalUrl,
-      customerId,
       hpCustomerId,
       origin: window.location.origin,
     });
