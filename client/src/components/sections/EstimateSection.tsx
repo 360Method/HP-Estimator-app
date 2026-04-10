@@ -299,7 +299,6 @@ function EstimateHeader({ jobInfo, estimateNumber, today }: {
 export default function EstimateSection() {
   const { state, setSummaryNotes, setClientNote, setSection, updateOpportunity, upsertPhaseOverride, removePhaseOverride } = useEstimator();
   const [showMatLabor, setShowMatLabor] = useState(false);
-  const [showAudit, setShowAudit] = useState(false);
   const [expandedPhases, setExpandedPhases] = useState<Set<number>>(new Set());
   const [showTC, setShowTC] = useState(false);
   const [showSendDialog, setShowSendDialog] = useState(false);
@@ -935,54 +934,6 @@ export default function EstimateSection() {
         </div>
       </div>
 
-      {/* Internal margin audit */}
-      <div className="no-print">
-        <button
-          onClick={() => setShowAudit(v => !v)}
-          className="flex items-center gap-2 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
-        >
-          {showAudit ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-          Internal Margin Audit (not shown to client)
-        </button>
-        {showAudit && (
-          <div className="mt-3 bg-slate-900 text-emerald-400 rounded-xl p-4 font-mono text-xs overflow-x-auto">
-            <pre>{JSON.stringify({
-              estimateNumber,
-              date: today,
-              client: state.jobInfo.client,
-              hardCost: Math.round(totals.totalHard * 100) / 100,
-              customerPrice: Math.round(totals.totalPrice * 100) / 100,
-              grossProfit: Math.round(totals.totalGP * 100) / 100,
-              grossMarginPct: Math.round(totals.totalGM * 1000) / 10,
-              minGMFloor: Math.round(minGM * 100),
-              gmStatus: gmFlag,
-              markupMultiplier: state.global.markupPct,
-              laborRate: state.global.laborRate,
-              phases: activePhaseData.map(({ phase, result }) => ({
-                phase: phase.name,
-                hardCost: Math.round(result.hardCost * 100) / 100,
-                customerPrice: Math.round(result.price * 100) / 100,
-                matPrice: Math.round(result.matPrice * 100) / 100,
-                laborPrice: Math.round(result.laborPrice * 100) / 100,
-              })),
-            }, null, 2)}</pre>
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(JSON.stringify({
-                  estimateNumber, date: today, client: state.jobInfo.client,
-                  hardCost: totals.totalHard, customerPrice: totals.totalPrice,
-                  grossProfit: totals.totalGP, grossMarginPct: Math.round(totals.totalGM * 1000) / 10,
-                  minGMFloor: Math.round(minGM * 100), gmStatus: gmFlag,
-                }, null, 2));
-                toast.success('Audit data copied');
-              }}
-              className="mt-3 px-3 py-1.5 bg-emerald-800 text-emerald-200 rounded-md text-xs font-semibold hover:bg-emerald-700 transition-colors"
-            >
-              Copy Audit JSON
-            </button>
-          </div>
-        )}
-      </div>
     </div>
   );
 }

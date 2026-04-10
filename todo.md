@@ -845,10 +845,10 @@
 - [x] Fix estimate.send: removed z.number() customerId field from schema; EstimateSection and SendEstimateDialog now pass hpCustomerId (string) correctly
 
 ## Feature: Resend + Read-Receipt on Portal Tab
-- [ ] Add viewedAt column to portalEstimates and portalInvoices schema, run db:push
-- [ ] Mark portalEstimate viewedAt on first open in PortalEstimateDetail
-- [ ] Mark portalInvoice viewedAt on first open in PortalInvoiceDetail
-- [ ] Add portal.resendEstimate procedure: re-generate magic link + resend email
-- [ ] Add portal.resendInvoice procedure: re-generate magic link + resend email
-- [ ] CustomerPortalTab: show "Viewed" badge with timestamp when viewedAt is set
-- [ ] CustomerPortalTab: add Resend button on each estimate and invoice card
+- [x] Add viewedAt column to portalEstimates and portalInvoices schema, run db:push
+- [x] Mark portalEstimate viewedAt on first open in PortalEstimateDetail
+- [x] Mark portalInvoice viewedAt on first open in PortalInvoiceDetail
+- [x] Add portal.resendEstimate procedure: re-generate magic link + resend email
+- [x] Add portal.resendInvoice procedure: re-generate magic link + resend email
+- [x] CustomerPortalTab: show "Viewed" badge with timestamp when viewedAt is set
+- [x] CustomerPortalTab: add Resend button on each estimate and invoice card
