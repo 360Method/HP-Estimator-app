@@ -5,7 +5,7 @@
 import React, { createContext, useContext, useReducer, useCallback, useEffect } from 'react';
 import {
   EstimatorState, JobInfo, GlobalSettings, AppSection,
-  LineItem, CustomLineItem, EstimateLineOverride,
+  LineItem, CustomLineItem, EstimateLineOverride, EstimatePhaseOverride,
   Opportunity, PipelineArea, CustomerProfile, ActivityEvent, CustomerProfileTab,
   OpportunityStage, Customer, Invoice, InvoiceLineItem, ScheduleEvent,
   EstimateSnapshot, CustomerAddress, JobTask, JobAttachment, CustomRole, LeadNote,
@@ -46,6 +46,7 @@ const initialState: EstimatorState = {
   // v3
   clientNote: '',
   estimateOverrides: [],
+  phaseOverrides: [],
   signature: null,
   signedAt: null,
   signedBy: null,
@@ -177,6 +178,8 @@ type Action =
   | { type: 'SET_CLIENT_NOTE'; payload: string }
   | { type: 'UPSERT_ESTIMATE_OVERRIDE'; payload: EstimateLineOverride }
   | { type: 'REMOVE_ESTIMATE_OVERRIDE'; itemId: string }
+  | { type: 'UPSERT_PHASE_OVERRIDE'; payload: EstimatePhaseOverride }
+  | { type: 'REMOVE_PHASE_OVERRIDE'; phaseId: number }
   | { type: 'SET_SIGNATURE'; payload: { signature: string; signedBy: string } }
   | { type: 'CLEAR_SIGNATURE' }
   | { type: 'ADD_OPPORTUNITY'; payload: Omit<Opportunity, 'id' | 'createdAt' | 'updatedAt'> }
@@ -396,12 +399,28 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
       return { ...state, estimateOverrides: [...state.estimateOverrides, action.payload] };
     }
 
-    case 'REMOVE_ESTIMATE_OVERRIDE':
+     case 'REMOVE_ESTIMATE_OVERRIDE':
       return {
         ...state,
         estimateOverrides: state.estimateOverrides.filter(o => o.itemId !== action.itemId),
       };
-
+    case 'UPSERT_PHASE_OVERRIDE': {
+      const exists = (state.phaseOverrides ?? []).find(o => o.phaseId === action.payload.phaseId);
+      if (exists) {
+        return {
+          ...state,
+          phaseOverrides: (state.phaseOverrides ?? []).map(o =>
+            o.phaseId === action.payload.phaseId ? action.payload : o
+          ),
+        };
+      }
+      return { ...state, phaseOverrides: [...(state.phaseOverrides ?? []), action.payload] };
+    }
+    case 'REMOVE_PHASE_OVERRIDE':
+      return {
+        ...state,
+        phaseOverrides: (state.phaseOverrides ?? []).filter(o => o.phaseId !== action.phaseId),
+      };
     case 'SET_SIGNATURE':
       return {
         ...state,
@@ -517,6 +536,7 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
           estimatorNotes: state.estimatorNotes,
           clientNote: state.clientNote,
           estimateOverrides: state.estimateOverrides,
+          phaseOverrides: state.phaseOverrides ?? [],
           signature: state.signature,
           signedAt: state.signedAt,
           signedBy: state.signedBy,
@@ -578,6 +598,7 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
         estimatorNotes: snap?.estimatorNotes ?? '',
         clientNote: snap?.clientNote ?? '',
         estimateOverrides: snap?.estimateOverrides ?? [],
+        phaseOverrides: snap?.phaseOverrides ?? [],
         signature: snap?.signature ?? null,
         signedAt: snap?.signedAt ?? null,
         signedBy: snap?.signedBy ?? null,
@@ -818,6 +839,7 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
             estimatorNotes: state.estimatorNotes,
             clientNote: state.clientNote,
             estimateOverrides: state.estimateOverrides,
+            phaseOverrides: state.phaseOverrides ?? [],
             signature: state.signature,
             signedAt: state.signedAt,
             signedBy: state.signedBy,
@@ -1365,11 +1387,11 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
         })),
         customItems: [],
         estimateOverrides: [],
+        phaseOverrides: [],
         signature: null,
         signedAt: null,
         signedBy: null,
       };
-
     case 'ADD_SCHEDULE_EVENT': {
       const now = new Date().toISOString();
       const newEvent: ScheduleEvent = {
@@ -1477,6 +1499,8 @@ interface EstimatorContextValue {
   setClientNote: (v: string) => void;
   upsertEstimateOverride: (override: EstimateLineOverride) => void;
   removeEstimateOverride: (itemId: string) => void;
+  upsertPhaseOverride: (override: EstimatePhaseOverride) => void;
+  removePhaseOverride: (phaseId: number) => void;
   setSignature: (signature: string, signedBy: string) => void;
   clearSignature: () => void;
   addOpportunity: (payload: Omit<Opportunity, 'id' | 'createdAt' | 'updatedAt'>) => void;
@@ -1712,6 +1736,10 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'UPSERT_ESTIMATE_OVERRIDE', payload: override }), []);
   const removeEstimateOverride = useCallback((itemId: string) =>
     dispatch({ type: 'REMOVE_ESTIMATE_OVERRIDE', itemId }), []);
+  const upsertPhaseOverride = useCallback((override: EstimatePhaseOverride) =>
+    dispatch({ type: 'UPSERT_PHASE_OVERRIDE', payload: override }), []);
+  const removePhaseOverride = useCallback((phaseId: number) =>
+    dispatch({ type: 'REMOVE_PHASE_OVERRIDE', phaseId }), []);
   const setSignature = useCallback((signature: string, signedBy: string) =>
     dispatch({ type: 'SET_SIGNATURE', payload: { signature, signedBy } }), []);
   const clearSignature = useCallback(() => dispatch({ type: 'CLEAR_SIGNATURE' }), []);
@@ -1919,6 +1947,7 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
       addCustomItem, updateCustomItem, removeCustomItem,
       setFieldNotes, setSummaryNotes, setEstimatorNotes, setClientNote,
       upsertEstimateOverride, removeEstimateOverride,
+      upsertPhaseOverride, removePhaseOverride,
       setSignature, clearSignature,
       addOpportunity, updateOpportunity, removeOpportunity, setPipelineArea,
       setCustomerProfile, addActivityEvent, setCustomerTab,

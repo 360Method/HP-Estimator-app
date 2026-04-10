@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { randomBytes } from "crypto";
-import { publicProcedure, router } from "../_core/trpc";
+import { publicProcedure, protectedProcedure, router } from "../_core/trpc";
 import { invokeLLM } from "../_core/llm";
 import { sendEmail } from "../gmail";
 import { sendSms, isTwilioConfigured } from "../twilio";
@@ -232,6 +232,67 @@ Return the structured JSON estimate.`;
 }
 
 // ─── Router ─────────────────────────────────────────────────────────────────
+// ─── AI rewrite helpers ──────────────────────────────────────────────────
+
+/**
+ * Rewrites a full phase section (title + description + all SOW bullets)
+ * using professional contractor language.
+ */
+async function aiRewritePhase(input: {
+  phaseName: string;
+  phaseDescription: string;
+  bullets: string[];
+  jobTitle: string;
+  customerName: string;
+}): Promise<{ title: string; description: string; bullets: string[] }> {
+  const prompt = [
+    `You are a professional contractor writing customer-facing estimate copy for Handy Pioneers, a licensed home improvement company in Vancouver, WA.`,
+    ``,
+    `Rewrite the following estimate section in clear, professional, friendly language that builds trust with the homeowner.`,
+    `Keep the same scope and facts — do NOT add or remove line items. Keep bullets concise (1-2 sentences max).`,
+    ``,
+    `Job: ${input.jobTitle}`,
+    `Customer: ${input.customerName}`,
+    ``,
+    `Current section title: ${input.phaseName}`,
+    `Current section description: ${input.phaseDescription}`,
+    `Current SOW bullets:`,
+    ...input.bullets.map((b, i) => `${i + 1}. ${b}`),
+    ``,
+    `Return JSON with: { "title": string, "description": string, "bullets": string[] }`,
+    `The bullets array must have exactly ${input.bullets.length} items.`,
+  ].join('\n');
+
+  const response = await invokeLLM({
+    messages: [
+      { role: 'system', content: 'You are a professional contractor copywriter. Return only valid JSON.' },
+      { role: 'user', content: prompt },
+    ],
+    response_format: {
+      type: 'json_schema',
+      json_schema: {
+        name: 'phase_rewrite',
+        strict: true,
+        schema: {
+          type: 'object',
+          properties: {
+            title: { type: 'string' },
+            description: { type: 'string' },
+            bullets: { type: 'array', items: { type: 'string' } },
+          },
+          required: ['title', 'description', 'bullets'],
+          additionalProperties: false,
+        },
+      },
+    } as Parameters<typeof invokeLLM>[0]['response_format'],
+  });
+
+  const raw = response.choices?.[0]?.message?.content;
+  if (!raw) throw new Error('AI returned empty response');
+  const parsed = JSON.parse(typeof raw === 'string' ? raw : JSON.stringify(raw));
+  return parsed as { title: string; description: string; bullets: string[] };
+}
+
 export const estimateRouter = router({
   aiParse: publicProcedure
     .input(z.object({ notes: z.string().min(10).max(8000) }))
@@ -374,5 +435,42 @@ export const estimateRouter = router({
         throw new Error(results.errors.join("; "));
       }
       return results;
+    }),
+
+  // ─── AI rewrite a single phase section ──────────────────────────────────
+  rewritePhase: protectedProcedure
+    .input(
+      z.object({
+        phaseName: z.string(),
+        phaseDescription: z.string(),
+        bullets: z.array(z.string()),
+        jobTitle: z.string(),
+        customerName: z.string(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      return await aiRewritePhase(input);
+    }),
+
+  // ─── AI rewrite a single bullet ─────────────────────────────────────────
+  rewriteBullet: protectedProcedure
+    .input(
+      z.object({
+        bullet: z.string(),
+        phaseName: z.string(),
+        jobTitle: z.string(),
+        customerName: z.string(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const response = await invokeLLM({
+        messages: [
+          { role: 'system', content: 'You are a professional contractor copywriter. Return only the rewritten bullet text, no JSON, no quotes, no numbering.' },
+          { role: 'user', content: `Rewrite this scope-of-work bullet in clear, professional, friendly language for a homeowner estimate.\n\nJob: ${input.jobTitle}\nCustomer: ${input.customerName}\nSection: ${input.phaseName}\n\nOriginal bullet: ${input.bullet}\n\nReturn only the rewritten bullet text.` },
+        ],
+      });
+      const raw = response.choices?.[0]?.message?.content;
+      if (!raw || typeof raw !== 'string') throw new Error('AI returned empty response');
+      return { bullet: raw.trim() };
     }),
 });

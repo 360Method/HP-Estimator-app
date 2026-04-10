@@ -110,6 +110,14 @@ export interface EstimateLineOverride {
   hidden: boolean;             // hide from customer estimate
 }
 
+// Per-phase title/description/bullet overrides for the customer-facing estimate
+export interface EstimatePhaseOverride {
+  phaseId: number;              // matches PhaseGroup.id
+  customTitle?: string;         // override phase.name
+  customDescription?: string;   // override phase.description
+  customBullets?: string[];     // override the auto-generated SOW bullets (full replacement)
+}
+
 export interface PhaseGroup {
   id: number;
   name: string;
@@ -406,6 +414,7 @@ export interface EstimatorState {
   // v3 additions
   clientNote: string;                          // client-facing note on estimate
   estimateOverrides: EstimateLineOverride[];   // per-item estimate customizations
+  phaseOverrides: EstimatePhaseOverride[];     // per-phase title/description/bullet overrides
   signature: string | null;                    // base64 PNG of e-signature
   signedAt: string | null;                     // ISO timestamp of signature
   signedBy: string | null;                     // name of signer
@@ -525,6 +534,7 @@ export interface EstimateSnapshot {
   estimatorNotes: string;
   clientNote: string;
   estimateOverrides: EstimateLineOverride[];
+  phaseOverrides: EstimatePhaseOverride[];
   signature: string | null;
   signedAt: string | null;
   signedBy: string | null;

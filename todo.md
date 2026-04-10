@@ -774,3 +774,14 @@
 ## Bug: NotFoundError removeChild DOM conflict (Maps SDK vs React)
 - [x] Rewrote AddressMapPreview to create the map container div imperatively (outside React reconciler)
 - [x] Maps SDK owns its own div; React never tries to removeChild nodes it didn't create
+
+## Feature: Editable line items in Estimate tab
+- [x] Add `EstimatePhaseOverride` type to types.ts (phaseId, customTitle, customDescription, customBullets)
+- [x] Add `phaseOverrides` to EstimatorState + EstimateSnapshot; UPSERT/REMOVE_PHASE_OVERRIDE reducers
+- [x] Add `upsertPhaseOverride` / `removePhaseOverride` callbacks to EstimatorContext
+- [x] Add `estimate.rewritePhase` tRPC procedure (LLM rewrites title, description, and all bullets)
+- [x] EstimateSection: pencil icon per trade card opens inline edit form (title, description, bullets)
+- [x] Add / remove individual bullets in edit mode; AI Rewrite button rewrites entire section
+- [x] Save / Cancel buttons in edit mode; Save calls `upsertPhaseOverride`
+- [x] "Edited" badge on trade card header when override is active
+- [x] "Reset to original" button in view mode when override exists
