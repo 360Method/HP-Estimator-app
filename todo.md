@@ -809,3 +809,7 @@
 - [x] Wire change order creation: opens estimate tab with pre-populated phases from job's estimateSnapshot
 - [x] CO estimates appear with "CO" badge in PipelineBoard estimate cards
 - [x] Change Orders panel on job shows each CO's status and lets PM open it
+
+## Bug Fixes: React key + nested button errors
+- [x] Fix duplicate key `W0WQ__ru` — prefixed allAttachments uid with source (`lead-`, `est-`, `job-`) to prevent ID collisions
+- [x] Fix nested `<button>` inside `<button>` — moved rightSlot outside CollapsibleTrigger into a sibling div

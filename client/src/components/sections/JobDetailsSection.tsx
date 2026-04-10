@@ -127,19 +127,23 @@ function Section({
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <div className="card-section">
-        <CollapsibleTrigger asChild>
-          <button className="card-section-header text-xs font-semibold uppercase tracking-wider w-full text-left">
-            {icon}
-            <span>{title}</span>
-            {badge}
-            <span className="ml-auto flex items-center gap-2">
-              {rightSlot}
-              {open
-                ? <ChevronUp size={13} className="text-muted-foreground" />
-                : <ChevronDown size={13} className="text-muted-foreground" />}
-            </span>
-          </button>
-        </CollapsibleTrigger>
+        <div className="card-section-header text-xs font-semibold uppercase tracking-wider w-full text-left flex items-center">
+          <CollapsibleTrigger asChild>
+            <button className="flex items-center gap-1.5 flex-1 text-left min-w-0">
+              {icon}
+              <span>{title}</span>
+              {badge}
+              <span className="ml-auto flex items-center gap-1">
+                {open
+                  ? <ChevronUp size={13} className="text-muted-foreground" />
+                  : <ChevronDown size={13} className="text-muted-foreground" />}
+              </span>
+            </button>
+          </CollapsibleTrigger>
+          {rightSlot && (
+            <div className="ml-2 flex items-center gap-1 shrink-0">{rightSlot}</div>
+          )}
+        </div>
         <CollapsibleContent>
           <div className="card-section-body">
             {children}
@@ -346,9 +350,9 @@ export default function JobDetailsSection() {
   const taskProgress = tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0;
 
   // Attachments — unified: lead + estimate + job
-  const leadAttachments = (sourceLead?.leadAttachments ?? []).map(a => ({ ...a, source: 'Lead' as const }));
-  const estimateAttachments = (sourceEstimate?.leadAttachments ?? []).map(a => ({ ...a, source: 'Estimate' as const }));
-  const jobAttachments = (activeOpp.attachments ?? []).map(a => ({ ...a, source: 'Job' as const }));
+  const leadAttachments = (sourceLead?.leadAttachments ?? []).map(a => ({ ...a, source: 'Lead' as const, uid: `lead-${a.id}` }));
+  const estimateAttachments = (sourceEstimate?.leadAttachments ?? []).map(a => ({ ...a, source: 'Estimate' as const, uid: `est-${a.id}` }));
+  const jobAttachments = (activeOpp.attachments ?? []).map(a => ({ ...a, source: 'Job' as const, uid: `job-${a.id}` }));
   const allAttachments = [...leadAttachments, ...estimateAttachments, ...jobAttachments];
 
   // Activity
@@ -1145,7 +1149,7 @@ export default function JobDetailsSection() {
             {allAttachments.some(a => a.mimeType?.startsWith('image/')) && (
               <div className="grid grid-cols-4 gap-2">
                 {allAttachments.filter(a => a.mimeType?.startsWith('image/')).map(a => (
-                  <div key={a.id} className="relative group">
+                  <div key={a.uid ?? a.id} className="relative group">
                     <button onClick={() => setLightboxSrc(a.url)} className="w-full">
                       <img src={a.url} alt={a.name} className="w-full aspect-square object-cover rounded-lg border hover:opacity-80 transition-opacity" />
                     </button>
@@ -1173,7 +1177,7 @@ export default function JobDetailsSection() {
 
             {/* File list */}
             {allAttachments.filter(a => !a.mimeType?.startsWith('image/')).map(a => (
-              <div key={a.id} className="flex items-center gap-3 rounded-lg border bg-muted/20 px-3 py-2 group">
+              <div key={a.uid ?? a.id} className="flex items-center gap-3 rounded-lg border bg-muted/20 px-3 py-2 group">
                 <FileText size={14} className="text-muted-foreground flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-semibold text-foreground truncate">{a.name}</p>
