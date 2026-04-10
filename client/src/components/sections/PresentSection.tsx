@@ -600,19 +600,32 @@ export default function PresentSection() {
               {activePhases.map(phase => {
                 const phaseObj = state.phases.find(p => p.id === phase.phaseId);
                 const activeItems = phase.items.filter(i => i.hasData);
-                const bullets = phaseObj ? buildSowBullets(
+                const rawBullets = phaseObj ? buildSowBullets(
                   activeItems.map(i => {
                     const orig = phaseObj.items.find(pi => pi.id === i.id);
                     return orig ? { ...orig, qty: i.qty } : { id: i.id, name: i.name, qty: i.qty, tier: 'good', tiers: { good: { name: i.matName }, better: { name: i.matName }, best: { name: i.matName } }, hasTiers: true, unitType: i.unitType, wastePct: 0 };
                   })
                 ) : [];
+                // Apply editor overrides if present
+                const phaseOverride = (state.phaseOverrides ?? []).find(o => o.phaseId === phase.phaseId);
+                const displayPhaseName = phaseOverride?.customTitle ?? phase.phaseName;
+                const displayDescription = phaseOverride?.customDescription ?? phaseObj?.description ?? '';
+                // customBullets are plain strings; rawBullets are {title, desc} objects — normalise to {title, desc}
+                const displayBullets: { title: string; desc: string }[] = phaseOverride?.customBullets
+                  ? phaseOverride.customBullets.map(b => ({ title: b, desc: '' }))
+                  : rawBullets;
                 const phaseCustom = customByPhase[phase.phaseId] || [];
 
                 return (
                   <div key={phase.phaseId} className="mb-8">
                     {/* Phase header */}
                     <div className="flex items-start justify-between mb-2">
-                      <div className="text-sm font-bold text-gray-900">{phase.phaseName}</div>
+                      <div>
+                        <div className="text-sm font-bold text-gray-900">{displayPhaseName}</div>
+                        {displayDescription && (
+                          <div className="text-xs text-gray-500 mt-0.5">{displayDescription}</div>
+                        )}
+                      </div>
                       {jobInfo.estimator && (
                         <div className="text-xs text-gray-500 text-right">
                           Service completed by: {jobInfo.estimator}
@@ -634,7 +647,7 @@ export default function PresentSection() {
                       </thead>
                       <tbody>
                         {activeItems.map((item, idx) => {
-                          const bullet = bullets[idx];
+                          const bullet = displayBullets[idx];
                           const unitPrice = item.qty > 0 ? item.price / item.qty : 0;
                           // Derive material and labor from item if available
                           const matCost = (item as any).matCost ?? 0;

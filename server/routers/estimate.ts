@@ -246,26 +246,31 @@ async function aiRewritePhase(input: {
   customerName: string;
 }): Promise<{ title: string; description: string; bullets: string[] }> {
   const prompt = [
-    `You are a professional contractor writing customer-facing estimate copy for Handy Pioneers, a licensed home improvement company in Vancouver, WA.`,
+    `You are a licensed contractor writing scope-of-work copy for a customer-facing estimate.`,
     ``,
-    `Rewrite the following estimate section in clear, professional, friendly language that builds trust with the homeowner.`,
-    `Keep the same scope and facts — do NOT add or remove line items. Keep bullets concise (1-2 sentences max).`,
+    `Rules (follow strictly):`,
+    `- Write as a contractor speaks to a homeowner: direct, plain, no filler words.`,
+    `- BANNED words and phrases: "we are pleased", "rest assured", "comprehensive", "seamless", "top-notch", "high-quality", "ensure", "leverage", "tailored", "dedicated", "exceptional", "professional", "quality", "efficiently", "effectively".`,
+    `- Each bullet: 1-2 sentences max. State what will be done and the quantity or material. Nothing more.`,
+    `- Title: short noun phrase, 2-5 words (e.g. "Flooring", "Drywall Repair", "Exterior Paint"). No verbs.`,
+    `- Description: 1 sentence stating the overall scope of this trade section. No adjectives.`,
+    `- Do NOT add or remove line items. Same scope, same facts, cleaner language.`,
     ``,
     `Job: ${input.jobTitle}`,
     `Customer: ${input.customerName}`,
     ``,
-    `Current section title: ${input.phaseName}`,
-    `Current section description: ${input.phaseDescription}`,
-    `Current SOW bullets:`,
+    `Section title: ${input.phaseName}`,
+    `Section description: ${input.phaseDescription}`,
+    `SOW bullets:`,
     ...input.bullets.map((b, i) => `${i + 1}. ${b}`),
     ``,
-    `Return JSON with: { "title": string, "description": string, "bullets": string[] }`,
-    `The bullets array must have exactly ${input.bullets.length} items.`,
+    `Return JSON: { "title": string, "description": string, "bullets": string[] }`,
+    `bullets must have exactly ${input.bullets.length} items.`,
   ].join('\n');
 
   const response = await invokeLLM({
     messages: [
-      { role: 'system', content: 'You are a professional contractor copywriter. Return only valid JSON.' },
+      { role: 'system', content: 'You are a licensed contractor. Return only valid JSON. No filler words.' },
       { role: 'user', content: prompt },
     ],
     response_format: {
@@ -465,8 +470,8 @@ export const estimateRouter = router({
     .mutation(async ({ input }) => {
       const response = await invokeLLM({
         messages: [
-          { role: 'system', content: 'You are a professional contractor copywriter. Return only the rewritten bullet text, no JSON, no quotes, no numbering.' },
-          { role: 'user', content: `Rewrite this scope-of-work bullet in clear, professional, friendly language for a homeowner estimate.\n\nJob: ${input.jobTitle}\nCustomer: ${input.customerName}\nSection: ${input.phaseName}\n\nOriginal bullet: ${input.bullet}\n\nReturn only the rewritten bullet text.` },
+          { role: 'system', content: 'You are a licensed contractor. Return only the rewritten bullet text — 1-2 sentences max, no filler words, no JSON, no quotes, no numbering.' },
+          { role: 'user', content: `Rewrite this scope-of-work bullet for a customer-facing estimate.\n\nRules: Direct contractor language only. No filler words (no "ensure", "seamless", "high-quality", "professional", "exceptional", "comprehensive"). State what will be done and the quantity or material. 1-2 sentences max.\n\nJob: ${input.jobTitle}\nSection: ${input.phaseName}\n\nOriginal: ${input.bullet}\n\nReturn only the rewritten bullet text.` },
         ],
       });
       const raw = response.choices?.[0]?.message?.content;

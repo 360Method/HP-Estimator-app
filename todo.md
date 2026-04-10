@@ -785,3 +785,8 @@
 - [x] Save / Cancel buttons in edit mode; Save calls `upsertPhaseOverride`
 - [x] "Edited" badge on trade card header when override is active
 - [x] "Reset to original" button in view mode when override exists
+
+## Feature: Sync estimate edits to customer-facing output + tighten AI prompt
+- [x] PresentSection: apply phaseOverrides (customTitle, customDescription, customBullets) when rendering trade cards
+- [x] EstimateSection (customer PDF view): apply phaseOverrides to trade card title, description, and SOW bullets (displayTitle/displayDescription/displayBullets already in place)
+- [x] AI rewrite prompt: contractor-direct, no filler words, 1-2 sentences max per bullet, plain declarative language
