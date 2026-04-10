@@ -530,37 +530,39 @@ export default function PresentSection() {
       )}
 
       {/* ── THE DOCUMENT ── */}
-      <div ref={docRef} className="max-w-[850px] mx-auto my-6 bg-white shadow-2xl print:shadow-none print:my-0 print:max-w-none">
-        <div className="px-12 py-10 print:px-8 print:py-6">
+      <div ref={docRef} className="max-w-[850px] mx-auto my-4 bg-white shadow-2xl print:shadow-none print:my-0 print:max-w-none">
+        <div className="px-4 py-6 sm:px-8 sm:py-8 print:px-8 print:py-6">
 
           {/* ── HEADER ROW ── */}
-          <div className="flex items-start justify-between mb-8">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
             {/* Logo + company name */}
             <div>
-              <img src={HP_LOGO} alt="Handy Pioneers" className="w-24 h-24 object-contain mb-2" />
+              <img src={HP_LOGO} alt="Handy Pioneers" className="w-16 h-16 sm:w-24 sm:h-24 object-contain mb-2" />
               <div className="text-base font-bold text-gray-900">Handy Pioneers</div>
             </div>
 
             {/* Estimate info table */}
-            <table className="text-xs border border-gray-300 border-collapse" style={{ minWidth: 260 }}>
-              <tbody>
-                {[
-                  ['ESTIMATE', jobInfo.jobNumber],
-                  ['ESTIMATE DATE', fmtDate(jobInfo.date)],
-                  ['SERVICE DATE', fmtDate(jobInfo.servicedDate)],
-                  ['EXPIRATION DATE', fmtDate(jobInfo.expiresDate)],
-                ].map(([label, val]) => (
-                  <tr key={label}>
-                    <td className="border border-gray-300 px-3 py-1.5 font-semibold text-gray-600 bg-gray-50 whitespace-nowrap">{label}</td>
-                    <td className="border border-gray-300 px-3 py-1.5 text-gray-900 font-medium">{val}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="text-xs border border-gray-300 border-collapse w-full sm:w-auto">
+                <tbody>
+                  {[
+                    ['ESTIMATE', jobInfo.jobNumber],
+                    ['ESTIMATE DATE', fmtDate(jobInfo.date)],
+                    ['SERVICE DATE', fmtDate(jobInfo.servicedDate)],
+                    ['EXPIRATION DATE', fmtDate(jobInfo.expiresDate)],
+                  ].map(([label, val]) => (
+                    <tr key={label}>
+                      <td className="border border-gray-300 px-2 py-1.5 font-semibold text-gray-600 bg-gray-50 whitespace-nowrap text-[10px] sm:text-xs">{label}</td>
+                      <td className="border border-gray-300 px-2 py-1.5 text-gray-900 font-medium text-[10px] sm:text-xs">{val}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           {/* ── CLIENT + CONTACT BLOCK ── */}
-          <div className="flex gap-12 mb-8">
+          <div className="flex flex-col sm:flex-row gap-6 sm:gap-12 mb-6">
             {/* Client info */}
             <div className="flex-1">
               <div className="text-sm font-bold text-gray-900 mb-1">{jobInfo.client || 'Client Name'}</div>
@@ -645,6 +647,7 @@ export default function PresentSection() {
                     </div>
 
                     {/* Line items table — columns driven by visibility state */}
+                    <div className="overflow-x-auto">
                     <table className="w-full text-xs border-collapse mb-3">
                       <thead>
                         <tr className="bg-gray-100">
@@ -704,6 +707,7 @@ export default function PresentSection() {
                         })}
                       </tbody>
                     </table>
+                    </div>
 
                     {/* Phase subtotal */}
                     <div className="text-right text-xs text-gray-600 mb-1">
@@ -717,6 +721,7 @@ export default function PresentSection() {
               {activeCustom.filter(c => !activePhases.find(p => p.phaseId === c.phaseId)).length > 0 && (
                 <div className="mb-8">
                   <div className="text-sm font-bold text-gray-900 mb-2">Additional Services</div>
+                  <div className="overflow-x-auto">
                   <table className="w-full text-xs border-collapse mb-3">
                     <thead>
                       <tr className="bg-gray-100">
@@ -746,12 +751,13 @@ export default function PresentSection() {
                       })}
                     </tbody>
                   </table>
+                  </div>
                 </div>
               )}
 
               {/* ── TOTALS BLOCK ── */}
               <div className="flex justify-end mb-8">
-                <div className="w-72">
+                <div className="w-full sm:w-72">
                   <div className="flex justify-between py-2 border-b border-gray-200 text-sm">
                     <span className="text-gray-600">Subtotal</span>
                     <span className="font-medium text-gray-900">{fmtDollarCents(totals.totalPrice)}</span>
@@ -805,7 +811,7 @@ export default function PresentSection() {
           )}
 
           {/* ── FOOTER ── */}
-          <div className="mt-10 pt-4 border-t border-gray-200 flex items-center justify-between text-[10px] text-gray-400">
+          <div className="mt-8 pt-4 border-t border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-[10px] text-gray-400">
             <span>Handy Pioneers | {jobInfo.jobNumber}</span>
             <span>{HP_WEB}</span>
             <span>Reliable Renovations, Trusted Results.</span>
