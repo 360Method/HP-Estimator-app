@@ -196,7 +196,7 @@ export default function EstimateApprovedModal({
 
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) handleClose(); }}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg flex flex-col max-h-[90dvh]">
         {/* ── Step 1: Celebration ─────────────────────────────── */}
         {step === 1 && (
           <>
@@ -459,7 +459,7 @@ export default function EstimateApprovedModal({
         {/* ── Step 3: Invoice Summary + Schedule Preview ────── */}
         {step === 3 && (
           <>
-            <DialogHeader>
+            <DialogHeader className="flex-shrink-0">
               <DialogTitle className="flex items-center gap-2">
                 <FileText className="w-5 h-5 text-primary" />
                 Invoices &amp; Project Schedule
@@ -469,6 +469,7 @@ export default function EstimateApprovedModal({
               </DialogDescription>
             </DialogHeader>
 
+            <div className="overflow-y-auto flex-1 min-h-0">
             <div className="space-y-3 py-2">
               {/* Job info */}
               <div className="rounded-lg border bg-muted/30 p-3 flex items-center gap-3">
@@ -615,8 +616,9 @@ export default function EstimateApprovedModal({
                 )}
               </div>
             </div>
+            </div>
 
-            <div className="flex justify-between pt-2">
+            <div className="flex-shrink-0 flex justify-between pt-2 border-t">
               <Button variant="outline" onClick={() => setStep(2)}>Back</Button>
               <Button
                 onClick={handleFinish}

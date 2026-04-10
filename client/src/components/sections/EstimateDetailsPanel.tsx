@@ -28,6 +28,9 @@ import {
   Zap, Edit3, Check, ChevronDown, ChevronUp,
   Link2, Camera, ChevronRight,
 } from 'lucide-react';
+import type { LeadContactType, JobAttachment, EstimateStage, JobStage, Opportunity, LeadNote } from '@/lib/types';
+import { ESTIMATE_STAGES, JOB_STAGES } from '@/lib/types';
+import AddressMapPreview from '@/components/AddressMapPreview';
 
 // ── Lightbox ──────────────────────────────────────────────────
 function Lightbox({ images, index, onClose }: { images: string[]; index: number; onClose: () => void }) {
@@ -96,10 +99,6 @@ function Lightbox({ images, index, onClose }: { images: string[]; index: number;
     </div>
   );
 }
-import type { LeadContactType, JobAttachment, EstimateStage, JobStage } from '@/lib/types';
-import { ESTIMATE_STAGES, JOB_STAGES } from '@/lib/types';
-import AddressMapPreview from '@/components/AddressMapPreview';
-
 // ── Helpers ──────────────────────────────────────────────────
 function fmtDateTime(iso: string) {
   return new Date(iso).toLocaleString('en-US', {
@@ -226,11 +225,8 @@ export default function EstimateDetailsPanel() {
   );
 }
 
-// ── Inner component (stateful) ────────────────────────────────
-import type { Opportunity, LeadNote } from '@/lib/types';
-
-interface InnerProps {
-  activeOpp: Opportunity;
+// ── Inner component (stateful) ────────────────────────────────────────────
+interface InnerProps { activeOpp: Opportunity;
   stages: string[];
   stageColorMap: Record<string, string>;
   currentStage: string;

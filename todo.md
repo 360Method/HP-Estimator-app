@@ -819,10 +819,14 @@
 - [x] Estimate→Job transfer prompt: Step 4 added to EstimateApprovedModal (notes + attachments toggles, only shown when there is data to transfer)
 
 ## Feature: Lightbox + Job Completion + CO Badge
-- [ ] Build AttachmentLightbox component: full-screen overlay, prev/next nav, keyboard arrows, close on Escape/backdrop click
-- [ ] Wire lightbox into JobDetailsSection attachment grid
-- [ ] Wire lightbox into EstimateDetailsPanel attachment grid
-- [ ] Job completion workflow: "Mark Job Complete" button on Job Details header
-- [ ] JobCompleteModal: final invoice summary, customer sign-off signature canvas, confirm button
-- [ ] COMPLETE_JOB reducer action: set stage to 'completed', save completion signature, mark final invoice as signed
-- [ ] CO status badge on Job Details header: yellow "CO Pending" badge when any CO is in 'sent' or 'pending_approval' status
+- [x] Build AttachmentLightbox component: full-screen overlay, prev/next nav, keyboard arrows, close on Escape/backdrop click
+- [x] Wire lightbox into JobDetailsSection attachment grid
+- [x] Wire lightbox into EstimateDetailsPanel attachment grid
+- [x] Job completion workflow: "Mark Job Complete" button on Job Details header
+- [x] JobCompleteModal: final invoice summary, customer sign-off signature canvas, confirm button
+- [x] COMPLETE_JOB reducer action: calls archiveJob → sets stage to Invoice Paid, auto-generates final invoice, logs completion activity
+- [x] CO status badge on Job Details header: yellow "CO Pending" badge with pulse when any CO is in 'draft' or 'sent' status
+
+## Bug Fixes: Mobile UI — Estimate Header + Modal Scroll
+- [x] PresentSection header: button text overflows outside button bounds on mobile — fix with flex-shrink-0, whitespace-nowrap, and responsive sizing
+- [x] EstimateApprovedModal invoice confirmation step: no scroll — add overflow-y-auto to modal body so user can scroll full content
