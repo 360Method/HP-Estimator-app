@@ -565,6 +565,7 @@ export interface Opportunity {
   area: PipelineArea;
   stage: OpportunityStage;
   title: string;          // short description of the opportunity
+  seqNumber?: number;     // sequential per-area counter (L-001, E-001, J-001)
   value: number;          // estimated dollar value
   jobNumber?: string;     // e.g. "JOB-2026-001", set when converted to a job
   createdAt: string;      // ISO date string

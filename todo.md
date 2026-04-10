@@ -866,3 +866,10 @@
 - [x] Back-to-customer breadcrumb in opportunity detail view (opp-details section)
 - [x] Duplicate opportunity warning in intake modals when opened from customer profile
 - [x] Convert to Estimate button in lead detail view (pre-fills estimate modal with lead line items + notes)
+
+## Feature: Opportunity Title & Number
+- [x] Add sequential tracking number to Opportunity type (e.g., L-001, E-001, J-001)
+- [x] Assign sequential number in ADD_OPPORTUNITY reducer based on area
+- [x] Show number badge in IntakeShell header (e.g., "E-003")
+- [x] Add inline rename for opportunity title in IntakeShell header (click-to-edit)
+- [x] Persist title rename via updateOpportunityTitle context action

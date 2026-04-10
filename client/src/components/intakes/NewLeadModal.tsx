@@ -15,7 +15,7 @@ import IntakeShell, {
 } from './IntakeShell';
 
 export default function NewLeadModal({ onClose, prefill, onSaved }: { onClose: () => void; prefill?: any; onSaved?: (oppId: string) => void }) {
-  const { addOpportunity, addCustomer, setActiveCustomer } = useEstimator();
+  const { addOpportunity, addCustomer, setActiveCustomer, state } = useEstimator();
   const [customer, setCustomer] = useState(prefill?.displayName ?? '');
   const [selectedCustomer, setSelectedCustomer] = useState<SelectedCustomer | null>(
     prefill ? { id: prefill.id ?? '', displayName: prefill.displayName ?? '', phone: prefill.phone ?? '', email: prefill.email ?? '', address: prefill.address ?? '', city: prefill.city ?? '', state: prefill.state ?? '', zip: prefill.zip ?? '' } : null
@@ -23,6 +23,11 @@ export default function NewLeadModal({ onClose, prefill, onSaved }: { onClose: (
   const [assignee, setAssignee] = useState('');
   const [notes, setNotes] = useState('');
   const [items, setItems] = useState<LineItem[]>([]);
+  const leadCount = state.opportunities.filter(o => o.area === 'lead').length;
+  const seqNum = leadCount + 1;
+  const trackingNumber = `L-${String(seqNum).padStart(3, '0')}`;
+  const defaultTitle = prefill?.displayName ? `Lead — ${prefill.displayName}` : 'New Lead';
+  const [oppTitle, setOppTitle] = useState(defaultTitle);
 
   const handleCustomerConfirmed = (c: SelectedCustomer) => {
     setCustomer(c.displayName);
@@ -42,7 +47,8 @@ export default function NewLeadModal({ onClose, prefill, onSaved }: { onClose: (
       id: oppId,
       area: 'lead',
       stage: 'New Lead',
-      title: `Lead — ${customer.trim()}`,
+      title: oppTitle.trim() || `Lead — ${customer.trim()}`,
+      seqNumber: seqNum,
       value: totalValue,
       notes,
       archived: false,
@@ -85,7 +91,9 @@ export default function NewLeadModal({ onClose, prefill, onSaved }: { onClose: (
 
   return (
     <IntakeShell
-      title="New lead"
+      title={oppTitle}
+      onTitleChange={setOppTitle}
+      trackingNumber={trackingNumber}
       onClose={onClose}
       onSave={handleSave}
       saveLabel="Save lead"

@@ -15,7 +15,7 @@ import IntakeShell, {
 } from './IntakeShell';
 
 export default function NewJobModal({ onClose, prefill, onSaved }: { onClose: () => void; prefill?: any; onSaved?: (oppId: string) => void }) {
-  const { addOpportunity, addCustomer, setActiveCustomer, addScheduleEvent } = useEstimator();
+  const { addOpportunity, addCustomer, setActiveCustomer, addScheduleEvent, state } = useEstimator();
   const [customer, setCustomer] = useState(prefill?.displayName ?? '');
   const [selectedCustomer, setSelectedCustomer] = useState<SelectedCustomer | null>(
     prefill ? { id: prefill.id ?? '', displayName: prefill.displayName ?? '', phone: prefill.phone ?? '', email: prefill.email ?? '', address: prefill.address ?? '', city: prefill.city ?? '', state: prefill.state ?? '', zip: prefill.zip ?? '' } : null
@@ -28,6 +28,11 @@ export default function NewJobModal({ onClose, prefill, onSaved }: { onClose: ()
   const [team, setTeam] = useState('');
   const [notes, setNotes] = useState('');
   const [items, setItems] = useState<LineItem[]>([]);
+  const jobCount = state.opportunities.filter(o => o.area === 'job').length;
+  const seqNum = jobCount + 1;
+  const trackingNumber = `J-${String(seqNum).padStart(3, '0')}`;
+  const defaultTitle = prefill?.displayName ? `Job — ${prefill.displayName}` : 'New Job';
+  const [oppTitle, setOppTitle] = useState(defaultTitle);
 
   const handleCustomerConfirmed = (c: SelectedCustomer) => {
     setCustomer(c.displayName);
@@ -44,12 +49,13 @@ export default function NewJobModal({ onClose, prefill, onSaved }: { onClose: ()
     }
     const totalValue = items.reduce((s, i) => s + i.qty * i.unitPrice, 0);
     const oppId = nanoid(8);
-    const newJobTitle = `Job — ${customer.trim()}`;
+    const newJobTitle = oppTitle.trim() || `Job — ${customer.trim()}`;
     addOpportunity({
       id: oppId,
       area: 'job',
       stage: 'New Job',
-      title: `Job — ${customer.trim()}`,
+      title: newJobTitle,
+      seqNumber: seqNum,
       value: totalValue,
       notes,
       archived: false,
@@ -143,7 +149,9 @@ export default function NewJobModal({ onClose, prefill, onSaved }: { onClose: ()
 
   return (
     <IntakeShell
-      title="New job"
+      title={oppTitle}
+      onTitleChange={setOppTitle}
+      trackingNumber={trackingNumber}
       onClose={onClose}
       onSave={handleSave}
       saveLabel="Save job"

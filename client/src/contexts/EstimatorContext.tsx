@@ -452,9 +452,11 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
       return { ...state, signature: null, signedAt: null, signedBy: null };
 
     case 'ADD_OPPORTUNITY': {
+      const areaCount = state.opportunities.filter(o => o.area === action.payload.area).length;
       const newOpp: Opportunity = {
         ...action.payload,
         id: action.payload.id ?? nanoid(8),
+        seqNumber: action.payload.seqNumber ?? (areaCount + 1),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };

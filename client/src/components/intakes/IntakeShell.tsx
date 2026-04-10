@@ -12,7 +12,7 @@
 // ============================================================
 
 import { useState, useRef, useEffect, ReactNode } from 'react';
-import { X, Plus, Trash2, GripVertical, Search, User, UserPlus, ChevronRight, Check } from 'lucide-react';
+import { X, Plus, Trash2, GripVertical, Search, User, UserPlus, ChevronRight, Check, Pencil } from 'lucide-react';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { nanoid } from 'nanoid';
 import { Customer } from '@/lib/types';
@@ -41,6 +41,10 @@ export interface LineItem {
 
 export interface IntakeShellProps {
   title: string;
+  /** Called when the user renames the title inline */
+  onTitleChange?: (newTitle: string) => void;
+  /** Sequential tracking number badge, e.g. "L-001" */
+  trackingNumber?: string;
   onClose: () => void;
   onSave: () => void;
   leftPanel: ReactNode;
@@ -54,9 +58,49 @@ export interface IntakeShellProps {
   onCustomerConfirmed?: (c: SelectedCustomer) => void;
 }
 
+// ─── InlineTitle ─────────────────────────────────────────────
+function InlineTitle({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { if (editing) inputRef.current?.select(); }, [editing]);
+  useEffect(() => { if (!editing) setDraft(value); }, [value, editing]);
+
+  const commit = () => {
+    const trimmed = draft.trim();
+    if (trimmed) onChange(trimmed);
+    else setDraft(value);
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setDraft(value); setEditing(false); } }}
+        className="text-base sm:text-lg font-semibold text-slate-800 tracking-tight bg-transparent border-b-2 border-primary outline-none min-w-0 w-full max-w-[260px]"
+      />
+    );
+  }
+  return (
+    <button
+      onClick={() => setEditing(true)}
+      className="flex items-center gap-1.5 group min-w-0"
+      title="Click to rename"
+    >
+      <span className="text-base sm:text-lg font-semibold text-slate-800 tracking-tight truncate max-w-[200px] sm:max-w-[320px]">{value}</span>
+      <Pencil size={12} className="shrink-0 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+    </button>
+  );
+}
+
 // ─── Shell ────────────────────────────────────────────────────
 export default function IntakeShell({
-  title, onClose, onSave, leftPanel, rightPanel, saveLabel = 'Save',
+  title, onTitleChange, trackingNumber, onClose, onSave, leftPanel, rightPanel, saveLabel = 'Save',
   requireCustomer = true, prefillCustomer = null, onCustomerConfirmed,
 }: IntakeShellProps) {
   const [step, setStep] = useState<'customer' | 'details'>(
@@ -91,9 +135,20 @@ export default function IntakeShell({
           >
             <X size={18} />
           </button>
-          <h1 className="text-base sm:text-lg font-semibold text-slate-800 tracking-tight truncate">
-            {title}
-          </h1>
+          <div className="flex items-center gap-2 min-w-0">
+            {trackingNumber && (
+              <span className="shrink-0 px-1.5 py-0.5 text-[10px] font-bold bg-slate-100 text-slate-500 rounded font-mono">
+                {trackingNumber}
+              </span>
+            )}
+            {onTitleChange ? (
+              <InlineTitle value={title} onChange={onTitleChange} />
+            ) : (
+              <h1 className="text-base sm:text-lg font-semibold text-slate-800 tracking-tight truncate">
+                {title}
+              </h1>
+            )}
+          </div>
           {confirmedCustomer && (
             <div className="hidden sm:flex items-center gap-1.5 px-2 py-1 bg-emerald-50 border border-emerald-200 rounded-lg">
               <Check size={11} className="text-emerald-600" />

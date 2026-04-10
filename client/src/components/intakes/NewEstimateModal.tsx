@@ -15,7 +15,7 @@ import IntakeShell, {
 } from './IntakeShell';
 
 export default function NewEstimateModal({ onClose, prefill, onSaved }: { onClose: () => void; prefill?: any; onSaved?: (oppId: string) => void }) {
-  const { addOpportunity, addCustomer, setActiveCustomer } = useEstimator();
+  const { addOpportunity, addCustomer, setActiveCustomer, state } = useEstimator();
   const [customer, setCustomer] = useState(prefill?.displayName ?? '');
   const [selectedCustomer, setSelectedCustomer] = useState<SelectedCustomer | null>(
     prefill ? { id: prefill.id ?? '', displayName: prefill.displayName ?? '', phone: prefill.phone ?? '', email: prefill.email ?? '', address: prefill.address ?? '', city: prefill.city ?? '', state: prefill.state ?? '', zip: prefill.zip ?? '' } : null
@@ -27,6 +27,11 @@ export default function NewEstimateModal({ onClose, prefill, onSaved }: { onClos
   const [team, setTeam] = useState('');
   const [notes, setNotes] = useState('');
   const [items, setItems] = useState<LineItem[]>([]);
+  const estCount = state.opportunities.filter(o => o.area === 'estimate').length;
+  const seqNum = estCount + 1;
+  const trackingNumber = `E-${String(seqNum).padStart(3, '0')}`;
+  const defaultTitle = prefill?.displayName ? `Estimate — ${prefill.displayName}` : 'New Estimate';
+  const [oppTitle, setOppTitle] = useState(defaultTitle);
 
   const handleCustomerConfirmed = (c: SelectedCustomer) => {
     setCustomer(c.displayName);
@@ -46,7 +51,8 @@ export default function NewEstimateModal({ onClose, prefill, onSaved }: { onClos
       id: oppId,
       area: 'estimate',
       stage: 'Draft',
-      title: `Estimate — ${customer.trim()}`,
+      title: oppTitle.trim() || `Estimate — ${customer.trim()}`,
+      seqNumber: seqNum,
       value: totalValue,
       notes,
       archived: false,
@@ -116,7 +122,9 @@ export default function NewEstimateModal({ onClose, prefill, onSaved }: { onClos
 
   return (
     <IntakeShell
-      title="New estimate"
+      title={oppTitle}
+      onTitleChange={setOppTitle}
+      trackingNumber={trackingNumber}
       onClose={onClose}
       onSave={handleSave}
       saveLabel="Save estimate"
