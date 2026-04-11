@@ -579,6 +579,13 @@ export default function JobDetailsSection() {
   // File upload ref
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // MUST be defined before early return — used in derived values below
+  const changeOrders = activeOpp?.changeOrders ?? [];
+  const leadAttachmentsPre = (sourceLead?.leadAttachments ?? []).map(a => ({ ...a, source: 'Lead' as const, uid: `lead-${a.id}` }));
+  const estimateAttachmentsPre = (sourceEstimate?.leadAttachments ?? []).map(a => ({ ...a, source: 'Estimate' as const, uid: `est-${a.id}` }));
+  const jobAttachmentsPre = (activeOpp?.attachments ?? []).map(a => ({ ...a, source: 'Job' as const, uid: `job-${a.id}` }));
+  const allAttachments = [...leadAttachmentsPre, ...estimateAttachmentsPre, ...jobAttachmentsPre];
+
   if (!activeOpp) {
     return (
       <div className="py-16 text-center text-muted-foreground text-sm">
@@ -635,7 +642,6 @@ export default function JobDetailsSection() {
       : snap2.depositValue
     : 0;
   const balanceAmount = totalPrice - depositAmount;
-  const changeOrders = activeOpp.changeOrders ?? [];
   const totalWithCOs = totalPrice + changeOrders
     .filter(co => co.status === 'approved')
     .reduce((sum, co) => sum + co.valueDelta, 0);
@@ -649,11 +655,6 @@ export default function JobDetailsSection() {
   const completedCount = tasks.filter(t => t.completed).length;
   const taskProgress = tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0;
 
-  // Attachments — unified: lead + estimate + job
-  const leadAttachments = (sourceLead?.leadAttachments ?? []).map(a => ({ ...a, source: 'Lead' as const, uid: `lead-${a.id}` }));
-  const estimateAttachments = (sourceEstimate?.leadAttachments ?? []).map(a => ({ ...a, source: 'Estimate' as const, uid: `est-${a.id}` }));
-  const jobAttachments = (activeOpp.attachments ?? []).map(a => ({ ...a, source: 'Job' as const, uid: `job-${a.id}` }));
-  const allAttachments = [...leadAttachments, ...estimateAttachments, ...jobAttachments];
 
   // Activity
   const jobActivity = [...(activeOpp.jobActivity ?? [])].sort(
