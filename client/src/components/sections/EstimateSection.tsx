@@ -518,6 +518,26 @@ export default function EstimateSection() {
           depositAmount={depositAmount}
           scopeSummary={state.jobInfo.scope}
           lineItemsText={generatePlainText()}
+          lineItemsJson={JSON.stringify(
+            activePhaseData.map(({ phase, result, activeItems, bullets }) => ({
+              phaseName: phase.name,
+              phaseDescription: (phase as any).description ?? '',
+              items: activeItems.map((item, idx) => {
+                const itemResult = result.items.find((r: any) => r.id === item.id);
+                const price = itemResult?.price ?? 0;
+                const unitPrice = item.qty > 0 ? price / item.qty : 0;
+                return {
+                  name: item.name,
+                  scopeOfWork: bullets[idx] ?? '',
+                  qty: item.qty,
+                  unitType: item.unitType,
+                  unitPrice: Math.round(unitPrice * 100) / 100,
+                  amount: Math.round(price * 100) / 100,
+                };
+              }),
+              phaseTotal: Math.round(result.price * 100) / 100,
+            }))
+          )}
           hpCustomerId={activeCustomer?.id}
           defaultEmail={activeCustomer?.email || state.jobInfo.email || ''}
           defaultPhone={activeCustomer?.mobilePhone || state.jobInfo.phone || ''}

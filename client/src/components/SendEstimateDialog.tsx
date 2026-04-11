@@ -17,6 +17,8 @@ export interface SendEstimateDialogProps {
   depositAmount?: number;
   scopeSummary?: string;
   lineItemsText?: string;
+  /** Structured JSON string — array of phase objects with line items */
+  lineItemsJson?: string;
   portalUrl?: string;
   hpCustomerId?: string;
   // Pre-filled from customer profile
@@ -35,13 +37,14 @@ export default function SendEstimateDialog({
   depositAmount,
   scopeSummary,
   lineItemsText,
+  lineItemsJson,
   portalUrl,
   hpCustomerId,
   defaultEmail = '',
   defaultPhone = '',
   onClose,
   onSent,
-}: SendEstimateDialogProps) {
+}: SendEstimateDialogProps & { lineItemsJson?: string }) {
   const [email, setEmail] = useState(defaultEmail);
   const [phone, setPhone] = useState(defaultPhone);
   const [sendViaEmail, setSendViaEmail] = useState(!!defaultEmail);
@@ -92,6 +95,7 @@ export default function SendEstimateDialog({
       depositAmount,
       scopeSummary,
       lineItemsText,
+      lineItemsJson,
       portalUrl,
       hpCustomerId,
       origin: window.location.origin,

@@ -45,6 +45,90 @@ const DEFAULT_COLS: Record<ColKey, boolean> = {
   amount:    true,
 };
 
+// ─── Portal structured line items serializer ────────────────────────────────
+type PortalPhasePayload = {
+  phaseName: string;
+  phaseDescription: string;
+  items: Array<{ name: string; scopeOfWork: string; qty: number; unitType: string; unitPrice: number; amount: number }>;
+  phaseTotal: number;
+};
+
+function buildPortalLineItemsJson(
+  activePhases: ReturnType<typeof import('@/lib/calc').calcPhase>[],
+  phases: { id: number; name: string; description?: string; items: { id: string; name: string; qty: number; tier: string; tiers: Record<string, { name: string }>; hasTiers: boolean; unitType: string; wastePct: number; paintPrep?: string; hasPaintPrep?: boolean }[] }[],
+  phaseOverrides: { phaseId: number; customTitle?: string; customDescription?: string; customBullets?: string[] }[],
+  customResults: { id: string; name: string; description?: string; qty: number; unitType?: string; price: number; hasData: boolean; phaseId: number }[],
+): string {
+  const portalPhases: PortalPhasePayload[] = [];
+
+  for (const phase of activePhases) {
+    const phaseObj = phases.find(p => p.id === phase.phaseId);
+    const override = phaseOverrides.find(o => o.phaseId === phase.phaseId);
+    const phaseName = override?.customTitle ?? phase.phaseName;
+    const phaseDescription = override?.customDescription ?? (phaseObj as any)?.description ?? '';
+    const activeItems = phase.items.filter((i: any) => i.hasData);
+
+    const items = activeItems.map((item: any, idx: number) => {
+      const orig = phaseObj?.items.find((pi: any) => pi.id === item.id);
+      const inputItems = orig
+        ? [{ ...orig, qty: item.qty }]
+        : [{ id: item.id, name: item.name, qty: item.qty, tier: 'good', tiers: { good: { name: item.matName }, better: { name: item.matName }, best: { name: item.matName } }, hasTiers: true, unitType: item.unitType, wastePct: 0 }];
+      const bullets = buildSowBullets(inputItems);
+      const scopeOfWork = override?.customBullets?.[idx] ?? bullets[0]?.title ?? item.sowLine ?? '';
+      const unitPrice = item.qty > 0 ? item.price / item.qty : 0;
+      return {
+        name: item.name,
+        scopeOfWork,
+        qty: item.qty,
+        unitType: item.unitType,
+        unitPrice: Math.round(unitPrice * 100) / 100,
+        amount: Math.round(item.price * 100) / 100,
+      };
+    });
+
+    // Include custom items for this phase
+    const phaseCustom = customResults.filter(c => c.hasData && c.phaseId === phase.phaseId);
+    for (const ci of phaseCustom) {
+      const unitPrice = ci.qty > 0 ? ci.price / ci.qty : 0;
+      items.push({
+        name: ci.name,
+        scopeOfWork: ci.description ?? '',
+        qty: ci.qty,
+        unitType: ci.unitType ?? 'unit',
+        unitPrice: Math.round(unitPrice * 100) / 100,
+        amount: Math.round(ci.price * 100) / 100,
+      });
+    }
+
+    if (items.length > 0) {
+      portalPhases.push({ phaseName, phaseDescription, items, phaseTotal: Math.round(phase.price * 100) / 100 });
+    }
+  }
+
+  // Orphan custom items (not tied to any active phase)
+  const orphanCustom = customResults.filter(c => c.hasData && !activePhases.find(p => p.phaseId === c.phaseId));
+  if (orphanCustom.length > 0) {
+    portalPhases.push({
+      phaseName: 'Additional Items',
+      phaseDescription: '',
+      items: orphanCustom.map(ci => {
+        const unitPrice = ci.qty > 0 ? ci.price / ci.qty : 0;
+        return {
+          name: ci.name,
+          scopeOfWork: ci.description ?? '',
+          qty: ci.qty,
+          unitType: ci.unitType ?? 'unit',
+          unitPrice: Math.round(unitPrice * 100) / 100,
+          amount: Math.round(ci.price * 100) / 100,
+        };
+      }),
+      phaseTotal: Math.round(orphanCustom.reduce((s, c) => s + c.price, 0) * 100) / 100,
+    });
+  }
+
+  return JSON.stringify(portalPhases);
+}
+
 // ─── SOW bullet generator ─────────────────────────────────────
 function buildSowBullets(items: { id: string; name: string; qty: number; tier: string; tiers: Record<string, { name: string }>; hasTiers: boolean; unitType: string; wastePct: number; paintPrep?: string; hasPaintPrep?: boolean; sowTemplate?: string; salesSelected?: boolean }[]): { title: string; desc: string }[] {
   const bullets: { title: string; desc: string }[] = [];
@@ -837,6 +921,12 @@ export default function PresentSection() {
           depositAmount={depositAmount}
           scopeSummary={jobInfo.scope}
           lineItemsText={`Estimate ${jobInfo.jobNumber} — Total: $${totals.totalPrice.toLocaleString()}`}
+          lineItemsJson={buildPortalLineItemsJson(
+            activePhases,
+            state.phases as any,
+            state.phaseOverrides ?? [],
+            customResults as any,
+          )}
           defaultEmail={activeCustomer?.email || jobInfo.email || ''}
           defaultPhone={activeCustomer?.mobilePhone || jobInfo.phone || ''}
           hpCustomerId={activeCustomer?.id}

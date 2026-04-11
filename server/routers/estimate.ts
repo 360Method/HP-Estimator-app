@@ -361,6 +361,8 @@ export const estimateRouter = router({
         depositAmount: z.number().optional(),
         scopeSummary: z.string().optional(),
         lineItemsText: z.string().optional(),
+        /** Structured JSON — array of portal phase objects with full line items */
+        lineItemsJson: z.string().optional(),
         portalUrl: z.string().optional(),
         hpCustomerId: z.string().optional(),
         origin: z.string().optional(),
@@ -391,7 +393,7 @@ export const estimateRouter = router({
               totalAmount: Math.round(input.totalPrice * 100),
               depositAmount: Math.round((input.depositAmount ?? input.totalPrice * 0.5) * 100),
               depositPercent: depositPct,
-              lineItemsJson: input.lineItemsText ? JSON.stringify([{ description: input.lineItemsText }]) : undefined,
+              lineItemsJson: input.lineItemsJson ?? (input.lineItemsText ? JSON.stringify([{ description: input.lineItemsText }]) : undefined),
               scopeOfWork: input.scopeSummary,
               expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
               sentAt: new Date(),
