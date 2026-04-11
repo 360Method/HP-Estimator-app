@@ -20,13 +20,14 @@ import {
   ChevronRight, ChevronLeft, Settings, Edit,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import PortalThreadPanel from '@/components/PortalThreadPanel';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Channel = 'sms' | 'email' | 'call' | 'note';
-type SidebarFilter = 'all' | 'customers' | 'employees' | 'calls';
+type SidebarFilter = 'all' | 'customers' | 'employees' | 'calls' | 'portal';
 // Mobile screen stack
 type MobileScreen = 'home' | 'list' | 'thread';
 
@@ -314,6 +315,19 @@ export default function InboxPage() {
     { enabled: sidebarFilter === 'calls' }
   );
 
+  // Portal messages (all customers, HP-side view)
+  const { data: portalMsgsAll = [], isLoading: portalMsgsLoading, refetch: refetchPortalMsgs } =
+    trpc.portal.getAllPortalMessages.useQuery(
+      undefined,
+      { enabled: sidebarFilter === 'portal' }
+    );
+  const [activePortalCustomerId, setActivePortalCustomerId] = useState<number | null>(null);
+  const [portalReplyText, setPortalReplyText] = useState('');
+  const replyPortalMsg = trpc.portal.replyToPortalMessage.useMutation({
+    onSuccess: () => { setPortalReplyText(''); refetchPortalMsgs(); },
+    onError: (err) => toast.error(err.message),
+  });
+
   const { data: twilioStatus } = trpc.inbox.twilio.status.useQuery();
   const { data: gmailStatus } = trpc.gmail.status.useQuery();
 
@@ -526,6 +540,21 @@ export default function InboxPage() {
             </button>
           </div>
         </div>
+        {/* PORTAL section */}
+        <div>
+          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-2">Client Portal</div>
+          <div className="bg-white rounded-xl shadow-sm overflow-hidden divide-y divide-border/50">
+            <button
+              onClick={() => goToList('portal')}
+              className="w-full flex items-center justify-between px-4 py-4 hover:bg-muted/30 active:bg-muted/50 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-[16px] font-medium text-foreground">Portal Messages</span>
+              </div>
+              <ChevronRight className="w-5 h-5 text-muted-foreground" />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -535,7 +564,8 @@ export default function InboxPage() {
   const listTitle =
     sidebarFilter === 'all' ? 'All Comms' :
     sidebarFilter === 'customers' ? 'Customers' :
-    sidebarFilter === 'employees' ? 'Employees' : 'Voice Call Log';
+    sidebarFilter === 'employees' ? 'Employees' :
+    sidebarFilter === 'portal' ? 'Portal Messages' : 'Voice Call Log';
 
   const ListScreen = (
     <div className="flex flex-col h-full bg-background">
@@ -567,7 +597,7 @@ export default function InboxPage() {
       </div>
 
       {/* Search */}
-      {sidebarFilter !== 'calls' && (
+      {sidebarFilter !== 'calls' && sidebarFilter !== 'portal' && (
         <div className="px-4 py-2.5 border-b border-border bg-background">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -583,7 +613,62 @@ export default function InboxPage() {
 
       {/* List */}
       <div className="flex-1 overflow-y-auto">
-        {sidebarFilter === 'calls' ? (
+        {sidebarFilter === 'portal' ? (
+          portalMsgsLoading ? (
+            <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">Loading...</div>
+          ) : portalMsgsAll.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 gap-3 text-center px-4">
+              <MessageSquare className="w-10 h-10 text-muted-foreground/30" />
+              <p className="text-sm font-medium text-muted-foreground">No portal messages yet</p>
+            </div>
+          ) : (
+            <div>
+              {/* Group by customer */}
+              {Object.entries(
+                (portalMsgsAll as any[]).reduce((acc: Record<number, any>, msg: any) => {
+                  if (!acc[msg.customerId]) acc[msg.customerId] = { customerId: msg.customerId, messages: [] };
+                  acc[msg.customerId].messages.push(msg);
+                  return acc;
+                }, {})
+              ).map(([custId, group]: [string, any]) => {
+                const latest = group.messages[0];
+                const unread = group.messages.filter((m: any) => m.senderRole === 'customer' && !m.readAt).length;
+                const isActive = activePortalCustomerId === group.customerId;
+                return (
+                  <button
+                    key={custId}
+                    onClick={() => setActivePortalCustomerId(group.customerId)}
+                    className={`w-full text-left px-4 py-3.5 border-b border-border/40 hover:bg-muted/40 transition-colors flex items-center gap-3.5 ${
+                      isActive ? 'bg-primary/5' : ''
+                    }`}
+                  >
+                    <div className="flex-shrink-0 w-11 h-11 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 text-sm font-bold">
+                      {latest.senderName ? latest.senderName.charAt(0).toUpperCase() : 'C'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className={`text-[15px] font-semibold truncate ${unread > 0 ? 'text-foreground' : 'text-foreground/80'}`}>
+                          {latest.senderName || `Customer #${custId}`}
+                        </span>
+                        <span className="text-xs text-muted-foreground flex-shrink-0">{fmtTime(latest.createdAt)}</span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 mt-0.5">
+                        <p className={`text-sm truncate ${unread > 0 ? 'text-foreground/70 font-medium' : 'text-muted-foreground'}`}>
+                          {latest.senderRole === 'customer' ? '' : 'You: '}{latest.body}
+                        </p>
+                        {unread > 0 && (
+                          <span className="flex-shrink-0 bg-amber-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                            {unread}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )
+        ) : sidebarFilter === 'calls' ? (
           callLogsLoading ? (
             <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">Loading...</div>
           ) : (callLogs as any[]).length === 0 ? (
@@ -822,7 +907,19 @@ export default function InboxPage() {
       <div className="md:hidden flex flex-col h-[calc(100vh-57px)] overflow-hidden">
         {mobileScreen === 'home' && HomeScreen}
         {mobileScreen === 'list' && ListScreen}
-        {mobileScreen === 'thread' && (activeConv ? ThreadScreen : ListScreen)}
+        {mobileScreen === 'thread' && (
+        sidebarFilter === 'portal' && activePortalCustomerId ? (
+          <PortalThreadPanel
+            customerId={activePortalCustomerId}
+            messages={(portalMsgsAll as any[]).filter((m: any) => m.customerId === activePortalCustomerId)}
+            replyText={portalReplyText}
+            onReplyChange={setPortalReplyText}
+            onReply={() => replyPortalMsg.mutate({ customerId: activePortalCustomerId, body: portalReplyText.trim() })}
+            isSending={replyPortalMsg.isPending}
+            onBack={() => setMobileScreen('list')}
+          />
+        ) : activeConv ? ThreadScreen : ListScreen
+      )}
       </div>
 
       {/* ── DESKTOP: 3-panel side-by-side ── */}
@@ -867,6 +964,18 @@ export default function InboxPage() {
             <Phone className="w-4 h-4 flex-shrink-0" />
             <span className="truncate">Voice Call Log</span>
           </button>
+          <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-2 mt-3 mb-1">Portal</div>
+          <button
+            onClick={() => setSidebarFilter('portal')}
+            className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-colors text-left ${
+              sidebarFilter === 'portal'
+                ? 'bg-amber-100 text-amber-700 font-semibold'
+                : 'text-foreground/70 hover:bg-muted hover:text-foreground'
+            }`}
+          >
+            <MessageSquare className="w-4 h-4 flex-shrink-0" />
+            <span className="truncate">Portal Messages</span>
+          </button>
         </div>
 
         {/* Conversation list */}
@@ -898,7 +1007,61 @@ export default function InboxPage() {
             </div>
           )}
           <div className="flex-1 overflow-y-auto">
-            {sidebarFilter === 'calls' ? (
+            {sidebarFilter === 'portal' ? (
+              portalMsgsLoading ? (
+                <div className="flex items-center justify-center py-12 text-muted-foreground text-sm">Loading...</div>
+              ) : portalMsgsAll.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-3 text-center px-4">
+                  <MessageSquare className="w-8 h-8 text-muted-foreground/40" />
+                  <p className="text-sm font-medium text-muted-foreground">No portal messages yet</p>
+                </div>
+              ) : (
+                <div>
+                  {Object.entries(
+                    (portalMsgsAll as any[]).reduce((acc: Record<number, any>, msg: any) => {
+                      if (!acc[msg.customerId]) acc[msg.customerId] = { customerId: msg.customerId, messages: [] };
+                      acc[msg.customerId].messages.push(msg);
+                      return acc;
+                    }, {})
+                  ).map(([custId, group]: [string, any]) => {
+                    const latest = group.messages[0];
+                    const unread = group.messages.filter((m: any) => m.senderRole === 'customer' && !m.readAt).length;
+                    const isActive = activePortalCustomerId === group.customerId;
+                    return (
+                      <button
+                        key={custId}
+                        onClick={() => setActivePortalCustomerId(group.customerId)}
+                        className={`w-full text-left px-4 py-3 border-b border-border/50 hover:bg-muted/40 transition-colors flex items-center gap-3 ${
+                          isActive ? 'bg-amber-50' : ''
+                        }`}
+                      >
+                        <div className="flex-shrink-0 w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 text-sm font-bold">
+                          {latest.senderName ? latest.senderName.charAt(0).toUpperCase() : 'C'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-baseline justify-between gap-2">
+                            <span className={`text-sm font-semibold truncate ${unread > 0 ? 'text-foreground' : 'text-foreground/80'}`}>
+                              {latest.senderName || `Customer #${custId}`}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground flex-shrink-0">{fmtTime(latest.createdAt)}</span>
+                          </div>
+                          <div className="flex items-center justify-between gap-2 mt-0.5">
+                            <p className={`text-xs truncate ${unread > 0 ? 'text-foreground/70 font-medium' : 'text-muted-foreground'}`}>
+                              {latest.senderRole === 'customer' ? '' : 'You: '}{latest.body}
+                            </p>
+                            {unread > 0 && (
+                              <span className="flex-shrink-0 bg-amber-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
+                                {unread}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )
+            ) : sidebarFilter === 'calls' ? (
               callLogsLoading ? (
                 <div className="flex items-center justify-center py-12 text-muted-foreground text-sm">Loading...</div>
               ) : (callLogs as any[]).length === 0 ? (
@@ -956,8 +1119,29 @@ export default function InboxPage() {
           </div>
         </div>
 
-        {/* Thread panel */}
-        {activeConv ? (
+        {/* Thread panel — portal mode */}
+        {sidebarFilter === 'portal' ? (
+          activePortalCustomerId ? (
+            <PortalThreadPanel
+              customerId={activePortalCustomerId}
+              messages={(portalMsgsAll as any[]).filter((m: any) => m.customerId === activePortalCustomerId)}
+              replyText={portalReplyText}
+              onReplyChange={setPortalReplyText}
+              onReply={() => replyPortalMsg.mutate({ customerId: activePortalCustomerId, body: portalReplyText.trim() })}
+              isSending={replyPortalMsg.isPending}
+            />
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center p-8">
+              <div className="w-16 h-16 rounded-2xl bg-amber-50 flex items-center justify-center">
+                <MessageSquare className="w-8 h-8 text-amber-400" />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold mb-1">Select a portal conversation</h3>
+                <p className="text-sm text-muted-foreground max-w-xs">Choose a customer from the list to view their messages.</p>
+              </div>
+            </div>
+          )
+        ) : activeConv ? (
           <div className="flex-1 flex flex-col min-w-0">
             <div className="px-5 py-3 border-b border-border flex items-center justify-between bg-background">
               <div className="flex items-center gap-3">

@@ -359,3 +359,45 @@ export async function generateReferralCode(name: string): Promise<string> {
   const suffix = Math.random().toString(36).slice(2, 5).toUpperCase();
   return `${base}-${suffix}`;
 }
+export async function updatePortalCustomerProfile(
+  id: number,
+  data: { name?: string; phone?: string; address?: string }
+) {
+  const db = await d();
+  await db.update(portalCustomers).set(data).where(eq(portalCustomers.id, id));
+  return findPortalCustomerById(id);
+}
+
+// ─── SERVICE REQUESTS ─────────────────────────────────────────────────────────
+import {
+  portalServiceRequests,
+  type InsertPortalServiceRequest,
+} from "../drizzle/schema";
+
+export async function createPortalServiceRequest(data: InsertPortalServiceRequest) {
+  const db = await d();
+  const result = await db.insert(portalServiceRequests).values(data);
+  const newId = Number((result as any).insertId ?? (result as any)[0]?.insertId);
+  const rows = await db.select().from(portalServiceRequests).where(eq(portalServiceRequests.id, newId)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function getPortalServiceRequestsByCustomer(customerId: number) {
+  const db = await d();
+  return db.select().from(portalServiceRequests).where(eq(portalServiceRequests.customerId, customerId)).orderBy(desc(portalServiceRequests.createdAt));
+}
+
+export async function getAllPendingPortalServiceRequests() {
+  const db = await d();
+  return db.select().from(portalServiceRequests).where(eq(portalServiceRequests.status, 'pending')).orderBy(desc(portalServiceRequests.createdAt));
+}
+
+export async function updatePortalServiceRequestStatus(id: number, status: string, leadId?: string) {
+  const db = await d();
+  await db.update(portalServiceRequests).set({ status, ...(leadId ? { leadId } : {}), readAt: new Date() }).where(eq(portalServiceRequests.id, id));
+}
+
+export async function getAllPortalMessages() {
+  const db = await d();
+  return db.select().from(portalMessages).orderBy(desc(portalMessages.createdAt));
+}

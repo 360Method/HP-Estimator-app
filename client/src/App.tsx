@@ -13,6 +13,7 @@ import Home from "./pages/Home";
 import BookingWizard from "./pages/book/BookingWizard";
 
 // Portal pages
+import PortalHome from "./pages/portal/PortalHome";
 import PortalLogin from "./pages/portal/PortalLogin";
 import PortalAppointments from "./pages/portal/PortalAppointments";
 import PortalInvoices from "./pages/portal/PortalInvoices";
@@ -24,6 +25,7 @@ import PortalDocuments from "./pages/portal/PortalDocuments";
 import PortalWallet from "./pages/portal/PortalWallet";
 import PortalReferral from "./pages/portal/PortalReferral";
 import PortalMessages from "./pages/portal/PortalMessages";
+import PortalRequest from "./pages/portal/PortalRequest";
 
 // Domains that should serve only the customer portal (no admin app)
 const PORTAL_HOSTNAMES = ["client.handypioneers.com"];
@@ -56,6 +58,7 @@ function Router() {
       <Route path="/portal/auth" component={PortalLogin} />
 
       {/* Customer portal — session-gated (PortalProvider handles redirect) */}
+      <Route path="/portal/home" component={PortalHome} />
       <Route path="/portal/appointments" component={PortalAppointments} />
       <Route path="/portal/invoices/:id" component={PortalInvoiceDetail} />
       <Route path="/portal/invoices" component={PortalInvoices} />
@@ -66,6 +69,7 @@ function Router() {
       <Route path="/portal/wallet" component={PortalWallet} />
       <Route path="/portal/referral" component={PortalReferral} />
       <Route path="/portal/messages" component={PortalMessages} />
+      <Route path="/portal/request" component={PortalRequest} />
 
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />

@@ -538,3 +538,27 @@ export const opportunities = mysqlTable("opportunities", {
 });
 export type DbOpportunity = typeof opportunities.$inferSelect;
 export type InsertDbOpportunity = typeof opportunities.$inferInsert;
+
+// ─── PORTAL: SERVICE REQUESTS ─────────────────────────────────────────────────
+// Customer-initiated booking requests from the portal.
+// On submit, a lead is created on the pro side.
+export const portalServiceRequests = mysqlTable("portalServiceRequests", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Portal customer who submitted the request */
+  customerId: int("customerId").notNull(),
+  /** Free-text description of work needed */
+  description: text("description").notNull(),
+  /** ASAP | within_week | flexible */
+  timeline: varchar("timeline", { length: 32 }).notNull().default("flexible"),
+  /** Service address (defaults to customer address) */
+  address: text("address"),
+  /** pending | reviewed | converted */
+  status: varchar("status", { length: 32 }).notNull().default("pending"),
+  /** HP lead ID created from this request */
+  leadId: varchar("leadId", { length: 64 }),
+  /** Set when HP staff views/reads this request */
+  readAt: timestamp("readAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type PortalServiceRequest = typeof portalServiceRequests.$inferSelect;
+export type InsertPortalServiceRequest = typeof portalServiceRequests.$inferInsert;

@@ -38,6 +38,12 @@ import {
   getPortalReferralsByReferrer,
   generateReferralCode,
   updatePortalCustomerStripeId,
+  updatePortalCustomerProfile,
+  createPortalServiceRequest,
+  getPortalServiceRequestsByCustomer,
+  getAllPendingPortalServiceRequests,
+  updatePortalServiceRequestStatus,
+  getAllPortalMessages,
 } from "../portalDb";
 import { sendEmail } from "../gmail";
 import { notifyOwner } from "../_core/notification";
@@ -721,6 +727,35 @@ export const portalRouter = router({
     }),
 
   /** Customer-facing: unified document list (estimates + invoices) */
+  // ── DASHBOARD ─────────────────────────────────────────────────────────────
+  /** Single call to get all data needed for the portal home dashboard */
+  getDashboard: portalProcedure.query(async ({ ctx }) => {
+    const customerId = ctx.portalCustomer.id;
+    const [estimates, invoices, appointments, messages] = await Promise.all([
+      getPortalEstimatesByCustomer(customerId),
+      getPortalInvoicesByCustomer(customerId),
+      getPortalAppointmentsByCustomer(customerId),
+      getPortalMessagesByCustomer(customerId),
+    ]);
+    return {
+      customer: ctx.portalCustomer,
+      estimates,
+      invoices,
+      appointments,
+      unreadMessages: messages.filter((m) => m.senderRole === 'hp_team' && !m.readAt).length,
+    };
+  }),
+  /** Customer updates their own profile info */
+  updateProfile: portalProcedure
+    .input(z.object({
+      name: z.string().min(1).optional(),
+      phone: z.string().optional(),
+      address: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const updated = await updatePortalCustomerProfile(ctx.portalCustomer.id, input);
+      return { customer: updated };
+    }),
   getDocuments: portalProcedure.query(async ({ ctx }) => {
     const [estimates, invoices] = await Promise.all([
       getPortalEstimatesByCustomer(ctx.portalCustomer.id),
@@ -782,74 +817,163 @@ export const portalRouter = router({
         getPortalInvoicesByCustomer(portalCustomer.id),
         getPortalAppointmentsByCustomer(portalCustomer.id),
       ]);
-      return { customer: portalCustomer, estimates, invoices, appointments };
+       return { customer: portalCustomer, estimates, invoices, appointments };
+    }),
+
+  /** HP staff: list all portal messages across all customers */
+  getAllPortalMessages: hpProcedure.query(async () => {
+    return getAllPortalMessages();
+  }),
+
+  // ── SERVICE REQUESTS (Booking) ──────────────────────────────────────────────────────
+  /** Customer submits a new service/booking request */
+  submitServiceRequest: portalProcedure
+    .input(z.object({
+      description: z.string().min(10),
+      timeline: z.enum(['asap', 'within_week', 'flexible']).default('flexible'),
+      address: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const req = await createPortalServiceRequest({
+        customerId: ctx.portalCustomer.id,
+        description: input.description,
+        timeline: input.timeline,
+        address: input.address ?? ctx.portalCustomer.address ?? undefined,
+      });
+      // Notify HP team
+      await notifyOwner({
+        title: `New Booking Request from ${ctx.portalCustomer.name}`,
+        content: `${ctx.portalCustomer.name} (${ctx.portalCustomer.email}) submitted a service request:\n\n${input.description}\n\nTimeline: ${input.timeline}`,
+      });
+      return { ok: true, id: req?.id };
+    }),
+  /** Customer views their own service requests */
+  getServiceRequests: portalProcedure.query(async ({ ctx }) => {
+    return getPortalServiceRequestsByCustomer(ctx.portalCustomer.id);
+  }),
+  /** HP staff: list all pending service requests */
+  getAllServiceRequests: hpProcedure.query(async () => {
+    return getAllPendingPortalServiceRequests();
+  }),
+  /** HP staff: mark a service request as reviewed */
+  reviewServiceRequest: hpProcedure
+    .input(z.object({ id: z.number(), status: z.string(), leadId: z.string().optional() }))
+    .mutation(async ({ input }) => {
+      await updatePortalServiceRequestStatus(input.id, input.status, input.leadId);
+      return { ok: true };
     }),
 });
-
 // ─── EMAIL TEMPLATES ──────────────────────────────────────────────────────────
+// HP brand palette: forest green #1a2e1a / #2d4a2d, warm gold #c8922a
+const HP_LOGO_EMAIL = "https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg";
 
-const HP_LOGO = "https://cdn.manus.im/hp-logo.png";
-const HP_FOOTER = `
-  <p style="text-align:center;color:#666;font-size:12px;margin-top:32px;">
-    (360) 544-9858 | <a href="mailto:help@handypioneers.com">help@handypioneers.com</a><br/>
-    808 SE Chkalov Dr 3-433, Vancouver, WA 98683<br/>
-    <a href="https://handypioneers.com">handypioneers.com</a>
-  </p>`;
+function emailWrapper(content: string, accentColor = "#c8922a") {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Handy Pioneers</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f5f7;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f5f7;padding:32px 16px;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+        <!-- HEADER -->
+        <tr>
+          <td style="background:linear-gradient(135deg,#1a2e1a 0%,#2d4a2d 100%);padding:28px 40px;text-align:center;">
+            <img src="${HP_LOGO_EMAIL}" alt="Handy Pioneers" height="64" style="display:block;margin:0 auto 12px;border-radius:4px;" />
+            <p style="margin:0;color:rgba(255,255,255,0.65);font-size:11px;letter-spacing:0.12em;text-transform:uppercase;">Reliable Renovations, Trusted Results</p>
+          </td>
+        </tr>
+        <!-- BODY -->
+        <tr>
+          <td style="padding:36px 40px 28px;color:#1a1a1a;font-size:15px;line-height:1.6;">
+            ${content}
+          </td>
+        </tr>
+        <!-- DIVIDER -->
+        <tr>
+          <td style="padding:0 40px;"><hr style="border:none;border-top:1px solid #e8e8e8;margin:0;" /></td>
+        </tr>
+        <!-- FOOTER -->
+        <tr>
+          <td style="padding:20px 40px 28px;text-align:center;">
+            <p style="margin:0 0 4px;font-size:12px;color:#888;">Handy Pioneers &bull; Vancouver, WA 98683</p>
+            <p style="margin:0 0 4px;font-size:12px;color:#888;">
+              <a href="tel:3605449858" style="color:#888;text-decoration:none;">(360) 544-9858</a>
+              &nbsp;&bull;&nbsp;
+              <a href="mailto:help@handypioneers.com" style="color:#888;text-decoration:none;">help@handypioneers.com</a>
+            </p>
+            <p style="margin:0;font-size:12px;">
+              <a href="https://handypioneers.com" style="color:${accentColor};text-decoration:none;">handypioneers.com</a>
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
 
-function emailWrapper(content: string) {
-  return `<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
-    <div style="text-align:center;margin-bottom:24px;">
-      <img src="https://cdn.manus.im/uploads/webdev/hp-logo-email.png" alt="Handy Pioneers" style="height:80px;" />
-    </div>
-    ${content}
-    ${HP_FOOTER}
-  </body></html>`;
+function ctaButton(label: string, url: string, color = "#c8922a") {
+  return `<table width="100%" cellpadding="0" cellspacing="0" style="margin:28px 0;">
+    <tr><td align="center">
+      <a href="${url}" style="display:inline-block;background:${color};color:#ffffff;font-size:15px;font-weight:700;letter-spacing:0.04em;padding:14px 36px;border-radius:6px;text-decoration:none;">${label}</a>
+    </td></tr>
+  </table>`;
 }
 
 function buildMagicLinkEmail(name: string, url: string) {
+  const firstName = name.split(' ')[0];
   return emailWrapper(`
-    <p>Hello ${name},</p>
-    <p>At Handy Pioneers, we provide our customers with a portal to access their appointments, estimates, and invoices.</p>
-    <p>Click the button below to log in to your account. This magic link will expire in 7 days.</p>
-    <div style="text-align:center;margin:32px 0;">
-      <a href="${url}" style="background:#1a56db;color:#fff;padding:14px 28px;border-radius:6px;text-decoration:none;font-weight:bold;text-transform:uppercase;letter-spacing:1px;">LOGIN TO CUSTOMER PORTAL</a>
-    </div>
-    <p style="font-size:13px;color:#666;">A magic link is a type of authentication method that involves sending a unique, time-sensitive URL to your registered email address. By clicking on this link, you are granted access to a secure account without the need for a traditional password.</p>
+    <h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#1a2e1a;">Your Portal Access Link</h2>
+    <p style="margin:0 0 12px;">Hi ${firstName},</p>
+    <p style="margin:0 0 20px;">Your secure link to the <strong>Handy Pioneers Customer Portal</strong> is ready. Use it to view your estimates, invoices, and upcoming appointments — all in one place.</p>
+    ${ctaButton('Access My Portal', url)}
+    <p style="margin:0 0 8px;font-size:13px;color:#666;">This link expires in <strong>7 days</strong> and can only be used once. If you didn't request this, you can safely ignore this email.</p>
+    <p style="margin:0;font-size:13px;color:#aaa;">Or copy this URL into your browser:<br/><span style="word-break:break-all;color:#888;">${url}</span></p>
   `);
 }
 
 function buildEstimateEmail(name: string, estimateNumber: string, title: string, url: string, baseUrl: string) {
+  const firstName = name.split(' ')[0];
   return emailWrapper(`
-    <h2 style="text-align:center;">Approve Estimate ${estimateNumber} from Handy Pioneers</h2>
-    <p>Hi ${name},</p>
-    <p>Thank you for choosing Handy Pioneers. Please review your estimate for <strong>${title}</strong>.</p>
-    <div style="text-align:center;margin:32px 0;">
-      <a href="${url}" style="background:#1a56db;color:#fff;padding:14px 28px;border-radius:6px;text-decoration:none;font-weight:bold;">View Estimate</a>
-    </div>
-    <p style="text-align:center;"><a href="${baseUrl}/portal/estimates" style="color:#1a56db;">View all estimates in your Customer Portal</a></p>
+    <h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#1a2e1a;">Your Estimate is Ready</h2>
+    <p style="margin:0 0 12px;">Hi ${firstName},</p>
+    <p style="margin:0 0 8px;">Thank you for choosing Handy Pioneers. We've prepared estimate <strong>${estimateNumber}</strong> for:</p>
+    <p style="margin:0 0 20px;padding:12px 16px;background:#f8f9fa;border-left:3px solid #c8922a;border-radius:0 4px 4px 0;font-weight:600;color:#1a2e1a;">${title}</p>
+    <p style="margin:0 0 20px;">Please review the details and approve when you're ready to move forward.</p>
+    ${ctaButton('Review & Approve Estimate', url)}
+    <p style="margin:0;font-size:13px;color:#888;text-align:center;">Questions? <a href="mailto:help@handypioneers.com" style="color:#c8922a;">Reply to this email</a> or call us at (360) 544-9858.</p>
   `);
 }
 
-function buildInvoiceEmail(name: string, invoiceNumber: string, amountCents: number, url: string, baseUrl: string) {
+function buildInvoiceEmail(name: string, invoiceNumber: string, amountCents: number, url: string, _baseUrl: string) {
+  const firstName = name.split(' ')[0];
   const amount = `$${(amountCents / 100).toFixed(2)}`;
   return emailWrapper(`
-    <h2 style="text-align:center;">Invoice ${invoiceNumber} from Handy Pioneers</h2>
-    <p>Hi ${name},</p>
-    <p>You have a new invoice for <strong>${amount}</strong> from Handy Pioneers.</p>
-    <div style="text-align:center;margin:32px 0;">
-      <a href="${url}" style="background:#1a56db;color:#fff;padding:14px 28px;border-radius:6px;text-decoration:none;font-weight:bold;">Review & Pay Invoice</a>
-    </div>
-    <p style="text-align:center;"><a href="${baseUrl}/portal/invoices" style="color:#1a56db;">View all invoices in your Customer Portal</a></p>
+    <h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#1a2e1a;">Invoice ${invoiceNumber}</h2>
+    <p style="margin:0 0 12px;">Hi ${firstName},</p>
+    <p style="margin:0 0 20px;">Your invoice from Handy Pioneers is ready. The amount due is:</p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+      <tr><td style="background:#f8f9fa;border:1px solid #e8e8e8;border-radius:6px;padding:16px 24px;text-align:center;">
+        <p style="margin:0;font-size:13px;color:#888;text-transform:uppercase;letter-spacing:0.08em;">Amount Due</p>
+        <p style="margin:4px 0 0;font-size:32px;font-weight:700;color:#1a2e1a;">${amount}</p>
+      </td></tr>
+    </table>
+    ${ctaButton('Review & Pay Invoice', url)}
+    <p style="margin:0;font-size:13px;color:#888;text-align:center;">Questions about this invoice? <a href="mailto:help@handypioneers.com" style="color:#c8922a;">Contact us</a> and we'll be happy to help.</p>
   `);
 }
 
 function buildReferralEmail(referrerName: string, referralLink: string) {
   return emailWrapper(`
-    <h2 style="text-align:center;">You've been invited to Handy Pioneers!</h2>
-    <p>${referrerName} thinks you'd love Handy Pioneers for your home improvement needs.</p>
-    <p>Sign up through the link below and both you and ${referrerName} will receive a reward when your first job is completed.</p>
-    <div style="text-align:center;margin:32px 0;">
-      <a href="${referralLink}" style="background:#1a56db;color:#fff;padding:14px 28px;border-radius:6px;text-decoration:none;font-weight:bold;">Get Started</a>
-    </div>
+    <h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#1a2e1a;">You've Been Referred to Handy Pioneers</h2>
+    <p style="margin:0 0 12px;">Hi there,</p>
+    <p style="margin:0 0 20px;"><strong>${referrerName}</strong> thinks you'd love Handy Pioneers for your home improvement needs in the Vancouver, WA area. Sign up through the link below — both you and ${referrerName} will receive a reward when your first job is completed.</p>
+    ${ctaButton('Claim Your Referral Reward', referralLink)}
+    <p style="margin:0;font-size:13px;color:#888;text-align:center;">Handy Pioneers &bull; Reliable Renovations, Trusted Results</p>
   `);
 }

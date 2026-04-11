@@ -878,3 +878,31 @@
 - [x] Show seqNumber badge on pipeline opportunity cards in PipelineBoard
 - [x] Add inline click-to-edit title rename in OpportunityDetailsTab header
 - [x] Include tracking number in portal estimate/invoice email subjects
+
+## Feature: Portal Email Redesign & Full Portal Integration
+- [ ] Redesign all portal email HTML templates with polished HP branding (magic-link login, estimate, invoice, resend)
+- [ ] Fix broken logo image in portal emails — use hosted CDN URL instead of attachment
+- [ ] Personalize email greeting with customer first name (not "Hello Customer,")
+- [ ] Customer portal home page (/portal): show customer profile info (name, address, phone, email)
+- [ ] Customer portal home page: show active estimates with status badges and direct links
+- [ ] Customer portal home page: show invoices with balance-due amounts and pay buttons
+- [ ] Customer portal home page: show job history (completed jobs)
+- [ ] Add customer-to-pro messaging thread in portal (customer sends message, pro sees it in inbox)
+- [ ] Add booking request form in portal (customer requests new work, creates lead on pro side)
+- [ ] Pro side: show portal messages in inbox with customer context
+- [ ] Pro side: show portal booking requests as new leads in pipeline
+
+## Portal Interconnection & Email UI (Apr 2026)
+
+- [x] Polish portal email templates (magic-link, estimate, invoice, invoice-paid) with HP branding — forest green header, gold accents, responsive layout
+- [x] Build portal home/dashboard page (PortalHome.tsx) — welcome banner, quick stats, upcoming appointments, estimates/invoices list, profile edit card
+- [x] getDashboard tRPC procedure + updateProfile mutation
+- [x] Customer booking/service request form (PortalRequest.tsx) — description, timeline picker, address, success state
+- [x] submitServiceRequest + getServiceRequests portal tRPC procedures
+- [x] portalServiceRequests DB table + schema migration
+- [x] Pro-side portal inbox panel in InboxPage — "Portal" sidebar filter, grouped-by-customer list, PortalThreadPanel component with HP-team reply
+- [x] getAllPortalMessages HP procedure
+- [x] PortalThreadPanel component — date-grouped messages, HP green bubbles, ⌘↵ to send
+- [x] CustomerSection portal tab: service requests section (review/convert actions) + portal messages preview
+- [x] getAllServiceRequests + reviewServiceRequest HP procedures wired to CustomerPortalTab
+- [x] PortalLayout: Home nav item, logo links to /portal/home, Book online → /portal/request

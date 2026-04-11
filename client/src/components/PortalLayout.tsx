@@ -25,9 +25,10 @@ import {
   Menu,
   X,
   FolderOpen,
+  Home,
 } from "lucide-react";
 
-const HP_LOGO = "https://cdn.manus.space/webdev-static-assets/hp-logo.png";
+const HP_LOGO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg";
 
 interface NavItem {
   label: string;
@@ -37,6 +38,7 @@ interface NavItem {
 }
 
 const mainNav: NavItem[] = [
+  { label: "Home", path: "/portal/home", icon: <Home className="w-4 h-4" /> },
   { label: "Appointments", path: "/portal/appointments", icon: <Calendar className="w-4 h-4" /> },
   { label: "Invoices", path: "/portal/invoices", icon: <FileText className="w-4 h-4" /> },
   { label: "Estimates", path: "/portal/estimates", icon: <ClipboardList className="w-4 h-4" /> },
@@ -143,7 +145,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
-            <Link href="/portal/appointments">
+            <Link href="/portal/home">
               <a className="flex items-center gap-2 cursor-pointer">
                 <img
                   src={HP_LOGO}
@@ -168,9 +170,13 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
                 </Button>
               </a>
             </Link>
-            <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white text-xs hidden sm:flex">
-              Book online
-            </Button>
+            <Link href="/portal/request">
+              <a>
+                <Button size="sm" className="hidden sm:flex text-xs" style={{ background: '#c8922a', color: '#fff' }}>
+                  Book online
+                </Button>
+              </a>
+            </Link>
             {customer && (
               <span className="text-xs text-gray-500 hidden md:block ml-2">
                 LOGGED IN AS: {customer.name.toUpperCase()}

@@ -29,7 +29,7 @@ import {
   CreditCard, Bell, MessageSquare, AtSign, Star, Paperclip, FileText,
   Activity, Send, CheckCircle2, XCircle, Clock, PhoneCall, Wallet,
   ExternalLink, Edit3, Save, X, AlertCircle, TrendingUp, Archive,
-  RefreshCw, FolderOpen, Download,
+  RefreshCw, FolderOpen, Download, Wrench,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import PipelineBoard from '@/components/PipelineBoard';
@@ -1686,6 +1686,15 @@ function CustomerPortalTab({ customerId }: { customerId: string }) {
     { hpCustomerId: customerId },
     { enabled: !!customerId }
   );
+  const { data: allPortalMsgs = [] } = trpc.portal.getAllPortalMessages.useQuery();
+  const { data: allServiceReqs = [] } = trpc.portal.getAllServiceRequests.useQuery();
+  const reviewServiceRequest = trpc.portal.reviewServiceRequest.useMutation({
+    onSuccess: () => {
+      toast.success('Request updated!');
+      utils.portal.getCustomerPortalData.invalidate({ hpCustomerId: customerId });
+    },
+    onError: (err) => toast.error(err.message),
+  });
   const resendEstimate = trpc.portal.resendEstimate.useMutation({
     onSuccess: () => {
       toast.success('Estimate email resent!');
@@ -1716,6 +1725,13 @@ function CustomerPortalTab({ customerId }: { customerId: string }) {
   }
 
   const { customer, estimates, invoices, appointments } = data;
+  // Filter messages and service requests to this portal customer
+  const customerMsgs = (allPortalMsgs as any[]).filter(
+    (m: any) => m.customerId === customer.id
+  );
+  const customerServiceReqs = (allServiceReqs as any[]).filter(
+    (r: any) => r.customerId === customer.id
+  );
   const portalBase = 'https://client.handypioneers.com';
 
   return (
@@ -1871,6 +1887,78 @@ function CustomerPortalTab({ customerId }: { customerId: string }) {
                     {apt.startTime ? fmtDate(new Date(apt.startTime).toISOString()) : '—'}
                   </p>
                 </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Service Requests (Booking) */}
+      {customerServiceReqs.length > 0 && (
+        <div>
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+            Service Requests ({customerServiceReqs.length})
+          </h3>
+          <div className="space-y-2">
+            {customerServiceReqs.map((req: any) => (
+              <div key={req.id} className="rounded-xl border bg-card p-3 space-y-2">
+                <div className="flex items-start gap-3">
+                  <Wrench size={15} className="text-muted-foreground shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium line-clamp-2">{req.description}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {req.preferredTimeline ? `Timeline: ${req.preferredTimeline.replace('_', ' ')}` : ''}
+                      {req.address ? ` · ${req.address}` : ''}
+                    </p>
+                  </div>
+                  <span className={`shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                    req.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+                    req.status === 'reviewed' ? 'bg-sky-100 text-sky-700' :
+                    req.status === 'converted' ? 'bg-emerald-100 text-emerald-700' :
+                    'bg-muted text-muted-foreground'
+                  }`}>{req.status}</span>
+                </div>
+                {req.status === 'pending' && (
+                  <div className="flex gap-2 pl-6">
+                    <button
+                      onClick={() => reviewServiceRequest.mutate({ id: req.id, status: 'reviewed' })}
+                      disabled={reviewServiceRequest.isPending}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-sky-50 border border-sky-200 text-sky-700 text-xs font-medium hover:bg-sky-100 transition-colors disabled:opacity-50"
+                    >
+                      Mark Reviewed
+                    </button>
+                    <button
+                      onClick={() => reviewServiceRequest.mutate({ id: req.id, status: 'converted' })}
+                      disabled={reviewServiceRequest.isPending}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                    >
+                      Convert to Lead
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Portal Messages Preview */}
+      {customerMsgs.length > 0 && (
+        <div>
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+            Portal Messages ({customerMsgs.length})
+          </h3>
+          <div className="space-y-1.5">
+            {[...customerMsgs].sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5).map((msg: any) => (
+              <div key={msg.id} className={`rounded-lg p-2.5 text-xs flex gap-2 ${
+                msg.senderRole === 'hp_team' ? 'bg-[#1a2e1a]/5 border border-[#1a2e1a]/10' : 'bg-muted'
+              }`}>
+                <span className={`shrink-0 font-semibold ${
+                  msg.senderRole === 'hp_team' ? 'text-[#1a2e1a]' : 'text-amber-700'
+                }`}>
+                  {msg.senderRole === 'hp_team' ? 'HP Team' : (msg.senderName || 'Customer')}:
+                </span>
+                <span className="text-foreground/80 line-clamp-2">{msg.body}</span>
               </div>
             ))}
           </div>

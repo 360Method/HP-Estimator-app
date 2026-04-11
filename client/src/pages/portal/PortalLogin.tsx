@@ -12,7 +12,7 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { Loader2, Mail, CheckCircle, ArrowRight } from "lucide-react";
 
-const HP_LOGO = "https://cdn.manus.space/webdev-static-assets/hp-logo.png";
+const HP_LOGO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg";
 
 export default function PortalLogin() {
   const [, navigate] = useLocation();
@@ -22,7 +22,7 @@ export default function PortalLogin() {
   // Check for token and redirect in URL
   const params = new URLSearchParams(window.location.search);
   const token = params.get("token");
-  const redirectPath = params.get("redirect") || "/portal/appointments";
+  const redirectPath = params.get("redirect") || "/portal/home";
 
   const requestMagicLink = trpc.portal.sendMagicLink.useMutation({
     onSuccess: () => setSent(true),
