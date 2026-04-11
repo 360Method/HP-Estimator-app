@@ -6,6 +6,7 @@ import {
   mysqlTable,
   text,
   timestamp,
+  uniqueIndex,
   varchar,
 } from "drizzle-orm/mysql-core";
 
@@ -176,36 +177,45 @@ export const portalSessions = mysqlTable("portalSessions", {
 export type PortalSession = typeof portalSessions.$inferSelect;
 export type InsertPortalSession = typeof portalSessions.$inferInsert;
 
-// ─── PORTAL: ESTIMATES ───────────────────────────────────────────────────────
+// ─── PORTAL: ESTIMATES ────────────────────────────────────────────────────────────────
 // Customer-facing estimates sent from the HP estimator.
-export const portalEstimates = mysqlTable("portalEstimates", {
-  id: int("id").autoincrement().primaryKey(),
-  customerId: int("customerId").notNull(),
-  /** e.g. "HP-2026-042" */
-  estimateNumber: varchar("estimateNumber", { length: 64 }).notNull(),
-  title: varchar("title", { length: 255 }).notNull(),
-  /** pending | sent | viewed | approved | declined | expired */
-  status: varchar("status", { length: 32 }).default("sent").notNull(),
-  totalAmount: int("totalAmount").notNull().default(0), // cents
-  depositAmount: int("depositAmount").notNull().default(0), // cents
-  depositPercent: int("depositPercent").notNull().default(50),
-  /** JSON array of line items */
-  lineItemsJson: text("lineItemsJson"),
-  /** Full scope of work text */
-  scopeOfWork: text("scopeOfWork"),
-  /** Expiry date for the estimate */
-  expiresAt: timestamp("expiresAt"),
-  sentAt: timestamp("sentAt").defaultNow().notNull(),
-  viewedAt: timestamp("viewedAt"),
-  approvedAt: timestamp("approvedAt"),
-  /** Base64 PNG of customer signature */
-  signatureDataUrl: text("signatureDataUrl"),
-  signerName: varchar("signerName", { length: 255 }),
-  declinedAt: timestamp("declinedAt"),
-  declineReason: text("declineReason"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+export const portalEstimates = mysqlTable(
+  "portalEstimates",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    customerId: int("customerId").notNull(),
+    /** e.g. "HP-2026-042" */
+    estimateNumber: varchar("estimateNumber", { length: 64 }).notNull(),
+    title: varchar("title", { length: 255 }).notNull(),
+    /** pending | sent | viewed | approved | declined | expired */
+    status: varchar("status", { length: 32 }).default("sent").notNull(),
+    totalAmount: int("totalAmount").notNull().default(0), // cents
+    depositAmount: int("depositAmount").notNull().default(0), // cents
+    depositPercent: int("depositPercent").notNull().default(50),
+    /** JSON array of line items */
+    lineItemsJson: text("lineItemsJson"),
+    /** Full scope of work text */
+    scopeOfWork: text("scopeOfWork"),
+    /** Expiry date for the estimate */
+    expiresAt: timestamp("expiresAt"),
+    sentAt: timestamp("sentAt").defaultNow().notNull(),
+    viewedAt: timestamp("viewedAt"),
+    approvedAt: timestamp("approvedAt"),
+    /** Base64 PNG of customer signature */
+    signatureDataUrl: text("signatureDataUrl"),
+    signerName: varchar("signerName", { length: 255 }),
+    declinedAt: timestamp("declinedAt"),
+    declineReason: text("declineReason"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  (t) => ({
+    uniqCustomerEstimate: uniqueIndex("portalEstimates_customer_estimate_uidx").on(
+      t.customerId,
+      t.estimateNumber,
+    ),
+  })
+);
 
 export type PortalEstimate = typeof portalEstimates.$inferSelect;
 export type InsertPortalEstimate = typeof portalEstimates.$inferInsert;

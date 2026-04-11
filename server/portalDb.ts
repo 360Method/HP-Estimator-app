@@ -152,9 +152,37 @@ export async function deletePortalSession(sessionToken: string) {
 
 export async function createPortalEstimate(data: InsertPortalEstimate) {
   const db = await d();
-  const result = await db.insert(portalEstimates).values(data);
-  const newId = Number((result as any).insertId ?? (result as any)[0]?.insertId);
-  return getPortalEstimateById(newId);
+  // Upsert: if an estimate with the same customerId + estimateNumber already exists,
+  // update it with the latest structured lineItemsJson and other fields.
+  await db
+    .insert(portalEstimates)
+    .values(data)
+    .onDuplicateKeyUpdate({
+      set: {
+        title: data.title,
+        status: data.status ?? 'sent',
+        totalAmount: data.totalAmount,
+        depositAmount: data.depositAmount,
+        depositPercent: data.depositPercent,
+        lineItemsJson: data.lineItemsJson,
+        scopeOfWork: data.scopeOfWork,
+        expiresAt: data.expiresAt,
+        sentAt: data.sentAt ?? new Date(),
+        updatedAt: new Date(),
+      },
+    });
+  // Fetch the upserted row
+  const rows = await db
+    .select()
+    .from(portalEstimates)
+    .where(
+      and(
+        eq(portalEstimates.customerId, data.customerId),
+        eq(portalEstimates.estimateNumber, data.estimateNumber),
+      )
+    )
+    .limit(1);
+  return rows[0] ?? null;
 }
 
 export async function getPortalEstimatesByCustomer(customerId: number) {

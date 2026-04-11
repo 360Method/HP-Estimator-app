@@ -909,8 +909,8 @@
 
 ## Bug: Portal Estimate Detail Does Not Match Pro-Side PDF
 
-- [ ] Audit portalEstimates schema — confirm lineItems/phases JSON is stored when estimate is sent
-- [ ] Fix PortalEstimateDetail page to render full phases + line items (name, scope of work, qty, unit price, amount)
-- [ ] Fix $NaN unit price — line items must read qty and unitPrice from stored snapshot
-- [ ] Add PDF/print button to portal estimate detail page (mirrors pro-side Print/PDF)
-- [ ] Ensure portal estimate detail shows: estimate number, dates, customer info, HP contact, all phases, subtotal, tax, total, deposit
+- [x] Audit portalEstimates schema — confirm lineItems/phases JSON is stored when estimate is sent
+- [x] Fix PortalEstimateDetail page to render full phases + line items (name, scope of work, qty, unit price, amount)
+- [x] Fix $NaN unit price — line items must read qty and unitPrice from stored snapshot
+- [x] Add PDF/print button to portal estimate detail page (mirrors pro-side Print/PDF)
+- [x] Ensure portal estimate detail shows: estimate number, dates, customer info, HP contact, all phases, subtotal, tax, total, deposit

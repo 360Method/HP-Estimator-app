@@ -64,6 +64,13 @@
       "when": 1775935391879,
       "tag": "0008_lean_kabuki",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1775939909731,
+      "tag": "0009_shiny_maddog",
+      "breakpoints": true
     }
   ]
 }
