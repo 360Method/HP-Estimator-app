@@ -880,17 +880,17 @@
 - [x] Include tracking number in portal estimate/invoice email subjects
 
 ## Feature: Portal Email Redesign & Full Portal Integration
-- [ ] Redesign all portal email HTML templates with polished HP branding (magic-link login, estimate, invoice, resend)
-- [ ] Fix broken logo image in portal emails — use hosted CDN URL instead of attachment
-- [ ] Personalize email greeting with customer first name (not "Hello Customer,")
-- [ ] Customer portal home page (/portal): show customer profile info (name, address, phone, email)
-- [ ] Customer portal home page: show active estimates with status badges and direct links
-- [ ] Customer portal home page: show invoices with balance-due amounts and pay buttons
-- [ ] Customer portal home page: show job history (completed jobs)
-- [ ] Add customer-to-pro messaging thread in portal (customer sends message, pro sees it in inbox)
-- [ ] Add booking request form in portal (customer requests new work, creates lead on pro side)
-- [ ] Pro side: show portal messages in inbox with customer context
-- [ ] Pro side: show portal booking requests as new leads in pipeline
+- [x] Redesign all portal email HTML templates with polished HP branding (magic-link login, estimate, invoice, resend)
+- [x] Fix broken logo image in portal emails — use hosted CDN URL instead of attachment
+- [x] Personalize email greeting with customer first name (not "Hello Customer,")
+- [x] Customer portal home page (/portal): show customer profile info (name, address, phone, email)
+- [x] Customer portal home page: show active estimates with status badges and direct links
+- [x] Customer portal home page: show invoices with balance-due amounts and pay buttons
+- [x] Customer portal home page: show job history (completed jobs)
+- [x] Add customer-to-pro messaging thread in portal (customer sends message, pro sees it in inbox)
+- [x] Add booking request form in portal (customer requests new work, creates lead on pro side)
+- [x] Pro side: show portal messages in inbox with customer context
+- [x] Pro side: show portal booking requests as new leads in pipeline
 
 ## Portal Interconnection & Email UI (Apr 2026)
 
