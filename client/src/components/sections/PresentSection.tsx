@@ -426,6 +426,10 @@ export default function PresentSection() {
 
   // Active customer for pre-filling email/phone
   const activeCustomer = state.customers.find(c => c.id === state.activeCustomerId);
+  const activeOpp = state.opportunities.find(o => o.id === state.activeOpportunityId);
+  const seqLabel = activeOpp?.seqNumber
+    ? `E-${String(activeOpp.seqNumber).padStart(3, '0')}`
+    : (jobInfo.jobNumber || `HP-${Date.now().toString().slice(-6)}`);
   const depositAmount = deposit;
 
   const handlePrint = () => window.print();
@@ -825,7 +829,7 @@ export default function PresentSection() {
       {/* Send to Customer dialog */}
       {showSendDialog && (
         <SendEstimateDialog
-          estimateNumber={jobInfo.jobNumber || `HP-${Date.now().toString().slice(-6)}`}
+          estimateNumber={seqLabel}
           customerName={activeCustomer?.name || jobInfo.client || 'Customer'}
           jobTitle={jobInfo.scope || jobInfo.jobNumber || 'Project Estimate'}
           totalPrice={totals.totalPrice}

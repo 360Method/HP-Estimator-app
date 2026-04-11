@@ -873,3 +873,8 @@
 - [x] Show number badge in IntakeShell header (e.g., "E-003")
 - [x] Add inline rename for opportunity title in IntakeShell header (click-to-edit)
 - [x] Persist title rename via updateOpportunityTitle context action
+
+## Feature: Tracking Number Visibility
+- [x] Show seqNumber badge on pipeline opportunity cards in PipelineBoard
+- [x] Add inline click-to-edit title rename in OpportunityDetailsTab header
+- [x] Include tracking number in portal estimate/invoice email subjects

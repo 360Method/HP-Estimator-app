@@ -5,7 +5,7 @@
 // links. Approved estimates open in read-only mode.
 // ============================================================
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -13,7 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import {
   User, Phone, Mail, MapPin, FileText, Briefcase,
-  Star, ChevronRight, Lock, ExternalLink, Calendar, DollarSign, ArrowLeft, ArrowRight,
+  Star, ChevronRight, Lock, ExternalLink, Calendar, DollarSign, ArrowLeft, ArrowRight, Pencil, Check, X,
 } from 'lucide-react';
 import type { Opportunity } from '@/lib/types';
 import LeadNurturingPanel from '@/components/sections/LeadNurturingPanel';
@@ -110,9 +110,12 @@ function LineageNode({ opp, isCurrent, isReadOnly, onClick }: LineageNodeProps) 
 // ── Main component ────────────────────────────────────────────
 
 export default function OpportunityDetailsTab() {
-  const { state, setActiveOpportunity, setSection, navigateToTopLevel, convertLeadToEstimate } = useEstimator();
+  const { state, setActiveOpportunity, setSection, navigateToTopLevel, convertLeadToEstimate, updateOpportunity } = useEstimator();
   // MUST be before any early return (Rules of Hooks)
   const [showConvertModal, setShowConvertModal] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState('');
+  const titleInputRef = useRef<HTMLInputElement>(null);
 
   const activeOpp = state.opportunities.find(o => o.id === state.activeOpportunityId);
   if (!activeOpp) return null;
@@ -251,7 +254,41 @@ export default function OpportunityDetailsTab() {
                   {activeOpp.stage}
                 </Badge>
               </div>
-              <CardTitle className="text-xl leading-tight">{activeOpp.title}</CardTitle>
+              {/* Inline editable title */}
+              {editingTitle ? (
+                <div className="flex items-center gap-1.5 mt-1">
+                  <input
+                    ref={titleInputRef}
+                    value={titleDraft}
+                    onChange={e => setTitleDraft(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        if (titleDraft.trim()) updateOpportunity(activeOpp.id, { title: titleDraft.trim() });
+                        setEditingTitle(false);
+                      } else if (e.key === 'Escape') {
+                        setEditingTitle(false);
+                      }
+                    }}
+                    className="text-xl font-bold bg-transparent border-b-2 border-primary focus:outline-none flex-1 min-w-0"
+                    autoFocus
+                  />
+                  <button onClick={() => { if (titleDraft.trim()) updateOpportunity(activeOpp.id, { title: titleDraft.trim() }); setEditingTitle(false); }} className="text-emerald-600 hover:text-emerald-700"><Check size={16} /></button>
+                  <button onClick={() => setEditingTitle(false)} className="text-muted-foreground hover:text-foreground"><X size={16} /></button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 mt-1 group/title">
+                  <CardTitle className="text-xl leading-tight">{activeOpp.title}</CardTitle>
+                  {!isApproved && (
+                    <button
+                      onClick={() => { setTitleDraft(activeOpp.title); setEditingTitle(true); }}
+                      className="opacity-0 group-hover/title:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
+                      title="Rename"
+                    >
+                      <Pencil size={13} />
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
             <div className="text-right flex-shrink-0">
               <div className="text-2xl font-bold text-primary">{fmtDollar(activeOpp.value)}</div>
