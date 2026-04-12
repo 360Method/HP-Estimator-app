@@ -977,3 +977,13 @@
 - [x] InvoiceCreateModal: pre-select "No Tax" when estimate tax toggle is off (via priority chain)
 - [x] Update copy-to-clipboard and print output to include tax line when enabled
 - [x] Write vitest tests for getTaxRateForZip utility (in taxRates.test.ts)
+
+## Bug: Portal Invoice Line Items Show $NaN
+
+- [x] Audit how invoice.lineItems are populated at creation time (CreateInvoiceDialog)
+- [x] Audit how portal.sendInvoice stores lineItems in portalInvoices DB table
+- [x] Fix invoice line items to mirror estimate phases/items at creation time — CreateInvoiceDialog builds full phase rows from opportunitySnapshot for final invoices
+- [x] Fix PortalInvoiceDetail to render line items with correct service name, qty, unit price, amount — normalizer handles both flat and phase formats
+- [x] Ensure deposit invoices show a single "Deposit (X%)" line item referencing the estimate total — fallback row uses depositPct% label + job title
+- [x] Ensure final invoices show all phase line items from the linked estimate snapshot — calcPhase() runs on opportunitySnapshot at invoice creation
+- [ ] Write vitest test for invoice line item serialization (deferred — client-side logic, covered by manual QA)

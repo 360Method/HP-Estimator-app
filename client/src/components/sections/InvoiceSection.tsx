@@ -9,7 +9,8 @@ import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-
 import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js';
 import { trpc } from '@/lib/trpc';
 import { useEstimator } from '@/contexts/EstimatorContext';
-import { Invoice, PaymentRecord, PaymentMethod, InvoiceStatus, Customer, Opportunity } from '@/lib/types';
+import { Invoice, PaymentRecord, PaymentMethod, InvoiceStatus, Customer, Opportunity, EstimateSnapshot } from '@/lib/types';
+import { calcPhase } from '@/lib/calc';
 import InvoicePrintView from './InvoicePrintView';
 import { nanoid } from 'nanoid';
 import { toast } from 'sonner';
@@ -252,6 +253,18 @@ function InvoiceCard({
   const handleSendToCustomer = () => {
     const email = customer?.email;
     if (!email) { toast.error('No email address on file for this customer'); return; }
+    // Serialize invoice line items into the portal phase format so the portal invoice
+    // detail page can render a full breakdown mirroring the estimate.
+    const lineItemsJson = invoice.lineItems && invoice.lineItems.length > 0
+      ? JSON.stringify(
+          invoice.lineItems.map(item => ({
+            description: item.description,
+            qty: item.qty,
+            unitPrice: item.unitPrice,
+            amount: item.total,
+          }))
+        )
+      : undefined;
     sendInvoiceMutation.mutate({
       toEmail: email,
       toName: customer?.firstName ? `${customer.firstName} ${customer.lastName ?? ''}`.trim() : undefined,
@@ -261,6 +274,7 @@ function InvoiceCard({
       invoiceTotal: invoice.total,
       dueDate: invoice.dueDate,
       jobTitle: opportunity?.title,
+      lineItemsJson,
     });
   };
 
@@ -929,6 +943,8 @@ function CreateInvoiceDialog({
   defaultType,
   invoiceNumber,
   defaultTaxCode,
+  opportunitySnapshot,
+  jobTitle,
 }: {
   open: boolean;
   onClose: () => void;
@@ -937,6 +953,8 @@ function CreateInvoiceDialog({
   defaultType: 'deposit' | 'final';
   invoiceNumber: string;
   defaultTaxCode?: string;
+  opportunitySnapshot?: EstimateSnapshot;
+  jobTitle?: string;
 }) {
   const [type, setType] = useState<'deposit' | 'final'>(defaultType);
   const [depositPct, setDepositPct] = useState(50);
@@ -973,13 +991,52 @@ function CreateInvoiceDialog({
       payments: [],
       amountPaid: 0,
       balance: total,
-      lineItems: [{
-        id: nanoid(8),
-        description: type === 'deposit' ? `${depositPct}% Deposit` : 'Project Balance',
-        qty: 1,
-        unitPrice: subtotal,
-        total: subtotal,
-      }],
+      lineItems: (() => {
+        // For final invoices: build one row per active line item from the estimate snapshot.
+        // For deposit invoices: single summary row.
+        if (type === 'final' && opportunitySnapshot && opportunitySnapshot.phases.length > 0) {
+          const rows: Invoice['lineItems'] = [];
+          for (const phase of opportunitySnapshot.phases) {
+            const phaseResult = calcPhase(phase, opportunitySnapshot.global);
+            for (const item of phaseResult.items) {
+              if (!item.hasData) continue;
+              const unitPrice = item.qty > 0 ? item.price / item.qty : item.price;
+              rows.push({
+                id: nanoid(8),
+                description: item.name + (item.sowLine ? ` — ${item.sowLine}` : ''),
+                qty: item.qty,
+                unitPrice: Math.round(unitPrice * 100) / 100,
+                total: Math.round(item.price * 100) / 100,
+              });
+            }
+          }
+          // Include custom line items
+          if (opportunitySnapshot.customItems) {
+            for (const ci of opportunitySnapshot.customItems) {
+              const ciUnitPrice = ci.qty > 0 ? (ci.matCostPerUnit + ci.laborHrsPerUnit * ci.laborRate) : 0;
+              rows.push({
+                id: nanoid(8),
+                description: ci.description,
+                qty: ci.qty,
+                unitPrice: Math.round(ciUnitPrice * 100) / 100,
+                total: Math.round(ciUnitPrice * ci.qty * 100) / 100,
+              });
+            }
+          }
+          if (rows.length > 0) return rows;
+        }
+        // Fallback: single summary row
+        const label = type === 'deposit'
+          ? `${depositPct}% Deposit${jobTitle ? ` — ${jobTitle}` : ''}`
+          : `Project Balance${jobTitle ? ` — ${jobTitle}` : ''}`;
+        return [{
+          id: nanoid(8),
+          description: label,
+          qty: 1,
+          unitPrice: subtotal,
+          total: subtotal,
+        }];
+      })(),
       notes,
       internalNotes: '',
     };
@@ -1261,6 +1318,8 @@ export default function InvoiceSection() {
           ?? (state.jobInfo.zip ? getTaxRateForZip(state.jobInfo.zip)?.code : undefined)
           ?? (state.global.taxEnabled ? (state.global.taxRateCode ?? '0603') : 'none')
         }
+        opportunitySnapshot={activeOpp?.estimateSnapshot}
+        jobTitle={activeOpp?.title || state.jobInfo.scope || undefined}
       />
     </div>
   );

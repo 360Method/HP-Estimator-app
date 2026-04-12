@@ -63,10 +63,41 @@ export default function PortalInvoiceDetail() {
     );
   }
 
-  const lineItems: Array<{ description: string; qty: number; unitPrice: number; amount: number }> =
-    inv.lineItemsJson ? (() => {
-      try { return JSON.parse(inv.lineItemsJson as string); } catch { return []; }
-    })() : [];
+  // Normalize line items — support both storage formats:
+  //  1. Flat format (from handleSendToCustomer): { description, qty, unitPrice, amount }
+  //  2. Phase format (from SendEstimateDialog): [{ phaseName, items: [{ name, qty, unitPrice, amount }] }]
+  type NormalizedLineItem = { description: string; qty: number; unitPrice: number; amount: number };
+  const lineItems: NormalizedLineItem[] = (() => {
+    if (!inv.lineItemsJson) return [];
+    try {
+      const parsed = JSON.parse(inv.lineItemsJson as string);
+      if (!Array.isArray(parsed)) return [];
+      // Phase format: first element has a `phaseName` key
+      if (parsed.length > 0 && 'phaseName' in parsed[0]) {
+        const rows: NormalizedLineItem[] = [];
+        for (const phase of parsed) {
+          if (Array.isArray(phase.items)) {
+            for (const item of phase.items) {
+              rows.push({
+                description: item.name ?? item.description ?? '',
+                qty: Number(item.qty) || 1,
+                unitPrice: Number(item.unitPrice) || 0,
+                amount: Number(item.amount) || 0,
+              });
+            }
+          }
+        }
+        return rows;
+      }
+      // Flat format
+      return parsed.map((item: any) => ({
+        description: item.description ?? item.name ?? '',
+        qty: Number(item.qty) || 1,
+        unitPrice: Number(item.unitPrice) || 0,
+        amount: Number(item.amount ?? item.total) || 0,
+      }));
+    } catch { return []; }
+  })();
 
   const isPaid = inv.status === "paid";
   const isOverdue = !isPaid && inv.dueDate ? new Date(inv.dueDate) < new Date() : false;

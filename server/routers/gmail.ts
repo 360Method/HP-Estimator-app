@@ -51,6 +51,7 @@ export const gmailRouter = router({
       dueDate: z.string(),
       jobTitle: z.string().optional(),
       paymentLink: z.string().optional(),
+      lineItemsJson: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
       const fromEmail = process.env.GMAIL_CONNECTED_EMAIL || "help@handypioneers.com";
@@ -78,6 +79,7 @@ export const gmailRouter = router({
             tipAmount: 0,
             dueDate: new Date(input.dueDate),
             jobTitle: input.jobTitle,
+            lineItemsJson: input.lineItemsJson,
             sentAt: new Date(),
           });
           const token = randomBytes(32).toString("hex");
