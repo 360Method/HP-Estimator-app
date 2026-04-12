@@ -10,10 +10,10 @@ import { serveStatic, setupVite } from "./vite";
 import Stripe from "stripe";
 import { handleInboundSms, handleCallStatusUpdate, generateVoiceToken, isTwilioConfigured } from "../twilio";
 import twilio from "twilio";
-import { exchangeGmailCode, pollInboundEmails } from "../gmail";
+import { exchangeGmailCode, pollInboundEmails, sendOverdueReminderEmail } from "../gmail";
 import { getFirstGmailToken } from "../db";
 import { addSSEClient, broadcastNewMessage } from "../sse";
-import { getPortalInvoiceByStripePaymentIntentId, updatePortalInvoicePaid, getPortalInvoiceByCheckoutSessionId, findPortalCustomerById } from "../portalDb";
+import { getPortalInvoiceByStripePaymentIntentId, updatePortalInvoicePaid, getPortalInvoiceByCheckoutSessionId, findPortalCustomerById, getOverdueInvoicesForReminder, markPortalInvoiceReminderSent } from "../portalDb";
 import { sendEmail } from "../gmail";
 import { notifyOwner } from "../_core/notification";
 import { randomUUID } from "crypto";
@@ -453,6 +453,87 @@ async function startServer() {
       );
     }
   }, 2 * 60 * 1000); // every 2 minutes
+
+  // ── Overdue invoice reminder (daily at 9 AM server time) ─────────────────────
+  const scheduleOverdueReminders = () => {
+    const now = new Date();
+    const next9am = new Date(now);
+    next9am.setHours(9, 0, 0, 0);
+    if (next9am <= now) next9am.setDate(next9am.getDate() + 1);
+    const msUntil9am = next9am.getTime() - now.getTime();
+    setTimeout(async () => {
+      try {
+        const overdueRows = await getOverdueInvoicesForReminder();
+        const origin = process.env.PORTAL_ORIGIN ?? "https://client.handypioneers.com";
+        let sent = 0;
+        for (const { invoice, customer } of overdueRows) {
+          if (!customer.email) continue;
+          try {
+            await sendOverdueReminderEmail({
+              to: customer.email,
+              customerName: customer.name ?? "Valued Customer",
+              invoiceNumber: invoice.invoiceNumber,
+              amountDueCents: Math.max(0, invoice.amountDue - invoice.amountPaid),
+              dueDate: invoice.dueDate,
+              portalInvoiceId: invoice.id,
+              origin,
+            });
+            await markPortalInvoiceReminderSent(invoice.id);
+            sent++;
+          } catch (err) {
+            console.error(`[Overdue] Failed to send reminder for invoice ${invoice.id}:`, err);
+          }
+        }
+        if (sent > 0) {
+          console.log(`[Overdue] Sent ${sent} overdue reminder email(s)`);
+          await notifyOwner({
+            title: `Overdue reminders sent`,
+            content: `${sent} overdue invoice reminder email(s) sent to customers.`,
+          }).catch(() => {});
+        }
+      } catch (err) {
+        console.error("[Overdue] Reminder job error:", err);
+      }
+      // Schedule next run in 24 hours
+      setInterval(async () => {
+        try {
+          const overdueRows = await getOverdueInvoicesForReminder();
+          const origin = process.env.PORTAL_ORIGIN ?? "https://client.handypioneers.com";
+          let sent = 0;
+          for (const { invoice, customer } of overdueRows) {
+            if (!customer.email) continue;
+            try {
+              await sendOverdueReminderEmail({
+                to: customer.email,
+                customerName: customer.name ?? "Valued Customer",
+                invoiceNumber: invoice.invoiceNumber,
+                amountDueCents: Math.max(0, invoice.amountDue - invoice.amountPaid),
+                dueDate: invoice.dueDate,
+                portalInvoiceId: invoice.id,
+                origin,
+              });
+              await markPortalInvoiceReminderSent(invoice.id);
+              sent++;
+            } catch (err) {
+              console.error(`[Overdue] Failed to send reminder for invoice ${invoice.id}:`, err);
+            }
+          }
+          if (sent > 0) {
+            console.log(`[Overdue] Sent ${sent} overdue reminder email(s)`);
+            await notifyOwner({
+              title: `Overdue reminders sent`,
+              content: `${sent} overdue invoice reminder email(s) sent to customers.`,
+            }).catch(() => {});
+          }
+        } catch (err) {
+          console.error("[Overdue] Reminder job error:", err);
+        }
+      }, 24 * 60 * 60 * 1000); // repeat every 24 hours
+    }, msUntil9am);
+    console.log(`[Overdue] Next reminder run scheduled in ${Math.round(msUntil9am / 60000)} minutes`);
+  };
+  scheduleOverdueReminders();
+
   // tRPC API
   app.use(
     "/api/trpc",

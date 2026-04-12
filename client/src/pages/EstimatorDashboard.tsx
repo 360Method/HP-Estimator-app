@@ -19,6 +19,7 @@ import {
   UserPlus, ClipboardList, Wrench, Receipt,
 } from 'lucide-react';
 import { Customer, Opportunity, Invoice } from '@/lib/types';
+import { trpc } from '@/lib/trpc';
 
 // ── Helpers ──────────────────────────────────────────────────
 const fmt$ = (n: number) =>
@@ -182,6 +183,12 @@ export default function EstimatorDashboard() {
   const { state, setSection, setActiveCustomer, setActiveOpportunity } = useEstimator();
   const [revenueRange] = useState<'6m' | '12m'>('6m');
 
+  // ── DB-backed revenue stats (portal payments) ───────────────
+  const { data: revenueStats } = trpc.portal.getRevenueStats.useQuery(undefined, {
+    staleTime: 60_000,
+    refetchOnWindowFocus: true,
+  });
+
   // ── Aggregate all data ──────────────────────────────────────
   const allCustomers: Customer[] = state.customers;
 
@@ -226,8 +233,13 @@ export default function EstimatorDashboard() {
   const activeJobsCount = jobs.filter(j => ['In Progress', 'Scheduled', 'New Job', 'Deposit Collected', 'Materials Received'].includes(j.stage)).length;
   const openEstimatesCount = estimates.filter(e => !['Approved', 'Rejected'].includes(e.stage)).length;
   const leadsThisMonth = leads.filter(l => isThisMonth(l.createdAt)).length;
-  const revenueCollected = allInvoices.reduce((s, inv) => s + (inv.amountPaid || 0), 0);
-  const outstandingBalance = allInvoices.reduce((s, inv) => s + (inv.balance || 0), 0);
+  // Use DB-backed portal totals when available; fall back to local state
+  const revenueCollected = revenueStats
+    ? revenueStats.totalCollectedCents / 100
+    : allInvoices.reduce((s, inv) => s + (inv.amountPaid || 0), 0);
+  const outstandingBalance = revenueStats
+    ? revenueStats.totalOutstandingCents / 100
+    : allInvoices.reduce((s, inv) => s + (inv.balance || 0), 0);
 
   // Conversion rates
   const wonLeads = leads.filter(l => l.stage === 'Won').length;

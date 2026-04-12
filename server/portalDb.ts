@@ -3,7 +3,7 @@
  * All functions return raw Drizzle rows.
  */
 import { getDb } from "./db";
-import { eq, and, gt, desc, inArray } from "drizzle-orm";
+import { eq, and, gt, lt, or, isNull, desc, inArray, sql, sum } from "drizzle-orm";
 import {
   portalCustomers,
   portalTokens,
@@ -483,4 +483,86 @@ export async function getPortalInvoicePaymentStatusByNumbers(
     };
   }
   return result;
+}
+
+// ─── OVERDUE REMINDERS ────────────────────────────────────────────────────────
+
+/**
+ * Returns all portal invoices that are overdue and eligible for a reminder email.
+ * Eligible = dueDate < now AND status != 'paid' AND (lastReminderSentAt IS NULL OR lastReminderSentAt < 3 days ago).
+ * Includes the customer row so the caller can address the email.
+ */
+export async function getOverdueInvoicesForReminder() {
+  const db = await d();
+  const now = new Date();
+  const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
+
+  const rows = await db
+    .select({
+      invoice: portalInvoices,
+      customer: portalCustomers,
+    })
+    .from(portalInvoices)
+    .innerJoin(portalCustomers, eq(portalInvoices.customerId, portalCustomers.id))
+    .where(
+      and(
+        lt(portalInvoices.dueDate, now),
+        // status not paid — MySQL doesn't have ne(), use sql
+        sql`${portalInvoices.status} != 'paid'`,
+        or(
+          isNull(portalInvoices.lastReminderSentAt),
+          lt(portalInvoices.lastReminderSentAt, threeDaysAgo)
+        )
+      )
+    );
+
+  return rows;
+}
+
+/**
+ * Stamps lastReminderSentAt = now on a portal invoice after a reminder is sent.
+ */
+export async function markPortalInvoiceReminderSent(id: number) {
+  const db = await d();
+  await db
+    .update(portalInvoices)
+    .set({ lastReminderSentAt: new Date() })
+    .where(eq(portalInvoices.id, id));
+}
+
+// ─── REVENUE STATS ────────────────────────────────────────────────────────────
+
+/**
+ * Returns total collected (sum of amountPaid on paid invoices) and
+ * total outstanding (sum of amountDue - amountPaid on unpaid invoices),
+ * both in cents.
+ */
+export async function getPortalRevenueStats(): Promise<{
+  totalCollectedCents: number;
+  totalOutstandingCents: number;
+}> {
+  const db = await d();
+
+  const [collected] = await db
+    .select({ total: sum(portalInvoices.amountPaid) })
+    .from(portalInvoices)
+    .where(eq(portalInvoices.status, "paid"));
+
+  const unpaidRows = await db
+    .select({
+      amountDue: portalInvoices.amountDue,
+      amountPaid: portalInvoices.amountPaid,
+    })
+    .from(portalInvoices)
+    .where(sql`${portalInvoices.status} != 'paid'`);
+
+  const totalOutstandingCents = unpaidRows.reduce(
+    (acc, r) => acc + Math.max(0, r.amountDue - r.amountPaid),
+    0
+  );
+
+  return {
+    totalCollectedCents: Number(collected?.total ?? 0),
+    totalOutstandingCents,
+  };
 }

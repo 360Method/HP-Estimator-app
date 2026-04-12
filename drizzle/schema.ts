@@ -250,6 +250,8 @@ export const portalInvoices = mysqlTable("portalInvoices", {
   jobTitle: varchar("jobTitle", { length: 255 }),
   sentAt: timestamp("sentAt").defaultNow().notNull(),
   viewedAt: timestamp("viewedAt"),
+  /** Last time an overdue reminder email was sent for this invoice */
+  lastReminderSentAt: timestamp("lastReminderSentAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

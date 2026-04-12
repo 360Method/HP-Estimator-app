@@ -47,6 +47,7 @@ import {
   getPortalInvoiceByCheckoutSessionId,
   updatePortalInvoiceCheckoutSessionId,
   getPortalInvoicePaymentStatusByNumbers,
+  getPortalRevenueStats,
 } from "../portalDb";
 import { sendEmail } from "../gmail";
 import { updateOpportunity } from "../db";
@@ -844,6 +845,14 @@ export const portalRouter = router({
     .query(async ({ input }) => {
       return getPortalInvoicePaymentStatusByNumbers(input.invoiceNumbers);
     }),
+
+  /**
+   * HP-side: returns total collected and total outstanding from portal invoices.
+   * Used by the pro-side dashboard Revenue Collected KPI card.
+   */
+  getRevenueStats: hpProcedure.query(async () => {
+    return getPortalRevenueStats();
+  }),
 
   /** HP staff: list all portal messages across all customers */
   getAllPortalMessages: hpProcedure.query(async () => {

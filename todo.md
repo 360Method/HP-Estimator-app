@@ -949,3 +949,17 @@
 - [x] PortalHome dashboard: overdue invoice banner (red alert strip) above invoice list
 - [x] PortalInvoiceDetail: red overdue banner when invoice is overdue
 - [x] Pro-side InvoiceCard: red "Overdue" badge when dueDate < now && not paid
+
+## Feature: Overdue Invoice Reminder Emails
+
+- [x] Add lastReminderSentAt column to portalInvoices schema and run db:push
+- [x] Add sendOverdueReminders() helper in portalDb.ts — queries invoices where dueDate < now, status != paid, and (lastReminderSentAt is null OR lastReminderSentAt < now - 3 days)
+- [x] Add sendOverdueReminderEmail() in gmail.ts — HP-branded email with Pay Now link
+- [x] Register daily cron job in server/_core/index.ts that calls sendOverdueReminders()
+- [x] Write vitest test for the overdue query filter logic
+
+## Feature: Revenue Collected from DB
+
+- [x] Add getRevenueCollected() helper in portalDb.ts — sums portalInvoices.amountPaid where status = paid
+- [x] Add portal.getRevenueStats tRPC procedure returning totalCollected and outstandingBalance
+- [x] Wire Dashboard.tsx Revenue Collected card to trpc.portal.getRevenueStats

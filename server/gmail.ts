@@ -304,3 +304,130 @@ export async function pollInboundEmails(fromEmail: string, afterHistoryId?: stri
     console.error("[Gmail] Poll error:", err);
   }
 }
+
+// ─── Overdue Invoice Reminder Email ──────────────────────────────────────────
+
+/**
+ * Sends an HP-branded overdue reminder email to a portal customer.
+ * @param to          Customer email address
+ * @param customerName Customer's display name
+ * @param invoiceNumber e.g. "INV-2026-001"
+ * @param amountDueCents Amount still owed in cents
+ * @param dueDate     The original due date
+ * @param portalInvoiceId  DB id of the portalInvoice row (used to build the Pay Now link)
+ * @param origin      Frontend origin, e.g. "https://client.handypioneers.com"
+ */
+export async function sendOverdueReminderEmail({
+  to,
+  customerName,
+  invoiceNumber,
+  amountDueCents,
+  dueDate,
+  portalInvoiceId,
+  origin,
+}: {
+  to: string;
+  customerName: string;
+  invoiceNumber: string;
+  amountDueCents: number;
+  dueDate: Date | null;
+  portalInvoiceId: number;
+  origin: string;
+}): Promise<void> {
+  const amountStr = `$${(amountDueCents / 100).toFixed(2)}`;
+  const dueDateStr = dueDate
+    ? dueDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+    : "a past date";
+  const payUrl = `${origin}/portal/invoices/${portalInvoiceId}`;
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8" /></head>
+<body style="margin:0;padding:0;background:#f5f5f0;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f0;padding:32px 0;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+        <!-- Header -->
+        <tr>
+          <td style="background:#2D5016;padding:28px 32px;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td>
+                  <span style="color:#ffffff;font-size:20px;font-weight:700;letter-spacing:-0.3px;">Handy Pioneers</span><br/>
+                  <span style="color:#a8c47a;font-size:12px;">Field Estimator &amp; Customer Portal</span>
+                </td>
+                <td align="right">
+                  <span style="background:#c8922a;color:#fff;padding:6px 14px;border-radius:20px;font-size:12px;font-weight:700;">PAYMENT OVERDUE</span>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <!-- Body -->
+        <tr>
+          <td style="padding:32px;">
+            <p style="margin:0 0 16px;font-size:16px;color:#1a1a1a;">Hi ${customerName},</p>
+            <p style="margin:0 0 24px;font-size:15px;color:#444;line-height:1.6;">
+              This is a friendly reminder that invoice <strong>${invoiceNumber}</strong> for
+              <strong>${amountStr}</strong> was due on <strong>${dueDateStr}</strong> and
+              remains unpaid. Please take a moment to settle the balance at your earliest convenience.
+            </p>
+            <!-- Invoice summary box -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9f7f2;border:1px solid #e8e0d0;border-radius:8px;margin-bottom:28px;">
+              <tr>
+                <td style="padding:20px 24px;">
+                  <table width="100%" cellpadding="0" cellspacing="0">
+                    <tr>
+                      <td style="font-size:13px;color:#666;padding-bottom:8px;">Invoice</td>
+                      <td align="right" style="font-size:13px;color:#1a1a1a;font-weight:600;padding-bottom:8px;">${invoiceNumber}</td>
+                    </tr>
+                    <tr>
+                      <td style="font-size:13px;color:#666;padding-bottom:8px;">Amount Due</td>
+                      <td align="right" style="font-size:15px;color:#c8922a;font-weight:700;padding-bottom:8px;">${amountStr}</td>
+                    </tr>
+                    <tr>
+                      <td style="font-size:13px;color:#666;">Due Date</td>
+                      <td align="right" style="font-size:13px;color:#e53e3e;font-weight:600;">${dueDateStr}</td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+            <!-- CTA -->
+            <table cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+              <tr>
+                <td style="background:#2D5016;border-radius:8px;padding:14px 32px;">
+                  <a href="${payUrl}" style="color:#ffffff;font-size:15px;font-weight:700;text-decoration:none;">
+                    Pay Now — ${amountStr}
+                  </a>
+                </td>
+              </tr>
+            </table>
+            <p style="margin:0;font-size:13px;color:#888;line-height:1.6;">
+              If you've already sent payment or have questions, please reply to this email or
+              call us at <strong>(360) 544-9858</strong>. We're happy to help.
+            </p>
+          </td>
+        </tr>
+        <!-- Footer -->
+        <tr>
+          <td style="background:#f9f7f2;border-top:1px solid #e8e0d0;padding:20px 32px;text-align:center;">
+            <p style="margin:0;font-size:12px;color:#aaa;">
+              Handy Pioneers · 808 SE Chkalov Dr 3-433, Vancouver, WA 98683<br/>
+              <a href="${origin}/portal" style="color:#2D5016;text-decoration:none;">View your portal</a>
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+  await sendEmail({
+    to,
+    subject: `[Overdue] Invoice ${invoiceNumber} — ${amountStr} past due`,
+    html,
+  });
+}
