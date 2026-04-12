@@ -3,7 +3,7 @@
  * All functions return raw Drizzle rows.
  */
 import { getDb } from "./db";
-import { eq, and, gt, desc } from "drizzle-orm";
+import { eq, and, gt, desc, inArray } from "drizzle-orm";
 import {
   portalCustomers,
   portalTokens,
@@ -451,4 +451,36 @@ export async function updatePortalInvoiceCheckoutSessionId(
     .update(portalInvoices)
     .set({ stripeCheckoutSessionId: checkoutSessionId })
     .where(eq(portalInvoices.id, id));
+}
+
+// ─── BULK LOOKUP BY INVOICE NUMBER (for pro-side payment sync) ────────────────
+
+/**
+ * Given a list of invoice numbers (e.g. ["INV-2026-001", "INV-2026-002"]),
+ * returns portal invoice rows that have been paid, keyed by invoiceNumber.
+ * Used by the HP-side estimator to show "Paid via Portal" badges.
+ */
+export async function getPortalInvoicePaymentStatusByNumbers(
+  invoiceNumbers: string[]
+): Promise<Record<string, { paidAt: Date | null; amountPaid: number; status: string }>> {
+  if (!invoiceNumbers.length) return {};
+  const db = await d();
+  const rows = await db
+    .select({
+      invoiceNumber: portalInvoices.invoiceNumber,
+      paidAt: portalInvoices.paidAt,
+      amountPaid: portalInvoices.amountPaid,
+      status: portalInvoices.status,
+    })
+    .from(portalInvoices)
+    .where(inArray(portalInvoices.invoiceNumber, invoiceNumbers));
+  const result: Record<string, { paidAt: Date | null; amountPaid: number; status: string }> = {};
+  for (const row of rows) {
+    result[row.invoiceNumber] = {
+      paidAt: row.paidAt,
+      amountPaid: row.amountPaid,
+      status: row.status,
+    };
+  }
+  return result;
 }

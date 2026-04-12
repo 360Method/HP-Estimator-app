@@ -1880,21 +1880,36 @@ function CustomerPortalTab({ customerId }: { customerId: string }) {
                         <CheckCircle2 size={11} /> Viewed
                       </span>
                     )}
-                    <Badge className={
-                      inv.status === 'paid' ? 'bg-emerald-100 text-emerald-800' :
-                      inv.status === 'due' ? 'bg-orange-100 text-orange-700' :
-                      'bg-sky-100 text-sky-700'
-                    }>
-                      {inv.status}
-                    </Badge>
+                    {inv.status === 'paid' && (
+                      <Badge className="bg-emerald-100 text-emerald-800 flex items-center gap-1">
+                        <CheckCircle2 size={10} /> Paid via Portal
+                      </Badge>
+                    )}
+                    {inv.status !== 'paid' && inv.dueDate && new Date(inv.dueDate) < new Date() && (
+                      <Badge className="bg-red-100 text-red-700 border-red-300">Overdue</Badge>
+                    )}
+                    {inv.status !== 'paid' && !(inv.dueDate && new Date(inv.dueDate) < new Date()) && (
+                      <Badge className={
+                        inv.status === 'due' ? 'bg-orange-100 text-orange-700' :
+                        'bg-sky-100 text-sky-700'
+                      }>
+                        {inv.status}
+                      </Badge>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center justify-between pl-7">
-                  {inv.viewedAt ? (
-                    <p className="text-xs text-emerald-600">Viewed {fmtRelative(new Date(inv.viewedAt).toISOString())}</p>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">Not yet viewed</p>
-                  )}
+                  <div>
+                    {inv.status === 'paid' && inv.paidAt ? (
+                      <p className="text-xs text-emerald-600">
+                        Paid {fmtRelative(new Date(inv.paidAt).toISOString())} · {fmtDollar((inv.amountPaid ?? 0) / 100)}
+                      </p>
+                    ) : inv.viewedAt ? (
+                      <p className="text-xs text-emerald-600">Viewed {fmtRelative(new Date(inv.viewedAt).toISOString())}</p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Not yet viewed</p>
+                    )}
+                  </div>
                   <button
                     onClick={() => resendInvoice.mutate({ invoiceId: inv.id })}
                     disabled={resendInvoice.isPending}

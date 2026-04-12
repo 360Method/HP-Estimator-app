@@ -2,7 +2,7 @@ import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import PortalLayout from "@/components/PortalLayout";
 import { Button } from "@/components/ui/button";
-import { Loader2, FileText, CreditCard, CheckCircle2 } from "lucide-react";
+import { Loader2, FileText, CreditCard, CheckCircle2, AlertTriangle } from "lucide-react";
 
 function statusBadge(status: string) {
   const map: Record<string, string> = {
@@ -56,9 +56,22 @@ export default function PortalInvoices() {
             <p className="text-base">No invoices yet</p>
           </div>
         ) : (
+          <>
+            {/* Overdue banner */}
+            {invoices.some(inv => inv.status !== 'paid' && inv.dueDate && new Date(inv.dueDate) < new Date()) && (
+              <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
+                <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-red-700">You have overdue invoices</p>
+                  <p className="text-xs text-red-600 mt-0.5">Please pay the outstanding balance to avoid service interruptions.</p>
+                </div>
+              </div>
+            )}
           <div className="space-y-3">
             {invoices.map((inv) => {
               const isPaid = inv.status === "paid";
+              const isOverdue = !isPaid && inv.dueDate ? new Date(inv.dueDate) < new Date() : false;
+              const displayStatus = isOverdue ? "overdue" : inv.status;
               const balance = (inv.amountDue ?? 0) - (inv.amountPaid ?? 0);
               return (
                 <div
@@ -69,6 +82,8 @@ export default function PortalInvoices() {
                   <div className="flex items-center gap-3 flex-1 min-w-0">
                     {isPaid ? (
                       <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0" />
+                    ) : isOverdue ? (
+                      <AlertTriangle className="w-5 h-5 text-red-500 shrink-0" />
                     ) : (
                       <FileText className="w-5 h-5 text-orange-500 shrink-0" />
                     )}
@@ -89,7 +104,7 @@ export default function PortalInvoices() {
                         <p className="text-xs text-orange-600">Balance: {fmtMoney(balance)}</p>
                       )}
                     </div>
-                    {statusBadge(inv.status)}
+                    {statusBadge(displayStatus)}
                     {!isPaid && (
                       <Button
                         size="sm"
@@ -108,6 +123,7 @@ export default function PortalInvoices() {
               );
             })}
           </div>
+          </>
         )}
       </div>
     </PortalLayout>

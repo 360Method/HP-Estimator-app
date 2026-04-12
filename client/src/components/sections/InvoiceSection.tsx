@@ -235,6 +235,7 @@ function InvoiceCard({
   customer,
   opportunity,
   allJobInvoices = [],
+  portalPayment,
 }: {
   invoice: Invoice;
   onUpdate: (updated: Invoice) => void;
@@ -243,6 +244,7 @@ function InvoiceCard({
   customer: Customer | undefined;
   opportunity: Opportunity | null;
   allJobInvoices?: Invoice[];
+  portalPayment?: { paidAt: Date | null; amountPaid: number; status: string } | null;
 }) {
   const [showPrintView, setShowPrintView] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -285,6 +287,10 @@ function InvoiceCard({
 
   const balance = invoice.balance;
   const isPaid = invoice.status === 'paid';
+  const isPaidViaPortal = portalPayment?.status === 'paid' && !!portalPayment?.paidAt;
+  const isOverdue = !isPaid && !isPaidViaPortal && invoice.dueDate
+    ? new Date(invoice.dueDate) < new Date()
+    : false;
 
   // ── Stripe flow ──────────────────────────────────────────────
   const handleStripeClick = async () => {
@@ -389,6 +395,16 @@ function InvoiceCard({
                 <Badge className={`text-xs ${STATUS_COLORS[invoice.status]}`}>
                   {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
                 </Badge>
+                {isPaidViaPortal && (
+                  <Badge className="text-xs bg-emerald-100 text-emerald-800 border-emerald-300 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" /> Paid via Portal
+                  </Badge>
+                )}
+                {isOverdue && (
+                  <Badge className="text-xs bg-red-100 text-red-700 border-red-300">
+                    Overdue
+                  </Badge>
+                )}
                 <Badge variant="outline" className="text-xs">
                   {invoice.type === 'deposit' ? 'Deposit Invoice' : 'Final Invoice'}
                 </Badge>
@@ -406,6 +422,17 @@ function InvoiceCard({
             {isPaid && (
               <div className="text-xs text-green-600 flex items-center gap-1 justify-end">
                 <CheckCircle2 className="w-3 h-3" /> Paid
+              </div>
+            )}
+            {isPaidViaPortal && portalPayment?.paidAt && (
+              <div className="text-xs text-emerald-700 flex items-center gap-1 justify-end mt-0.5">
+                <CheckCircle2 className="w-3 h-3" />
+                Portal: {new Date(portalPayment.paidAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              </div>
+            )}
+            {isOverdue && (
+              <div className="text-xs text-red-600 flex items-center gap-1 justify-end mt-0.5">
+                Past due
               </div>
             )}
           </div>
@@ -1089,6 +1116,13 @@ export default function InvoiceSection() {
   const publishableKey = stripeData?.publishableKey ?? null;
   const paypalClientId = paypalData?.clientId ?? null;
 
+  // Fetch portal payment status for all invoices in this section
+  const invoiceNumbers = invoices.map(inv => inv.invoiceNumber).filter(Boolean);
+  const { data: portalPaymentStatus } = trpc.portal.getPortalPaymentStatus.useQuery(
+    { invoiceNumbers },
+    { enabled: invoiceNumbers.length > 0, staleTime: 30_000, refetchOnWindowFocus: true }
+  );
+
   // Invoice counter — global across all customers to avoid duplicates
   const nextInvoiceNumber = () => {
     const year = new Date().getFullYear();
@@ -1212,6 +1246,7 @@ export default function InvoiceSection() {
               customer={customer}
               opportunity={activeOpp ?? null}
               allJobInvoices={sortedInvoices}
+              portalPayment={portalPaymentStatus?.[inv.invoiceNumber]}
             />
           ))}
         </div>

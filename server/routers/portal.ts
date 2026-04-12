@@ -46,6 +46,7 @@ import {
   getAllPortalMessages,
   getPortalInvoiceByCheckoutSessionId,
   updatePortalInvoiceCheckoutSessionId,
+  getPortalInvoicePaymentStatusByNumbers,
 } from "../portalDb";
 import { sendEmail } from "../gmail";
 import { updateOpportunity } from "../db";
@@ -832,6 +833,16 @@ export const portalRouter = router({
         getPortalAppointmentsByCustomer(portalCustomer.id),
       ]);
        return { customer: portalCustomer, estimates, invoices, appointments };
+    }),
+
+  /**
+   * HP-side: given a list of invoice numbers, return their portal payment status.
+   * Used by the pro-side estimator to show "Paid via Portal" badges on InvoiceCards.
+   */
+  getPortalPaymentStatus: hpProcedure
+    .input(z.object({ invoiceNumbers: z.array(z.string()) }))
+    .query(async ({ input }) => {
+      return getPortalInvoicePaymentStatusByNumbers(input.invoiceNumbers);
     }),
 
   /** HP staff: list all portal messages across all customers */

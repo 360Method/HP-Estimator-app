@@ -24,6 +24,7 @@ import {
   Check,
   X,
   AlertCircle,
+  AlertTriangle,
   CheckCircle,
   Clock,
   CreditCard,
@@ -235,6 +236,9 @@ export default function PortalHome() {
 
   const pendingEstimates = estimates.filter((e) => e.status === "sent" || e.status === "viewed");
   const openInvoices = invoices.filter((i) => i.status !== "paid");
+  const overdueInvoices = openInvoices.filter(
+    (i) => i.dueDate && new Date(i.dueDate) < new Date()
+  );
   const upcomingAppts = appointments.filter(
     (a) => new Date(a.scheduledAt).getTime() >= Date.now() && a.status === "scheduled"
   );
@@ -409,6 +413,27 @@ export default function PortalHome() {
         )}
 
         {/* Open Invoices */}
+        {/* Overdue alert banner */}
+        {overdueInvoices.length > 0 && (
+          <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl p-4">
+            <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-red-700">
+                {overdueInvoices.length === 1 ? '1 invoice is overdue' : `${overdueInvoices.length} invoices are overdue`}
+              </p>
+              <p className="text-xs text-red-600 mt-0.5">
+                Please pay the outstanding balance to avoid service interruptions.
+              </p>
+            </div>
+            <button
+              onClick={() => navigate('/portal/invoices')}
+              className="text-xs font-semibold text-red-700 underline shrink-0"
+            >
+              View
+            </button>
+          </div>
+        )}
+
         {openInvoices.length > 0 && (
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
@@ -428,7 +453,11 @@ export default function PortalHome() {
                     key={inv.id}
                     className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 transition-colors"
                   >
-                    <FileText className="w-4 h-4 text-orange-500 shrink-0" />
+                    {inv.dueDate && new Date(inv.dueDate) < new Date() ? (
+                      <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
+                    ) : (
+                      <FileText className="w-4 h-4 text-orange-500 shrink-0" />
+                    )}
                     <button
                       className="flex-1 min-w-0 text-left"
                       onClick={() => navigate(`/portal/invoices/${inv.id}`)}
@@ -441,7 +470,9 @@ export default function PortalHome() {
                       </p>
                     </button>
                     <div className="flex items-center gap-2 shrink-0">
-                      <InvoiceStatusBadge status={inv.status} />
+                      <InvoiceStatusBadge
+                        status={inv.dueDate && new Date(inv.dueDate) < new Date() ? "overdue" : inv.status}
+                      />
                       <Button
                         size="sm"
                         className="bg-[#2D5016] hover:bg-[#1a2e0d] text-white text-xs h-7 px-2 gap-1"

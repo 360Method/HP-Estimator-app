@@ -3,7 +3,7 @@ import { useParams, useLocation, useSearch } from "wouter";
 import { trpc } from "@/lib/trpc";
 import PortalLayout from "@/components/PortalLayout";
 import { Button } from "@/components/ui/button";
-import { Loader2, ArrowLeft, CreditCard, CheckCircle2 } from "lucide-react";
+import { Loader2, ArrowLeft, CreditCard, CheckCircle2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 const HP_LOGO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg";
@@ -69,6 +69,7 @@ export default function PortalInvoiceDetail() {
     })() : [];
 
   const isPaid = inv.status === "paid";
+  const isOverdue = !isPaid && inv.dueDate ? new Date(inv.dueDate) < new Date() : false;
   const balance = inv.amountDue - (inv.amountPaid ?? 0);
 
   return (
@@ -96,6 +97,19 @@ export default function PortalInvoiceDetail() {
               {inv.paidAt && (
                 <p className="text-green-600 text-xs mt-0.5">Paid on {fmtDate(inv.paidAt)}</p>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* ── Overdue banner ── */}
+        {isOverdue && !returnedPaid && (
+          <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+            <AlertTriangle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-red-800 font-semibold text-sm">This invoice is overdue</p>
+              <p className="text-red-600 text-xs mt-0.5">
+                Due date was {fmtDate(inv.dueDate)}. Please pay as soon as possible.
+              </p>
             </div>
           </div>
         )}
@@ -157,6 +171,8 @@ export default function PortalInvoiceDetail() {
             <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide ${
               isPaid
                 ? "bg-green-100 text-green-700"
+                : isOverdue
+                ? "bg-red-100 text-red-700"
                 : "bg-amber-100 text-amber-700"
             }`}>
               {isPaid ? "Paid" : "Payment Due"}

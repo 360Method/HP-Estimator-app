@@ -934,3 +934,18 @@
 - [x] Update pro-side invoice status when portal payment completes — webhook marks portalInvoice paid + notifyOwner fires to alert HP team
 - [x] Send customer payment receipt email on successful payment — HP-branded receipt email sent from checkout.session.completed webhook
 - [x] Wire Pay button in PortalHome invoice list and PortalInvoices list to the new flow — both pages navigate to invoice detail which triggers Checkout
+
+## Feature: Pro-Side Portal Payment Sync Badge
+
+- [x] Add getPortalInvoiceByInvoiceNumber (or by estimateId) lookup to pro-side invoice query
+- [x] Expose portal payment status (paidAt, amountPaid, invoiceNumber) via tRPC on the pro-side invoices list
+- [x] InvoiceCard: show "Paid via Portal" green badge when portal paidAt is set
+- [x] InvoiceCard: show portal payment date and amount in the payment history section
+
+## Feature: Overdue Invoice Detection
+
+- [x] Add computed isOverdue flag to portal getInvoices query (dueDate < now && status !== 'paid')
+- [x] PortalInvoices list: red "Overdue" badge replaces "Due" when overdue
+- [x] PortalHome dashboard: overdue invoice banner (red alert strip) above invoice list
+- [x] PortalInvoiceDetail: red overdue banner when invoice is overdue
+- [x] Pro-side InvoiceCard: red "Overdue" badge when dueDate < now && not paid
