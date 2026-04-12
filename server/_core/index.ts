@@ -13,7 +13,7 @@ import twilio from "twilio";
 import { exchangeGmailCode, pollInboundEmails } from "../gmail";
 import { getFirstGmailToken } from "../db";
 import { addSSEClient, broadcastNewMessage } from "../sse";
-import { getPortalInvoiceByStripePaymentIntentId, updatePortalInvoicePaid } from "../portalDb";
+import { getPortalInvoiceByStripePaymentIntentId, updatePortalInvoicePaid, getPortalInvoiceByCheckoutSessionId } from "../portalDb";
 import { randomUUID } from "crypto";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -80,6 +80,23 @@ async function startServer() {
           }
         } catch (dbErr) {
           console.error(`[Webhook] DB update failed for PI ${pi.id}:`, dbErr);
+        }
+        break;
+      }
+      case "checkout.session.completed": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        console.log(`[Webhook] Checkout session completed: ${session.id}`);
+        try {
+          const inv = await getPortalInvoiceByCheckoutSessionId(session.id);
+          if (inv) {
+            const amountPaid = session.amount_total ?? inv.amountDue;
+            await updatePortalInvoicePaid(inv.id, amountPaid, session.payment_intent as string | undefined);
+            console.log(`[Webhook] Portal invoice ${inv.id} marked paid via Checkout ${session.id}`);
+          } else {
+            console.log(`[Webhook] No portal invoice found for Checkout session ${session.id}`);
+          }
+        } catch (dbErr) {
+          console.error(`[Webhook] DB update failed for Checkout ${session.id}:`, dbErr);
         }
         break;
       }

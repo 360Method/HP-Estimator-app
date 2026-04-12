@@ -241,6 +241,8 @@ export const portalInvoices = mysqlTable("portalInvoices", {
   dueDate: timestamp("dueDate"),
   /** Stripe PaymentIntent ID for tracking */
   stripePaymentIntentId: varchar("stripePaymentIntentId", { length: 64 }),
+  /** Stripe Checkout Session ID for hosted checkout */
+  stripeCheckoutSessionId: varchar("stripeCheckoutSessionId", { length: 128 }),
   paidAt: timestamp("paidAt"),
   /** JSON array of line items */
   lineItemsJson: text("lineItemsJson"),

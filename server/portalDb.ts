@@ -429,3 +429,26 @@ export async function getAllPortalMessages() {
   const db = await d();
   return db.select().from(portalMessages).orderBy(desc(portalMessages.createdAt));
 }
+
+// ─── INVOICE CHECKOUT SESSION HELPERS ────────────────────────────────────────
+
+export async function getPortalInvoiceByCheckoutSessionId(sessionId: string) {
+  const db = await d();
+  const rows = await db
+    .select()
+    .from(portalInvoices)
+    .where(eq(portalInvoices.stripeCheckoutSessionId, sessionId))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function updatePortalInvoiceCheckoutSessionId(
+  id: number,
+  checkoutSessionId: string
+) {
+  const db = await d();
+  await db
+    .update(portalInvoices)
+    .set({ stripeCheckoutSessionId: checkoutSessionId })
+    .where(eq(portalInvoices.id, id));
+}

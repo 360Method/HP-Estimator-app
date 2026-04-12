@@ -44,6 +44,8 @@ import {
   getAllPendingPortalServiceRequests,
   updatePortalServiceRequestStatus,
   getAllPortalMessages,
+  getPortalInvoiceByCheckoutSessionId,
+  updatePortalInvoiceCheckoutSessionId,
 } from "../portalDb";
 import { sendEmail } from "../gmail";
 import { updateOpportunity } from "../db";
@@ -863,6 +865,53 @@ export const portalRouter = router({
   getServiceRequests: portalProcedure.query(async ({ ctx }) => {
     return getPortalServiceRequestsByCustomer(ctx.portalCustomer.id);
   }),
+  /** Create Stripe Checkout Session for invoice payment */
+  createCheckoutSession: portalProcedure
+    .input(z.object({ invoiceId: z.number() }))
+    .mutation(async ({ input, ctx }) => {
+      const inv = await getPortalInvoiceById(input.invoiceId);
+      if (!inv || inv.customerId !== ctx.portalCustomer.id) {
+        throw new TRPCError({ code: "NOT_FOUND" });
+      }
+      if (inv.status === "paid") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Invoice already paid" });
+      }
+
+      const baseUrl = process.env.PORTAL_BASE_URL ?? "https://client.handypioneers.com";
+      const successUrl = `${baseUrl}/portal/invoices/${inv.id}?paid=1`;
+      const cancelUrl = `${baseUrl}/portal/invoices/${inv.id}`;
+
+      const session = await getStripe().checkout.sessions.create({
+        mode: "payment",
+        payment_method_types: ["card"],
+        line_items: [
+          {
+            price_data: {
+              currency: "usd",
+              unit_amount: inv.amountDue,
+              product_data: {
+                name: inv.jobTitle ?? `Invoice ${inv.invoiceNumber}`,
+                description: `Handy Pioneers — Invoice ${inv.invoiceNumber}`,
+              },
+            },
+            quantity: 1,
+          },
+        ],
+        customer_email: ctx.portalCustomer.email,
+        metadata: {
+          portalInvoiceId: String(inv.id),
+          portalCustomerId: String(ctx.portalCustomer.id),
+          invoiceNumber: inv.invoiceNumber,
+        },
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+      });
+
+      await updatePortalInvoiceCheckoutSessionId(inv.id, session.id);
+
+      return { url: session.url! };
+    }),
+
   /** HP staff: list all pending service requests */
   getAllServiceRequests: hpProcedure.query(async () => {
     return getAllPendingPortalServiceRequests();

@@ -1,11 +1,12 @@
-import { useParams, useLocation } from "wouter";
+import { useEffect } from "react";
+import { useParams, useLocation, useSearch } from "wouter";
 import { trpc } from "@/lib/trpc";
 import PortalLayout from "@/components/PortalLayout";
 import { Button } from "@/components/ui/button";
-import { Loader2, ArrowLeft, CreditCard } from "lucide-react";
+import { Loader2, ArrowLeft, CreditCard, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 
-const HP_LOGO = "https://cdn.manus.space/webdev-static-assets/hp-logo.png";
+const HP_LOGO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg";
 
 function fmtMoney(cents: number) {
   return `$${(cents / 100).toFixed(2)}`;
@@ -18,12 +19,27 @@ function fmtDate(ts: number | Date | null | undefined) {
 export default function PortalInvoiceDetail() {
   const { id } = useParams<{ id: string }>();
   const [, navigate] = useLocation();
+  const search = useSearch();
   const invoiceId = Number(id);
+  const returnedPaid = new URLSearchParams(search).get("paid") === "1";
 
-  const { data, isLoading } = trpc.portal.getInvoice.useQuery({ id: invoiceId }, { enabled: !isNaN(invoiceId) });
-  const payMutation = trpc.portal.createInvoicePaymentIntent.useMutation({
+  const utils = trpc.useUtils();
+  const { data, isLoading, refetch } = trpc.portal.getInvoice.useQuery(
+    { id: invoiceId },
+    { enabled: !isNaN(invoiceId) }
+  );
+
+  // On return from Stripe Checkout with ?paid=1, refetch to pick up webhook update
+  useEffect(() => {
+    if (returnedPaid) {
+      const timer = setTimeout(() => refetch(), 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [returnedPaid, refetch]);
+
+  const checkoutMutation = trpc.portal.createCheckoutSession.useMutation({
     onSuccess: (res) => {
-      if (res.clientSecret) { toast.success("Payment session created"); }
+      window.location.href = res.url;
     },
     onError: (err) => toast.error(err.message),
   });
@@ -32,7 +48,7 @@ export default function PortalInvoiceDetail() {
     return (
       <PortalLayout>
         <div className="flex justify-center py-16">
-          <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+          <Loader2 className="w-6 h-6 animate-spin text-[#2D5016]" />
         </div>
       </PortalLayout>
     );
@@ -48,96 +64,123 @@ export default function PortalInvoiceDetail() {
   }
 
   const lineItems: Array<{ description: string; qty: number; unitPrice: number; amount: number }> =
-    inv.lineItemsJson ? JSON.parse(inv.lineItemsJson as string) : [];
+    inv.lineItemsJson ? (() => {
+      try { return JSON.parse(inv.lineItemsJson as string); } catch { return []; }
+    })() : [];
+
   const isPaid = inv.status === "paid";
+  const balance = inv.amountDue - (inv.amountPaid ?? 0);
 
   return (
     <PortalLayout>
-      <div className="p-6 max-w-4xl mx-auto">
+      <div className="p-4 sm:p-6 max-w-3xl mx-auto">
         {/* Breadcrumb */}
         <p className="text-xs text-gray-400 mb-1">
-          Customer Portal &rsaquo; Invoices &rsaquo; View Invoice
+          Customer Portal &rsaquo; Invoices &rsaquo; #{inv.invoiceNumber ?? inv.id}
         </p>
 
         {/* Back */}
         <button
           onClick={() => navigate("/portal/invoices")}
-          className="flex items-center gap-1 text-sm text-blue-600 hover:underline mb-4"
+          className="flex items-center gap-1 text-sm text-[#2D5016] hover:underline mb-5"
         >
           <ArrowLeft className="w-4 h-4" /> Back to Invoices
         </button>
 
-        {/* Pay section */}
-        {!isPaid && (
-          <div className="bg-white border border-gray-200 rounded-lg p-5 mb-6">
-            <h2 className="text-base font-semibold text-gray-900 mb-1">
-              Review &amp; pay your invoice from Handy Pioneers
-            </h2>
-            <p className="text-sm text-gray-500 mb-4">{fmtMoney(inv.amountDue)} due</p>
-
-            <div className="space-y-2 mb-4">
-              <p className="text-xs font-semibold text-gray-500 uppercase">Add a tip</p>
-              <div className="flex gap-2 flex-wrap">
-                {["10%", "15%", "20%", "No Tip"].map((t) => (
-                  <button
-                    key={t}
-                    className="px-3 py-1.5 border border-gray-300 rounded text-xs hover:bg-gray-50"
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
+        {/* ── Paid banner ── */}
+        {isPaid && (
+          <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+            <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />
+            <div>
+              <p className="text-green-800 font-semibold text-sm">Payment received — thank you!</p>
+              {inv.paidAt && (
+                <p className="text-green-600 text-xs mt-0.5">Paid on {fmtDate(inv.paidAt)}</p>
+              )}
             </div>
+          </div>
+        )}
 
+        {/* ── Return-from-checkout pending banner ── */}
+        {returnedPaid && !isPaid && (
+          <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <Loader2 className="w-4 h-4 text-blue-500 animate-spin shrink-0" />
+            <p className="text-blue-700 text-sm">Confirming your payment…</p>
+          </div>
+        )}
+
+        {/* ── Pay section ── */}
+        {!isPaid && !returnedPaid && (
+          <div className="bg-white border border-gray-200 rounded-xl p-5 mb-6 shadow-sm">
+            <h2 className="text-base font-semibold text-gray-900 mb-1">
+              Pay Invoice #{inv.invoiceNumber}
+            </h2>
+            <p className="text-sm text-gray-500 mb-4">
+              Amount due: <span className="font-semibold text-gray-800">{fmtMoney(balance > 0 ? balance : inv.amountDue)}</span>
+            </p>
             <Button
-              className="bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto"
-              disabled={payMutation.isPending}
-              onClick={() => payMutation.mutate({ invoiceId: inv.id, tipCents: 0 })}
-
+              className="bg-[#2D5016] hover:bg-[#1a2e0d] text-white w-full sm:w-auto gap-2"
+              disabled={checkoutMutation.isPending}
+              onClick={() => checkoutMutation.mutate({ invoiceId: inv.id })}
             >
-              {payMutation.isPending ? (
-                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Redirecting…</>
+              {checkoutMutation.isPending ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Redirecting to payment…</>
               ) : (
-                <><CreditCard className="w-4 h-4 mr-2" /> Pay {fmtMoney(inv.amountDue)}</>
+                <><CreditCard className="w-4 h-4" /> Pay Now — {fmtMoney(balance > 0 ? balance : inv.amountDue)}</>
               )}
             </Button>
+            <p className="text-xs text-gray-400 mt-3">
+              Secure payment processed by Stripe. You'll be redirected to complete your payment.
+            </p>
           </div>
         )}
 
-        {isPaid && (
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6 text-green-700 text-sm font-medium">
-            ✓ Paid on {fmtDate(inv.paidAt)} — Thank you!
-          </div>
-        )}
-
-        {/* Invoice document */}
-        <div className="bg-white border border-gray-200 rounded-lg p-8">
+        {/* ── Invoice document ── */}
+        <div className="bg-white border border-gray-200 rounded-xl p-6 sm:p-8 shadow-sm">
           {/* Header */}
           <div className="flex justify-between items-start mb-8">
             <div>
-              <p className="font-bold text-gray-900">Handy Pioneers</p>
-              <p className="text-xs text-gray-500">808 SE Chkalov Dr 3-433, Vancouver, WA 98683</p>
-              <p className="text-xs text-gray-500">3605449858 | help@handypioneers.com</p>
+              <p className="font-bold text-gray-900 text-lg">Handy Pioneers</p>
+              <p className="text-xs text-gray-500 mt-0.5">808 SE Chkalov Dr 3-433</p>
+              <p className="text-xs text-gray-500">Vancouver, WA 98683</p>
+              <p className="text-xs text-gray-500">(360) 544-9858 | help@handypioneers.com</p>
             </div>
             <img
               src={HP_LOGO}
               alt="Handy Pioneers"
-              className="h-12 w-auto object-contain"
+              className="h-14 w-auto object-contain"
               onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-6 mb-8 text-sm">
+          {/* Status badge */}
+          <div className="mb-6">
+            <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wide ${
+              isPaid
+                ? "bg-green-100 text-green-700"
+                : "bg-amber-100 text-amber-700"
+            }`}>
+              {isPaid ? "Paid" : "Payment Due"}
+            </span>
+          </div>
+
+          {/* Bill to + Invoice meta */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8 text-sm">
             <div>
-              <p className="text-xs text-gray-400 uppercase mb-1">Bill to</p>
+              <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">Bill To</p>
               <p className="font-medium text-gray-900">{inv.customerName}</p>
-              {inv.customerAddress && <p className="text-gray-500 text-xs">{inv.customerAddress}</p>}
+              {inv.customerAddress && <p className="text-gray-500 text-xs mt-0.5">{inv.customerAddress}</p>}
               {inv.customerEmail && <p className="text-gray-500 text-xs">{inv.customerEmail}</p>}
             </div>
-            <div className="text-right">
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                <span className="text-gray-400">Invoice</span>
-                <span>#{inv.invoiceNumber ?? inv.id}</span>
+            <div className="sm:text-right">
+              <div className="inline-grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
+                <span className="text-gray-400">Invoice #</span>
+                <span className="font-medium">{inv.invoiceNumber ?? inv.id}</span>
+                {inv.jobTitle && (
+                  <>
+                    <span className="text-gray-400">Job</span>
+                    <span className="font-medium">{inv.jobTitle}</span>
+                  </>
+                )}
                 <span className="text-gray-400">Invoice Date</span>
                 <span>{fmtDate(inv.sentAt)}</span>
                 <span className="text-gray-400">Due Date</span>
@@ -150,49 +193,64 @@ export default function PortalInvoiceDetail() {
 
           {/* Line items */}
           {lineItems.length > 0 && (
-            <table className="w-full text-sm mb-6">
-              <thead>
-                <tr className="bg-gray-800 text-white text-xs">
-                  <th className="text-left px-3 py-2 rounded-tl">Services</th>
-                  <th className="text-right px-3 py-2">Qty</th>
-                  <th className="text-right px-3 py-2">Unit price</th>
-                  <th className="text-right px-3 py-2 rounded-tr">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {lineItems.map((item, i) => (
-                  <tr key={i} className="border-b border-gray-100">
-                    <td className="px-3 py-2 text-gray-700">{item.description}</td>
-                    <td className="px-3 py-2 text-right text-gray-500">{item.qty}</td>
-                    <td className="px-3 py-2 text-right text-gray-500">{fmtMoney(item.unitPrice)}</td>
-                    <td className="px-3 py-2 text-right font-medium">{fmtMoney(item.amount)}</td>
+            <div className="mb-6 overflow-x-auto">
+              <table className="w-full text-sm min-w-[400px]">
+                <thead>
+                  <tr className="bg-[#2D5016] text-white text-xs">
+                    <th className="text-left px-3 py-2 rounded-tl-md">Services</th>
+                    <th className="text-right px-3 py-2">Qty</th>
+                    <th className="text-right px-3 py-2">Unit Price</th>
+                    <th className="text-right px-3 py-2 rounded-tr-md">Amount</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {lineItems.map((item, i) => (
+                    <tr key={i} className="border-b border-gray-100 hover:bg-gray-50">
+                      <td className="px-3 py-2.5 text-gray-700">{item.description}</td>
+                      <td className="px-3 py-2.5 text-right text-gray-500">{item.qty}</td>
+                      <td className="px-3 py-2.5 text-right text-gray-500">{fmtMoney(item.unitPrice)}</td>
+                      <td className="px-3 py-2.5 text-right font-medium">{fmtMoney(item.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
 
           {/* Totals */}
           <div className="flex justify-end">
-            <div className="w-56 space-y-1 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-500">Subtotal</span>
-              <span>{fmtMoney(inv.amountDue)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Tax</span>
-              <span>$0.00</span>
-            </div>
-            <div className="flex justify-between font-bold text-base border-t border-gray-200 pt-2 mt-2">
-              <span>Invoice Amount</span>
-              <span>{fmtMoney(inv.amountDue)}</span>
+            <div className="w-60 space-y-1.5 text-sm">
+              <div className="flex justify-between text-gray-500">
+                <span>Subtotal</span>
+                <span>{fmtMoney(inv.amountDue)}</span>
               </div>
+              <div className="flex justify-between text-gray-500">
+                <span>Tax</span>
+                <span>$0.00</span>
+              </div>
+              <div className="flex justify-between font-bold text-base border-t border-gray-200 pt-2 mt-2">
+                <span>Total</span>
+                <span>{fmtMoney(inv.amountDue)}</span>
+              </div>
+              {(inv.amountPaid ?? 0) > 0 && (
+                <>
+                  <div className="flex justify-between text-green-600 text-sm">
+                    <span>Amount Paid</span>
+                    <span>−{fmtMoney(inv.amountPaid ?? 0)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold text-base border-t border-gray-200 pt-2 mt-2">
+                    <span>Balance Due</span>
+                    <span>{fmtMoney(Math.max(0, inv.amountDue - (inv.amountPaid ?? 0)))}</span>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
           {/* Footer */}
-          <div className="mt-8 pt-4 border-t border-gray-100 text-center text-xs text-gray-400 space-y-1">
-            <p>Handy Pioneers | (360) 544-9858 | http://handypioneers.com</p>
+          <div className="mt-8 pt-4 border-t border-gray-100 text-center text-xs text-gray-400 space-y-0.5">
+            <p>Handy Pioneers &bull; (360) 544-9858 &bull; help@handypioneers.com</p>
+            <p>808 SE Chkalov Dr 3-433, Vancouver, WA 98683</p>
           </div>
         </div>
       </div>
