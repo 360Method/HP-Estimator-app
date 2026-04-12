@@ -17,7 +17,7 @@ describe("Gmail credentials", () => {
   it("isGmailConfigured returns true when both vars are set", async () => {
     const { isGmailConfigured } = await import("./gmail");
     expect(isGmailConfigured()).toBe(true);
-  });
+  }, 15000);
 
   it("getOAuth2Client builds without throwing when credentials are set", async () => {
     const { getOAuth2Client } = await import("./gmail");

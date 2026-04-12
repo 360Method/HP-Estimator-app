@@ -37,6 +37,9 @@ const initialState: EstimatorState = {
     markupPct: DEFAULTS.markupPct,
     laborRate: DEFAULTS.laborRate,
     paintRate: DEFAULTS.paintRate,
+    taxEnabled: false,
+    taxRateCode: '0603', // Vancouver WA default
+    customTaxPct: 8.9,
   },
   phases: ALL_PHASES,
   customItems: [],
@@ -611,7 +614,7 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
         activeSection: state.activeSection,
         // Restore snapshot or start fresh
         jobInfo: snap?.jobInfo ?? freshJobInfo,
-        global: snap?.global ?? { markupPct: DEFAULTS.markupPct, laborRate: DEFAULTS.laborRate, paintRate: DEFAULTS.paintRate },
+        global: snap?.global ?? { markupPct: DEFAULTS.markupPct, laborRate: DEFAULTS.laborRate, paintRate: DEFAULTS.paintRate, taxEnabled: false, taxRateCode: '0603', customTaxPct: 8.9 },
         phases: snap?.phases ? mergePhasesWithCatalog(snap.phases as any[]) : ALL_PHASES,
         customItems: snap?.customItems ?? [],
         fieldNotes: snap?.fieldNotes ?? '',
@@ -1857,6 +1860,11 @@ function loadPersistedState(): EstimatorState {
       // Always reset transient UI state on reload
       activeSection: parsed.activeSection ?? 'dashboard',
       activeOpportunityId: null,
+      // Merge global settings to ensure new fields (taxEnabled, taxRateCode, customTaxPct) are present
+      global: {
+        ...initialState.global,
+        ...(parsed.global ?? {}),
+      },
     };
   } catch {
     return initialState;

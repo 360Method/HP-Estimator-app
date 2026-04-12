@@ -250,6 +250,12 @@ export interface GlobalSettings {
   markupPct: number;
   laborRate: number;
   paintRate: number;
+  /** Whether to include sales tax on the estimate */
+  taxEnabled: boolean;
+  /** WA DOR location code, e.g. '0603' for Vancouver 8.9% */
+  taxRateCode: string;
+  /** Custom tax rate override (used when taxRateCode === 'custom') */
+  customTaxPct: number;
 }
 
 export type AppSection = 'customer' | 'opp-details' | 'sales' | 'calculator' | 'estimate' | 'present' | 'customers' | 'jobs' | 'job-details' | 'pipeline' | 'invoice' | 'dashboard' | 'schedule' | 'inbox' | 'reporting' | 'marketing' | 'requests';

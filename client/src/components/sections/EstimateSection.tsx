@@ -13,12 +13,17 @@ import { LineItem, PhaseGroup, EstimatePhaseOverride } from '@/lib/types';
 import {
   Copy, Printer, ChevronDown, ChevronUp, AlertTriangle,
   CheckCircle2, XCircle, Mail, Presentation, X, FileText, Send,
-  Pencil, Sparkles, RotateCcw, Check, Plus, Trash2,
+  Pencil, Sparkles, RotateCcw, Check, Plus, Trash2, Receipt,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import AddressMapPreview from '@/components/AddressMapPreview';
 import SendEstimateDialog from '@/components/SendEstimateDialog';
 import { trpc } from '@/lib/trpc';
+import { getTaxRateForZip, CLARK_COUNTY_TAX_RATES } from '@/lib/taxRates';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
 
 const HP_LOGO = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg';
 
@@ -297,7 +302,7 @@ function EstimateHeader({ jobInfo, estimateNumber, today }: {
 
 // ─── Main component ───────────────────────────────────────────
 export default function EstimateSection() {
-  const { state, setSummaryNotes, setClientNote, setSection, updateOpportunity, upsertPhaseOverride, removePhaseOverride } = useEstimator();
+  const { state, setSummaryNotes, setClientNote, setSection, updateOpportunity, upsertPhaseOverride, removePhaseOverride, setGlobal } = useEstimator();
   const [showMatLabor, setShowMatLabor] = useState(false);
   const [expandedPhases, setExpandedPhases] = useState<Set<number>>(new Set());
   const [showTC, setShowTC] = useState(false);
@@ -393,6 +398,31 @@ export default function EstimateSection() {
   const minGM = totals.totalHard < 2000 ? 0.40 : 0.30;
   const isReady = gmFlag === 'ok' && totals.totalPrice > 0;
 
+  // ── Tax calculations ─────────────────────────────────────────
+  const taxEnabled = state.global.taxEnabled ?? false;
+  const taxRateCode = state.global.taxRateCode ?? '0603';
+  const customTaxPct = state.global.customTaxPct ?? 8.9;
+  const taxRateInfo = useMemo(() => {
+    if (!taxEnabled) return null;
+    if (taxRateCode === 'none') return null;
+    if (taxRateCode === 'custom') return { rate: customTaxPct / 100, label: `Custom (${customTaxPct}%)`, code: 'custom' };
+    return CLARK_COUNTY_TAX_RATES.find(r => r.code === taxRateCode) ?? null;
+  }, [taxEnabled, taxRateCode, customTaxPct]);
+  const taxAmount = taxRateInfo ? totals.totalPrice * taxRateInfo.rate : 0;
+  const grandTotal = totals.totalPrice + taxAmount;
+
+  // Auto-populate tax code from job zip when tax is enabled
+  const handleTaxToggle = useCallback((enabled: boolean) => {
+    const updates: Partial<typeof state.global> = { taxEnabled: enabled };
+    if (enabled && state.jobInfo.zip) {
+      const zipInfo = getTaxRateForZip(state.jobInfo.zip);
+      if (zipInfo) {
+        updates.taxRateCode = zipInfo.code;
+      }
+    }
+    setGlobal(updates);
+  }, [state.jobInfo.zip, setGlobal]);
+
   const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
   const estimateNumber = state.jobInfo.jobNumber || `HP-${Date.now().toString().slice(-6)}`;
 
@@ -466,7 +496,11 @@ export default function EstimateSection() {
     }
     lines.push('');
     lines.push('─────────────────────────────────────');
-    lines.push(`TOTAL INVESTMENT: ${fmtDollar(totals.totalPrice)}`);
+    if (taxRateInfo && taxAmount > 0) {
+      lines.push(`Subtotal: ${fmtDollar(totals.totalPrice)}`);
+      lines.push(`Sales Tax (${taxRateInfo.label}): ${fmtDollar(taxAmount)}`);
+    }
+    lines.push(`TOTAL INVESTMENT: ${fmtDollar(grandTotal)}`);
     lines.push('');
     lines.push('TERMS & CONDITIONS');
     lines.push('─────────────────────────────────────');
@@ -855,12 +889,82 @@ export default function EstimateSection() {
           </div>
         )}
 
+        {/* Tax toggle — no-print controls, visible on estimate doc */}
+        <div className="px-6 py-4 border-t border-slate-700 bg-slate-800 no-print">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Switch
+                id="tax-toggle"
+                checked={taxEnabled}
+                onCheckedChange={handleTaxToggle}
+              />
+              <Label htmlFor="tax-toggle" className="text-sm text-slate-200 cursor-pointer flex items-center gap-1.5">
+                <Receipt className="w-3.5 h-3.5" />
+                Include Sales Tax
+              </Label>
+            </div>
+            {taxEnabled && (
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <Select
+                  value={taxRateCode}
+                  onValueChange={v => setGlobal({ taxRateCode: v })}
+                >
+                  <SelectTrigger className="h-8 text-xs bg-slate-700 border-slate-600 text-slate-100 w-56">
+                    <SelectValue placeholder="Select location" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CLARK_COUNTY_TAX_RATES.map(r => (
+                      <SelectItem key={r.code} value={r.code}>{r.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {taxRateCode === 'custom' && (
+                  <div className="flex items-center gap-1">
+                    <Input
+                      type="number" min={0} max={30} step={0.1}
+                      value={customTaxPct}
+                      onChange={e => setGlobal({ customTaxPct: Number(e.target.value) })}
+                      className="h-8 w-20 text-xs bg-slate-700 border-slate-600 text-slate-100"
+                    />
+                    <span className="text-xs text-slate-400">%</span>
+                  </div>
+                )}
+                {state.jobInfo.zip && getTaxRateForZip(state.jobInfo.zip) && (
+                  <button
+                    onClick={() => {
+                      const info = getTaxRateForZip(state.jobInfo.zip);
+                      if (info) setGlobal({ taxRateCode: info.code });
+                    }}
+                    className="text-xs text-slate-400 hover:text-slate-200 underline whitespace-nowrap"
+                  >
+                    Auto-fill from ZIP {state.jobInfo.zip}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
         {/* Total investment */}
         <div className="px-6 py-5 bg-slate-900 text-white">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-xs uppercase tracking-widest font-bold text-slate-400 mb-1">Total Investment</div>
-              <div className="text-3xl font-black mono">{fmtDollar(totals.totalPrice)}</div>
+              {taxRateInfo ? (
+                <>
+                  <div className="text-xs uppercase tracking-widest font-bold text-slate-400 mb-1">Subtotal</div>
+                  <div className="text-xl font-bold mono text-slate-300 mb-2">{fmtDollar(totals.totalPrice)}</div>
+                  <div className="text-xs text-slate-400 mb-2">
+                    Sales Tax ({taxRateInfo.label}): {fmtDollar(taxAmount)}
+                  </div>
+                  <div className="text-xs uppercase tracking-widest font-bold text-slate-400 mb-1">Total Investment</div>
+                  <div className="text-3xl font-black mono">{fmtDollar(grandTotal)}</div>
+                </>
+              ) : (
+                <>
+                  <div className="text-xs uppercase tracking-widest font-bold text-slate-400 mb-1">Total Investment</div>
+                  <div className="text-3xl font-black mono">{fmtDollar(totals.totalPrice)}</div>
+                </>
+              )}
               {showMatLabor && totals.totalHard > 0 && (
                 <div className="text-xs text-slate-400 mt-1 space-y-0.5">
                   <div>Materials: {fmtDollar(activePhaseData.reduce((s, d) => s + d.result.matPrice, 0))}</div>
@@ -871,6 +975,7 @@ export default function EstimateSection() {
             <div className="text-right text-xs text-slate-400 space-y-1">
               <div>{activePhaseData.length} trade{activePhaseData.length !== 1 ? 's' : ''} included</div>
               {customResults.length > 0 && <div>+ {customResults.length} custom item{customResults.length !== 1 ? 's' : ''}</div>}
+              {taxRateInfo && <div className="text-emerald-400 font-semibold">Tax incl.</div>}
             </div>
           </div>
         </div>

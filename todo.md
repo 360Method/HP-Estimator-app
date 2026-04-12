@@ -963,3 +963,17 @@
 - [x] Add getRevenueCollected() helper in portalDb.ts — sums portalInvoices.amountPaid where status = paid
 - [x] Add portal.getRevenueStats tRPC procedure returning totalCollected and outstandingBalance
 - [x] Wire Dashboard.tsx Revenue Collected card to trpc.portal.getRevenueStats
+
+## Feature: ZIP-Based Tax Rate + Estimate Tax Toggle
+
+- [x] Create shared ZIP-to-tax-rate lookup table covering all Clark County WA zip codes (WA DOR Q2 2026)
+- [x] Add getTaxRateForZip(zip) utility that returns { rate, label, code } or null
+- [x] Add taxEnabled (boolean) and taxRateCode (string) to EstimatorState
+- [x] Add SET_TAX_ENABLED and SET_TAX_RATE_CODE actions to EstimatorContext reducer (via setGlobal)
+- [x] EstimateSection: add tax toggle switch and tax location selector in the Total Investment bar
+- [x] EstimateSection: auto-populate tax code from job zip when toggle is turned on
+- [x] EstimateSection: show subtotal + tax line + total when tax is enabled
+- [x] InvoiceCreateModal: auto-populate defaultTaxCode from job zip if customer has no defaultTaxCode
+- [x] InvoiceCreateModal: pre-select "No Tax" when estimate tax toggle is off (via priority chain)
+- [x] Update copy-to-clipboard and print output to include tax line when enabled
+- [x] Write vitest tests for getTaxRateForZip utility (in taxRates.test.ts)

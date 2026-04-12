@@ -30,28 +30,7 @@ import {
   CreditCard, DollarSign, CheckCircle2, Clock, AlertCircle, FileText,
   Plus, Printer, Send, ChevronRight, Banknote, Smartphone, PenLine, ShieldCheck, Eye,
 } from 'lucide-react';
-
-// ── Clark County WA Tax Rates (WA DOR Q2 2026) ───────────────────
-const CLARK_COUNTY_TAX_RATES: { label: string; rate: number; code: string }[] = [
-  { label: 'No Tax (0%)', rate: 0, code: 'none' },
-  // Unincorporated areas
-  { label: 'Clark County Unincorp. Areas (8.0%)', rate: 0.0800, code: '0600' },
-  { label: 'Clark County Unincorp. PTBA (8.7%)', rate: 0.0870, code: '0666' },
-  // Cities — alphabetical
-  { label: 'Battle Ground (8.9%)', rate: 0.0890, code: '0601' },
-  { label: 'Camas (8.8%)', rate: 0.0880, code: '0602' },
-  { label: 'La Center (8.8%)', rate: 0.0880, code: '0611' },
-  { label: 'Ridgefield (8.8%)', rate: 0.0880, code: '0604' },
-  { label: 'Vancouver (8.9%)', rate: 0.0890, code: '0603' },
-  { label: 'Washougal (8.6%)', rate: 0.0860, code: '0605' },
-  { label: 'Woodland (7.9%)', rate: 0.0790, code: '0607' },
-  { label: 'Yacolt (8.5%)', rate: 0.0850, code: '0606' },
-  // Tribal areas
-  { label: 'Cowlitz Tribe – Clark Unincorp. (8.0%)', rate: 0.0800, code: '0609' },
-  { label: 'Cowlitz Tribe – La Center (8.8%)', rate: 0.0880, code: '0611' },
-  // Manual entry
-  { label: 'Custom rate…', rate: -1, code: 'custom' },
-];
+import { CLARK_COUNTY_TAX_RATES, getTaxRateForZip } from '@/lib/taxRates';
 
 // ── Stripe loader (lazy, keyed on publishable key) ─────────────
 let stripePromise: ReturnType<typeof loadStripe> | null = null;
@@ -1276,7 +1255,12 @@ export default function InvoiceSection() {
         defaultTotal={estimateValue}
         defaultType={createType}
         invoiceNumber={nextInvoiceNumber()}
-        defaultTaxCode={customer?.defaultTaxCode}
+        defaultTaxCode={
+          // Priority: customer default → job zip lookup → estimate global tax → Vancouver default
+          customer?.defaultTaxCode
+          ?? (state.jobInfo.zip ? getTaxRateForZip(state.jobInfo.zip)?.code : undefined)
+          ?? (state.global.taxEnabled ? (state.global.taxRateCode ?? '0603') : 'none')
+        }
       />
     </div>
   );
