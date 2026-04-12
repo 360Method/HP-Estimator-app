@@ -29,7 +29,7 @@ import {
   CreditCard, Bell, MessageSquare, AtSign, Star, Paperclip, FileText,
   Activity, Send, CheckCircle2, XCircle, Clock, PhoneCall, Wallet,
   ExternalLink, Edit3, Save, X, AlertCircle, TrendingUp, Archive,
-  RefreshCw, FolderOpen, Download, Wrench,
+  RefreshCw, FolderOpen, Download, Wrench, Trophy,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import PipelineBoard from '@/components/PipelineBoard';
@@ -1682,6 +1682,7 @@ function CustomerAttachmentsTab({ customerId }: { customerId: string }) {
 // ─── Customer Portal Tab ──────────────────────────────────────
 function CustomerPortalTab({ customerId }: { customerId: string }) {
   const utils = trpc.useUtils();
+  const { approveEstimate, updateOpportunity, state } = useEstimator();
   const { data, isLoading } = trpc.portal.getCustomerPortalData.useQuery(
     { hpCustomerId: customerId },
     { enabled: !!customerId }
@@ -1798,14 +1799,52 @@ function CustomerPortalTab({ customerId }: { customerId: string }) {
                   ) : (
                     <p className="text-xs text-muted-foreground">Not yet viewed</p>
                   )}
-                  <button
-                    onClick={() => resendEstimate.mutate({ estimateId: est.id })}
-                    disabled={resendEstimate.isPending}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-border text-xs font-medium hover:bg-muted transition-colors disabled:opacity-50"
-                  >
-                    <RefreshCw size={11} className={resendEstimate.isPending ? 'animate-spin' : ''} />
-                    Resend
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    {est.status === 'approved' && (() => {
+                      // Check if the linked opportunity is already marked Won
+                      const linkedOpp = est.hpOpportunityId
+                        ? state.opportunities.find((o: any) => o.id === est.hpOpportunityId)
+                        : null;
+                      const alreadyWon = linkedOpp?.wonAt || linkedOpp?.stage === 'Won' || linkedOpp?.stage === 'Approved';
+                      if (alreadyWon) return (
+                        <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-semibold">
+                          <Trophy size={10} /> Won
+                        </span>
+                      );
+                      return (
+                        <button
+                          onClick={() => {
+                            if (!est.hpOpportunityId) {
+                              toast.error('No linked opportunity — re-send the estimate to link it.');
+                              return;
+                            }
+                            approveEstimate({
+                              estimateId: est.hpOpportunityId,
+                              jobMode: 'new',
+                              newJobTitle: est.title,
+                              totalPrice: (est.totalAmount ?? 0) / 100,
+                              depositAmount: (est.depositAmount ?? 0) / 100,
+                              depositLabel: `Deposit (${est.depositPercent ?? 50}%)`,
+                              balanceAmount: ((est.totalAmount ?? 0) - (est.depositAmount ?? 0)) / 100,
+                              signedEstimateDataUrl: est.signatureDataUrl ?? undefined,
+                            });
+                            toast.success('Estimate marked Won — job created!');
+                          }}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 transition-colors"
+                        >
+                          <Trophy size={11} /> Mark Won
+                        </button>
+                      );
+                    })()}
+                    <button
+                      onClick={() => resendEstimate.mutate({ estimateId: est.id })}
+                      disabled={resendEstimate.isPending}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-border text-xs font-medium hover:bg-muted transition-colors disabled:opacity-50"
+                    >
+                      <RefreshCw size={11} className={resendEstimate.isPending ? 'animate-spin' : ''} />
+                      Resend
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}

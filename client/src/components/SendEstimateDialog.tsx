@@ -21,6 +21,8 @@ export interface SendEstimateDialogProps {
   lineItemsJson?: string;
   portalUrl?: string;
   hpCustomerId?: string;
+  /** Pro-side opportunity ID — stored so portal approval can mark it won */
+  hpOpportunityId?: string;
   // Pre-filled from customer profile
   defaultEmail?: string;
   defaultPhone?: string;
@@ -40,6 +42,7 @@ export default function SendEstimateDialog({
   lineItemsJson,
   portalUrl,
   hpCustomerId,
+  hpOpportunityId,
   defaultEmail = '',
   defaultPhone = '',
   onClose,
@@ -98,6 +101,7 @@ export default function SendEstimateDialog({
       lineItemsJson,
       portalUrl,
       hpCustomerId,
+      hpOpportunityId,
       origin: window.location.origin,
     });
   };

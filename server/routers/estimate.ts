@@ -365,6 +365,8 @@ export const estimateRouter = router({
         lineItemsJson: z.string().optional(),
         portalUrl: z.string().optional(),
         hpCustomerId: z.string().optional(),
+        /** Pro-side opportunity ID — stored so approval can mark it won */
+        hpOpportunityId: z.string().optional(),
         origin: z.string().optional(),
       })
     )
@@ -388,6 +390,7 @@ export const estimateRouter = router({
             const portalEst = await createPortalEstimate({
               customerId: portalCustomer.id,
               estimateNumber: input.estimateNumber,
+              hpOpportunityId: input.hpOpportunityId,
               title: input.jobTitle,
               status: 'sent',
               totalAmount: Math.round(input.totalPrice * 100),

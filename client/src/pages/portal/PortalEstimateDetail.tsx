@@ -153,9 +153,13 @@ export default function PortalEstimateDetail() {
           >
             <ArrowLeft className="w-4 h-4" /> Back to Estimates
           </button>
-          <Button variant="outline" size="sm" onClick={() => window.print()} className="print:hidden gap-1.5">
-            <Printer className="w-4 h-4" /> Print / PDF
-          </Button>
+          <a
+            href={`/api/portal/estimate-pdf/${est.id}`}
+            download={`Estimate-${est.estimateNumber ?? est.id}.pdf`}
+            className="print:hidden inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-border text-sm font-medium hover:bg-muted transition-colors"
+          >
+            <Printer className="w-4 h-4" /> Download PDF
+          </a>
         </div>
 
         {/* Status banners */}

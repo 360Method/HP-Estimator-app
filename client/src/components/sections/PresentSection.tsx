@@ -930,6 +930,7 @@ export default function PresentSection() {
           defaultEmail={activeCustomer?.email || jobInfo.email || ''}
           defaultPhone={activeCustomer?.mobilePhone || jobInfo.phone || ''}
           hpCustomerId={activeCustomer?.id}
+          hpOpportunityId={state.activeOpportunityId ?? undefined}
           onClose={() => setShowSendDialog(false)}
         />
       )}

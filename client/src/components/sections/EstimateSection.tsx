@@ -539,6 +539,7 @@ export default function EstimateSection() {
             }))
           )}
           hpCustomerId={activeCustomer?.id}
+          hpOpportunityId={state.activeOpportunityId ?? undefined}
           defaultEmail={activeCustomer?.email || state.jobInfo.email || ''}
           defaultPhone={activeCustomer?.mobilePhone || state.jobInfo.phone || ''}
           onClose={() => setShowSendDialog(false)}

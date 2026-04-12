@@ -46,6 +46,7 @@ import {
   getAllPortalMessages,
 } from "../portalDb";
 import { sendEmail } from "../gmail";
+import { updateOpportunity } from "../db";
 import { notifyOwner } from "../_core/notification";
 import Stripe from "stripe";
 import { ENV } from "../_core/env";
@@ -237,10 +238,21 @@ export const portalRouter = router({
         });
       }
 
+      // Mark pro-side opportunity as won (if linked)
+      if (est.hpOpportunityId) {
+        await updateOpportunity(est.hpOpportunityId, {
+          stage: 'Won',
+          wonAt: new Date().toISOString(),
+          approvedAt: new Date().toISOString(),
+        }).catch((e: unknown) => {
+          console.warn('[portal.approveEstimate] Could not mark opportunity won:', e);
+        });
+      }
+
       // Notify HP team
       await notifyOwner({
-        title: `Estimate Approved: ${est.estimateNumber}`,
-        content: `${ctx.portalCustomer.name} approved estimate ${est.estimateNumber} (${est.title}) and signed electronically.`,
+        title: `\u2705 Estimate Approved: ${est.estimateNumber}`,
+        content: `${ctx.portalCustomer.name} approved estimate ${est.estimateNumber} (${est.title}) and signed electronically.${est.hpOpportunityId ? ` Opportunity ${est.hpOpportunityId} marked Won.` : ''}`,
       }).catch(() => null);
 
       return { estimate: await getPortalEstimateById(input.id), depositInvoice };

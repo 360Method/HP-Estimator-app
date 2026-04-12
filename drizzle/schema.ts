@@ -186,6 +186,8 @@ export const portalEstimates = mysqlTable(
     customerId: int("customerId").notNull(),
     /** e.g. "HP-2026-042" */
     estimateNumber: varchar("estimateNumber", { length: 64 }).notNull(),
+    /** Pro-side opportunity ID (from local state) — used to mark won on approval */
+    hpOpportunityId: varchar("hpOpportunityId", { length: 64 }),
     title: varchar("title", { length: 255 }).notNull(),
     /** pending | sent | viewed | approved | declined | expired */
     status: varchar("status", { length: 32 }).default("sent").notNull(),

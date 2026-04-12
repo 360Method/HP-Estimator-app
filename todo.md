@@ -914,3 +914,12 @@
 - [x] Fix $NaN unit price — line items must read qty and unitPrice from stored snapshot
 - [x] Add PDF/print button to portal estimate detail page (mirrors pro-side Print/PDF)
 - [x] Ensure portal estimate detail shows: estimate number, dates, customer info, HP contact, all phases, subtotal, tax, total, deposit
+
+## Feature: Approve → Auto-Invoice + Won Workflow + PDF Download
+
+- [ ] Add hpOpportunityId column to portalEstimates schema + db:push
+- [ ] Pass hpOpportunityId from PresentSection → SendEstimateDialog → estimate.send → stored in portal
+- [ ] portal.approveEstimate: after marking approved, update pro-side opportunity wonAt + stage = 'Won'
+- [ ] CustomerPortalTab: show "Mark Won + Create Job" button when portal estimate status === 'approved'
+- [ ] Add /api/portal/estimate-pdf/:id Express route for server-side PDF download
+- [ ] PortalEstimateDetail: replace window.print() with server-side PDF download button

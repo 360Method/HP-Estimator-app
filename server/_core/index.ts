@@ -243,6 +243,152 @@ async function startServer() {
     }
   });
 
+  // ── Portal estimate PDF download ─────────────────────────────────────────────
+  // GET /api/portal/estimate-pdf/:id — returns a PDF of the estimate
+  // Requires a valid portal session cookie (same as tRPC portal procedures)
+  app.get("/api/portal/estimate-pdf/:id", async (req, res) => {
+    const { exec } = await import("child_process");
+    const { promisify } = await import("util");
+    const { readFile, writeFile, unlink, mkdtemp } = await import("fs/promises");
+    const { join } = await import("path");
+    const { tmpdir } = await import("os");
+    const execAsync = promisify(exec);
+    try {
+      // Validate portal session
+      const { getPortalEstimateById, findValidPortalSession, findPortalCustomerById } = await import("../portalDb");
+      const cookieHeader = req.headers.cookie || "";
+      const tokenMatch = cookieHeader.match(/hp_portal_session=([^;]+)/);
+      if (!tokenMatch) { res.status(401).json({ error: "Not authenticated" }); return; }
+      const session = await findValidPortalSession(decodeURIComponent(tokenMatch[1]));
+      if (!session) { res.status(401).json({ error: "Invalid or expired session" }); return; }
+      const portalCustomer = await findPortalCustomerById(session.customerId);
+      if (!portalCustomer) { res.status(401).json({ error: "Customer not found" }); return; }
+
+      const est = await getPortalEstimateById(req.params.id);
+      if (!est || est.customerId !== portalCustomer.id) { res.status(404).json({ error: "Not found" }); return; }
+
+      // Parse stored lineItemsJson
+      let phases: any[] = [];
+      try { phases = JSON.parse(est.lineItemsJson || "[]"); } catch { phases = []; }
+
+      const fmtMoney = (cents: number) => `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      const fmtDate = (d: string | Date | null | undefined) => {
+        if (!d) return "—";
+        return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+      };
+
+      // Build HTML matching the portal estimate detail layout
+      const isLegacy = phases.length > 0 && !phases[0].items;
+      let lineItemsHtml = "";
+      if (isLegacy) {
+        lineItemsHtml = `<table class="items-table"><thead><tr><th>Services</th><th>Qty</th><th>Unit Price</th><th>Amount</th></tr></thead><tbody>`;
+        for (const row of phases) {
+          lineItemsHtml += `<tr><td>${row.description || ""}</td><td>—</td><td>—</td><td>${fmtMoney(est.totalAmount ?? 0)}</td></tr>`;
+        }
+        lineItemsHtml += `</tbody></table>`;
+      } else {
+        for (const phase of phases) {
+          lineItemsHtml += `<div class="phase-block">`;
+          lineItemsHtml += `<div class="phase-header"><strong>${phase.phaseName || ""}</strong>`;
+          if (phase.phaseDescription) lineItemsHtml += `<p class="phase-desc">${phase.phaseDescription}</p>`;
+          lineItemsHtml += `</div>`;
+          lineItemsHtml += `<table class="items-table"><thead><tr><th>Services</th><th>Qty</th><th>Unit Price</th><th>Amount</th></tr></thead><tbody>`;
+          for (const item of (phase.items || [])) {
+            lineItemsHtml += `<tr><td><strong>${item.name || ""}</strong>`;
+            if (item.scopeOfWork) lineItemsHtml += `<br/><span class="sow">SCOPE OF WORK<br/>— ${item.scopeOfWork}</span>`;
+            lineItemsHtml += `</td><td>${item.qty ?? "—"}</td><td>${item.unitPrice != null ? fmtMoney(Math.round(item.unitPrice * 100)) : "—"}</td><td>${item.amount != null ? fmtMoney(Math.round(item.amount * 100)) : "—"}</td></tr>`;
+          }
+          lineItemsHtml += `</tbody></table>`;
+          if (phase.phaseSubtotal != null) {
+            lineItemsHtml += `<div class="phase-subtotal">Services subtotal: <strong>${fmtMoney(Math.round(phase.phaseSubtotal * 100))}</strong></div>`;
+          }
+          lineItemsHtml += `</div>`;
+        }
+      }
+
+      const depositPct = est.depositPercent ?? 50;
+      const depositAmt = est.depositAmount ?? Math.round((est.totalAmount ?? 0) * depositPct / 100);
+
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/><style>
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 13px; color: #1a1a1a; margin: 0; padding: 0; }
+        .header-bar { background: #1a2e1a; color: white; padding: 20px 32px; display: flex; align-items: center; gap: 16px; }
+        .header-bar img { width: 52px; height: 52px; border-radius: 50%; }
+        .header-bar .company { font-size: 20px; font-weight: 700; }
+        .header-bar .tagline { font-size: 11px; opacity: 0.75; }
+        .gold-bar { height: 4px; background: linear-gradient(90deg, #c8922a, #e8b84b); }
+        .body { padding: 32px; }
+        .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+        .meta-table td { padding: 4px 8px; font-size: 12px; }
+        .meta-table .label { color: #666; }
+        .meta-table .value { font-weight: 600; }
+        .meta-table .right { text-align: right; }
+        .section-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; color: #888; text-transform: uppercase; margin-bottom: 4px; }
+        .customer-block { margin-bottom: 24px; }
+        .customer-block h2 { font-size: 22px; font-weight: 700; margin: 0 0 4px; }
+        .phase-block { margin-bottom: 24px; }
+        .phase-header { background: #f5f5f5; padding: 10px 14px; border-radius: 6px 6px 0 0; border: 1px solid #e0e0e0; border-bottom: none; }
+        .phase-header strong { font-size: 15px; }
+        .phase-desc { font-size: 12px; color: #555; margin: 4px 0 0; }
+        .items-table { width: 100%; border-collapse: collapse; border: 1px solid #e0e0e0; }
+        .items-table th { background: #f9f9f9; text-align: left; padding: 8px 12px; font-size: 11px; font-weight: 600; color: #555; border-bottom: 1px solid #e0e0e0; }
+        .items-table th:not(:first-child) { text-align: right; }
+        .items-table td { padding: 10px 12px; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+        .items-table td:not(:first-child) { text-align: right; }
+        .sow { font-size: 11px; color: #666; }
+        .phase-subtotal { text-align: right; padding: 8px 12px; font-size: 12px; color: #555; background: #fafafa; border: 1px solid #e0e0e0; border-top: none; }
+        .totals-table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+        .totals-table td { padding: 6px 12px; font-size: 13px; }
+        .totals-table td:last-child { text-align: right; }
+        .totals-table .total-row td { font-weight: 700; font-size: 15px; border-top: 2px solid #1a2e1a; padding-top: 10px; }
+        .totals-table .deposit-row td { color: #c8922a; font-weight: 600; }
+        .footer { margin-top: 40px; text-align: center; font-size: 11px; color: #888; border-top: 1px solid #e0e0e0; padding-top: 16px; }
+        .approve-note { background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; padding: 12px 16px; margin-top: 24px; font-size: 12px; color: #166534; }
+      </style></head><body>
+        <div class="header-bar">
+          <img src="https://d2zcpib8duehag.cloudfront.net/hp-logo-circle.png" alt="HP"/>
+          <div><div class="company">Handy Pioneers</div><div class="tagline">808 SE Chkalov Dr 3-433, Vancouver, WA 98683 &nbsp;|&nbsp; (360) 544-9858 &nbsp;|&nbsp; help@handypioneers.com</div></div>
+          <div style="margin-left:auto;text-align:right;font-size:12px;">
+            <div style="opacity:0.7">ESTIMATE</div>
+            <div style="font-weight:700;font-size:16px">${est.estimateNumber}</div>
+          </div>
+        </div>
+        <div class="gold-bar"></div>
+        <div class="body">
+          <table class="meta-table"><tr>
+            <td><span class="section-label">For</span><br/><strong>${est.customerName || portalCustomer.name}</strong></td>
+            <td class="right"><span class="label">Estimate Date:</span> <span class="value">${fmtDate(est.sentAt)}</span><br/><span class="label">Expires:</span> <span class="value">${fmtDate(est.expiresAt)}</span></td>
+          </tr></table>
+          ${lineItemsHtml}
+          <table class="totals-table">
+            <tr><td>Subtotal</td><td>${fmtMoney(est.totalAmount ?? 0)}</td></tr>
+            <tr><td style="color:#888">Tax (WA — client to verify)</td><td style="color:#888;font-style:italic">Not included</td></tr>
+            <tr class="total-row"><td>Total</td><td>${fmtMoney(est.totalAmount ?? 0)}</td></tr>
+            <tr class="deposit-row"><td>Deposit (${depositPct}%) required to schedule</td><td>${fmtMoney(depositAmt)}</td></tr>
+          </table>
+          ${est.status === 'approved' ? `<div class="approve-note">✅ This estimate was approved${est.approvedAt ? ` on ${fmtDate(est.approvedAt)}` : ''}.${est.signatureDataUrl ? ' A digital signature was collected.' : ''}</div>` : ''}
+          <div class="footer">Handy Pioneers &nbsp;·&nbsp; 808 SE Chkalov Dr 3-433, Vancouver, WA 98683 &nbsp;·&nbsp; (360) 544-9858 &nbsp;·&nbsp; help@handypioneers.com</div>
+        </div>
+      </body></html>`;
+
+      // Write HTML to temp file and convert to PDF
+      const tmpDir = await mkdtemp(join(tmpdir(), "hp-est-"));
+      const htmlPath = join(tmpDir, "estimate.html");
+      const pdfPath = join(tmpDir, "estimate.pdf");
+      await writeFile(htmlPath, html, "utf-8");
+      await execAsync(`manus-md-to-pdf "${htmlPath}" "${pdfPath}"`);
+      const pdfBuffer = await readFile(pdfPath);
+      await unlink(htmlPath).catch(() => null);
+      await unlink(pdfPath).catch(() => null);
+
+      res.set("Content-Type", "application/pdf");
+      res.set("Content-Disposition", `attachment; filename="Estimate-${est.estimateNumber}.pdf"`);
+      res.send(pdfBuffer);
+    } catch (err) {
+      console.error("[Portal PDF]", err);
+      res.status(500).json({ error: "PDF generation failed" });
+    }
+  });
+
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
