@@ -26,6 +26,7 @@ import {
   AlertCircle,
   CheckCircle,
   Clock,
+  CreditCard,
 } from "lucide-react";
 
 function fmtMoney(cents: number) {
@@ -423,25 +424,33 @@ export default function PortalHome() {
               {openInvoices.slice(0, 5).map((inv) => {
                 const balance = (inv.amountDue ?? 0) - (inv.amountPaid ?? 0);
                 return (
-                  <button
+                  <div
                     key={inv.id}
-                    onClick={() => navigate(`/portal/invoices/${inv.id}`)}
-                    className="w-full flex items-center gap-3 px-5 py-3 hover:bg-gray-50 transition-colors text-left"
+                    className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 transition-colors"
                   >
                     <FileText className="w-4 h-4 text-orange-500 shrink-0" />
-                    <div className="flex-1 min-w-0">
+                    <button
+                      className="flex-1 min-w-0 text-left"
+                      onClick={() => navigate(`/portal/invoices/${inv.id}`)}
+                    >
                       <p className="text-sm font-medium text-gray-900 truncate">
                         {inv.invoiceNumber} — {inv.jobTitle ?? inv.type}
                       </p>
                       <p className="text-xs text-gray-500">
                         Due {fmtDate(inv.dueDate)} · Balance {fmtMoney(balance)}
                       </p>
-                    </div>
+                    </button>
                     <div className="flex items-center gap-2 shrink-0">
                       <InvoiceStatusBadge status={inv.status} />
-                      <ChevronRight className="w-4 h-4 text-gray-300" />
+                      <Button
+                        size="sm"
+                        className="bg-[#2D5016] hover:bg-[#1a2e0d] text-white text-xs h-7 px-2 gap-1"
+                        onClick={() => navigate(`/portal/invoices/${inv.id}`)}
+                      >
+                        <CreditCard className="w-3 h-3" /> Pay
+                      </Button>
                     </div>
-                  </button>
+                  </div>
                 );
               })}
             </div>

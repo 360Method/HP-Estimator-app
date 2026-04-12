@@ -13,7 +13,9 @@ import twilio from "twilio";
 import { exchangeGmailCode, pollInboundEmails } from "../gmail";
 import { getFirstGmailToken } from "../db";
 import { addSSEClient, broadcastNewMessage } from "../sse";
-import { getPortalInvoiceByStripePaymentIntentId, updatePortalInvoicePaid, getPortalInvoiceByCheckoutSessionId } from "../portalDb";
+import { getPortalInvoiceByStripePaymentIntentId, updatePortalInvoicePaid, getPortalInvoiceByCheckoutSessionId, findPortalCustomerById } from "../portalDb";
+import { sendEmail } from "../gmail";
+import { notifyOwner } from "../_core/notification";
 import { randomUUID } from "crypto";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -92,6 +94,36 @@ async function startServer() {
             const amountPaid = session.amount_total ?? inv.amountDue;
             await updatePortalInvoicePaid(inv.id, amountPaid, session.payment_intent as string | undefined);
             console.log(`[Webhook] Portal invoice ${inv.id} marked paid via Checkout ${session.id}`);
+            // Send payment receipt email
+            try {
+              const customer = await findPortalCustomerById(inv.customerId);
+              if (customer) {
+                const amountStr = `$${(amountPaid / 100).toFixed(2)}`;
+                const baseUrl = process.env.PORTAL_BASE_URL ?? 'https://client.handypioneers.com';
+                const invoiceUrl = `${baseUrl}/portal/invoices/${inv.id}`;
+                const firstName = customer.name.split(' ')[0];
+                const receiptHtml = `<!DOCTYPE html><html><body style="font-family:Helvetica,Arial,sans-serif;background:#f4f5f7;padding:32px 16px;">
+<table width="600" style="max-width:600px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;">
+<tr><td style="background:linear-gradient(135deg,#1a2e1a,#2d4a2d);padding:28px 40px;text-align:center;">
+  <p style="color:#fff;font-size:20px;font-weight:700;margin:0;">Payment Received</p>
+  <p style="color:rgba(255,255,255,0.65);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;margin:6px 0 0;">Handy Pioneers</p>
+</td></tr>
+<tr><td style="padding:36px 40px;color:#1a1a1a;font-size:15px;line-height:1.6;">
+  <p>Hi ${firstName},</p>
+  <p>We received your payment of <strong>${amountStr}</strong> for invoice <strong>${inv.invoiceNumber}</strong>. Thank you!</p>
+  <table width="100%" style="margin:20px 0;"><tr><td style="background:#f8f9fa;border:1px solid #e8e8e8;border-radius:6px;padding:16px 24px;text-align:center;">
+    <p style="margin:0;font-size:13px;color:#888;text-transform:uppercase;">Amount Paid</p>
+    <p style="margin:4px 0 0;font-size:28px;font-weight:700;color:#2D5016;">${amountStr}</p>
+  </td></tr></table>
+  <p style="text-align:center;"><a href="${invoiceUrl}" style="display:inline-block;background:#c8922a;color:#fff;font-weight:700;padding:12px 32px;border-radius:6px;text-decoration:none;">View Invoice</a></p>
+  <p style="font-size:13px;color:#888;text-align:center;">Questions? <a href="mailto:help@handypioneers.com" style="color:#c8922a;">help@handypioneers.com</a> | (360) 544-9858</p>
+</td></tr></table></body></html>`;
+                await sendEmail({ to: customer.email, subject: `Payment Received — Invoice ${inv.invoiceNumber}`, html: receiptHtml }).catch(() => null);
+                await notifyOwner({ title: `💳 Invoice Paid: ${inv.invoiceNumber}`, content: `${customer.name} paid ${amountStr} for invoice ${inv.invoiceNumber} via Stripe Checkout.` }).catch(() => null);
+              }
+            } catch (emailErr) {
+              console.error('[Webhook] Receipt email failed:', emailErr);
+            }
           } else {
             console.log(`[Webhook] No portal invoice found for Checkout session ${session.id}`);
           }

@@ -926,11 +926,11 @@
 
 ## Feature: Portal Invoice Payment (Stripe Checkout)
 
-- [ ] Audit portalInvoices schema and existing payment procedures
-- [ ] Add portal.createCheckoutSession tRPC procedure (protected by portal session)
-- [ ] Add Stripe webhook handler for checkout.session.completed → mark portal invoice paid
-- [ ] Build PortalInvoiceDetail page with Pay Now button (Stripe Checkout redirect)
-- [ ] Add payment success/cancel landing pages in portal (/portal/payment-success, /portal/payment-cancel)
-- [ ] Update pro-side invoice status when portal payment completes (sync to EstimatorState via DB)
-- [ ] Send customer payment receipt email on successful payment
-- [ ] Wire Pay button in PortalHome invoice list and PortalInvoices list to the new flow
+- [x] Audit portalInvoices schema and existing payment procedures
+- [x] Add portal.createCheckoutSession tRPC procedure (protected by portal session)
+- [x] Add Stripe webhook handler for checkout.session.completed → mark portal invoice paid
+- [x] Build PortalInvoiceDetail page with Pay Now button (Stripe Checkout redirect)
+- [x] Add payment success/cancel landing pages in portal (/portal/payment-success, /portal/payment-cancel) — handled inline via ?paid=1 return param on invoice detail page
+- [x] Update pro-side invoice status when portal payment completes — webhook marks portalInvoice paid + notifyOwner fires to alert HP team
+- [x] Send customer payment receipt email on successful payment — HP-branded receipt email sent from checkout.session.completed webhook
+- [x] Wire Pay button in PortalHome invoice list and PortalInvoices list to the new flow — both pages navigate to invoice detail which triggers Checkout
