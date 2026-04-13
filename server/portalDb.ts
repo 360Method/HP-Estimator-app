@@ -914,3 +914,17 @@ export async function getPortalDocumentsByCustomer(portalCustomerId: number) {
     .where(eq(portalDocuments.portalCustomerId, portalCustomerId))
     .orderBy(desc(portalDocuments.uploadedAt));
 }
+
+/** Mark all unread customer-sent portal messages as read (HP opens the inbox). */
+export async function markAllPortalMessagesRead(): Promise<void> {
+  const db = await d();
+  await db
+    .update(portalMessages)
+    .set({ readAt: new Date() })
+    .where(
+      and(
+        eq(portalMessages.senderRole, "customer"),
+        isNull(portalMessages.readAt),
+      )
+    );
+}

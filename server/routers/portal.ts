@@ -67,6 +67,7 @@ import {
   getPendingChangeOrderCountsByJob,
   addPortalDocument,
   getPortalDocumentsByCustomer,
+  markAllPortalMessagesRead,
 } from "../portalDb";
 import { sendEmail } from "../gmail";
 import { updateOpportunity } from "../db";
@@ -951,6 +952,12 @@ export const portalRouter = router({
   getPortalUnreadCount: hpProcedure.query(async () => {
     const count = await getGlobalUnreadPortalMessageCount();
     return { count };
+  }),
+
+  /** Mark all unread customer-sent portal messages as read (called when HP opens the Inbox) */
+  markAllPortalRead: hpProcedure.mutation(async () => {
+    await markAllPortalMessagesRead();
+    return { ok: true };
   }),
 
   // ── SERVICE REQUESTS (Booking) ──────────────────────────────────────────────────────

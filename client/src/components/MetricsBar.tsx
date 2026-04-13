@@ -103,6 +103,11 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
   const newBtnRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
 
+  const utils = trpc.useUtils();
+  const markAllPortalReadMutation = trpc.portal.markAllPortalRead.useMutation({
+    onSuccess: () => utils.portal.getPortalUnreadCount.invalidate(),
+  });
+
   const logoutMutation = trpc.auth.logout.useMutation({
     onSettled: () => {
       // Always clear local state and redirect to login regardless of server response
@@ -213,6 +218,7 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
   const handleGoToInbox = () => {
     navigateToTopLevel('inbox' as AppSection);
     setShowMobileNav(false);
+    markAllPortalReadMutation.mutate();
   };
 
   const handleNavClick = (section: AppSection | null, label: string) => {
