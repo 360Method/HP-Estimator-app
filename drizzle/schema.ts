@@ -489,6 +489,8 @@ export const customers = mysqlTable("customers", {
   // Source tracking
   /** If created from an online request, link to it */
   onlineRequestId: int("onlineRequestId"),
+  /** If this customer was merged into another, store the surviving customer id (soft-delete) */
+  mergedIntoId: varchar("mergedIntoId", { length: 64 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -509,6 +511,8 @@ export const customerAddresses = mysqlTable("customerAddresses", {
   isPrimary: boolean("isPrimary").default(false).notNull(),
   lat: text("lat"),
   lng: text("lng"),
+  /** Optional notes for this specific property/unit (access instructions, gate codes, etc.) */
+  propertyNotes: text("propertyNotes"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type DbCustomerAddress = typeof customerAddresses.$inferSelect;

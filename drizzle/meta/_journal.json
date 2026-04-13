@@ -141,6 +141,13 @@
       "when": 1776116312823,
       "tag": "0019_silent_zarda",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "5",
+      "when": 1776123969314,
+      "tag": "0020_smiling_bedlam",
+      "breakpoints": true
     }
   ]
 }

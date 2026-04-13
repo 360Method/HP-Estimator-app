@@ -1070,7 +1070,7 @@ export default function CustomerSection() {
             <MapPin size={13} />
             <span>Addresses</span>
             <button
-              onClick={() => { setAddingAddress(true); setEditingAddressId(null); setAddrForm({ label: 'Home', street: '', unit: '', city: 'Vancouver', state: 'WA', zip: '', lat: undefined, lng: undefined }); setAddrLatLng({}); }}
+              onClick={() => { setAddingAddress(true); setEditingAddressId(null); setAddrForm({ label: 'Home', street: '', unit: '', city: 'Vancouver', state: 'WA', zip: '', lat: undefined, lng: undefined, propertyNotes: '' }); setAddrLatLng({}); }}
               className="ml-auto inline-flex items-center gap-1 text-xs text-primary hover:underline font-medium"
             >
               <Plus size={11} /> Add Address
@@ -1100,7 +1100,7 @@ export default function CustomerSection() {
                       onClick={() => {
                         setEditingAddressId(addr.id);
                         setAddingAddress(false);
-                        setAddrForm({ label: addr.label, street: addr.street, unit: addr.unit, city: addr.city, state: addr.state, zip: addr.zip, lat: addr.lat, lng: addr.lng });
+                        setAddrForm({ label: addr.label, street: addr.street, unit: addr.unit, city: addr.city, state: addr.state, zip: addr.zip, lat: addr.lat, lng: addr.lng, propertyNotes: (addr as any).propertyNotes ?? '' });
                         setAddrLatLng({ lat: addr.lat, lng: addr.lng });
                       }}
                       className="text-[11px] text-muted-foreground hover:text-foreground"
@@ -1130,10 +1130,11 @@ export default function CustomerSection() {
                       <input value={addrForm.zip} onChange={e => setAddrForm(f => ({ ...f, zip: e.target.value }))} placeholder="Zip" className="field-input text-xs" />
                     </div>
                     {addrForm.street && <AddressMapPreview street={addrForm.street} city={addrForm.city} state={addrForm.state} zip={addrForm.zip} lat={addrLatLng.lat} lng={addrLatLng.lng} height="120px" showLink={false} />}
+                    <textarea value={(addrForm as any).propertyNotes ?? ''} onChange={e => setAddrForm(f => ({ ...f, propertyNotes: e.target.value }))} placeholder="Property notes (gate code, parking, access instructions…)" rows={2} className="field-input w-full text-xs resize-none" />
                     <div className="flex gap-2">
                       <button onClick={() => {
                         if (!activeCustomerId) return;
-                        updateCustomerAddress(activeCustomerId, addr.id, { label: addrForm.label, street: addrForm.street, unit: addrForm.unit, city: addrForm.city, state: addrForm.state, zip: addrForm.zip, lat: addrForm.lat, lng: addrForm.lng });
+                        updateCustomerAddress(activeCustomerId, addr.id, { label: addrForm.label, street: addrForm.street, unit: addrForm.unit, city: addrForm.city, state: addrForm.state, zip: addrForm.zip, lat: addrForm.lat, lng: addrForm.lng, propertyNotes: addrForm.propertyNotes });
                         // Sync jobInfo if this is primary
                         if (addr.isPrimary) setJobInfo({ address: addrForm.street, city: addrForm.city, state: addrForm.state, zip: addrForm.zip });
                         setEditingAddressId(null);
@@ -1173,11 +1174,12 @@ export default function CustomerSection() {
                   <input value={addrForm.zip} onChange={e => setAddrForm(f => ({ ...f, zip: e.target.value }))} placeholder="Zip" className="field-input text-xs" />
                 </div>
                 {addrForm.street && <AddressMapPreview street={addrForm.street} city={addrForm.city} state={addrForm.state} zip={addrForm.zip} lat={addrLatLng.lat} lng={addrLatLng.lng} height="120px" showLink={false} />}
+                <textarea value={(addrForm as any).propertyNotes ?? ''} onChange={e => setAddrForm(f => ({ ...f, propertyNotes: e.target.value }))} placeholder="Property notes (gate code, parking, access instructions…)" rows={2} className="field-input w-full text-xs resize-none" />
                 <div className="flex gap-2">
                   <button onClick={() => {
                     if (!activeCustomerId || !addrForm.street) { toast.error('Street is required'); return; }
                     const isFirst = (activeCustomer?.addresses ?? []).length === 0;
-                    addCustomerAddress(activeCustomerId, { id: nanoid(), label: addrForm.label || 'Home', street: addrForm.street, unit: addrForm.unit, city: addrForm.city, state: addrForm.state, zip: addrForm.zip, isPrimary: isFirst, lat: addrForm.lat, lng: addrForm.lng });
+                    addCustomerAddress(activeCustomerId, { id: nanoid(), label: addrForm.label || 'Home', street: addrForm.street, unit: addrForm.unit, city: addrForm.city, state: addrForm.state, zip: addrForm.zip, isPrimary: isFirst, lat: addrForm.lat, lng: addrForm.lng, propertyNotes: (addrForm as any).propertyNotes });
                     if (isFirst) setJobInfo({ address: addrForm.street, city: addrForm.city, state: addrForm.state, zip: addrForm.zip });
                     setAddingAddress(false);
                   }} className="flex-1 text-xs bg-primary text-primary-foreground rounded px-2 py-1.5">Add Address</button>

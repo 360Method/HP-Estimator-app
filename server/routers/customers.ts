@@ -7,6 +7,7 @@ import { TRPCError } from "@trpc/server";
 import { router, protectedProcedure } from "../_core/trpc";
 import {
   listCustomers,
+  listCustomersFiltered,
   getCustomerById,
   findCustomerByEmail,
   createCustomer,
@@ -14,8 +15,12 @@ import {
   deleteCustomer,
   listCustomerAddresses,
   createCustomerAddress,
+  updateCustomerAddress,
   deleteCustomerAddress,
   listOpportunities,
+  detectDuplicates,
+  mergeCustomers,
+  bulkAddTag,
 } from "../db";
 import { nanoid } from "nanoid";
 
@@ -53,6 +58,24 @@ export const customersRouter = router({
     .input(z.object({ search: z.string().optional(), limit: z.number().default(200), offset: z.number().default(0) }))
     .query(async ({ input }) => {
       return listCustomers(input.search, input.limit, input.offset);
+    }),
+
+  /** Advanced filtered list with type/leadSource/tags/city/zip/sort */
+  listFiltered: protectedProcedure
+    .input(z.object({
+      search: z.string().optional(),
+      customerType: z.string().optional(),
+      leadSource: z.string().optional(),
+      tags: z.array(z.string()).optional(),
+      city: z.string().optional(),
+      zip: z.string().optional(),
+      sortBy: z.enum(['lastName', 'city', 'createdAt', 'lifetimeValue']).optional(),
+      sortDir: z.enum(['asc', 'desc']).optional(),
+      limit: z.number().default(300),
+      offset: z.number().default(0),
+    }))
+    .query(async ({ input }) => {
+      return listCustomersFiltered(input);
     }),
 
   /**
@@ -121,7 +144,7 @@ export const customersRouter = router({
       return getCustomerById(id);
     }),
 
-  /** Delete a customer */
+  /** Delete a customer (only if no linked opportunities) */
   delete: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ input }) => {
@@ -129,11 +152,96 @@ export const customersRouter = router({
       return { success: true };
     }),
 
+  /** Bulk delete customers — skips any that have linked opportunities */
+  bulkDelete: protectedProcedure
+    .input(z.object({ ids: z.array(z.string()) }))
+    .mutation(async ({ input }) => {
+      const allOpps = await listOpportunities(undefined, undefined, false, 5000);
+      const idsWithOpps = new Set(allOpps.map(o => o.customerId));
+      const skipped: string[] = [];
+      const deleted: string[] = [];
+      for (const id of input.ids) {
+        if (idsWithOpps.has(id)) {
+          skipped.push(id);
+        } else {
+          await deleteCustomer(id);
+          deleted.push(id);
+        }
+      }
+      return { deleted, skipped };
+    }),
+
   /** Find customer by email (used during booking wizard dedup) */
   findByEmail: protectedProcedure
     .input(z.object({ email: z.string() }))
     .query(async ({ input }) => {
       return findCustomerByEmail(input.email);
+    }),
+
+  // ── Deduplication & Merge ──────────────────────────────────────────────────
+
+  /** Detect likely duplicate customer groups */
+  detectDuplicates: protectedProcedure
+    .query(async () => {
+      return detectDuplicates();
+    }),
+
+  /** Merge sourceId into targetId (re-parents opps/addresses/conversations, soft-deletes source) */
+  merge: protectedProcedure
+    .input(z.object({ sourceId: z.string(), targetId: z.string() }))
+    .mutation(async ({ input }) => {
+      if (input.sourceId === input.targetId) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Cannot merge a customer with itself" });
+      }
+      await mergeCustomers(input.sourceId, input.targetId);
+      return { success: true };
+    }),
+
+  // ── Bulk Tag ───────────────────────────────────────────────────────────────
+
+  /** Add a tag to multiple customers */
+  bulkAddTag: protectedProcedure
+    .input(z.object({ customerIds: z.array(z.string()), tag: z.string().min(1) }))
+    .mutation(async ({ input }) => {
+      await bulkAddTag(input.customerIds, input.tag);
+      return { success: true };
+    }),
+
+  // ── Export CSV ─────────────────────────────────────────────────────────────
+
+  /** Export selected customers as CSV string */
+  exportCsv: protectedProcedure
+    .input(z.object({ ids: z.array(z.string()) }))
+    .mutation(async ({ input }) => {
+      const rows = await Promise.all(input.ids.map(id => getCustomerById(id)));
+      const valid = rows.filter(Boolean) as Awaited<ReturnType<typeof getCustomerById>>[];
+      const header = ['Name', 'Company', 'Email', 'Mobile', 'Street', 'City', 'State', 'Zip', 'Type', 'Lead Source', 'Tags', 'Lifetime Value', 'Outstanding Balance', 'Created'];
+      const escape = (v: string | number | null | undefined) => {
+        const s = String(v ?? '');
+        return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
+      };
+      const lines = [header.join(',')];
+      for (const c of valid) {
+        if (!c) continue;
+        const tags: string[] = c.tags ? JSON.parse(c.tags as unknown as string) : [];
+        lines.push([
+          escape(`${c.firstName} ${c.lastName}`.trim() || c.displayName),
+          escape(c.company),
+          escape(c.email),
+          escape(c.mobilePhone),
+          escape(c.street),
+          escape(c.city),
+          escape(c.state),
+          escape(c.zip),
+          escape(c.customerType),
+          escape(c.leadSource),
+          escape(tags.join('; ')),
+          escape(c.lifetimeValue),
+          escape(c.outstandingBalance),
+          escape(c.createdAt?.toISOString?.() ?? ''),
+        ].join(','));
+      }
+      return { csv: lines.join('\n') };
     }),
 
   // ── Addresses ──────────────────────────────────────────────────────────────
@@ -156,10 +264,32 @@ export const customersRouter = router({
       state: z.string(),
       zip: z.string(),
       isPrimary: z.boolean().default(false),
+      propertyNotes: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
       const id = nanoid();
       return createCustomerAddress({ id, ...input });
+    }),
+
+  /** Update an address */
+  updateAddress: protectedProcedure
+    .input(z.object({
+      id: z.string(),
+      label: z.string().optional(),
+      street: z.string().optional(),
+      unit: z.string().optional(),
+      city: z.string().optional(),
+      state: z.string().optional(),
+      zip: z.string().optional(),
+      isPrimary: z.boolean().optional(),
+      propertyNotes: z.string().optional(),
+      lat: z.string().optional(),
+      lng: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { id, ...data } = input;
+      await updateCustomerAddress(id, data);
+      return { success: true };
     }),
 
   /** Remove an address */

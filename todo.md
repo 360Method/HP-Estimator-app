@@ -1247,3 +1247,39 @@
 ### Phase 5 — Tests + Checkpoint
 - [x] Write vitest tests for findOrCreateByCustomer procedure
 - [x] Save checkpoint
+
+## Customers Tab — 4-Phase Improvement
+
+### Phase 1 — Deduplication & Merge
+- [x] Add mergedIntoId (varchar) to customers table in schema.ts
+- [x] Add propertyNotes (text) to customerAddresses table in schema.ts
+- [x] Run pnpm db:push
+- [x] Add detectDuplicates tRPC procedure (match by phone, email, or name+zip)
+- [x] Add merge tRPC procedure (absorb opps, invoices, attachments, addresses into target; soft-delete source)
+- [x] Add DuplicatesPanel component in CustomersListPage (banner showing N duplicate groups)
+- [x] MergeDialog: side-by-side comparison of two customers with field-level selection, confirm merge
+
+### Phase 2 — Filter Bar Upgrade
+- [x] Add CustomerType pill filter (All / Homeowner / Business)
+- [x] Add LeadSource dropdown filter
+- [x] Add Tag multi-select chip filter
+- [x] Add City/Zip quick filter input
+- [x] Add column sort headers: Name, City, Created, Lifetime Value (asc/desc toggle)
+- [ ] Persist filter state in URL params (shareable links) — deferred
+
+### Phase 3 — Multi-Property Support
+- [x] Show "N properties" badge on customer rows with >1 address
+- [x] Upgrade Addresses section in CustomerSection Profile tab: add/edit/remove with labels, set primary, mini-map preview, propertyNotes
+- [ ] Property selector modal when creating lead/estimate/job from customer with multiple addresses — deferred
+- [ ] Show property address on each opportunity row in customer profile Leads/Estimates/Jobs tabs — deferred
+
+### Phase 4 — Bulk Actions
+- [x] Merge selected (2 rows) — opens MergeDialog
+- [x] Add tag to all selected — tag picker popover
+- [x] Export CSV of selected rows (name, phone, email, address, type, tags, lifetime value)
+- [x] Delete selected (confirmation, only if no linked opportunities)
+
+### Phase 5 — Customer Quick-View Slide-Over
+- [x] Slide-over panel on customer row hover (Eye icon)
+- [x] Panel shows: contact info, address list, open opps count, outstanding balance
+- [x] Quick-action buttons: Open Full Profile, New Lead

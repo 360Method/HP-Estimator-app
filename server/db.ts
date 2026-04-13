@@ -533,3 +533,225 @@ export async function getOnlineRequestById(id: number) {
   const rows = await db.select().from(onlineRequests).where(eq(onlineRequests.id, id)).limit(1);
   return rows[0] ?? null;
 }
+
+// ─── CUSTOMER DEDUPLICATION & MERGE HELPERS ───────────────────────────────────
+
+export interface DuplicateGroup {
+  reason: 'email' | 'phone' | 'name_zip';
+  customers: DbCustomer[];
+}
+
+/**
+ * Detect likely duplicate customers.
+ * Groups by: same non-empty email, same non-empty mobilePhone, or same lastName+zip.
+ * Excludes already-merged records (mergedIntoId IS NOT NULL).
+ */
+export async function detectDuplicates(): Promise<DuplicateGroup[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const all = await db.select().from(customers)
+    .where(sql`${customers.mergedIntoId} IS NULL`)
+    .orderBy(asc(customers.lastName));
+
+  const groups: DuplicateGroup[] = [];
+
+  // Group by email
+  const byEmail = new Map<string, DbCustomer[]>();
+  for (const c of all) {
+    const key = c.email?.toLowerCase().trim();
+    if (!key) continue;
+    if (!byEmail.has(key)) byEmail.set(key, []);
+    byEmail.get(key)!.push(c);
+  }
+  for (const [, group] of byEmail) {
+    if (group.length > 1) groups.push({ reason: 'email', customers: group });
+  }
+
+  // Group by mobilePhone
+  const byPhone = new Map<string, DbCustomer[]>();
+  for (const c of all) {
+    const key = c.mobilePhone?.replace(/\D/g, '');
+    if (!key || key.length < 7) continue;
+    if (!byPhone.has(key)) byPhone.set(key, []);
+    byPhone.get(key)!.push(c);
+  }
+  for (const [, group] of byPhone) {
+    if (group.length > 1) {
+      // Avoid double-reporting if already captured by email
+      const ids = new Set(group.map(c => c.id));
+      const alreadyReported = groups.some(g => g.customers.some(c => ids.has(c.id)));
+      if (!alreadyReported) groups.push({ reason: 'phone', customers: group });
+    }
+  }
+
+  // Group by lastName + zip
+  const byNameZip = new Map<string, DbCustomer[]>();
+  for (const c of all) {
+    const lastName = c.lastName?.toLowerCase().trim();
+    const zip = c.zip?.trim();
+    if (!lastName || !zip) continue;
+    const key = `${lastName}|${zip}`;
+    if (!byNameZip.has(key)) byNameZip.set(key, []);
+    byNameZip.get(key)!.push(c);
+  }
+  for (const [, group] of byNameZip) {
+    if (group.length > 1) {
+      const ids = new Set(group.map(c => c.id));
+      const alreadyReported = groups.some(g => g.customers.some(c => ids.has(c.id)));
+      if (!alreadyReported) groups.push({ reason: 'name_zip', customers: group });
+    }
+  }
+
+  return groups;
+}
+
+/**
+ * Merge sourceId into targetId:
+ * 1. Re-parent all opportunities, customerAddresses, conversations from source → target.
+ * 2. Merge tags from source into target (union).
+ * 3. Set source.mergedIntoId = targetId (soft-delete).
+ */
+export async function mergeCustomers(sourceId: string, targetId: string): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  // Re-parent opportunities
+  await db.update(opportunities)
+    .set({ customerId: targetId })
+    .where(eq(opportunities.customerId, sourceId));
+
+  // Re-parent customer addresses
+  await db.update(customerAddresses)
+    .set({ customerId: targetId })
+    .where(eq(customerAddresses.customerId, sourceId));
+
+  // Re-parent conversations
+  await db.update(conversations)
+    .set({ customerId: targetId })
+    .where(eq(conversations.customerId, sourceId));
+
+  // Merge tags
+  const [src, tgt] = await Promise.all([
+    getCustomerById(sourceId),
+    getCustomerById(targetId),
+  ]);
+  if (src && tgt) {
+    const srcTags: string[] = src.tags ? JSON.parse(src.tags as unknown as string) : [];
+    const tgtTags: string[] = tgt.tags ? JSON.parse(tgt.tags as unknown as string) : [];
+    const merged = Array.from(new Set([...tgtTags, ...srcTags]));
+    await db.update(customers)
+      .set({ tags: JSON.stringify(merged) })
+      .where(eq(customers.id, targetId));
+  }
+
+  // Soft-delete source
+  await db.update(customers)
+    .set({ mergedIntoId: targetId })
+    .where(eq(customers.id, sourceId));
+}
+
+/**
+ * Add a tag to multiple customers (union — does not remove existing tags).
+ */
+export async function bulkAddTag(customerIds: string[], tag: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const rows = await db.select({ id: customers.id, tags: customers.tags })
+    .from(customers)
+    .where(sql`${customers.id} IN ${customerIds}`);
+  for (const row of rows) {
+    const existing: string[] = row.tags ? JSON.parse(row.tags as unknown as string) : [];
+    if (!existing.includes(tag)) {
+      existing.push(tag);
+      await db.update(customers)
+        .set({ tags: JSON.stringify(existing) })
+        .where(eq(customers.id, row.id));
+    }
+  }
+}
+
+/**
+ * Update a customer address (all fields optional).
+ */
+export async function updateCustomerAddress(
+  id: string,
+  data: Partial<Omit<DbCustomerAddress, 'id' | 'customerId' | 'createdAt'>>,
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(customerAddresses).set(data).where(eq(customerAddresses.id, id));
+}
+
+/**
+ * List customers with optional filters for the advanced filter bar.
+ */
+export async function listCustomersFiltered(opts: {
+  search?: string;
+  customerType?: string;
+  leadSource?: string;
+  tags?: string[];
+  city?: string;
+  zip?: string;
+  sortBy?: 'lastName' | 'city' | 'createdAt' | 'lifetimeValue';
+  sortDir?: 'asc' | 'desc';
+  limit?: number;
+  offset?: number;
+}): Promise<DbCustomer[]> {
+  const db = await getDb();
+  if (!db) return [];
+
+  const conditions: ReturnType<typeof eq>[] = [
+    sql`${customers.mergedIntoId} IS NULL` as any,
+  ];
+
+  if (opts.search) {
+    const s = `%${opts.search}%`;
+    conditions.push(
+      or(
+        like(customers.firstName, s),
+        like(customers.lastName, s),
+        like(customers.email, s),
+        like(customers.mobilePhone, s),
+        like(customers.company, s),
+        like(customers.displayName, s),
+      ) as any
+    );
+  }
+  if (opts.customerType) {
+    conditions.push(eq(customers.customerType, opts.customerType) as any);
+  }
+  if (opts.leadSource) {
+    conditions.push(eq(customers.leadSource, opts.leadSource) as any);
+  }
+  if (opts.city) {
+    conditions.push(like(customers.city, `%${opts.city}%`) as any);
+  }
+  if (opts.zip) {
+    conditions.push(like(customers.zip, `%${opts.zip}%`) as any);
+  }
+
+  let q = db.select().from(customers).where(and(...conditions));
+
+  const sortField = {
+    lastName: customers.lastName,
+    city: customers.city,
+    createdAt: customers.createdAt,
+    lifetimeValue: customers.lifetimeValue,
+  }[opts.sortBy ?? 'lastName'] ?? customers.lastName;
+
+  const sortFn = opts.sortDir === 'desc' ? desc : asc;
+  const result = await (q as any).orderBy(sortFn(sortField))
+    .limit(opts.limit ?? 300)
+    .offset(opts.offset ?? 0);
+
+  // Client-side tag filter (tags stored as JSON string)
+  if (opts.tags && opts.tags.length > 0) {
+    return result.filter((c: DbCustomer) => {
+      const cTags: string[] = c.tags ? JSON.parse(c.tags as unknown as string) : [];
+      return opts.tags!.every(t => cTags.includes(t));
+    });
+  }
+
+  return result;
+}
