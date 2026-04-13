@@ -317,6 +317,17 @@ export default function EstimateSection() {
 
   const rewritePhaseMutation = trpc.estimate.rewritePhase.useMutation();
 
+  // Portal approval status — polls every 30s when estimate has been sent
+  const portalApprovalQuery = trpc.portal.getPortalApprovalStatus.useQuery(
+    { hpOpportunityId: state.activeOpportunityId ?? '' },
+    {
+      enabled: !!state.activeOpportunityId && !!state.jobInfo.sentAt,
+      refetchInterval: 30_000,
+      staleTime: 20_000,
+    }
+  );
+  const portalApproval = portalApprovalQuery.data;
+
   const startEdit = useCallback((phase: PhaseGroup, bullets: string[]) => {
     const override = state.phaseOverrides.find(o => o.phaseId === phase.id);
     setDraftTitle(override?.customTitle ?? phase.name);
@@ -606,6 +617,42 @@ export default function EstimateSection() {
           {showMatLabor ? 'Hide' : 'Show'} Mat/Labor Split
         </button>
       </div>
+
+      {/* Portal approval status banner */}
+      {portalApproval && (
+        <div className={`flex items-center gap-3 px-4 py-3 rounded-lg border text-sm no-print ${
+          portalApproval.status === 'approved'
+            ? 'bg-green-50 border-green-200 text-green-800'
+            : portalApproval.status === 'declined'
+            ? 'bg-red-50 border-red-200 text-red-800'
+            : 'bg-amber-50 border-amber-200 text-amber-800'
+        }`}>
+          {portalApproval.status === 'approved' ? (
+            <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0" />
+          ) : portalApproval.status === 'declined' ? (
+            <XCircle className="w-5 h-5 text-red-500 shrink-0" />
+          ) : (
+            <Mail className="w-5 h-5 text-amber-500 shrink-0" />
+          )}
+          <div className="flex-1">
+            {portalApproval.status === 'approved' ? (
+              <span>
+                <strong>{portalApproval.signerName}</strong> approved this estimate in the portal
+                {portalApproval.approvedAt && (
+                  <span className="ml-1 text-green-600 font-normal">
+                    on {new Date(portalApproval.approvedAt).toLocaleDateString()}
+                  </span>
+                )}
+                . Opportunity marked <strong>Won</strong>.
+              </span>
+            ) : portalApproval.status === 'declined' ? (
+              <span>Customer <strong>declined</strong> this estimate in the portal. Consider following up.</span>
+            ) : (
+              <span>Estimate sent to portal — awaiting customer approval.</span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ─── ESTIMATE DOCUMENT ─────────────────────────────── */}
       <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden print-area">

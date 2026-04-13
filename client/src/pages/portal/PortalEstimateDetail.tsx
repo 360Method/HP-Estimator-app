@@ -228,10 +228,10 @@ export default function PortalEstimateDetail() {
             </div>
             {canApprove && (
               <Button
-                className="bg-blue-600 hover:bg-blue-700 text-white"
+                className="bg-[#1a2e1a] hover:bg-[#2d4a2d] text-white font-semibold px-6"
                 onClick={() => setApproveOpen(true)}
               >
-                Approve
+                Approve Estimate
               </Button>
             )}
           </div>
@@ -334,20 +334,46 @@ export default function PortalEstimateDetail() {
 
           {/* Footer CTA */}
           {canApprove && (
-            <div className="text-center py-6 border-t border-gray-100 bg-gray-50 print:hidden">
-              <p className="text-sm text-gray-500 mb-1">Not what you were looking for?</p>
-              <p className="text-xs text-gray-400 mb-4">Let us know if you'd like any changes — we'd love to win your business.</p>
-              <div className="flex gap-3 justify-center">
+            <div className="px-8 py-6 border-t border-gray-100 bg-gray-50 print:hidden">
+              {/* Deposit callout */}
+              {depositCents > 0 && (
+                <div className="mb-5 flex items-start gap-3 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                  <span className="text-amber-500 text-lg">💳</span>
+                  <div>
+                    <p className="text-sm font-semibold text-amber-800">Deposit required to schedule</p>
+                    <p className="text-xs text-amber-700 mt-0.5">
+                      A <strong>{fmtMoney(depositCents)}</strong> deposit ({depositPct}% of total) is due after approval.
+                      You'll be taken directly to the payment page.
+                    </p>
+                  </div>
+                </div>
+              )}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold text-gray-700">Ready to move forward?</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Approve below to lock in your project date.</p>
+                </div>
                 <Button
-                  variant="outline"
+                  className="bg-[#1a2e1a] hover:bg-[#2d4a2d] text-white font-semibold px-8 py-2.5 text-sm"
+                  onClick={() => setApproveOpen(true)}
+                >
+                  Approve & Pay Deposit
+                </Button>
+              </div>
+              <div className="flex gap-3 justify-center mt-4 pt-4 border-t border-gray-200">
+                <p className="text-xs text-gray-400">Not quite right?</p>
+                <Button
+                  variant="ghost"
                   size="sm"
+                  className="text-xs text-gray-400 h-auto p-0 hover:text-gray-600"
                   onClick={() => declineMutation.mutate({ id: estimateId })}
                   disabled={declineMutation.isPending}
                 >
                   Decline estimate
                 </Button>
-                <Button variant="outline" size="sm" asChild>
-                  <a href="mailto:help@handypioneers.com">Contact us</a>
+                <span className="text-gray-300">·</span>
+                <Button variant="ghost" size="sm" className="text-xs text-gray-400 h-auto p-0 hover:text-gray-600" asChild>
+                  <a href="mailto:help@handypioneers.com">Request changes</a>
                 </Button>
               </div>
             </div>
@@ -359,20 +385,26 @@ export default function PortalEstimateDetail() {
       <Dialog open={approveOpen} onOpenChange={setApproveOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Approve estimate</DialogTitle>
+            <DialogTitle className="text-[#1a2e1a]">Approve Estimate</DialogTitle>
           </DialogHeader>
 
           {/* Option summary */}
-          <div className="flex items-center gap-3 bg-gray-50 rounded-lg p-3 mb-4">
-            <div className="w-10 h-10 bg-[#1a2e1a] rounded flex items-center justify-center">
+          <div className="flex items-center gap-3 bg-[#1a2e1a]/5 border border-[#1a2e1a]/20 rounded-lg p-3 mb-3">
+            <div className="w-10 h-10 bg-[#1a2e1a] rounded flex items-center justify-center shrink-0">
               <Pen className="w-4 h-4 text-green-200" />
             </div>
-            <div className="flex-1">
-              <p className="text-sm font-medium">Option #1</p>
-              {est.title && <p className="text-xs text-gray-500">{est.title}</p>}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-gray-900 truncate">{est.title ?? 'Option #1'}</p>
+              <p className="text-xs text-gray-500">Total: {fmtMoney(totalCents)}</p>
             </div>
-            <p className="font-semibold text-sm">{fmtMoney(totalCents)}</p>
           </div>
+          {/* Deposit callout in modal */}
+          {depositCents > 0 && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 mb-3">
+              <span>💳</span>
+              <span>After approval, you'll be redirected to pay the <strong>{fmtMoney(depositCents)}</strong> deposit to schedule your project.</span>
+            </div>
+          )}
 
           {/* Name */}
           <Input
@@ -386,13 +418,13 @@ export default function PortalEstimateDetail() {
           <p className="text-sm text-gray-600 mb-2">Confirm with your signature</p>
           <div className="flex gap-2 mb-3">
             <Button size="sm" variant={sigMode === "type" ? "default" : "outline"}
-              className={sigMode === "type" ? "bg-blue-600 text-white" : ""}
+              className={sigMode === "type" ? "bg-[#1a2e1a] text-white" : ""}
               onClick={() => setSigMode("type")}
             >
               <Type className="w-3.5 h-3.5 mr-1" /> Type
             </Button>
             <Button size="sm" variant={sigMode === "draw" ? "default" : "outline"}
-              className={sigMode === "draw" ? "bg-blue-600 text-white" : ""}
+              className={sigMode === "draw" ? "bg-[#1a2e1a] text-white" : ""}
               onClick={() => setSigMode("draw")}
             >
               <Pen className="w-3.5 h-3.5 mr-1" /> Draw
@@ -428,11 +460,13 @@ export default function PortalEstimateDetail() {
           <div className="flex gap-3 justify-end">
             <Button variant="outline" onClick={() => setApproveOpen(false)}>Cancel</Button>
             <Button
-              className="bg-blue-600 hover:bg-blue-700 text-white"
+              className="bg-[#1a2e1a] hover:bg-[#2d4a2d] text-white font-semibold"
               disabled={approveMutation.isPending || !signerName || !agreed}
               onClick={handleApprove}
             >
-              {approveMutation.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Approving…</> : "Approve"}
+              {approveMutation.isPending
+                ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Approving…</>
+                : depositCents > 0 ? "Approve & Pay Deposit" : "Approve Estimate"}
             </Button>
           </div>
         </DialogContent>

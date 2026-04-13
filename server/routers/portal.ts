@@ -17,9 +17,9 @@ import {
   createPortalSession,
   findValidPortalSession,
   deletePortalSession,
-  createPortalEstimate,
-  getPortalEstimatesByCustomer,
   getPortalEstimateById,
+  getPortalEstimatesByCustomer,
+  getPortalEstimateByOpportunityId,
   updatePortalEstimateStatus,
   markPortalEstimateViewed,
   createPortalInvoice,
@@ -252,6 +252,27 @@ export const portalRouter = router({
           console.warn('[portal.approveEstimate] Could not mark opportunity won:', e);
         });
       }
+
+      // Send approval confirmation email to customer
+      const baseUrl = process.env.PORTAL_BASE_URL ?? 'https://client.handypioneers.com';
+      const depositFmt = est.depositAmount > 0
+        ? `$${(est.depositAmount / 100).toFixed(2)}`
+        : null;
+      const invoiceUrl = depositInvoice
+        ? `${baseUrl}/portal/invoices/${depositInvoice.id}`
+        : `${baseUrl}/portal/invoices`;
+      await sendEmail({
+        to: ctx.portalCustomer.email,
+        subject: `Estimate ${est.estimateNumber} Approved — Thank You!`,
+        html: buildApprovalConfirmationEmail(
+          ctx.portalCustomer.name,
+          est.estimateNumber,
+          est.title ?? 'Your Project',
+          depositFmt,
+          invoiceUrl,
+          baseUrl,
+        ),
+      }).catch(() => null);
 
       // Notify HP team
       await notifyOwner({
@@ -497,6 +518,7 @@ export const portalRouter = router({
         customerPhone: z.string().optional(),
         customerAddress: z.string().optional(),
         hpCustomerId: z.string().optional(),
+        hpOpportunityId: z.string().optional(), // link back to pro-side opportunity for auto-sync
         estimateNumber: z.string(),
         title: z.string(),
         totalAmount: z.number(), // cents
@@ -535,6 +557,7 @@ export const portalRouter = router({
         scopeOfWork: input.scopeOfWork,
         expiresAt: input.expiresAt,
         sentAt: new Date(),
+        hpOpportunityId: input.hpOpportunityId,
       });
 
       // Send magic link email
@@ -932,6 +955,21 @@ export const portalRouter = router({
       return { url: session.url! };
     }),
 
+  /** HP staff: get portal approval status for a pro-side opportunity */
+  getPortalApprovalStatus: hpProcedure
+    .input(z.object({ hpOpportunityId: z.string() }))
+    .query(async ({ input }) => {
+      const est = await getPortalEstimateByOpportunityId(input.hpOpportunityId);
+      if (!est) return null;
+      return {
+        status: est.status,
+        approvedAt: est.approvedAt,
+        signerName: est.signerName,
+        estimateNumber: est.estimateNumber,
+        portalEstimateId: est.id,
+      };
+    }),
+
   /** HP staff: list all pending service requests */
   getAllServiceRequests: hpProcedure.query(async () => {
     return getAllPendingPortalServiceRequests();
@@ -1046,6 +1084,29 @@ function buildInvoiceEmail(name: string, invoiceNumber: string, amountCents: num
     </table>
     ${ctaButton('Review & Pay Invoice', url)}
     <p style="margin:0;font-size:13px;color:#888;text-align:center;">Questions about this invoice? <a href="mailto:help@handypioneers.com" style="color:#c8922a;">Contact us</a> and we'll be happy to help.</p>
+  `);
+}
+
+function buildApprovalConfirmationEmail(
+  name: string,
+  estimateNumber: string,
+  title: string,
+  depositFmt: string | null,
+  invoiceUrl: string,
+  _baseUrl: string,
+) {
+  const firstName = name.split(' ')[0];
+  const depositSection = depositFmt
+    ? `<p style="margin:0 0 20px;">To get your project scheduled, please pay the <strong>${depositFmt} deposit</strong> using the button below.</p>
+       ${ctaButton('Pay Deposit Now', invoiceUrl, '#1a2e1a')}`
+    : `<p style="margin:0 0 20px;">Our team will be in touch shortly to schedule your project.</p>`;
+  return emailWrapper(`
+    <h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#1a2e1a;">Estimate Approved — Thank You!</h2>
+    <p style="margin:0 0 12px;">Hi ${firstName},</p>
+    <p style="margin:0 0 8px;">We've received your approval for estimate <strong>${estimateNumber}</strong>:</p>
+    <p style="margin:0 0 20px;padding:12px 16px;background:#f8f9fa;border-left:3px solid #1a2e1a;border-radius:0 4px 4px 0;font-weight:600;color:#1a2e1a;">${title}</p>
+    ${depositSection}
+    <p style="margin:0;font-size:13px;color:#888;text-align:center;">Questions? <a href="mailto:help@handypioneers.com" style="color:#c8922a;">Reply to this email</a> or call us at (360) 544-9858.</p>
   `);
 }
 

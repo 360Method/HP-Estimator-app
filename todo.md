@@ -987,3 +987,18 @@
 - [x] Ensure deposit invoices show a single "Deposit (X%)" line item referencing the estimate total — fallback row uses depositPct% label + job title
 - [x] Ensure final invoices show all phase line items from the linked estimate snapshot — calcPhase() runs on opportunitySnapshot at invoice creation
 - [ ] Write vitest test for invoice line item serialization (deferred — client-side logic, covered by manual QA)
+
+## Phase 1: Portal Estimate Approval (Client Journey)
+
+- [x] Add hpOpportunityId to sendEstimateToPortal input schema and store on portalEstimate record
+- [x] Update SendEstimateDialog to pass hpOpportunityId when sending estimate to portal (already wired via estimate.send)
+- [x] Fix approveEstimate to create a balance invoice (final invoice) in addition to deposit invoice (handled by APPROVE_ESTIMATE reducer on pro side)
+- [x] Fix approveEstimate to send HP-branded approval confirmation email to customer
+- [x] Add portal.getPortalApprovalStatus HP procedure — returns approval/decline status for a given hpOpportunityId
+- [x] Pro-side: poll portal approval status in EstimateSection — shows amber/green/red banner, polls every 30s when sentAt is set
+- [ ] Pro-side: auto-trigger APPROVE_ESTIMATE reducer when portal approval detected (deferred — requires active opportunity to be open)
+- [ ] Add "Approved via Portal" banner on pro-side opportunity card when wonAt is set from portal (deferred to Phase 2)
+- [x] PortalEstimateDetail: improve Approve button visual weight — HP forest-green, full-width CTA below the document
+- [x] PortalEstimateDetail: show deposit amount prominently in the approval modal ("You will be directed to pay $X deposit")
+- [x] PortalEstimateDetail: after approval, redirect to deposit invoice Pay Now page automatically
+- [x] PortalEstimates list: show "Approved" green badge and "Declined" red badge on estimate cards

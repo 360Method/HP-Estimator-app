@@ -185,6 +185,17 @@ export async function createPortalEstimate(data: InsertPortalEstimate) {
   return rows[0] ?? null;
 }
 
+export async function getPortalEstimateByOpportunityId(hpOpportunityId: string) {
+  const db = await d();
+  const rows = await db
+    .select()
+    .from(portalEstimates)
+    .where(eq(portalEstimates.hpOpportunityId, hpOpportunityId))
+    .orderBy(desc(portalEstimates.createdAt))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
 export async function getPortalEstimatesByCustomer(customerId: number) {
   const db = await d();
   return db
