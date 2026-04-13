@@ -87,6 +87,8 @@ const initialState: EstimatorState = {
   depositValue: 50,
   // Schedule deep-link filter
   scheduleFilterJobId: null,
+  // Inbox deep-link: pre-select customer in InboxPage
+  inboxCustomerId: null,
   // User profile
   userProfile: {
     firstName: 'Handy',
@@ -246,6 +248,7 @@ type Action =
   | { type: 'UPDATE_OPPORTUNITY_SCHEDULE'; id: string; scheduledDate?: string; scheduledEndDate?: string; scheduledDuration?: number; assignedTo?: string; scheduleNotes?: string }
   | { type: 'SET_DEPOSIT'; depositType: 'pct' | 'flat'; depositValue: number }
   | { type: 'SET_SCHEDULE_FILTER'; jobId: string | null }
+  | { type: 'SET_INBOX_CUSTOMER'; customerId: string | null }
   | {
       type: 'APPROVE_ESTIMATE';
       estimateId: string;           // the estimate opportunity being approved
@@ -1512,7 +1515,8 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
 
     case 'SET_SCHEDULE_FILTER':
       return { ...state, scheduleFilterJobId: action.jobId };
-
+    case 'SET_INBOX_CUSTOMER':
+      return { ...state, inboxCustomerId: action.customerId };
     case 'UPDATE_USER_PROFILE':
       return { ...state, userProfile: { ...state.userProfile, ...action.payload } };
 
@@ -1754,6 +1758,8 @@ interface EstimatorContextValue {
   setDeposit: (depositType: 'pct' | 'flat', depositValue: number) => void;
   // Schedule deep-link filter
   setScheduleFilter: (jobId: string | null) => void;
+  // Inbox deep-link: pre-select customer in InboxPage
+  setInboxCustomer: (customerId: string | null) => void;
   // Approve Estimate
   approveEstimate: (params: {
     estimateId: string;
@@ -2118,6 +2124,9 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
   const setScheduleFilter = useCallback((jobId: string | null) => {
     dispatch({ type: 'SET_SCHEDULE_FILTER', jobId });
   }, []);
+  const setInboxCustomer = useCallback((customerId: string | null) => {
+    dispatch({ type: 'SET_INBOX_CUSTOMER', customerId });
+  }, []);
 
   // ── Job task / attachment / activity helpers ─────────────────────
   const addJobTask = useCallback((oppId: string, task: JobTask) => {
@@ -2222,6 +2231,7 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
       addScheduleEvent, updateScheduleEvent, removeScheduleEvent, updateOpportunitySchedule,
       setDeposit,
       setScheduleFilter,
+      setInboxCustomer,
       approveEstimate,
       addJobTask, updateJobTask, removeJobTask,
       addJobAttachment, removeJobAttachment,

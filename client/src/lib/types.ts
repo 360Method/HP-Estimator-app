@@ -466,6 +466,8 @@ export interface EstimatorState {
   depositValue: number;          // percent (0-100) when pct, dollar amount when flat
   // Schedule deep-link: when set, SchedulePage pre-filters to this opportunityId
   scheduleFilterJobId: string | null;
+  // Inbox deep-link: when set, InboxPage pre-selects this customerId
+  inboxCustomerId: string | null;
   // Current user profile (persisted locally)
   userProfile: UserProfile;
   // Custom roles & permissions

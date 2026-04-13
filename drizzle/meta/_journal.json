@@ -127,6 +127,20 @@
       "when": 1776112685075,
       "tag": "0017_mighty_deadpool",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "5",
+      "when": 1776116290955,
+      "tag": "0018_first_mikhail_rasputin",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "5",
+      "when": 1776116312823,
+      "tag": "0019_silent_zarda",
+      "breakpoints": true
     }
   ]
 }

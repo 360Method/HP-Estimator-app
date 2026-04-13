@@ -45,7 +45,7 @@ const mainNav: NavItem[] = [
   { label: "Estimates", path: "/portal/estimates", icon: <ClipboardList className="w-4 h-4" /> },
   { label: "Documents", path: "/portal/documents", icon: <FolderOpen className="w-4 h-4" /> },
   { label: "Gallery", path: "/portal/gallery", icon: <Images className="w-4 h-4" /> },
-  { label: "Jobs", path: "/portal/home", icon: <Briefcase className="w-4 h-4" /> },
+  { label: "Jobs", path: "/portal/jobs", icon: <Briefcase className="w-4 h-4" /> },
 ];
 
 const accountNav: NavItem[] = [

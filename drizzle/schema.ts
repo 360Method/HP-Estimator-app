@@ -35,6 +35,8 @@ export const conversations = mysqlTable("conversations", {
   id: int("id").autoincrement().primaryKey(),
   /** Link to the HP customer record (optional — may be unknown contact) */
   customerId: varchar("customerId", { length: 64 }),
+  /** Link to the portal customer record (optional — set when portal message is bridged) */
+  portalCustomerId: int("portalCustomerId"),
   contactName: varchar("contactName", { length: 255 }),
   contactPhone: varchar("contactPhone", { length: 32 }),
   contactEmail: varchar("contactEmail", { length: 320 }),
@@ -687,3 +689,21 @@ export const portalChangeOrders = mysqlTable("portalChangeOrders", {
 });
 export type PortalChangeOrder = typeof portalChangeOrders.$inferSelect;
 export type InsertPortalChangeOrder = typeof portalChangeOrders.$inferInsert;
+
+// ─── PORTAL: DOCUMENTS ───────────────────────────────────────────────────────
+// Files shared by the pro team with a portal customer.
+export const portalDocuments = mysqlTable("portalDocuments", {
+  id: int("id").autoincrement().primaryKey(),
+  /** portalCustomers.id */
+  portalCustomerId: int("portalCustomerId").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  /** Public S3 URL */
+  url: text("url").notNull(),
+  fileKey: varchar("fileKey", { length: 512 }).notNull(),
+  mimeType: varchar("mimeType", { length: 128 }).default("application/octet-stream").notNull(),
+  /** Optional pro-side job reference */
+  jobId: varchar("jobId", { length: 64 }),
+  uploadedAt: timestamp("uploadedAt").defaultNow().notNull(),
+});
+export type PortalDocument = typeof portalDocuments.$inferSelect;
+export type InsertPortalDocument = typeof portalDocuments.$inferInsert;

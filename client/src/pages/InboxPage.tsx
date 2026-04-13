@@ -12,6 +12,7 @@ import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
 import VoiceCallPanel from '@/components/VoiceCallPanel';
 import { useInboxSSE } from '@/hooks/useInboxSSE';
+import { useEstimator } from '@/contexts/EstimatorContext';
 import {
   MessageSquare, Mail, Phone, StickyNote, Search, Plus,
   Send, Paperclip, Inbox, Users, Briefcase,
@@ -274,8 +275,9 @@ function NewConversationModal({ onClose, onCreated }: { onClose: () => void; onC
 }
 
 // ─── InboxPage (main) ─────────────────────────────────────────────────────────
-
 export default function InboxPage() {
+  const { state, setInboxCustomer } = useEstimator();
+  const { inboxCustomerId } = state;
   const [sidebarFilter, setSidebarFilter] = useState<SidebarFilter>('all');
   const [activeConvId, setActiveConvId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -289,6 +291,8 @@ export default function InboxPage() {
   );
   // Mobile navigation state
   const [mobileScreen, setMobileScreen] = useState<MobileScreen>('home');
+  // Deep-link: HP customer id to pre-select in portal thread panel
+  const [deepLinkHpCustomerId, setDeepLinkHpCustomerId] = useState<string | null>(null);
   const threadEndRef = useRef<HTMLDivElement>(null);
 
   const requestNotifPermission = async () => {
@@ -319,7 +323,7 @@ export default function InboxPage() {
   const { data: portalMsgsAll = [], isLoading: portalMsgsLoading, refetch: refetchPortalMsgs } =
     trpc.portal.getAllPortalMessages.useQuery(
       undefined,
-      { enabled: sidebarFilter === 'portal' }
+      { enabled: sidebarFilter === 'portal' || !!deepLinkHpCustomerId }
     );
   const [activePortalCustomerId, setActivePortalCustomerId] = useState<number | null>(null);
   const [portalReplyText, setPortalReplyText] = useState('');
@@ -350,6 +354,25 @@ export default function InboxPage() {
   const markRead = trpc.inbox.conversations.markRead.useMutation({
     onSuccess: () => utils.inbox.conversations.list.invalidate(),
   });
+
+  // ── Deep-link: when inboxCustomerId is set, switch to portal filter for that customer ──
+  useEffect(() => {
+    if (!inboxCustomerId) return;
+    setSidebarFilter('portal');
+    setDeepLinkHpCustomerId(inboxCustomerId);
+    setInboxCustomer(null);
+  }, [inboxCustomerId]);
+
+  // ── Resolve deepLinkHpCustomerId to a portal customer id once messages load ──
+  useEffect(() => {
+    if (!deepLinkHpCustomerId || !portalMsgsAll.length) return;
+    const match = (portalMsgsAll as any[]).find((m: any) => m.hpCustomerId === deepLinkHpCustomerId);
+    if (match) {
+      setActivePortalCustomerId(match.customerId);
+      setMobileScreen('thread');
+      setDeepLinkHpCustomerId(null);
+    }
+  }, [deepLinkHpCustomerId, portalMsgsAll]);
 
   // ── Auto-scroll to bottom of thread ──
   useEffect(() => {

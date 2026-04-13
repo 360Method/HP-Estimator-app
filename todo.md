@@ -1126,10 +1126,10 @@
 - [x] PresentSection totals block: import CLARK_COUNTY_TAX_RATES; compute resolvedTax from state.global.taxEnabled/taxRateCode/customTaxPct; show actual tax label + amount when enabled; grandTotal = subtotal + taxAmount; deposit percentage applies to grandTotal
 
 ## Portal Tax Consistency (Apr 13)
-- [ ] PortalEstimateDetail: apply resolvedTax logic (taxEnabled/taxRateCode/customTaxPct from estimate.taxSnapshot); show subtotal / tax / grandTotal in three-line format matching PresentSection
-- [ ] buildEstimateEmail in portal.ts: compute grandTotal = totalPrice + taxAmount and use it for the displayed amount
-- [ ] PortalEstimateDetail deposit line: break out subtotal / tax / total above the deposit row, matching PresentSection layout
-- [ ] ColVisPanel desktop fix: left-0 only (opens rightward), no sm:right-0 override
+- [x] PortalEstimateDetail: apply resolvedTax logic (taxEnabled/taxRateCode/customTaxPct from estimate.taxSnapshot); show subtotal / tax / grandTotal in three-line format matching PresentSection
+- [x] buildEstimateEmail in portal.ts: compute grandTotal = totalPrice + taxAmount and use it for the displayed amount
+- [x] PortalEstimateDetail deposit line: break out subtotal / tax / total above the deposit row, matching PresentSection layout
+- [x] ColVisPanel desktop fix: left-0 only (opens rightward), no sm:right-0 override
 
 ## Tax Parity Fixes (Portal + Email)
 
@@ -1140,3 +1140,88 @@
 - [x] SendEstimateDialog: accept and forward taxEnabled/taxRateCode/customTaxPct/taxAmount props
 - [x] PresentSection: pass tax snapshot props to SendEstimateDialog
 - [x] PortalEstimateDetail: resolve tax from stored snapshot; show Subtotal / Tax / Total three-line format matching PresentSection; deposit line unchanged
+
+## Unified Inbox + Portal Completion Roadmap
+
+### Phase 1 — Schema / DB
+- [ ] Add portalCustomerId (varchar) to conversations table
+- [ ] Create portalDocuments table (id, portalCustomerId, name, url, fileKey, mimeType, uploadedAt)
+- [ ] Create portalGallery table (id, portalCustomerId, url, fileKey, caption, uploadedAt)
+- [ ] Create portalReferrals table (id, referrerId, referredPortalCustomerId, createdAt)
+- [ ] Add referralCode (varchar) to portalCustomers table
+- [ ] Run pnpm db:push
+
+### Phase 2 — Inbox: Customer-centric redesign
+- [ ] Left panel: list HP CRM customers; show last-message preview + unread badge
+- [ ] Right panel: unified chronological feed (SMS, email, call logs, internal notes, portal messages)
+- [ ] Channel-type badges on each message bubble
+- [ ] Compose bar with channel selector (SMS / Email / Note)
+- [ ] Backend: listUnifiedThreadByCustomer procedure
+
+### Phase 3 — Inbox: Deep-link from CustomerSection
+- [ ] Add inboxCustomerId to EstimatorContext state
+- [ ] CommunicationTab "Open Inbox" sets inboxCustomerId then navigates to inbox section
+- [ ] InboxPage reads inboxCustomerId on mount and pre-selects that customer
+
+### Phase 4 — Portal: Documents
+- [ ] Pro side: Share Document button in CustomerPortalTab → storagePut → portalDocuments row
+- [ ] Portal router: getDocuments queries portalDocuments
+- [ ] PortalDocuments page: list with download links
+
+### Phase 5 — Portal: Gallery
+- [ ] Pro side: Add Photo button → storagePut → portalGallery row
+- [ ] Portal router: getGallery queries portalGallery
+- [ ] PortalGallery page: responsive photo grid
+
+### Phase 6 — Portal: Appointments
+- [ ] Pro side: Schedule Appointment form → portalAppointments row
+- [ ] Portal router: getAppointments queries portalAppointments
+- [ ] PortalAppointments page: upcoming + past list
+
+### Phase 7 — Portal: Jobs list
+- [ ] Create PortalJobs page listing opportunities for portalCustomers.hpCustomerId
+- [ ] Portal router: getJobs procedure
+- [ ] Wire nav item in PortalLayout to /portal/jobs
+
+### Phase 8 — Portal: Wallet / saved cards
+- [ ] Portal router: createSetupIntent procedure
+- [ ] Portal router: getSavedCards procedure
+- [ ] Portal router: removeCard procedure
+- [ ] PortalWallet page: Stripe Elements card setup + saved cards list
+
+### Phase 9 — Portal: Messages unified feed
+- [ ] PortalMessages page: unified read-only feed (pro SMS/email/notes visible to customer)
+- [ ] Customer compose box sends portal message
+- [ ] Pro inbox: portal messages appear in unified thread
+
+### Phase 10 — Portal: Referral program
+- [ ] Generate unique referralCode on portalCustomers creation
+- [ ] Portal router: getReferrals procedure
+- [ ] PortalReferral page: code display, copy button, referral count
+
+### Phase 11 — Pro: customer save-to-DB + tests + checkpoint
+- [ ] Wire CustomerSection save button to trpc.customers.update mutation
+- [x] Write vitest tests for all new procedures
+- [x] Save final checkpoint
+
+## Session 2 — Unified Inbox + Portal Completion (Apr 13 continued)
+### Phase 2 — Inbox Customer-Centric Rebuild
+- [ ] Add getUnifiedFeedByCustomer tRPC procedure (merges conversations messages + call logs + portal messages by customerId)
+- [ ] Rebuild InboxPage left panel: list HP CRM customers with last-message preview + unread badge
+- [ ] Rebuild InboxPage right panel: unified chronological feed with channel-type badges
+- [ ] Compose bar with channel selector (SMS / Email / Note)
+### Phase 3 — Inbox Deep-link from CustomerSection
+- [x] Add inboxCustomerId to EstimatorContext state
+- [x] CommunicationTab "Open Inbox" sets inboxCustomerId then navigates to inbox section
+- [x] InboxPage reads inboxCustomerId on mount and pre-selects that customer
+### Phase 4-6 — Portal Pro Push UI
+- [x] CustomerPortalTab: Share Document button → storagePut → portal.addDocument tRPC
+- [x] CustomerPortalTab: Add Photo button → storagePut → portal.addGalleryPhoto tRPC
+- [x] CustomerPortalTab: Schedule Appointment form → portal.addAppointment tRPC
+- [x] Add portal.addDocument procedure (HP-side, by hpCustomerId)
+### Phase 7 — PortalJobs page
+- [x] Create PortalJobs page at /portal/jobs listing approved estimates as jobs
+- [x] Fix PortalLayout Jobs nav item to point to /portal/jobs
+- [x] Register /portal/jobs route in App.tsx
+### Phase 11 — CustomerSection Save button
+- [x] Wire CustomerSection "Save Contact" button to trpc.customers.update mutation (Sync to DB button)

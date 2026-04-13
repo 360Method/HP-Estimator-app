@@ -18,6 +18,8 @@ import {
   portalJobUpdates,
   portalJobSignOffs,
   portalChangeOrders,
+  portalDocuments,
+  type InsertPortalDocument,
   type InsertPortalCustomer,
   type InsertPortalToken,
   type InsertPortalSession,
@@ -451,7 +453,21 @@ export async function updatePortalServiceRequestStatus(id: number, status: strin
 
 export async function getAllPortalMessages() {
   const db = await d();
-  return db.select().from(portalMessages).orderBy(desc(portalMessages.createdAt));
+  const rows = await db
+    .select({
+      id: portalMessages.id,
+      customerId: portalMessages.customerId,
+      senderRole: portalMessages.senderRole,
+      senderName: portalMessages.senderName,
+      body: portalMessages.body,
+      readAt: portalMessages.readAt,
+      createdAt: portalMessages.createdAt,
+      hpCustomerId: portalCustomers.hpCustomerId,
+    })
+    .from(portalMessages)
+    .leftJoin(portalCustomers, eq(portalMessages.customerId, portalCustomers.id))
+    .orderBy(desc(portalMessages.createdAt));
+  return rows;
 }
 
 // ─── INVOICE CHECKOUT SESSION HELPERS ────────────────────────────────────────
@@ -867,4 +883,34 @@ export async function getPendingChangeOrderCountsByJob(): Promise<Record<string,
     counts[row.hpOpportunityId] = (counts[row.hpOpportunityId] ?? 0) + 1;
   }
   return counts;
+}
+
+// ─── PORTAL DOCUMENTS ────────────────────────────────────────────────────────
+
+export async function addPortalDocument(data: {
+  portalCustomerId: number;
+  name: string;
+  url: string;
+  fileKey: string;
+  mimeType: string;
+  jobId?: string;
+}) {
+  const db = await d();
+  const result = await db.insert(portalDocuments).values(data);
+  const newId = Number((result as any).insertId ?? (result as any)[0]?.insertId);
+  const rows = await db
+    .select()
+    .from(portalDocuments)
+    .where(eq(portalDocuments.id, newId))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function getPortalDocumentsByCustomer(portalCustomerId: number) {
+  const db = await d();
+  return db
+    .select()
+    .from(portalDocuments)
+    .where(eq(portalDocuments.portalCustomerId, portalCustomerId))
+    .orderBy(desc(portalDocuments.uploadedAt));
 }

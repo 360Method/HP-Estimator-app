@@ -65,6 +65,8 @@ import {
   getPortalInvoicesByHpOpportunityId,
   getGlobalUnreadPortalMessageCount,
   getPendingChangeOrderCountsByJob,
+  addPortalDocument,
+  getPortalDocumentsByCustomer,
 } from "../portalDb";
 import { sendEmail } from "../gmail";
 import { updateOpportunity } from "../db";
@@ -727,21 +729,26 @@ export const portalRouter = router({
   /** HP staff: reply to customer portal message */
   replyToPortalMessage: hpProcedure
     .input(
-      z.object({
-        customerEmail: z.string().email(),
-        body: z.string().min(1),
-      })
+      z.union([
+        z.object({ customerEmail: z.string().email(), customerId: z.undefined().optional(), body: z.string().min(1) }),
+        z.object({ customerId: z.number(), customerEmail: z.undefined().optional(), body: z.string().min(1) }),
+      ])
     )
     .mutation(async ({ input, ctx }) => {
-      const customer = await findPortalCustomerByEmail(input.customerEmail);
+      let customer;
+      if ('customerId' in input && input.customerId) {
+        customer = await findPortalCustomerById(input.customerId);
+      } else if ('customerEmail' in input && input.customerEmail) {
+        customer = await findPortalCustomerByEmail(input.customerEmail);
+      }
       if (!customer) throw new TRPCError({ code: "NOT_FOUND" });
-
       await createPortalMessage({
         customerId: customer.id,
         senderRole: "hp_team",
         senderName: ctx.user.name ?? "Handy Pioneers",
         body: input.body,
       });
+      try { broadcastPortalMessage(customer.id); } catch {}
       return { ok: true };
     }),
 
@@ -1426,6 +1433,62 @@ export const portalRouter = router({
    */
   getPendingCOCounts: hpProcedure.query(async () => {
     return getPendingChangeOrderCountsByJob();
+  }),
+
+  /** HP staff: share a document with a portal customer */
+  addDocument: hpProcedure
+    .input(
+      z.object({
+        customerEmail: z.string().email().optional(),
+        customerId: z.number().optional(),
+        name: z.string().min(1),
+        url: z.string().url(),
+        fileKey: z.string().min(1),
+        mimeType: z.string().default('application/octet-stream'),
+        jobId: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      let customer;
+      if (input.customerId) {
+        customer = await findPortalCustomerById(input.customerId);
+      } else if (input.customerEmail) {
+        customer = await findPortalCustomerByEmail(input.customerEmail);
+      }
+      if (!customer) throw new TRPCError({ code: 'NOT_FOUND', message: 'Customer not in portal' });
+      const doc = await addPortalDocument({
+        portalCustomerId: customer.id,
+        name: input.name,
+        url: input.url,
+        fileKey: input.fileKey,
+        mimeType: input.mimeType,
+        jobId: input.jobId,
+      });
+      return { document: doc };
+    }),
+
+  /** HP staff: list documents shared with a portal customer */
+  getDocumentsHP: hpProcedure
+    .input(
+      z.object({
+        customerEmail: z.string().email().optional(),
+        customerId: z.number().optional(),
+      })
+    )
+    .query(async ({ input }) => {
+      let customer;
+      if (input.customerId) {
+        customer = await findPortalCustomerById(input.customerId);
+      } else if (input.customerEmail) {
+        customer = await findPortalCustomerByEmail(input.customerEmail);
+      }
+      if (!customer) return [];
+      return getPortalDocumentsByCustomer(customer.id);
+    }),
+
+  /** Customer-facing: list documents shared by HP */
+  getDocumentsPortal: portalProcedure.query(async ({ ctx }) => {
+    return getPortalDocumentsByCustomer(ctx.portalCustomer.id);
   }),
 });
 // ─── EMAIL TEMPLATES ──────────────────────────────────────────────────────────

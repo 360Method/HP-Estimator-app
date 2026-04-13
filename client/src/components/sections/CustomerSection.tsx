@@ -29,7 +29,7 @@ import {
   CreditCard, Bell, MessageSquare, AtSign, Star, Paperclip, FileText,
   Activity, Send, CheckCircle2, XCircle, Clock, PhoneCall, Wallet,
   ExternalLink, Edit3, Save, X, AlertCircle, TrendingUp, Archive,
-  RefreshCw, FolderOpen, Download, Wrench, Trophy,
+  RefreshCw, FolderOpen, Download, Wrench, Trophy, FileUp, Camera, CalendarPlus,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import PipelineBoard from '@/components/PipelineBoard';
@@ -556,8 +556,9 @@ export default function CustomerSection() {
     state, setJobInfo, setCustomerProfile, addActivityEvent, setCustomerTab,
     addOpportunity, updateOpportunity, removeOpportunity, setPipelineArea,
     convertLeadToEstimate, convertEstimateToJob, archiveJob,
-    setActiveOpportunity, setSection,
+    setActiveOpportunity, setSection, setInboxCustomer,
     addCustomerAddress, updateCustomerAddress, removeCustomerAddress, setPrimaryAddress,
+    updateCustomer: updateCustomerLocal,
   } = useEstimator();
   const { jobInfo, customerProfile, activityFeed, activeCustomerTab, opportunities, activePipelineArea, activeCustomerId, customers } = state;
   const activeCustomer = customers.find(c => c.id === activeCustomerId);
@@ -625,6 +626,55 @@ export default function CustomerSection() {
     setCustomerProfile({ tags: customerProfile.tags.filter(t => t !== tag) });
   };
 
+  const syncToDbMutation = trpc.customers.update.useMutation({
+    onSuccess: (updated) => {
+      if (updated && activeCustomerId) {
+        updateCustomerLocal(activeCustomerId, {
+          firstName: updated.firstName,
+          lastName: updated.lastName,
+          displayName: updated.displayName,
+          company: updated.company,
+          mobilePhone: updated.mobilePhone,
+          homePhone: updated.homePhone,
+          workPhone: updated.workPhone,
+          email: updated.email,
+          street: updated.street,
+          unit: updated.unit,
+          city: updated.city,
+          state: updated.state,
+          zip: updated.zip,
+          tags: updated.tags ? JSON.parse(updated.tags as unknown as string) : [],
+          leadSource: (updated.leadSource ?? '') as any,
+          customerNotes: updated.customerNotes ?? '',
+          sendNotifications: updated.sendNotifications,
+          sendMarketingOptIn: updated.sendMarketingOptIn,
+        });
+      }
+      toast.success('Customer synced to database');
+    },
+    onError: (err) => toast.error(`Sync failed: ${err.message}`),
+  });
+  const handleSyncToDb = () => {
+    if (!activeCustomerId || !activeCustomer) { toast.error('No active customer'); return; }
+    syncToDbMutation.mutate({
+      id: activeCustomerId,
+      firstName: activeCustomer.firstName || jobInfo.client.split(' ')[0] || '',
+      lastName: activeCustomer.lastName || jobInfo.client.split(' ').slice(1).join(' ') || '',
+      displayName: activeCustomer.displayName || jobInfo.client || '',
+      company: activeCustomer.company || jobInfo.companyName || '',
+      mobilePhone: activeCustomer.mobilePhone || jobInfo.phone || '',
+      email: activeCustomer.email || jobInfo.email || '',
+      street: activeCustomer.street || jobInfo.address || '',
+      city: activeCustomer.city || jobInfo.city || '',
+      state: activeCustomer.state || jobInfo.state || '',
+      zip: activeCustomer.zip || jobInfo.zip || '',
+      tags: activeCustomer.tags ?? customerProfile.tags ?? [],
+      leadSource: (activeCustomer.leadSource || customerProfile.leadSource || '') as any,
+      customerNotes: activeCustomer.customerNotes || '',
+      sendNotifications: activeCustomer.sendNotifications ?? customerProfile.notificationsEnabled,
+      sendMarketingOptIn: activeCustomer.sendMarketingOptIn ?? customerProfile.emailMarketingConsent,
+    });
+  };
   const inviteToPortalMutation = trpc.portal.inviteCustomerToPortal.useMutation({
     onSuccess: () => {
       setCustomerProfile({ portalInviteSent: true, portalInvitedAt: new Date().toISOString() });
@@ -1321,6 +1371,18 @@ export default function CustomerSection() {
                 <PhoneCall size={13} />
                 <span className="hidden sm:inline">Call</span>
               </a>
+              {/* Sync to DB button */}
+              {activeCustomerId && (
+                <button
+                  onClick={handleSyncToDb}
+                  disabled={syncToDbMutation.isPending}
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-muted-foreground hover:border-primary hover:text-primary transition-colors disabled:opacity-50"
+                  title="Save current customer data to the database"
+                >
+                  <Save size={13} />
+                  <span className="hidden sm:inline">{syncToDbMutation.isPending ? 'Saving…' : 'Sync to DB'}</span>
+                </button>
+              )}
             </div>
           </div>
           {/* Sub-info */}
@@ -1374,7 +1436,7 @@ export default function CustomerSection() {
         {(activeCustomerTab === 'leads' || activeCustomerTab === 'estimates' || activeCustomerTab === 'jobs') && PipelineTab()}
         {activeCustomerTab === 'invoices' && <InvoiceSection />}
         {activeCustomerTab === 'communication' && (
-          <CommunicationTab customerId={activeCustomerId ?? ''} onOpenInbox={() => setSection('inbox' as any)} />
+          <CommunicationTab customerId={activeCustomerId ?? ''} onOpenInbox={() => { setInboxCustomer(activeCustomerId); setSection('inbox' as any); }} />
         )}
         {activeCustomerTab === 'attachments' && (
           <CustomerAttachmentsTab customerId={activeCustomerId ?? ''} />
@@ -1683,6 +1745,98 @@ function CustomerAttachmentsTab({ customerId }: { customerId: string }) {
 function CustomerPortalTab({ customerId }: { customerId: string }) {
   const utils = trpc.useUtils();
   const { approveEstimate, updateOpportunity, state } = useEstimator();
+  const uploadFile = trpc.uploads.uploadFile.useMutation();
+  // Share Document modal
+  const [showShareDoc, setShowShareDoc] = useState(false);
+  const [docFile, setDocFile] = useState<File | null>(null);
+  const [docName, setDocName] = useState('');
+  const [docUploading, setDocUploading] = useState(false);
+  const docFileRef = useRef<HTMLInputElement>(null);
+  // Add Photo modal
+  const [showAddPhoto, setShowAddPhoto] = useState(false);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoCaption, setPhotoCaption] = useState('');
+  const [photoPhase, setPhotoPhase] = useState<'before' | 'during' | 'after'>('after');
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const photoFileRef = useRef<HTMLInputElement>(null);
+  // Schedule Appointment modal
+  const [showScheduleAppt, setShowScheduleAppt] = useState(false);
+  const [apptTitle, setApptTitle] = useState('');
+  const [apptDate, setApptDate] = useState('');
+  const [apptTime, setApptTime] = useState('09:00');
+  const [apptEndTime, setApptEndTime] = useState('11:00');
+  const [apptAddress, setApptAddress] = useState('');
+  const [apptTech, setApptTech] = useState('');
+  const [apptNotes, setApptNotes] = useState('');
+  const addDocumentMutation = trpc.portal.addDocument.useMutation({
+    onSuccess: () => {
+      toast.success('Document shared with customer!');
+      setShowShareDoc(false);
+      setDocFile(null);
+      setDocName('');
+      utils.portal.getCustomerPortalData.invalidate({ hpCustomerId: customerId });
+    },
+    onError: (err) => toast.error(`Failed: ${err.message}`),
+  });
+  const addGalleryPhotoMutation = trpc.portal.addGalleryPhoto.useMutation({
+    onSuccess: () => {
+      toast.success('Photo added to customer gallery!');
+      setShowAddPhoto(false);
+      setPhotoFile(null);
+      setPhotoCaption('');
+      utils.portal.getCustomerPortalData.invalidate({ hpCustomerId: customerId });
+    },
+    onError: (err) => toast.error(`Failed: ${err.message}`),
+  });
+  const addAppointmentMutation = trpc.portal.addAppointment.useMutation({
+    onSuccess: () => {
+      toast.success('Appointment scheduled for customer!');
+      setShowScheduleAppt(false);
+      setApptTitle('');
+      setApptDate('');
+      utils.portal.getCustomerPortalData.invalidate({ hpCustomerId: customerId });
+    },
+    onError: (err) => toast.error(`Failed: ${err.message}`),
+  });
+  const handleShareDoc = async () => {
+    if (!docFile || !docName.trim()) { toast.error('Select a file and enter a name'); return; }
+    if (!data?.customer?.email) { toast.error('No portal customer email'); return; }
+    setDocUploading(true);
+    try {
+      const base64 = await new Promise<string>((res, rej) => {
+        const r = new FileReader();
+        r.onload = ev => res(ev.target?.result as string);
+        r.onerror = rej;
+        r.readAsDataURL(docFile);
+      });
+      const uploaded = await uploadFile.mutateAsync({ filename: docFile.name, mimeType: docFile.type || 'application/octet-stream', base64, folder: 'portal-documents' });
+      await addDocumentMutation.mutateAsync({ customerEmail: data.customer.email, name: docName.trim(), url: uploaded.url, fileKey: uploaded.key ?? uploaded.url, mimeType: docFile.type });
+    } catch (e: any) { toast.error(e.message ?? 'Upload failed'); }
+    setDocUploading(false);
+  };
+  const handleAddPhoto = async () => {
+    if (!photoFile) { toast.error('Select a photo'); return; }
+    if (!data?.customer?.email) { toast.error('No portal customer email'); return; }
+    setPhotoUploading(true);
+    try {
+      const base64 = await new Promise<string>((res, rej) => {
+        const r = new FileReader();
+        r.onload = ev => res(ev.target?.result as string);
+        r.onerror = rej;
+        r.readAsDataURL(photoFile);
+      });
+      const uploaded = await uploadFile.mutateAsync({ filename: photoFile.name, mimeType: photoFile.type || 'image/jpeg', base64, folder: 'portal-gallery' });
+      await addGalleryPhotoMutation.mutateAsync({ customerEmail: data.customer.email, imageUrl: uploaded.url, caption: photoCaption || undefined, phase: photoPhase });
+    } catch (e: any) { toast.error(e.message ?? 'Upload failed'); }
+    setPhotoUploading(false);
+  };
+  const handleScheduleAppt = () => {
+    if (!apptTitle.trim() || !apptDate) { toast.error('Enter title and date'); return; }
+    if (!data?.customer?.email) { toast.error('No portal customer email'); return; }
+    const scheduledAt = new Date(`${apptDate}T${apptTime}:00`);
+    const scheduledEndAt = apptEndTime ? new Date(`${apptDate}T${apptEndTime}:00`) : undefined;
+    addAppointmentMutation.mutate({ customerEmail: data.customer.email, title: apptTitle.trim(), scheduledAt, scheduledEndAt, address: apptAddress || undefined, techName: apptTech || undefined, notes: apptNotes || undefined });
+  };
   const { data, isLoading } = trpc.portal.getCustomerPortalData.useQuery(
     { hpCustomerId: customerId },
     { enabled: !!customerId }
@@ -1992,6 +2146,205 @@ function CustomerPortalTab({ customerId }: { customerId: string }) {
                 )}
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* HP Action Buttons */}
+      <div>
+        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+          Push to Portal
+        </h3>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setShowShareDoc(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-xs font-medium hover:bg-muted transition-colors"
+          >
+            <FileUp size={13} /> Share Document
+          </button>
+          <button
+            onClick={() => setShowAddPhoto(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-xs font-medium hover:bg-muted transition-colors"
+          >
+            <Camera size={13} /> Add Photo
+          </button>
+          <button
+            onClick={() => setShowScheduleAppt(true)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-xs font-medium hover:bg-muted transition-colors"
+          >
+            <CalendarPlus size={13} /> Schedule Appointment
+          </button>
+        </div>
+      </div>
+
+      {/* Share Document Modal */}
+      {showShareDoc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowShareDoc(false)}>
+          <div className="bg-card rounded-2xl shadow-2xl p-6 w-full max-w-md space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold text-base">Share Document with Customer</h2>
+              <button onClick={() => setShowShareDoc(false)} className="text-muted-foreground hover:text-foreground"><X size={18} /></button>
+            </div>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Document Name</label>
+              <input
+                type="text" value={docName} onChange={e => setDocName(e.target.value)}
+                placeholder="e.g. Scope of Work — Kitchen Remodel"
+                className="field-input w-full"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">File</label>
+              <input
+                ref={docFileRef} type="file" className="hidden"
+                onChange={e => setDocFile(e.target.files?.[0] ?? null)}
+              />
+              <button
+                onClick={() => docFileRef.current?.click()}
+                className="flex items-center gap-2 px-3 py-2 border border-dashed border-border rounded-lg text-xs text-muted-foreground hover:border-primary hover:text-primary transition-colors w-full"
+              >
+                <FileUp size={14} />
+                {docFile ? docFile.name : 'Click to select file'}
+              </button>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={handleShareDoc}
+                disabled={docUploading || addDocumentMutation.isPending}
+                className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
+              >
+                {docUploading ? 'Uploading…' : 'Share'}
+              </button>
+              <button onClick={() => setShowShareDoc(false)} className="px-4 py-2 border border-border rounded-lg text-sm hover:bg-muted transition-colors">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Photo Modal */}
+      {showAddPhoto && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowAddPhoto(false)}>
+          <div className="bg-card rounded-2xl shadow-2xl p-6 w-full max-w-md space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold text-base">Add Photo to Customer Gallery</h2>
+              <button onClick={() => setShowAddPhoto(false)} className="text-muted-foreground hover:text-foreground"><X size={18} /></button>
+            </div>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Photo</label>
+              <input
+                ref={photoFileRef} type="file" accept="image/*" className="hidden"
+                onChange={e => setPhotoFile(e.target.files?.[0] ?? null)}
+              />
+              <button
+                onClick={() => photoFileRef.current?.click()}
+                className="flex items-center gap-2 px-3 py-2 border border-dashed border-border rounded-lg text-xs text-muted-foreground hover:border-primary hover:text-primary transition-colors w-full"
+              >
+                <Camera size={14} />
+                {photoFile ? photoFile.name : 'Click to select photo'}
+              </button>
+            </div>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Caption (optional)</label>
+              <input
+                type="text" value={photoCaption} onChange={e => setPhotoCaption(e.target.value)}
+                placeholder="e.g. After — new kitchen backsplash"
+                className="field-input w-full"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Phase</label>
+              <select value={photoPhase} onChange={e => setPhotoPhase(e.target.value as any)} className="field-input w-full">
+                <option value="before">Before</option>
+                <option value="during">During</option>
+                <option value="after">After</option>
+              </select>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={handleAddPhoto}
+                disabled={photoUploading || addGalleryPhotoMutation.isPending}
+                className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
+              >
+                {photoUploading ? 'Uploading…' : 'Add Photo'}
+              </button>
+              <button onClick={() => setShowAddPhoto(false)} className="px-4 py-2 border border-border rounded-lg text-sm hover:bg-muted transition-colors">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Schedule Appointment Modal */}
+      {showScheduleAppt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowScheduleAppt(false)}>
+          <div className="bg-card rounded-2xl shadow-2xl p-6 w-full max-w-md space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold text-base">Schedule Appointment</h2>
+              <button onClick={() => setShowScheduleAppt(false)} className="text-muted-foreground hover:text-foreground"><X size={18} /></button>
+            </div>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Title</label>
+              <input
+                type="text" value={apptTitle} onChange={e => setApptTitle(e.target.value)}
+                placeholder="e.g. Site Visit — Kitchen Remodel"
+                className="field-input w-full"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1">Date</label>
+                <input type="date" value={apptDate} onChange={e => setApptDate(e.target.value)} className="field-input w-full" />
+              </div>
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1">Start Time</label>
+                <input type="time" value={apptTime} onChange={e => setApptTime(e.target.value)} className="field-input w-full" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1">End Time</label>
+                <input type="time" value={apptEndTime} onChange={e => setApptEndTime(e.target.value)} className="field-input w-full" />
+              </div>
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1">Technician</label>
+                <input
+                  type="text" value={apptTech} onChange={e => setApptTech(e.target.value)}
+                  placeholder="Tech name"
+                  className="field-input w-full"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Address (optional)</label>
+              <input
+                type="text" value={apptAddress} onChange={e => setApptAddress(e.target.value)}
+                placeholder="Job site address"
+                className="field-input w-full"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-muted-foreground mb-1">Notes (optional)</label>
+              <textarea
+                value={apptNotes} onChange={e => setApptNotes(e.target.value)}
+                placeholder="Any notes for the customer…"
+                rows={2} className="field-input w-full resize-none"
+              />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={handleScheduleAppt}
+                disabled={addAppointmentMutation.isPending}
+                className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
+              >
+                {addAppointmentMutation.isPending ? 'Scheduling…' : 'Schedule'}
+              </button>
+              <button onClick={() => setShowScheduleAppt(false)} className="px-4 py-2 border border-border rounded-lg text-sm hover:bg-muted transition-colors">
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
