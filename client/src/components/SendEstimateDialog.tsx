@@ -23,6 +23,11 @@ export interface SendEstimateDialogProps {
   hpCustomerId?: string;
   /** Pro-side opportunity ID — stored so portal approval can mark it won */
   hpOpportunityId?: string;
+  /** Tax settings snapshot */
+  taxEnabled?: boolean;
+  taxRateCode?: string;
+  customTaxPct?: number;
+  taxAmount?: number; // dollars
   // Pre-filled from customer profile
   defaultEmail?: string;
   defaultPhone?: string;
@@ -43,6 +48,10 @@ export default function SendEstimateDialog({
   portalUrl,
   hpCustomerId,
   hpOpportunityId,
+  taxEnabled,
+  taxRateCode,
+  customTaxPct,
+  taxAmount,
   defaultEmail = '',
   defaultPhone = '',
   onClose,
@@ -102,6 +111,10 @@ export default function SendEstimateDialog({
       portalUrl,
       hpCustomerId,
       hpOpportunityId,
+      taxEnabled,
+      taxRateCode,
+      customTaxPct,
+      taxAmount,
       origin: window.location.origin,
     });
   };

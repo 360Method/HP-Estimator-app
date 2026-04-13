@@ -1124,3 +1124,19 @@
 ## Visual Edits (Apr 13)
 - [x] PresentSection ColVisPanel: fix mobile-first positioning — `left-0 top-full` base, `sm:left-auto sm:right-0` on wider screens; max-w uses `calc(100vw-1rem)` to prevent overflow
 - [x] PresentSection totals block: import CLARK_COUNTY_TAX_RATES; compute resolvedTax from state.global.taxEnabled/taxRateCode/customTaxPct; show actual tax label + amount when enabled; grandTotal = subtotal + taxAmount; deposit percentage applies to grandTotal
+
+## Portal Tax Consistency (Apr 13)
+- [ ] PortalEstimateDetail: apply resolvedTax logic (taxEnabled/taxRateCode/customTaxPct from estimate.taxSnapshot); show subtotal / tax / grandTotal in three-line format matching PresentSection
+- [ ] buildEstimateEmail in portal.ts: compute grandTotal = totalPrice + taxAmount and use it for the displayed amount
+- [ ] PortalEstimateDetail deposit line: break out subtotal / tax / total above the deposit row, matching PresentSection layout
+- [ ] ColVisPanel desktop fix: left-0 only (opens rightward), no sm:right-0 override
+
+## Tax Parity Fixes (Portal + Email)
+
+- [x] Add tax columns (taxEnabled, taxRateCode, customTaxPct, taxAmount) to portalEstimates DB table via migration
+- [x] Populate tax columns in createPortalEstimate on estimate.send (resolves rate, computes grandTotal)
+- [x] Email template: show Subtotal / Tax / Total three-line breakdown when taxEnabled; use grandTotal in Total row
+- [x] SMS: use emailGrandTotal instead of totalPrice
+- [x] SendEstimateDialog: accept and forward taxEnabled/taxRateCode/customTaxPct/taxAmount props
+- [x] PresentSection: pass tax snapshot props to SendEstimateDialog
+- [x] PortalEstimateDetail: resolve tax from stored snapshot; show Subtotal / Tax / Total three-line format matching PresentSection; deposit line unchanged

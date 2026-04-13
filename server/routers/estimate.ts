@@ -5,6 +5,7 @@ import { invokeLLM } from "../_core/llm";
 import { sendEmail } from "../gmail";
 import { sendSms, isTwilioConfigured } from "../twilio";
 import { createPortalToken, upsertPortalCustomer, createPortalEstimate, generateReferralCode } from "../portalDb";
+import { CLARK_COUNTY_TAX_RATES } from "../../shared/taxRates";
 
 // ─── Catalog: all line items the AI can reference ──────────────────────────
 const CATALOG = [
@@ -368,6 +369,11 @@ export const estimateRouter = router({
         /** Pro-side opportunity ID — stored so approval can mark it won */
         hpOpportunityId: z.string().optional(),
         origin: z.string().optional(),
+        /** Tax settings snapshot */
+        taxEnabled: z.boolean().optional(),
+        taxRateCode: z.string().optional(),
+        customTaxPct: z.number().optional(),
+        taxAmount: z.number().optional(), // dollars (float)
       })
     )
     .mutation(async ({ input }) => {
@@ -387,19 +393,38 @@ export const estimateRouter = router({
             const depositPct = input.depositAmount && input.totalPrice > 0
               ? Math.round((input.depositAmount / input.totalPrice) * 100)
               : 50;
+            // Resolve tax rate for storage (basis points)
+            const taxEnabled = input.taxEnabled ? 1 : 0;
+            const taxRateCode = input.taxRateCode ?? '0603';
+            const customTaxPct = input.customTaxPct ?? 8.9;
+            let resolvedTaxBp = 890; // default 8.9% in basis points
+            if (taxRateCode === 'custom') {
+              resolvedTaxBp = Math.round(customTaxPct * 100);
+            } else if (taxRateCode !== 'none') {
+              const preset = CLARK_COUNTY_TAX_RATES.find(r => r.code === taxRateCode);
+              if (preset && preset.rate > 0) resolvedTaxBp = Math.round(preset.rate * 10000);
+            }
+            const taxAmountCents = input.taxAmount != null
+              ? Math.round(input.taxAmount * 100)
+              : (taxEnabled ? Math.round(input.totalPrice * (resolvedTaxBp / 10000) * 100) : 0);
+            const grandTotal = input.totalPrice + (taxEnabled ? taxAmountCents / 100 : 0);
             const portalEst = await createPortalEstimate({
               customerId: portalCustomer.id,
               estimateNumber: input.estimateNumber,
               hpOpportunityId: input.hpOpportunityId,
               title: input.jobTitle,
               status: 'sent',
-              totalAmount: Math.round(input.totalPrice * 100),
-              depositAmount: Math.round((input.depositAmount ?? input.totalPrice * 0.5) * 100),
+              totalAmount: Math.round(grandTotal * 100),
+              depositAmount: Math.round((input.depositAmount ?? grandTotal * 0.5) * 100),
               depositPercent: depositPct,
               lineItemsJson: input.lineItemsJson ?? (input.lineItemsText ? JSON.stringify([{ description: input.lineItemsText }]) : undefined),
               scopeOfWork: input.scopeSummary,
               expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
               sentAt: new Date(),
+              taxEnabled,
+              taxRateCode,
+              customTaxPct: resolvedTaxBp,
+              taxAmount: taxAmountCents,
             });
             const token = randomBytes(32).toString('hex');
             const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
@@ -413,11 +438,34 @@ export const estimateRouter = router({
       }
       const fmt = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+      // Compute email/SMS-level tax and grand total
+      const emailTaxEnabled = input.taxEnabled ?? false;
+      const emailTaxRateCode = input.taxRateCode ?? '0603';
+      const emailCustomTaxPct = input.customTaxPct ?? 8.9;
+      let emailTaxRate = 0;
+      let emailTaxLabel = '';
+      if (emailTaxEnabled) {
+        if (emailTaxRateCode === 'custom') {
+          emailTaxRate = emailCustomTaxPct / 100;
+          emailTaxLabel = `Custom (${emailCustomTaxPct}%)`;
+        } else if (emailTaxRateCode !== 'none') {
+          const preset = CLARK_COUNTY_TAX_RATES.find(r => r.code === emailTaxRateCode);
+          if (preset && preset.rate > 0) { emailTaxRate = preset.rate; emailTaxLabel = preset.label; }
+        }
+      }
+      const emailTaxAmt = emailTaxEnabled ? input.totalPrice * emailTaxRate : 0;
+      const emailGrandTotal = input.totalPrice + emailTaxAmt;
       // ── Email ──────────────────────────────────────────────────────────────
       if (input.sendEmail && input.toEmail) {
         try {
           const depositLine = input.depositLabel && input.depositAmount
             ? `<tr><td style="padding:4px 0;color:#6b7280;">Deposit Required</td><td style="padding:4px 0;text-align:right;font-weight:600;">${input.depositLabel} — $${fmt(input.depositAmount)}</td></tr>`
+            : "";
+          const subtotalLine = emailTaxEnabled && emailTaxAmt > 0
+            ? `<tr><td style="padding:4px 0;color:#6b7280;">Subtotal</td><td style="padding:4px 0;text-align:right;">$${fmt(input.totalPrice)}</td></tr>`
+            : "";
+          const taxLine = emailTaxEnabled && emailTaxAmt > 0
+            ? `<tr><td style="padding:4px 0;color:#6b7280;">Tax (${emailTaxLabel})</td><td style="padding:4px 0;text-align:right;">$${fmt(emailTaxAmt)}</td></tr>`
             : "";
           const scopeBlock = input.scopeSummary
             ? `<div style="margin:20px 0;"><h3 style="margin:0 0 8px;font-size:14px;color:#374151;">Scope of Work</h3><p style="margin:0;color:#4b5563;line-height:1.6;">${input.scopeSummary.replace(/\n/g, "<br>")}</p></div>`
@@ -429,7 +477,7 @@ export const estimateRouter = router({
             ? `<div style="text-align:center;margin:28px 0;"><a href="${portalUrl}" style="background:#1e3a5f;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">Review &amp; Approve Estimate</a></div>`
             : "";
 
-          const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:0;padding:0;background:#f9fafb;"><div style="max-width:600px;margin:32px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);"><div style="background:#1e3a5f;padding:28px 32px;"><div style="color:#fff;font-size:22px;font-weight:700;">Handy Pioneers</div><div style="color:#93c5fd;font-size:13px;margin-top:4px;">Licensed &amp; Insured · Vancouver, WA · HANDYP*761NH</div></div><div style="padding:32px;"><p style="margin:0 0 16px;font-size:16px;color:#111827;">Hi ${input.customerName},</p><p style="margin:0 0 24px;color:#4b5563;line-height:1.6;">Thank you for the opportunity to work with you. Please find your project estimate below.</p><div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:20px;margin-bottom:24px;"><div style="font-size:13px;color:#0369a1;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px;">Estimate Summary</div><table style="width:100%;border-collapse:collapse;"><tr><td style="padding:4px 0;color:#6b7280;">Estimate #</td><td style="padding:4px 0;text-align:right;font-weight:600;">${input.estimateNumber}</td></tr><tr><td style="padding:4px 0;color:#6b7280;">Project</td><td style="padding:4px 0;text-align:right;">${input.jobTitle}</td></tr><tr><td style="padding:4px 0;color:#6b7280;">Total</td><td style="padding:4px 0;text-align:right;font-size:18px;font-weight:700;color:#111827;">$${fmt(input.totalPrice)}</td></tr>${depositLine}</table></div>${scopeBlock}${lineItemsBlock}${approveBtn}<p style="margin:24px 0 0;color:#6b7280;font-size:13px;">Questions? Call or text us at <a href="tel:+13605449858" style="color:#1e3a5f;">(360) 544-9858</a> or reply to this email.</p></div><div style="background:#f9fafb;padding:20px 32px;border-top:1px solid #e5e7eb;"><p style="margin:0;font-size:12px;color:#9ca3af;text-align:center;">Handy Pioneers, LLC · Vancouver, WA · <a href="https://handypioneers.com" style="color:#6b7280;">handypioneers.com</a></p></div></div></body></html>`;
+          const html = `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:0;padding:0;background:#f9fafb;"><div style="max-width:600px;margin:32px auto;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.1);"><div style="background:#1e3a5f;padding:28px 32px;"><div style="color:#fff;font-size:22px;font-weight:700;">Handy Pioneers</div><div style="color:#93c5fd;font-size:13px;margin-top:4px;">Licensed &amp; Insured · Vancouver, WA · HANDYP*761NH</div></div><div style="padding:32px;"><p style="margin:0 0 16px;font-size:16px;color:#111827;">Hi ${input.customerName},</p><p style="margin:0 0 24px;color:#4b5563;line-height:1.6;">Thank you for the opportunity to work with you. Please find your project estimate below.</p><div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:20px;margin-bottom:24px;"><div style="font-size:13px;color:#0369a1;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:12px;">Estimate Summary</div><table style="width:100%;border-collapse:collapse;"><tr><td style="padding:4px 0;color:#6b7280;">Estimate #</td><td style="padding:4px 0;text-align:right;font-weight:600;">${input.estimateNumber}</td></tr><tr><td style="padding:4px 0;color:#6b7280;">Project</td><td style="padding:4px 0;text-align:right;">${input.jobTitle}</td></tr>${subtotalLine}${taxLine}<tr><td style="padding:4px 0;color:#6b7280;">Total</td><td style="padding:4px 0;text-align:right;font-size:18px;font-weight:700;color:#111827;">$${fmt(emailGrandTotal)}</td></tr>${depositLine}</table></div>${scopeBlock}${lineItemsBlock}${approveBtn}<p style="margin:24px 0 0;color:#6b7280;font-size:13px;">Questions? Call or text us at <a href="tel:+13605449858" style="color:#1e3a5f;">(360) 544-9858</a> or reply to this email.</p></div><div style="background:#f9fafb;padding:20px 32px;border-top:1px solid #e5e7eb;"><p style="margin:0;font-size:12px;color:#9ca3af;text-align:center;">Handy Pioneers, LLC · Vancouver, WA · <a href="https://handypioneers.com" style="color:#6b7280;">handypioneers.com</a></p></div></div></body></html>`;
 
           const res = await sendEmail({
             to: input.toEmail,
@@ -451,7 +499,7 @@ export const estimateRouter = router({
             const parts = [
               `Hi ${input.customerName}, your Handy Pioneers estimate is ready!`,
               `Estimate ${input.estimateNumber} — ${input.jobTitle}`,
-              `Total: $${fmt(input.totalPrice)}`,
+              `Total: $${fmt(emailGrandTotal)}`,
               input.depositLabel && input.depositAmount
                 ? `Deposit: ${input.depositLabel} — $${fmt(input.depositAmount)}`
                 : null,

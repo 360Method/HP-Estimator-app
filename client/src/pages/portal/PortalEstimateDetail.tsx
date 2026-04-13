@@ -136,8 +136,25 @@ export default function PortalEstimateDetail() {
   const isApproved = est.status === "approved";
   const isDeclined = est.status === "declined";
 
-  // Totals
+  // Totals — resolve tax from stored snapshot
+  const taxEnabled = (est as any).taxEnabled === 1 || (est as any).taxEnabled === true;
+  const taxAmountCents = taxEnabled ? ((est as any).taxAmount ?? 0) : 0;
+  const taxRateCode = (est as any).taxRateCode ?? '0603';
+  const customTaxBp = (est as any).customTaxPct ?? 890; // basis points
+  // totalAmount already includes tax (grand total) when taxEnabled
   const totalCents = est.totalAmount;
+  // Subtotal = totalAmount - taxAmount when tax is enabled
+  const subtotalCents = taxEnabled ? totalCents - taxAmountCents : totalCents;
+  // Resolve tax label
+  const CLARK_TAX_LABELS: Record<string, string> = {
+    '0603': 'Vancouver (8.9%)', '0601': 'Battle Ground (8.9%)', '0602': 'Camas (8.8%)',
+    '0611': 'La Center (8.8%)', '0604': 'Ridgefield (8.8%)', '0605': 'Washougal (8.6%)',
+    '0607': 'Woodland (7.9%)', '0606': 'Yacolt (8.5%)', '0666': 'Clark County Unincorp. PTBA (8.7%)',
+    '0600': 'Clark County Unincorp. (8.0%)', 'none': 'No Tax (0%)',
+  };
+  const taxLabel = taxRateCode === 'custom'
+    ? `Custom (${(customTaxBp / 100).toFixed(2)}%)`
+    : (CLARK_TAX_LABELS[taxRateCode] ?? taxRateCode);
   const depositCents = est.depositAmount ?? Math.round(totalCents * 0.5);
   const depositPct = est.depositPercent ?? 50;
 
@@ -322,18 +339,37 @@ export default function PortalEstimateDetail() {
 
           {/* ── Totals ── */}
           <div className="px-8 py-5 space-y-2 text-sm">
-            <div className="flex justify-between text-gray-500">
-              <span>Subtotal</span>
-              <span>{fmtMoney(totalCents)}</span>
-            </div>
-            <div className="flex justify-between text-gray-500">
-              <span>Tax (WA — client to verify)</span>
-              <span className="italic text-gray-400">Not included</span>
-            </div>
-            <div className="flex justify-between font-bold text-base border-t border-gray-200 pt-3 mt-1">
-              <span>Total</span>
-              <span>{fmtMoney(totalCents)}</span>
-            </div>
+            {taxEnabled ? (
+              <>
+                <div className="flex justify-between text-gray-500">
+                  <span>Subtotal</span>
+                  <span>{fmtMoney(subtotalCents)}</span>
+                </div>
+                <div className="flex justify-between text-gray-500">
+                  <span>Tax ({taxLabel})</span>
+                  <span>{fmtMoney(taxAmountCents)}</span>
+                </div>
+                <div className="flex justify-between font-bold text-base border-t border-gray-200 pt-3 mt-1">
+                  <span>Total</span>
+                  <span>{fmtMoney(totalCents)}</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex justify-between text-gray-500">
+                  <span>Subtotal</span>
+                  <span>{fmtMoney(totalCents)}</span>
+                </div>
+                <div className="flex justify-between text-gray-500">
+                  <span>Tax (WA — client to verify)</span>
+                  <span className="italic text-gray-400">Not included</span>
+                </div>
+                <div className="flex justify-between font-bold text-base border-t border-gray-200 pt-3 mt-1">
+                  <span>Total</span>
+                  <span>{fmtMoney(totalCents)}</span>
+                </div>
+              </>
+            )}
             {depositCents > 0 && (
               <div className="flex justify-between text-gray-600 text-sm">
                 <span>Deposit ({depositPct}%) required to schedule</span>

@@ -177,6 +177,10 @@ export async function createPortalEstimate(data: InsertPortalEstimate) {
         scopeOfWork: data.scopeOfWork,
         expiresAt: data.expiresAt,
         sentAt: data.sentAt ?? new Date(),
+        taxEnabled: data.taxEnabled ?? 0,
+        taxRateCode: data.taxRateCode ?? '0603',
+        customTaxPct: data.customTaxPct ?? 890,
+        taxAmount: data.taxAmount ?? 0,
         updatedAt: new Date(),
       },
     });

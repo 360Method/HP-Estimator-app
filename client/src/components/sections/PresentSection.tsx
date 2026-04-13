@@ -953,6 +953,10 @@ export default function PresentSection() {
           defaultPhone={activeCustomer?.mobilePhone || jobInfo.phone || ''}
           hpCustomerId={activeCustomer?.id}
           hpOpportunityId={state.activeOpportunityId ?? undefined}
+          taxEnabled={taxEnabled}
+          taxRateCode={taxRateCode}
+          customTaxPct={customTaxPct}
+          taxAmount={taxAmount / 100} {/* taxAmount is cents, prop expects dollars */}
           onClose={() => setShowSendDialog(false)}
         />
       )}

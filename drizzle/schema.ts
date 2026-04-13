@@ -6,6 +6,7 @@ import {
   mysqlTable,
   text,
   timestamp,
+  tinyint,
   uniqueIndex,
   varchar,
 } from "drizzle-orm/mysql-core";
@@ -203,6 +204,11 @@ export const portalEstimates = mysqlTable(
     sentAt: timestamp("sentAt").defaultNow().notNull(),
     viewedAt: timestamp("viewedAt"),
     approvedAt: timestamp("approvedAt"),
+    /** Tax snapshot at time of sending */
+    taxEnabled: tinyint("taxEnabled").default(0).notNull(),
+    taxRateCode: varchar("taxRateCode", { length: 32 }).default('0603').notNull(),
+    customTaxPct: int("customTaxPct").default(890).notNull(), // stored as basis points (890 = 8.90%)
+    taxAmount: int("taxAmount").default(0).notNull(), // cents
     /** Base64 PNG of customer signature */
     signatureDataUrl: text("signatureDataUrl"),
     signerName: varchar("signerName", { length: 255 }),
