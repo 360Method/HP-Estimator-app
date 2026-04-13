@@ -412,7 +412,7 @@ function SignaturePanel({ onSave, onCancel }: { onSave: (dataUrl: string, name: 
 // ─── Column Visibility Panel ──────────────────────────────────
 function ColVisPanel({ cols, onChange, onClose }: { cols: Record<ColKey, boolean>; onChange: (k: ColKey, v: boolean) => void; onClose: () => void }) {
   return (
-    <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-border rounded-xl shadow-xl p-4 w-56 max-w-[calc(100vw-1rem)] sm:left-auto sm:right-0">
+    <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-border rounded-xl shadow-xl p-4 w-56">
       <div className="flex items-center justify-between mb-3">
         <span className="text-xs font-semibold text-foreground">Visible Columns</span>
         <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
