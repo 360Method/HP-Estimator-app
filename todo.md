@@ -1120,3 +1120,7 @@
 - [x] Pass pendingCoCount from pendingCOMap to KanbanCard
 - [x] Render amber "CO Pending" badge on KanbanCard when pendingCoCount > 0
 - [x] 96 tests passing
+
+## Visual Edits (Apr 13)
+- [x] PresentSection ColVisPanel: fix mobile-first positioning — `left-0 top-full` base, `sm:left-auto sm:right-0` on wider screens; max-w uses `calc(100vw-1rem)` to prevent overflow
+- [x] PresentSection totals block: import CLARK_COUNTY_TAX_RATES; compute resolvedTax from state.global.taxEnabled/taxRateCode/customTaxPct; show actual tax label + amount when enabled; grandTotal = subtotal + taxAmount; deposit percentage applies to grandTotal

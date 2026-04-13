@@ -15,6 +15,7 @@
 import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { calcPhase, calcCustomItem, calcTotals, fmtDollar, fmtDollarCents } from '@/lib/calc';
+import { CLARK_COUNTY_TAX_RATES } from '@/lib/taxRates';
 import { X, Printer, Mail, PenLine, RotateCcw, Check, CheckCircle2, Settings2, Eye, EyeOff, Trophy, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import EstimateApprovedModal from '@/components/EstimateApprovedModal';
@@ -411,7 +412,7 @@ function SignaturePanel({ onSave, onCancel }: { onSave: (dataUrl: string, name: 
 // ─── Column Visibility Panel ──────────────────────────────────
 function ColVisPanel({ cols, onChange, onClose }: { cols: Record<ColKey, boolean>; onChange: (k: ColKey, v: boolean) => void; onClose: () => void }) {
   return (
-    <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-1 z-50 bg-white border border-border rounded-xl shadow-xl p-4 w-56 max-w-[calc(100vw-2rem)]">
+    <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-border rounded-xl shadow-xl p-4 w-56 max-w-[calc(100vw-1rem)] sm:left-auto sm:right-0">
       <div className="flex items-center justify-between mb-3">
         <span className="text-xs font-semibold text-foreground">Visible Columns</span>
         <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
@@ -492,8 +493,22 @@ export default function PresentSection() {
   }, [activeCustom]);
 
   // Deposit from configured settings (pct or flat)
+  // Resolve tax rate from global settings
+  const taxEnabled = state.global.taxEnabled ?? false;
+  const taxRateCode = state.global.taxRateCode ?? '0603';
+  const customTaxPct = state.global.customTaxPct ?? 8.9;
+  const resolvedTax = useMemo(() => {
+    if (!taxEnabled) return null;
+    if (taxRateCode === 'none') return null;
+    if (taxRateCode === 'custom') return { rate: customTaxPct / 100, label: `Custom (${customTaxPct}%)` };
+    const preset = CLARK_COUNTY_TAX_RATES.find(r => r.code === taxRateCode);
+    return preset ? { rate: preset.rate, label: preset.label } : null;
+  }, [taxEnabled, taxRateCode, customTaxPct]);
+  const taxAmount = resolvedTax ? Math.round(totals.totalPrice * resolvedTax.rate) : 0;
+  const grandTotal = totals.totalPrice + taxAmount;
+
   const deposit = state.depositType === 'pct'
-    ? totals.totalPrice * (state.depositValue / 100)
+    ? grandTotal * (state.depositValue / 100)
     : state.depositValue;
   const depositLabel = state.depositType === 'pct'
     ? `Deposit (${state.depositValue}%)`
@@ -850,13 +865,20 @@ export default function PresentSection() {
                     <span className="text-gray-600">Subtotal</span>
                     <span className="font-medium text-gray-900">{fmtDollarCents(totals.totalPrice)}</span>
                   </div>
-                  <div className="flex justify-between py-2 border-b border-gray-200 text-sm">
-                    <span className="text-gray-600">Tax (WA — client to verify)</span>
-                    <span className="text-gray-500 italic text-xs self-center">Not included</span>
-                  </div>
+                  {resolvedTax ? (
+                    <div className="flex justify-between py-2 border-b border-gray-200 text-sm">
+                      <span className="text-gray-600">Tax ({resolvedTax.label})</span>
+                      <span className="font-medium text-gray-900">{fmtDollarCents(taxAmount)}</span>
+                    </div>
+                  ) : (
+                    <div className="flex justify-between py-2 border-b border-gray-200 text-sm">
+                      <span className="text-gray-600">Tax</span>
+                      <span className="text-gray-400 italic text-xs self-center">Not included</span>
+                    </div>
+                  )}
                   <div className="flex justify-between py-3 border-b-2 border-gray-900 text-base">
                     <span className="font-bold text-gray-900">Total</span>
-                    <span className="font-bold text-gray-900">{fmtDollarCents(totals.totalPrice)}</span>
+                    <span className="font-bold text-gray-900">{fmtDollarCents(grandTotal)}</span>
                   </div>
                   <div className="flex justify-between py-2 text-sm">
                     <span className="font-semibold text-gray-700">{depositLabel}</span>
