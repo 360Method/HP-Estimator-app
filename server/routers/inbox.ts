@@ -63,6 +63,29 @@ const conversationsRouter = router({
     .query(async ({ input }) => {
       return listConversationsByCustomer(input.customerId);
     }),
+
+  /**
+   * Find or create the canonical conversation for a customer and return its ID.
+   * Ensures the requested channel is registered on the conversation.
+   * Used by the CommunicationTab action bar to deep-link into the inbox.
+   */
+  findOrCreateByCustomer: protectedProcedure
+    .input(z.object({
+      customerId: z.string(),
+      phone: z.string().nullable().optional(),
+      email: z.string().nullable().optional(),
+      name: z.string().nullable().optional(),
+      channel: z.enum(["sms", "email", "note"]).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const conv = await findOrCreateConversation(
+        input.phone ?? null,
+        input.email ?? null,
+        input.name ?? null,
+        input.customerId,
+      );
+      return { conversationId: conv.id };
+    }),
 });
 
 // ─── MESSAGES ────────────────────────────────────────────────────────────────

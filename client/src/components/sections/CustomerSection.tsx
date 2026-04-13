@@ -36,6 +36,7 @@ import PipelineBoard from '@/components/PipelineBoard';
 import AddressAutocomplete, { ParsedAddress } from '@/components/AddressAutocomplete';
 import AddressMapPreview from '@/components/AddressMapPreview';
 import InvoiceSection from '@/components/sections/InvoiceSection';
+import VoiceCallPanel from '@/components/VoiceCallPanel';
 import { toast } from 'sonner';
 import { nanoid } from 'nanoid';
 
@@ -556,7 +557,7 @@ export default function CustomerSection() {
     state, setJobInfo, setCustomerProfile, addActivityEvent, setCustomerTab,
     addOpportunity, updateOpportunity, removeOpportunity, setPipelineArea,
     convertLeadToEstimate, convertEstimateToJob, archiveJob,
-    setActiveOpportunity, setSection, setInboxCustomer,
+    setActiveOpportunity, setSection, setInboxCustomer, setInboxConversation,
     addCustomerAddress, updateCustomerAddress, removeCustomerAddress, setPrimaryAddress,
     updateCustomer: updateCustomerLocal,
   } = useEstimator();
@@ -1436,7 +1437,22 @@ export default function CustomerSection() {
         {(activeCustomerTab === 'leads' || activeCustomerTab === 'estimates' || activeCustomerTab === 'jobs') && PipelineTab()}
         {activeCustomerTab === 'invoices' && <InvoiceSection />}
         {activeCustomerTab === 'communication' && (
-          <CommunicationTab customerId={activeCustomerId ?? ''} onOpenInbox={() => { setInboxCustomer(activeCustomerId); setSection('inbox' as any); }} />
+          <CommunicationTab
+            customerId={activeCustomerId ?? ''}
+            customerPhone={activeCustomer?.phone ?? jobInfo.phone}
+            customerEmail={activeCustomer?.email ?? jobInfo.email}
+            customerName={activeCustomer?.name ?? jobInfo.client}
+            onOpenInbox={() => { setInboxCustomer(activeCustomerId); setSection('inbox' as any); }}
+            onOpenInboxWithConversation={(conversationId, channel) => {
+              setInboxConversation(conversationId, channel);
+              setInboxCustomer(activeCustomerId);
+              setSection('inbox' as any);
+            }}
+            onOpenInboxPortal={() => {
+              setInboxCustomer(activeCustomerId);
+              setSection('inbox' as any);
+            }}
+          />
         )}
         {activeCustomerTab === 'attachments' && (
           <CustomerAttachmentsTab customerId={activeCustomerId ?? ''} />
@@ -1619,51 +1635,179 @@ export default function CustomerSection() {
 // These use hooks (useQuery, useMutation, useRef) so React requires them to be
 // stable function references — i.e., defined at module scope, not inside a render.
 
-function CommunicationTab({ customerId, onOpenInbox }: { customerId: string; onOpenInbox: () => void }) {
+function CommunicationTab({
+  customerId,
+  customerPhone,
+  customerEmail,
+  customerName,
+  onOpenInbox,
+  onOpenInboxWithConversation,
+  onOpenInboxPortal,
+}: {
+  customerId: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  customerName?: string;
+  onOpenInbox: () => void;
+  onOpenInboxWithConversation: (conversationId: number, channel: 'sms' | 'email' | 'note') => void;
+  onOpenInboxPortal: () => void;
+}) {
+  const [showCall, setShowCall] = useState(false);
+  const findOrCreate = trpc.inbox.conversations.findOrCreateByCustomer.useMutation();
+
   const { data: convos, isLoading } = trpc.inbox.conversations.listByCustomer.useQuery(
     { customerId },
     { enabled: !!customerId }
   );
-  if (isLoading) return <div className="py-16 text-center text-muted-foreground text-sm">Loading messages...</div>;
-  if (!convos || convos.length === 0) return (
-    <div className="text-center py-16 text-muted-foreground border-2 border-dashed border-border rounded-xl">
-      <MessageSquare className="w-8 h-8 mx-auto mb-3 opacity-30" />
-      <div className="text-base font-semibold mb-1">No Messages Yet</div>
-      <div className="text-sm">SMS, email, and notes will appear here.</div>
-    </div>
-  );
+
+  const handleSms = async () => {
+    if (!customerPhone) { toast.error('No phone number on file for this customer'); return; }
+    try {
+      const { conversationId } = await findOrCreate.mutateAsync({
+        customerId,
+        phone: customerPhone,
+        email: customerEmail,
+        name: customerName,
+        channel: 'sms',
+      });
+      onOpenInboxWithConversation(conversationId, 'sms');
+    } catch { toast.error('Could not open SMS thread'); }
+  };
+
+  const handleEmail = async () => {
+    if (!customerEmail) { toast.error('No email address on file for this customer'); return; }
+    try {
+      const { conversationId } = await findOrCreate.mutateAsync({
+        customerId,
+        phone: customerPhone,
+        email: customerEmail,
+        name: customerName,
+        channel: 'email',
+      });
+      onOpenInboxWithConversation(conversationId, 'email');
+    } catch { toast.error('Could not open email thread'); }
+  };
+
+  const handlePortalChat = () => {
+    onOpenInboxPortal();
+  };
+
+  const handleCall = () => {
+    if (!customerPhone) { toast.error('No phone number on file for this customer'); return; }
+    setShowCall(true);
+  };
+
   return (
-    <div className="space-y-3">
-      <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Conversations</h3>
-      {convos.map(conv => (
-        <div key={conv.id} className="rounded-xl border bg-card p-4 flex items-start gap-3">
-          <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-            <MessageSquare size={15} className="text-primary" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-semibold text-sm">{conv.contactName ?? conv.contactPhone ?? conv.contactEmail ?? 'Unknown'}</span>
-              {conv.channels && <Badge variant="outline" className="text-xs capitalize">{conv.channels}</Badge>}
-              {(conv.unreadCount ?? 0) > 0 && (
-                <Badge className="bg-primary text-primary-foreground text-xs">{conv.unreadCount} unread</Badge>
-              )}
-            </div>
-            {conv.lastMessagePreview && (
-              <p className="text-xs text-muted-foreground mt-0.5 truncate">{conv.lastMessagePreview}</p>
-            )}
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {conv.lastMessageAt ? new Date(conv.lastMessageAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'No messages'}
-            </p>
-          </div>
+    <div className="space-y-5">
+      {/* ── Action Bar ── */}
+      <div className="rounded-xl border bg-card p-4">
+        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Reach Out</div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <button
             type="button"
-            className="shrink-0 text-xs text-primary hover:underline"
-            onClick={onOpenInbox}
+            onClick={handleSms}
+            disabled={findOrCreate.isPending}
+            className="flex flex-col items-center gap-1.5 rounded-lg border border-border bg-background hover:bg-muted/60 active:scale-95 transition-all py-3 px-2 disabled:opacity-50"
           >
-            Open
+            <MessageSquare size={18} className="text-primary" />
+            <span className="text-xs font-medium">SMS</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleEmail}
+            disabled={findOrCreate.isPending}
+            className="flex flex-col items-center gap-1.5 rounded-lg border border-border bg-background hover:bg-muted/60 active:scale-95 transition-all py-3 px-2 disabled:opacity-50"
+          >
+            <Mail size={18} className="text-sky-500" />
+            <span className="text-xs font-medium">Email</span>
+          </button>
+          <button
+            type="button"
+            onClick={handlePortalChat}
+            className="flex flex-col items-center gap-1.5 rounded-lg border border-border bg-background hover:bg-muted/60 active:scale-95 transition-all py-3 px-2"
+          >
+            <AtSign size={18} className="text-violet-500" />
+            <span className="text-xs font-medium">Portal Chat</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleCall}
+            className="flex flex-col items-center gap-1.5 rounded-lg border border-border bg-background hover:bg-muted/60 active:scale-95 transition-all py-3 px-2"
+          >
+            <Phone size={18} className="text-emerald-500" />
+            <span className="text-xs font-medium">Call</span>
           </button>
         </div>
-      ))}
+        {customerPhone && (
+          <p className="text-xs text-muted-foreground mt-2 text-center">{customerPhone}</p>
+        )}
+      </div>
+
+      {/* ── Inline Voice Call Panel ── */}
+      {showCall && customerPhone && (
+        <div className="rounded-xl border bg-card overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/30">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">In-Browser Call</span>
+            <button type="button" onClick={() => setShowCall(false)} className="text-muted-foreground hover:text-foreground">
+              <X size={14} />
+            </button>
+          </div>
+          <div className="p-4">
+            <VoiceCallPanel
+              toNumber={customerPhone}
+              toName={customerName}
+              onCallEnd={() => setShowCall(false)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ── Conversations List ── */}
+      {isLoading ? (
+        <div className="py-8 text-center text-muted-foreground text-sm">Loading conversations...</div>
+      ) : !convos || convos.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground border-2 border-dashed border-border rounded-xl">
+          <MessageSquare className="w-8 h-8 mx-auto mb-3 opacity-30" />
+          <div className="text-base font-semibold mb-1">No Conversations Yet</div>
+          <div className="text-sm">Use the buttons above to start a conversation.</div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Conversations</h3>
+          {convos.map(conv => (
+            <div key={conv.id} className="rounded-xl border bg-card p-4 flex items-start gap-3">
+              <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                <MessageSquare size={15} className="text-primary" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-semibold text-sm">{conv.contactName ?? conv.contactPhone ?? conv.contactEmail ?? 'Unknown'}</span>
+                  {conv.channels && <Badge variant="outline" className="text-xs capitalize">{conv.channels}</Badge>}
+                  {(conv.unreadCount ?? 0) > 0 && (
+                    <Badge className="bg-primary text-primary-foreground text-xs">{conv.unreadCount} unread</Badge>
+                  )}
+                </div>
+                {conv.lastMessagePreview && (
+                  <p className="text-xs text-muted-foreground mt-0.5 truncate">{conv.lastMessagePreview}</p>
+                )}
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {conv.lastMessageAt ? new Date(conv.lastMessageAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : 'No messages'}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="shrink-0 text-xs text-primary hover:underline"
+                onClick={() => {
+                  if (conv.id) onOpenInboxWithConversation(conv.id, (conv.channels as 'sms' | 'email' | 'note') ?? 'sms');
+                  else onOpenInbox();
+                }}
+              >
+                Open
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

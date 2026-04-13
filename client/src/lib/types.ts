@@ -468,6 +468,10 @@ export interface EstimatorState {
   scheduleFilterJobId: string | null;
   // Inbox deep-link: when set, InboxPage pre-selects this customerId
   inboxCustomerId: string | null;
+  // Inbox deep-link: when set, InboxPage opens this specific conversation
+  inboxConversationId: number | null;
+  // Inbox deep-link: when set, InboxPage pre-selects this compose channel
+  inboxChannel: 'sms' | 'email' | 'note' | null;
   // Current user profile (persisted locally)
   userProfile: UserProfile;
   // Custom roles & permissions

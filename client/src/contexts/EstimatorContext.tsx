@@ -89,6 +89,10 @@ const initialState: EstimatorState = {
   scheduleFilterJobId: null,
   // Inbox deep-link: pre-select customer in InboxPage
   inboxCustomerId: null,
+  // Inbox deep-link: open specific conversation
+  inboxConversationId: null,
+  // Inbox deep-link: pre-select compose channel
+  inboxChannel: null,
   // User profile
   userProfile: {
     firstName: 'Handy',
@@ -249,6 +253,7 @@ type Action =
   | { type: 'SET_DEPOSIT'; depositType: 'pct' | 'flat'; depositValue: number }
   | { type: 'SET_SCHEDULE_FILTER'; jobId: string | null }
   | { type: 'SET_INBOX_CUSTOMER'; customerId: string | null }
+  | { type: 'SET_INBOX_CONVERSATION'; conversationId: number | null; channel: 'sms' | 'email' | 'note' | null }
   | {
       type: 'APPROVE_ESTIMATE';
       estimateId: string;           // the estimate opportunity being approved
@@ -1517,6 +1522,8 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
       return { ...state, scheduleFilterJobId: action.jobId };
     case 'SET_INBOX_CUSTOMER':
       return { ...state, inboxCustomerId: action.customerId };
+    case 'SET_INBOX_CONVERSATION':
+      return { ...state, inboxConversationId: action.conversationId, inboxChannel: action.channel };
     case 'UPDATE_USER_PROFILE':
       return { ...state, userProfile: { ...state.userProfile, ...action.payload } };
 
@@ -1760,6 +1767,8 @@ interface EstimatorContextValue {
   setScheduleFilter: (jobId: string | null) => void;
   // Inbox deep-link: pre-select customer in InboxPage
   setInboxCustomer: (customerId: string | null) => void;
+  // Inbox deep-link: open specific conversation with channel
+  setInboxConversation: (conversationId: number | null, channel: 'sms' | 'email' | 'note' | null) => void;
   // Approve Estimate
   approveEstimate: (params: {
     estimateId: string;
@@ -2124,10 +2133,12 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
   const setScheduleFilter = useCallback((jobId: string | null) => {
     dispatch({ type: 'SET_SCHEDULE_FILTER', jobId });
   }, []);
-  const setInboxCustomer = useCallback((customerId: string | null) => {
+   const setInboxCustomer = useCallback((customerId: string | null) => {
     dispatch({ type: 'SET_INBOX_CUSTOMER', customerId });
   }, []);
-
+  const setInboxConversation = useCallback((conversationId: number | null, channel: 'sms' | 'email' | 'note' | null) => {
+    dispatch({ type: 'SET_INBOX_CONVERSATION', conversationId, channel });
+  }, []);
   // ── Job task / attachment / activity helpers ─────────────────────
   const addJobTask = useCallback((oppId: string, task: JobTask) => {
     dispatch({ type: 'ADD_JOB_TASK', oppId, task });
@@ -2232,6 +2243,7 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
       setDeposit,
       setScheduleFilter,
       setInboxCustomer,
+      setInboxConversation,
       approveEstimate,
       addJobTask, updateJobTask, removeJobTask,
       addJobAttachment, removeJobAttachment,

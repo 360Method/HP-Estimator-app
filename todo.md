@@ -1225,3 +1225,25 @@
 - [x] Register /portal/jobs route in App.tsx
 ### Phase 11 — CustomerSection Save button
 - [x] Wire CustomerSection "Save Contact" button to trpc.customers.update mutation (Sync to DB button)
+
+## Session 3 — Customer Communication Action Bar
+
+### Phase 2 — Server: findOrCreateByCustomer
+- [x] Add inbox.conversations.findOrCreateByCustomer procedure (accepts customerId, phone, email, name; returns conversationId)
+
+### Phase 3 — UI: CommunicationTab Action Bar
+- [x] Add 4-button action bar (SMS, Email, Portal Chat, Call) to CommunicationTab
+- [x] SMS button: findOrCreateByCustomer → deep-link to inbox with sms channel
+- [x] Email button: findOrCreateByCustomer → deep-link to inbox with email channel
+- [x] Portal Chat button: deep-link to inbox portal filter for this customer (or toast if no portal)
+- [x] Call button: render inline VoiceCallPanel with customer phone number
+
+### Phase 4 — InboxPage: inboxConversationId + inboxChannel deep-link
+- [x] Add inboxConversationId: number | null and inboxChannel: string | null to EstimatorState
+- [x] Add SET_INBOX_CONVERSATION action to EstimatorContext
+- [x] Add setInboxConversation callback to context value
+- [x] InboxPage: on mount, if inboxConversationId set → setActiveConvId + setComposeChannel + clear context
+
+### Phase 5 — Tests + Checkpoint
+- [x] Write vitest tests for findOrCreateByCustomer procedure
+- [x] Save checkpoint

@@ -276,8 +276,8 @@ function NewConversationModal({ onClose, onCreated }: { onClose: () => void; onC
 
 // ─── InboxPage (main) ─────────────────────────────────────────────────────────
 export default function InboxPage() {
-  const { state, setInboxCustomer } = useEstimator();
-  const { inboxCustomerId } = state;
+  const { state, setInboxCustomer, setInboxConversation } = useEstimator();
+  const { inboxCustomerId, inboxConversationId, inboxChannel } = state;
   const [sidebarFilter, setSidebarFilter] = useState<SidebarFilter>('all');
   const [activeConvId, setActiveConvId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -362,6 +362,18 @@ export default function InboxPage() {
     setDeepLinkHpCustomerId(inboxCustomerId);
     setInboxCustomer(null);
   }, [inboxCustomerId]);
+
+  // ── Deep-link: when inboxConversationId is set, auto-select that conversation ──
+  useEffect(() => {
+    if (!inboxConversationId) return;
+    setActiveConvId(inboxConversationId);
+    if (inboxChannel && (inboxChannel === 'sms' || inboxChannel === 'email' || inboxChannel === 'note')) {
+      setComposeChannel(inboxChannel as Channel);
+    }
+    setMobileScreen('thread');
+    // Clear context values after consuming
+    setInboxConversation(null, null);
+  }, [inboxConversationId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Resolve deepLinkHpCustomerId to a portal customer id once messages load ──
   useEffect(() => {
