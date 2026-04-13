@@ -956,7 +956,7 @@ export default function PresentSection() {
           taxEnabled={taxEnabled}
           taxRateCode={taxRateCode}
           customTaxPct={customTaxPct}
-          taxAmount={taxAmount / 100} {/* taxAmount is cents, prop expects dollars */}
+          taxAmount={taxAmount / 100}
           onClose={() => setShowSendDialog(false)}
         />
       )}
