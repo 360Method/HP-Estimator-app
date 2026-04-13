@@ -54,6 +54,8 @@ import {
   getUpdatesByJob,
   createJobUpdate,
   deleteJobUpdate,
+  getJobSignOff,
+  createJobSignOff,
 } from "../portalDb";
 import { sendEmail } from "../gmail";
 import { updateOpportunity } from "../db";
@@ -1063,6 +1065,113 @@ export const portalRouter = router({
       ]);
       return { milestones, updates };
     }),
+
+  // ─── JOB SIGN-OFF: CUSTOMER PROCEDURES ───────────────────────────────────
+
+  /** Customer: get sign-off record for a job (if it exists) */
+  getJobSignOff: portalProcedure
+    .input(z.object({ hpOpportunityId: z.string() }))
+    .query(async ({ input }) => {
+      return getJobSignOff(input.hpOpportunityId);
+    }),
+
+  /**
+   * Customer: submit job sign-off with e-signature.
+   * Marks the final/balance invoice as 'due' so the customer can pay.
+   * Sends a confirmation email and notifies the HP team.
+   */
+  submitJobSignOff: portalProcedure
+    .input(
+      z.object({
+        hpOpportunityId: z.string().min(1),
+        signerName: z.string().min(1),
+        signatureDataUrl: z.string().min(1),
+        workSummary: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const signedAt = new Date().toISOString();
+
+      // Find the final/balance invoice linked to this job via the estimate
+      const estimate = await getPortalEstimateByOpportunityId(input.hpOpportunityId);
+      let finalInvoice = null;
+      if (estimate) {
+        const invoices = await getPortalInvoicesByCustomer(ctx.portalCustomer.id);
+        // Prefer balance or final type; pick the most recent unpaid one
+        finalInvoice = invoices.find(
+          (inv) =>
+            inv.estimateId === estimate.id &&
+            (inv.type === 'balance' || inv.type === 'final') &&
+            inv.status !== 'paid' &&
+            inv.status !== 'void'
+        ) ?? invoices.find(
+          (inv) =>
+            inv.estimateId === estimate.id &&
+            inv.status !== 'paid' &&
+            inv.status !== 'void'
+        ) ?? null;
+      }
+
+      // If a final invoice exists and is still draft/sent, mark it 'due'
+      if (finalInvoice && (finalInvoice.status === 'draft' || finalInvoice.status === 'sent')) {
+        const db = await import('../db').then((m) => m.getDb());
+        if (db) {
+          const { portalInvoices } = await import('../../drizzle/schema');
+          const { eq } = await import('drizzle-orm');
+          await db
+            .update(portalInvoices)
+            .set({ status: 'due' })
+            .where(eq(portalInvoices.id, finalInvoice.id));
+        }
+      }
+
+      const signOff = await createJobSignOff({
+        hpOpportunityId: input.hpOpportunityId,
+        customerId: ctx.portalCustomer.id,
+        signatureDataUrl: input.signatureDataUrl,
+        signerName: input.signerName,
+        signedAt,
+        workSummary: input.workSummary ?? null,
+        finalInvoiceId: finalInvoice?.id ?? null,
+      });
+
+      // Send confirmation email to customer
+      const baseUrl = process.env.PORTAL_BASE_URL ?? 'https://client.handypioneers.com';
+      const invoiceUrl = finalInvoice
+        ? `${baseUrl}/portal/invoices/${finalInvoice.id}`
+        : `${baseUrl}/portal/invoices`;
+      await sendEmail({
+        to: ctx.portalCustomer.email,
+        subject: 'Job Completion Confirmed — Thank You!',
+        html: buildSignOffConfirmationEmail(
+          ctx.portalCustomer.name,
+          estimate?.title ?? 'Your Project',
+          signedAt,
+          finalInvoice ? finalInvoice.amountDue : null,
+          invoiceUrl,
+          baseUrl,
+        ),
+      }).catch(() => null);
+
+      // Notify HP team
+      await notifyOwner({
+        title: `✅ Job Sign-Off: ${estimate?.estimateNumber ?? input.hpOpportunityId}`,
+        content: `${ctx.portalCustomer.name} signed off on job completion for ${estimate?.title ?? input.hpOpportunityId}.${
+          finalInvoice ? ` Final invoice $${(finalInvoice.amountDue / 100).toFixed(2)} is now due.` : ''
+        }`,
+      }).catch(() => null);
+
+      return { signOff, finalInvoiceId: finalInvoice?.id ?? null };
+    }),
+
+  // ─── JOB SIGN-OFF: HP PROCEDURES ─────────────────────────────────────────
+
+  /** HP: get sign-off status for a job */
+  getJobSignOffStatus: hpProcedure
+    .input(z.object({ hpOpportunityId: z.string() }))
+    .query(async ({ input }) => {
+      return getJobSignOff(input.hpOpportunityId);
+    }),
 });
 // ─── EMAIL TEMPLATES ──────────────────────────────────────────────────────────
 // HP brand palette: forest green #1a2e1a / #2d4a2d, warm gold #c8922a
@@ -1199,5 +1308,32 @@ function buildReferralEmail(referrerName: string, referralLink: string) {
     <p style="margin:0 0 20px;"><strong>${referrerName}</strong> thinks you'd love Handy Pioneers for your home improvement needs in the Vancouver, WA area. Sign up through the link below — both you and ${referrerName} will receive a reward when your first job is completed.</p>
     ${ctaButton('Claim Your Referral Reward', referralLink)}
     <p style="margin:0;font-size:13px;color:#888;text-align:center;">Handy Pioneers &bull; Reliable Renovations, Trusted Results</p>
+  `);
+}
+
+function buildSignOffConfirmationEmail(
+  name: string,
+  jobTitle: string,
+  signedAt: string,
+  balanceCents: number | null,
+  invoiceUrl: string,
+  _baseUrl: string,
+) {
+  const firstName = name.split(' ')[0];
+  const signedDate = new Date(signedAt).toLocaleDateString('en-US', {
+    month: 'long', day: 'numeric', year: 'numeric',
+  });
+  const balanceSection = balanceCents && balanceCents > 0
+    ? `<p style="margin:0 0 20px;">Your remaining balance of <strong>$${(balanceCents / 100).toFixed(2)}</strong> is now due. Please use the button below to pay at your convenience.</p>
+       ${ctaButton('Pay Final Invoice', invoiceUrl, '#1a2e1a')}`
+    : `<p style="margin:0 0 20px;">Our team will send your final invoice shortly.</p>`;
+  return emailWrapper(`
+    <h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#1a2e1a;">Job Completion Confirmed — Thank You!</h2>
+    <p style="margin:0 0 12px;">Hi ${firstName},</p>
+    <p style="margin:0 0 8px;">Thank you for signing off on the completion of:</p>
+    <p style="margin:0 0 20px;padding:12px 16px;background:#f8f9fa;border-left:3px solid #1a2e1a;border-radius:0 4px 4px 0;font-weight:600;color:#1a2e1a;">${jobTitle}</p>
+    <p style="margin:0 0 20px;font-size:13px;color:#666;">Signed on ${signedDate}. A copy of your signature has been saved to your project record.</p>
+    ${balanceSection}
+    <p style="margin:0;font-size:13px;color:#888;text-align:center;">Questions? <a href="mailto:help@handypioneers.com" style="color:#c8922a;">Reply to this email</a> or call us at (360) 544-9858.</p>
   `);
 }

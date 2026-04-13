@@ -1,7 +1,8 @@
 import { useRoute, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import PortalLayout from "@/components/PortalLayout";
-import { Loader2, CheckCircle2, Circle, Clock, Flag, ChevronLeft, Briefcase } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Loader2, CheckCircle2, Circle, Clock, Flag, ChevronLeft, Briefcase, ClipboardCheck } from "lucide-react";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function fmtDate(ts: number | Date | string | null | undefined) {
@@ -41,6 +42,13 @@ export default function PortalJobDetail() {
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
 
   const currentMilestone = milestones.find((m) => m.status === "in_progress") ?? milestones.find((m) => m.status === "pending");
+  const allComplete = total > 0 && milestones.every((m) => m.status === "complete");
+
+  // Check if customer has already signed off
+  const { data: signOff } = trpc.portal.getJobSignOff.useQuery(
+    { hpOpportunityId },
+    { enabled: !!hpOpportunityId, staleTime: 60_000 }
+  );
 
   return (
     <PortalLayout>
@@ -107,6 +115,27 @@ export default function PortalJobDetail() {
                       <span className="text-gray-400"> · {fmtDate(currentMilestone.scheduledDate)}</span>
                     )}
                   </p>
+                )}
+                {/* Sign-off CTA — shown when all milestones complete and not yet signed */}
+                {allComplete && !signOff && (
+                  <div className="mt-4 pt-4 border-t border-gray-100">
+                    <Button
+                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                      onClick={() => navigate(`/portal/job/${hpOpportunityId}/complete`)}
+                    >
+                      <ClipboardCheck className="w-4 h-4 mr-2" />
+                      Sign Off on Completed Work
+                    </Button>
+                  </div>
+                )}
+                {/* Already signed badge */}
+                {signOff && (
+                  <div className="mt-4 pt-4 border-t border-gray-100 flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                    <p className="text-xs text-emerald-700 font-medium">
+                      Signed off on {fmtDate(signOff.signedAt)} by {signOff.signerName}
+                    </p>
+                  </div>
                 )}
               </div>
             )}

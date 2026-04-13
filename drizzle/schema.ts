@@ -616,3 +616,26 @@ export const portalJobUpdates = mysqlTable("portalJobUpdates", {
 });
 export type PortalJobUpdate = typeof portalJobUpdates.$inferSelect;
 export type InsertPortalJobUpdate = typeof portalJobUpdates.$inferInsert;
+
+// ─── PORTAL: JOB SIGN-OFFS ───────────────────────────────────────────────────
+// Customer e-signature confirming job completion, collected via the portal.
+export const portalJobSignOffs = mysqlTable("portalJobSignOffs", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Pro-side opportunity ID (area='job') — unique: one sign-off per job */
+  hpOpportunityId: varchar("hpOpportunityId", { length: 64 }).notNull().unique(),
+  /** Portal customer who signed */
+  customerId: int("customerId").notNull(),
+  /** Base64 PNG data URL of the drawn/adopted signature */
+  signatureDataUrl: text("signatureDataUrl").notNull(),
+  /** Name typed/adopted by the signer */
+  signerName: varchar("signerName", { length: 255 }).notNull(),
+  /** ISO timestamp of signing */
+  signedAt: varchar("signedAt", { length: 32 }).notNull(),
+  /** Optional notes / work summary from the customer at sign-off */
+  workSummary: text("workSummary"),
+  /** Portal invoice ID of the final/balance invoice linked to this job */
+  finalInvoiceId: int("finalInvoiceId"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type PortalJobSignOff = typeof portalJobSignOffs.$inferSelect;
+export type InsertPortalJobSignOff = typeof portalJobSignOffs.$inferInsert;

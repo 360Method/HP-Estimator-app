@@ -16,6 +16,7 @@ import {
   portalReferrals,
   portalJobMilestones,
   portalJobUpdates,
+  portalJobSignOffs,
   type InsertPortalCustomer,
   type InsertPortalToken,
   type InsertPortalSession,
@@ -27,6 +28,7 @@ import {
   type InsertPortalReferral,
   type InsertPortalJobMilestone,
   type InsertPortalJobUpdate,
+  type InsertPortalJobSignOff,
 } from "../drizzle/schema";
 
 async function d() {
@@ -657,4 +659,34 @@ export async function deleteJobUpdate(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.delete(portalJobUpdates).where(eq(portalJobUpdates.id, id));
+}
+
+// ─── JOB SIGN-OFFS ────────────────────────────────────────────────────────────
+
+export async function getJobSignOff(hpOpportunityId: string) {
+  const db = await d();
+  const rows = await db
+    .select()
+    .from(portalJobSignOffs)
+    .where(eq(portalJobSignOffs.hpOpportunityId, hpOpportunityId))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function createJobSignOff(data: InsertPortalJobSignOff) {
+  const db = await d();
+  // Upsert: if a sign-off already exists for this job, update it
+  await db
+    .insert(portalJobSignOffs)
+    .values(data)
+    .onDuplicateKeyUpdate({
+      set: {
+        signatureDataUrl: data.signatureDataUrl,
+        signerName: data.signerName,
+        signedAt: data.signedAt,
+        workSummary: data.workSummary ?? null,
+        finalInvoiceId: data.finalInvoiceId ?? null,
+      },
+    });
+  return getJobSignOff(data.hpOpportunityId);
 }

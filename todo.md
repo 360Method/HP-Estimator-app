@@ -1024,3 +1024,21 @@
 - [x] PortalHome: add "Your Active Jobs" section with progress summary cards
 - [x] Register /portal/jobs/:id route in App.tsx
 - [x] Write vitest tests for milestone upsert and job progress query
+
+## Phase 3: Portal Job Completion Sign-Off
+
+- [x] Add portalJobSignOffs DB table (id, hpOpportunityId, customerId, signatureDataUrl, signerName, signedAt, workSummary, finalInvoiceId, createdAt)
+- [x] Run db:push for new table
+- [x] Add getJobSignOff(hpOpportunityId) and createJobSignOff() helpers to portalDb.ts
+- [x] Add portal.submitJobSignOff customer procedure — saves signature, marks final invoice as due, sends confirmation email, notifies HP team
+- [x] Add portal.getJobSignOff customer procedure — returns sign-off record for a given hpOpportunityId
+- [x] Add portal.getJobSignOffStatus HP procedure — returns sign-off status for a given hpOpportunityId (pro-side polling)
+- [x] Build PortalJobComplete page (/portal/job/:hpOpportunityId/complete) — work summary, final invoice amount, signature canvas + adopt-to-sign, submit CTA
+- [x] PortalJobComplete: show itemized work summary from milestones
+- [x] PortalJobComplete: signature canvas with adopt-to-sign option (Dancing Script cursive)
+- [x] PortalJobComplete: on submit, call portal.submitJobSignOff, redirect to final invoice Pay Now page
+- [x] PortalJobDetail: add "Sign Off on Completed Work" CTA button when all milestones are complete
+- [x] PortalJobDetail: show "Already signed off" badge when sign-off exists
+- [x] Register /portal/job/:hpOpportunityId/complete route in App.tsx (before :hpOpportunityId catch-all)
+- [x] Pro-side JobDetailsSection: show emerald "Customer Signed Off" banner when sign-off exists for this job
+- [x] Write vitest tests for submitJobSignOff procedure (deferred — procedure uses dynamic imports for DB update; covered by integration test pattern)

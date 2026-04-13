@@ -520,6 +520,7 @@ function JobProgressSection({ hpOpportunityId }: { hpOpportunityId: string }) {
   const deleteMilestone = trpc.portal.deleteMilestone.useMutation({ onSuccess: () => { refetch(); toast.success('Milestone deleted'); } });
   const postUpdate = trpc.portal.postJobUpdate.useMutation({ onSuccess: () => { refetch(); setUpdateMsg(''); toast.success('Update posted'); } });
   const deleteUpdate = trpc.portal.deleteJobUpdate.useMutation({ onSuccess: () => { refetch(); toast.success('Update deleted'); } });
+  const { data: signOff } = trpc.portal.getJobSignOffStatus.useQuery({ hpOpportunityId }, { staleTime: 60_000 });
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editTitle, setEditTitle] = useState('');
@@ -638,6 +639,16 @@ function JobProgressSection({ hpOpportunityId }: { hpOpportunityId: string }) {
           </div>
         )}
       </div>
+
+      {/* Sign-off status banner */}
+      {signOff && (
+        <div className="mt-3 flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2">
+          <CheckCircle2 size={13} className="text-emerald-600 flex-shrink-0" />
+          <p className="text-[11px] text-emerald-800 font-medium">
+            Customer signed off on {new Date(signOff.signedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} — {signOff.signerName}
+          </p>
+        </div>
+      )}
 
       {/* Progress updates */}
       <div className="mt-4 border-t border-border pt-3">
