@@ -29,7 +29,7 @@ import {
   LayoutGrid, List, Plus, GripVertical, ExternalLink,
   DollarSign, Archive, ArrowRight, ChevronDown, Trash2,
   ArrowUpDown, MapPin, Search, User, UserPlus, Check, X as XIcon, ChevronRight,
-  SendHorizonal,
+  SendHorizonal, CheckCircle,
 } from 'lucide-react';
 import { Opportunity, PipelineArea, OpportunityStage, Customer, LeadNote, JobAttachment } from '@/lib/types';
 import { useEstimator } from '@/contexts/EstimatorContext';
@@ -196,6 +196,12 @@ function KanbanCard({
             <div className="inline-flex items-center gap-1 mt-1.5 px-1.5 py-0.5 bg-sky-50 border border-sky-200 text-sky-700 rounded-full text-[9px] font-semibold">
               <SendHorizonal size={8} />
               Sent {new Date(opp.sentAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+            </div>
+          )}
+          {opp.wonAt && area === 'estimate' && (
+            <div className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-full text-[9px] font-semibold">
+              <CheckCircle size={8} />
+              Approved via Portal
             </div>
           )}
         </div>
