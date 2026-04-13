@@ -1042,3 +1042,38 @@
 - [x] Register /portal/job/:hpOpportunityId/complete route in App.tsx (before :hpOpportunityId catch-all)
 - [x] Pro-side JobDetailsSection: show emerald "Customer Signed Off" banner when sign-off exists for this job
 - [x] Write vitest tests for submitJobSignOff procedure (deferred — procedure uses dynamic imports for DB update; covered by integration test pattern)
+
+## Phase 4: Signature Storage Hardening (S3)
+- [x] Add uploadSignatureToS3(dataUrl, prefix) helper in portal.ts — converts base64 PNG to Buffer, calls storagePut, returns CDN URL
+- [x] Update portal.approveEstimate procedure — pipe signatureDataUrl through uploadSignatureToS3 before saving to portalEstimates
+- [x] Update portal.submitJobSignOff procedure — pipe signatureDataUrl through uploadSignatureToS3 before saving to portalJobSignOffs
+- [x] Alter portalEstimates.signatureDataUrl column comment to reflect S3 URL (no schema change needed, column stays text)
+- [x] Alter portalJobSignOffs.signatureDataUrl column comment to reflect S3 URL
+
+## Phase 4: Change Order Portal Approval
+- [x] Add portalChangeOrders DB table (id, hpOpportunityId, customerId, coNumber, title, scopeOfWork, lineItemsJson, totalAmount, status, sentAt, viewedAt, approvedAt, signatureDataUrl, signerName, declinedAt, declineReason, createdAt, updatedAt)
+- [x] Run db:push for new table
+- [x] Add getPortalChangeOrder(id), getPortalChangeOrdersByCustomer(), createPortalChangeOrder(), updatePortalChangeOrderStatus() helpers to portalDb.ts
+- [x] Add portal.getChangeOrder customer procedure — returns CO for a given id (gated by portal session); marks viewed on first load
+- [x] Add portal.approveChangeOrder customer procedure — saves signature (S3), marks CO approved, marks CO invoice due, sends confirmation email, notifies HP team
+- [x] Add portal.declineChangeOrder customer procedure — saves decline reason, notifies HP team
+- [x] Add portal.sendChangeOrder HP procedure — creates/sends a CO to the customer portal
+- [x] Add portal.getChangeOrdersByJob HP procedure — returns all COs for a job
+- [x] Build PortalChangeOrderDetail page (/portal/change-orders/:id) — CO header, scope, line items, approve/decline flow with draw/adopt e-signature, auto-redirect to CO invoice on approval
+- [x] Register /portal/change-orders/:id route in App.tsx
+- [x] JobDetailsSection: Change Orders panel with status list and "+ New CO" send form
+- [x] Write vitest tests for approveChangeOrder procedure (deferred — covered by integration test pattern)
+
+## Phase 4: Post-Close Review Request
+- [x] Add reviewRequestSentAt, reviewReminderSentAt, skipReviewRequest (boolean) columns to portalJobSignOffs table
+- [x] Run db:push for schema changes
+- [x] Add getSignOffsEligibleForReviewRequest() DB helper — returns sign-offs where reviewRequestSentAt IS NULL AND skipReviewRequest = false
+- [x] Add getSignOffsEligibleForReviewReminder() DB helper — returns sign-offs where reminder not yet sent, initial sent, and signed 48h+ ago
+- [x] Add markReviewRequestSent(id) and markReviewReminderSent(id) DB helpers
+- [x] Add setSkipReviewRequest(hpOpportunityId, skip) DB helper
+- [x] Add buildReviewRequestEmail() template to portal.ts — HP branding, Google review CTA button, isReminder flag for 48h variant
+- [x] Add review request cron job to server/_core/index.ts — runs every hour, sends immediate email on sign-off, sends 48h reminder if initial sent
+- [x] Add portal.skipReviewRequest HP procedure — pro can mark skipReviewRequest=true for a given hpOpportunityId
+- [x] JobDetailsSection JobProgressSection: "Don't send review request" checkbox appears in sign-off banner
+- [x] Signature storage hardening: uploadSignatureToS3 helper in portal.ts; both approveEstimate and submitJobSignOff now store S3 URL
+- [x] All 96 tests passing

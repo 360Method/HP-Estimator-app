@@ -56,12 +56,38 @@ import {
   deleteJobUpdate,
   getJobSignOff,
   createJobSignOff,
+  getPortalChangeOrderById,
+  getPortalChangeOrdersByJob,
+  getPortalChangeOrdersByCustomer,
+  createPortalChangeOrder,
+  updatePortalChangeOrderStatus,
+  setSkipReviewRequest,
 } from "../portalDb";
 import { sendEmail } from "../gmail";
 import { updateOpportunity } from "../db";
 import { notifyOwner } from "../_core/notification";
+import { storagePut } from "../storage";
 import Stripe from "stripe";
 import { ENV } from "../_core/env";
+
+// ─── SIGNATURE STORAGE HELPER ───────────────────────────────────────────────
+/**
+ * Converts a base64 PNG data URL to a Buffer and uploads it to S3.
+ * Returns the CDN URL. Falls back to the original dataUrl if upload fails.
+ */
+async function uploadSignatureToS3(dataUrl: string, prefix: string): Promise<string> {
+  try {
+    // Strip the data:image/png;base64, prefix
+    const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
+    const buffer = Buffer.from(base64, 'base64');
+    const key = `signatures/${prefix}-${Date.now()}.png`;
+    const { url } = await storagePut(key, buffer, 'image/png');
+    return url;
+  } catch (err) {
+    console.warn('[portal] Signature S3 upload failed, storing as dataUrl:', err);
+    return dataUrl; // graceful fallback
+  }
+}
 
 function getStripe() {
   const key = ENV.stripeSecretKey || process.env.STRIPE_SECRET_KEY;
@@ -225,10 +251,16 @@ export const portalRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: "Already approved" });
       }
 
+      // Upload signature to S3 and store CDN URL instead of raw base64
+      const sigUrl = await uploadSignatureToS3(
+        input.signatureDataUrl,
+        `est-${input.id}-${ctx.portalCustomer.id}`
+      );
+
       await updatePortalEstimateStatus(input.id, "approved", {
         approvedAt: new Date(),
         signerName: input.signerName,
-        signatureDataUrl: input.signatureDataUrl,
+        signatureDataUrl: sigUrl,
       });
 
       // Auto-create deposit invoice if deposit > 0
@@ -996,11 +1028,13 @@ export const portalRouter = router({
   getJobProgress: hpProcedure
     .input(z.object({ hpOpportunityId: z.string() }))
     .query(async ({ input }) => {
-      const [milestones, updates] = await Promise.all([
+      const [milestones, updates, estimate] = await Promise.all([
         getMilestonesByJob(input.hpOpportunityId),
         getUpdatesByJob(input.hpOpportunityId),
+        getPortalEstimateByOpportunityId(input.hpOpportunityId),
       ]);
-      return { milestones, updates };
+      const customer = estimate?.customerId ? await findPortalCustomerById(estimate.customerId) : null;
+      return { milestones, updates, customer };
     }),
 
   /** HP staff: create or update a milestone */
@@ -1125,10 +1159,16 @@ export const portalRouter = router({
         }
       }
 
+      // Upload signature to S3 and store CDN URL instead of raw base64
+      const sigUrl = await uploadSignatureToS3(
+        input.signatureDataUrl,
+        `signoff-${input.hpOpportunityId}-${ctx.portalCustomer.id}`
+      );
+
       const signOff = await createJobSignOff({
         hpOpportunityId: input.hpOpportunityId,
         customerId: ctx.portalCustomer.id,
-        signatureDataUrl: input.signatureDataUrl,
+        signatureDataUrl: sigUrl,
         signerName: input.signerName,
         signedAt,
         workSummary: input.workSummary ?? null,
@@ -1171,6 +1211,180 @@ export const portalRouter = router({
     .input(z.object({ hpOpportunityId: z.string() }))
     .query(async ({ input }) => {
       return getJobSignOff(input.hpOpportunityId);
+    }),
+
+  // ─── CHANGE ORDERS: HP PROCEDURES ───────────────────────────────────────────────────
+
+  /** HP: send a change order to the customer portal */
+  sendChangeOrder: hpProcedure
+    .input(z.object({
+      hpOpportunityId: z.string(),
+      customerId: z.number(),
+      coNumber: z.string(),
+      title: z.string().min(1),
+      scopeOfWork: z.string().optional(),
+      lineItemsJson: z.string().optional(),
+      totalAmount: z.number().int().min(0), // cents
+    }))
+    .mutation(async ({ input }) => {
+      const co = await createPortalChangeOrder({
+        customerId: input.customerId,
+        hpOpportunityId: input.hpOpportunityId,
+        coNumber: input.coNumber,
+        title: input.title,
+        scopeOfWork: input.scopeOfWork ?? null,
+        lineItemsJson: input.lineItemsJson ?? null,
+        totalAmount: input.totalAmount,
+        status: 'sent',
+        sentAt: new Date(),
+      });
+
+      // Notify HP team
+      await notifyOwner({
+        title: `📋 Change Order Sent: ${input.coNumber}`,
+        content: `Change order "${input.title}" ($${(input.totalAmount / 100).toFixed(2)}) sent to customer portal.`,
+      }).catch(() => null);
+
+      return co;
+    }),
+
+  /** HP: get all change orders for a job */
+  getChangeOrdersByJob: hpProcedure
+    .input(z.object({ hpOpportunityId: z.string() }))
+    .query(async ({ input }) => {
+      return getPortalChangeOrdersByJob(input.hpOpportunityId);
+    }),
+
+  /** HP: set skip review request flag */
+  skipReviewRequest: hpProcedure
+    .input(z.object({ hpOpportunityId: z.string(), skip: z.boolean() }))
+    .mutation(async ({ input }) => {
+      await setSkipReviewRequest(input.hpOpportunityId, input.skip);
+      return { ok: true };
+    }),
+
+  // ─── CHANGE ORDERS: CUSTOMER PROCEDURES ───────────────────────────────────────────────
+
+  /** Customer: get a change order by ID (gated by portal session) */
+  getChangeOrder: portalProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input, ctx }) => {
+      const co = await getPortalChangeOrderById(input.id);
+      if (!co || co.customerId !== ctx.portalCustomer.id) {
+        throw new TRPCError({ code: 'NOT_FOUND' });
+      }
+      // Mark viewed
+      if (!co.viewedAt) {
+        await updatePortalChangeOrderStatus(co.id, co.status, { viewedAt: new Date() });
+      }
+      return co;
+    }),
+
+  /** Customer: get all change orders for the logged-in customer */
+  getMyChangeOrders: portalProcedure
+    .query(async ({ ctx }) => {
+      return getPortalChangeOrdersByCustomer(ctx.portalCustomer.id);
+    }),
+
+  /** Customer: approve a change order with e-signature */
+  approveChangeOrder: portalProcedure
+    .input(z.object({
+      id: z.number(),
+      signerName: z.string().min(1),
+      signatureDataUrl: z.string().min(1),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const co = await getPortalChangeOrderById(input.id);
+      if (!co || co.customerId !== ctx.portalCustomer.id) {
+        throw new TRPCError({ code: 'NOT_FOUND' });
+      }
+      if (co.status === 'approved') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Already approved' });
+      }
+
+      // Upload signature to S3
+      const sigUrl = await uploadSignatureToS3(
+        input.signatureDataUrl,
+        `co-${input.id}-${ctx.portalCustomer.id}`
+      );
+
+      // Auto-create a CO invoice
+      let coInvoice = null;
+      if (co.totalAmount > 0) {
+        coInvoice = await createPortalInvoice({
+          customerId: co.customerId,
+          invoiceNumber: `CO-INV-${co.coNumber}`,
+          type: 'final',
+          status: 'due',
+          amountDue: co.totalAmount,
+          amountPaid: 0,
+          tipAmount: 0,
+          dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          jobTitle: co.title,
+          lineItemsJson: co.lineItemsJson,
+          sentAt: new Date(),
+        });
+      }
+
+      await updatePortalChangeOrderStatus(co.id, 'approved', {
+        approvedAt: new Date(),
+        signerName: input.signerName,
+        signatureDataUrl: sigUrl,
+        invoiceId: coInvoice?.id ?? undefined,
+      });
+
+      // Send confirmation email
+      const baseUrl = process.env.PORTAL_BASE_URL ?? 'https://client.handypioneers.com';
+      const invoiceUrl = coInvoice ? `${baseUrl}/portal/invoices/${coInvoice.id}` : null;
+      await sendEmail({
+        to: ctx.portalCustomer.email,
+        subject: `Change Order Approved — ${co.coNumber}`,
+        html: buildChangeOrderApprovalEmail(
+          ctx.portalCustomer.name,
+          co.title,
+          co.coNumber,
+          co.totalAmount,
+          invoiceUrl,
+          baseUrl,
+        ),
+      }).catch(() => null);
+
+      // Notify HP team
+      await notifyOwner({
+        title: `✅ Change Order Approved: ${co.coNumber}`,
+        content: `${ctx.portalCustomer.name} approved change order "${co.title}" ($${(co.totalAmount / 100).toFixed(2)}).`,
+      }).catch(() => null);
+
+      return { co: await getPortalChangeOrderById(co.id), invoiceId: coInvoice?.id ?? null };
+    }),
+
+  /** Customer: decline a change order */
+  declineChangeOrder: portalProcedure
+    .input(z.object({
+      id: z.number(),
+      declineReason: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const co = await getPortalChangeOrderById(input.id);
+      if (!co || co.customerId !== ctx.portalCustomer.id) {
+        throw new TRPCError({ code: 'NOT_FOUND' });
+      }
+      if (co.status === 'approved' || co.status === 'declined') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: `Cannot decline a ${co.status} change order` });
+      }
+
+      await updatePortalChangeOrderStatus(co.id, 'declined', {
+        declinedAt: new Date(),
+        declineReason: input.declineReason ?? null,
+      });
+
+      // Notify HP team
+      await notifyOwner({
+        title: `❌ Change Order Declined: ${co.coNumber}`,
+        content: `${ctx.portalCustomer.name} declined change order "${co.title}".${input.declineReason ? ` Reason: ${input.declineReason}` : ''}`,
+      }).catch(() => null);
+
+      return { ok: true };
     }),
 });
 // ─── EMAIL TEMPLATES ──────────────────────────────────────────────────────────
@@ -1336,4 +1550,57 @@ function buildSignOffConfirmationEmail(
     ${balanceSection}
     <p style="margin:0;font-size:13px;color:#888;text-align:center;">Questions? <a href="mailto:help@handypioneers.com" style="color:#c8922a;">Reply to this email</a> or call us at (360) 544-9858.</p>
   `);
+}
+
+function buildChangeOrderApprovalEmail(
+  name: string,
+  jobTitle: string,
+  coNumber: string,
+  totalCents: number,
+  invoiceUrl: string | null,
+  _baseUrl: string,
+) {
+  const firstName = name.split(' ')[0];
+  const totalFmt = `$${(totalCents / 100).toFixed(2)}`;
+  const invoiceSection = invoiceUrl
+    ? `<p style="margin:0 0 20px;">An invoice for <strong>${totalFmt}</strong> has been created and is now due.</p>
+       ${ctaButton('Pay Change Order Invoice', invoiceUrl, '#1a2e1a')}`
+    : `<p style="margin:0 0 20px;">Our team will send your invoice for <strong>${totalFmt}</strong> shortly.</p>`;
+  return emailWrapper(`
+    <h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#1a2e1a;">Change Order Approved</h2>
+    <p style="margin:0 0 12px;">Hi ${firstName},</p>
+    <p style="margin:0 0 8px;">Thank you for approving change order <strong>${coNumber}</strong> for:</p>
+    <p style="margin:0 0 20px;padding:12px 16px;background:#f8f9fa;border-left:3px solid #1a2e1a;border-radius:0 4px 4px 0;font-weight:600;color:#1a2e1a;">${jobTitle}</p>
+    ${invoiceSection}
+    <p style="margin:0;font-size:13px;color:#888;text-align:center;">Questions? <a href="mailto:help@handypioneers.com" style="color:#c8922a;">Reply to this email</a> or call us at (360) 544-9858.</p>
+  `);
+}
+
+export function buildReviewRequestEmail(
+  name: string,
+  jobTitle: string,
+  googleReviewUrl: string,
+  isReminder = false,
+) {
+  const firstName = name.split(' ')[0];
+  const subject = isReminder
+    ? `Reminder: Share your experience with Handy Pioneers`
+    : `How did we do? — ${jobTitle}`;
+  const headline = isReminder
+    ? `A Quick Reminder — We'd Love Your Feedback`
+    : `How Did We Do?`;
+  const intro = isReminder
+    ? `We wanted to follow up on your recently completed project. Your feedback means the world to our small team.`
+    : `We just wrapped up <strong>${jobTitle}</strong> and we hope you're thrilled with the results.`;
+  return {
+    subject,
+    html: emailWrapper(`
+      <h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#1a2e1a;">${headline}</h2>
+      <p style="margin:0 0 12px;">Hi ${firstName},</p>
+      <p style="margin:0 0 20px;">${intro}</p>
+      <p style="margin:0 0 20px;">If you have a moment, we'd be grateful if you could leave us a quick Google review. It takes less than a minute and helps other homeowners find us.</p>
+      ${ctaButton('Leave a Google Review ⭐', googleReviewUrl, '#c8922a')}
+      <p style="margin:24px 0 0;font-size:13px;color:#888;text-align:center;">Thank you for choosing Handy Pioneers. We look forward to working with you again!</p>
+    `),
+  };
 }

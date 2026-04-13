@@ -13,7 +13,7 @@ import twilio from "twilio";
 import { exchangeGmailCode, pollInboundEmails, sendOverdueReminderEmail } from "../gmail";
 import { getFirstGmailToken } from "../db";
 import { addSSEClient, broadcastNewMessage } from "../sse";
-import { getPortalInvoiceByStripePaymentIntentId, updatePortalInvoicePaid, getPortalInvoiceByCheckoutSessionId, findPortalCustomerById, getOverdueInvoicesForReminder, markPortalInvoiceReminderSent } from "../portalDb";
+import { getPortalInvoiceByStripePaymentIntentId, updatePortalInvoicePaid, getPortalInvoiceByCheckoutSessionId, findPortalCustomerById, getOverdueInvoicesForReminder, markPortalInvoiceReminderSent, getSignOffsEligibleForReviewRequest, getSignOffsEligibleForReviewReminder, markReviewRequestSent, markReviewReminderSent } from "../portalDb";
 import { sendEmail } from "../gmail";
 import { notifyOwner } from "../_core/notification";
 import { randomUUID } from "crypto";
@@ -533,6 +533,62 @@ async function startServer() {
     console.log(`[Overdue] Next reminder run scheduled in ${Math.round(msUntil9am / 60000)} minutes`);
   };
   scheduleOverdueReminders();
+
+  // ── Review request emails (runs every hour, checks for eligible sign-offs) ─────
+  const GOOGLE_REVIEW_URL = process.env.GOOGLE_REVIEW_URL ?? 'https://g.page/r/handypioneers/review';
+  const { buildReviewRequestEmail } = await import('../routers/portal.js');
+
+  const runReviewRequests = async () => {
+    try {
+      // Initial review request — send immediately after sign-off
+      const eligible = await getSignOffsEligibleForReviewRequest();
+      for (const signOff of eligible) {
+        const customer = await findPortalCustomerById(signOff.customerId);
+        if (!customer?.email) continue;
+        try {
+          const { subject, html } = buildReviewRequestEmail(
+            customer.name ?? 'Valued Customer',
+            signOff.hpOpportunityId,
+            GOOGLE_REVIEW_URL,
+            false,
+          );
+          await sendEmail({ to: customer.email, subject, html }).catch(() => null);
+          await markReviewRequestSent(signOff.id);
+          console.log(`[Review] Sent initial review request to ${customer.email} for job ${signOff.hpOpportunityId}`);
+        } catch (err) {
+          console.error(`[Review] Failed to send initial request for sign-off ${signOff.id}:`, err);
+        }
+      }
+
+      // 48h reminder — send if initial was sent but no review yet
+      const reminders = await getSignOffsEligibleForReviewReminder();
+      for (const signOff of reminders) {
+        const customer = await findPortalCustomerById(signOff.customerId);
+        if (!customer?.email) continue;
+        try {
+          const { subject, html } = buildReviewRequestEmail(
+            customer.name ?? 'Valued Customer',
+            signOff.hpOpportunityId,
+            GOOGLE_REVIEW_URL,
+            true,
+          );
+          await sendEmail({ to: customer.email, subject, html }).catch(() => null);
+          await markReviewReminderSent(signOff.id);
+          console.log(`[Review] Sent 48h reminder to ${customer.email} for job ${signOff.hpOpportunityId}`);
+        } catch (err) {
+          console.error(`[Review] Failed to send 48h reminder for sign-off ${signOff.id}:`, err);
+        }
+      }
+    } catch (err) {
+      console.error('[Review] Review request job error:', err);
+    }
+  };
+
+  // Run once on startup (catches any sign-offs that happened while server was down)
+  // then every hour
+  runReviewRequests().catch(console.error);
+  setInterval(runReviewRequests, 60 * 60 * 1000);
+  console.log('[Review] Review request scheduler started (runs every hour)');
 
   // tRPC API
   app.use(

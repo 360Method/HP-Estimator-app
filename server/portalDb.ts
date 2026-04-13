@@ -17,6 +17,7 @@ import {
   portalJobMilestones,
   portalJobUpdates,
   portalJobSignOffs,
+  portalChangeOrders,
   type InsertPortalCustomer,
   type InsertPortalToken,
   type InsertPortalSession,
@@ -29,6 +30,8 @@ import {
   type InsertPortalJobMilestone,
   type InsertPortalJobUpdate,
   type InsertPortalJobSignOff,
+  type InsertPortalChangeOrder,
+  type PortalChangeOrder,
 } from "../drizzle/schema";
 
 async function d() {
@@ -689,4 +692,107 @@ export async function createJobSignOff(data: InsertPortalJobSignOff) {
       },
     });
   return getJobSignOff(data.hpOpportunityId);
+}
+
+// ─── CHANGE ORDERS ────────────────────────────────────────────────────────────
+export async function getPortalChangeOrderById(id: number) {
+  const db = await d();
+  const rows = await db.select().from(portalChangeOrders).where(eq(portalChangeOrders.id, id)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function getPortalChangeOrdersByJob(hpOpportunityId: string) {
+  const db = await d();
+  return db
+    .select()
+    .from(portalChangeOrders)
+    .where(eq(portalChangeOrders.hpOpportunityId, hpOpportunityId))
+    .orderBy(desc(portalChangeOrders.createdAt));
+}
+
+export async function getPortalChangeOrdersByCustomer(customerId: number) {
+  const db = await d();
+  return db
+    .select()
+    .from(portalChangeOrders)
+    .where(eq(portalChangeOrders.customerId, customerId))
+    .orderBy(desc(portalChangeOrders.createdAt));
+}
+
+export async function createPortalChangeOrder(data: InsertPortalChangeOrder) {
+  const db = await d();
+  const result = await db.insert(portalChangeOrders).values(data);
+  const insertId = (result as unknown as { insertId: number }).insertId;
+  return getPortalChangeOrderById(insertId);
+}
+
+export async function updatePortalChangeOrderStatus(
+  id: number,
+  status: PortalChangeOrder['status'],
+  extra?: Partial<Pick<PortalChangeOrder, 'viewedAt' | 'approvedAt' | 'signatureDataUrl' | 'signerName' | 'declinedAt' | 'declineReason' | 'invoiceId'>>
+) {
+  const db = await d();
+  await db
+    .update(portalChangeOrders)
+    .set({ status, ...extra })
+    .where(eq(portalChangeOrders.id, id));
+  return getPortalChangeOrderById(id);
+}
+
+// ─── REVIEW REQUESTS ──────────────────────────────────────────────────────────
+/** Returns sign-offs eligible for the INITIAL review request email (not yet sent, not skipped, signed). */
+export async function getSignOffsEligibleForReviewRequest() {
+  const db = await d();
+  return db
+    .select()
+    .from(portalJobSignOffs)
+    .where(
+      and(
+        eq(portalJobSignOffs.skipReviewRequest, false),
+        isNull(portalJobSignOffs.reviewRequestSentAt)
+      )
+    );
+}
+
+/** Returns sign-offs eligible for the 48h REMINDER review request email. */
+export async function getSignOffsEligibleForReviewReminder() {
+  const db = await d();
+  const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
+  return db
+    .select()
+    .from(portalJobSignOffs)
+    .where(
+      and(
+        eq(portalJobSignOffs.skipReviewRequest, false),
+        isNull(portalJobSignOffs.reviewReminderSentAt),
+        // Initial request was already sent
+        sql`${portalJobSignOffs.reviewRequestSentAt} IS NOT NULL`,
+        // Signed at least 48h ago
+        lt(portalJobSignOffs.createdAt, cutoff)
+      )
+    );
+}
+
+export async function markReviewRequestSent(id: number) {
+  const db = await d();
+  await db
+    .update(portalJobSignOffs)
+    .set({ reviewRequestSentAt: new Date() })
+    .where(eq(portalJobSignOffs.id, id));
+}
+
+export async function markReviewReminderSent(id: number) {
+  const db = await d();
+  await db
+    .update(portalJobSignOffs)
+    .set({ reviewReminderSentAt: new Date() })
+    .where(eq(portalJobSignOffs.id, id));
+}
+
+export async function setSkipReviewRequest(hpOpportunityId: string, skip: boolean) {
+  const db = await d();
+  await db
+    .update(portalJobSignOffs)
+    .set({ skipReviewRequest: skip })
+    .where(eq(portalJobSignOffs.hpOpportunityId, hpOpportunityId));
 }

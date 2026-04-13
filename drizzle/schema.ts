@@ -635,7 +635,47 @@ export const portalJobSignOffs = mysqlTable("portalJobSignOffs", {
   workSummary: text("workSummary"),
   /** Portal invoice ID of the final/balance invoice linked to this job */
   finalInvoiceId: int("finalInvoiceId"),
+  /** Timestamp when the first review request email was sent */
+  reviewRequestSentAt: timestamp("reviewRequestSentAt"),
+  /** Timestamp when the 48h reminder review request email was sent */
+  reviewReminderSentAt: timestamp("reviewReminderSentAt"),
+  /** Pro can set this to true to suppress review request emails for this job */
+  skipReviewRequest: boolean("skipReviewRequest").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type PortalJobSignOff = typeof portalJobSignOffs.$inferSelect;
 export type InsertPortalJobSignOff = typeof portalJobSignOffs.$inferInsert;
+
+// ─── PORTAL: CHANGE ORDERS ───────────────────────────────────────────────
+// Change orders sent from the HP estimator to the customer portal for approval.
+export const portalChangeOrders = mysqlTable("portalChangeOrders", {
+  id: int("id").autoincrement().primaryKey(),
+  customerId: int("customerId").notNull(),
+  /** Pro-side opportunity ID (area='job') this CO belongs to */
+  hpOpportunityId: varchar("hpOpportunityId", { length: 64 }).notNull(),
+  /** e.g. "CO-HP-2026-042-01" */
+  coNumber: varchar("coNumber", { length: 64 }).notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  /** Full scope of work text for this change order */
+  scopeOfWork: text("scopeOfWork"),
+  /** JSON array of line items */
+  lineItemsJson: text("lineItemsJson"),
+  /** Total amount in cents */
+  totalAmount: int("totalAmount").notNull().default(0),
+  /** pending | sent | viewed | approved | declined | void */
+  status: varchar("status", { length: 32 }).default("sent").notNull(),
+  sentAt: timestamp("sentAt").defaultNow().notNull(),
+  viewedAt: timestamp("viewedAt"),
+  approvedAt: timestamp("approvedAt"),
+  /** S3 URL of the customer signature PNG */
+  signatureDataUrl: text("signatureDataUrl"),
+  signerName: varchar("signerName", { length: 255 }),
+  declinedAt: timestamp("declinedAt"),
+  declineReason: text("declineReason"),
+  /** Portal invoice ID linked to this CO (auto-created on approval) */
+  invoiceId: int("invoiceId"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type PortalChangeOrder = typeof portalChangeOrders.$inferSelect;
+export type InsertPortalChangeOrder = typeof portalChangeOrders.$inferInsert;

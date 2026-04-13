@@ -520,7 +520,11 @@ function JobProgressSection({ hpOpportunityId }: { hpOpportunityId: string }) {
   const deleteMilestone = trpc.portal.deleteMilestone.useMutation({ onSuccess: () => { refetch(); toast.success('Milestone deleted'); } });
   const postUpdate = trpc.portal.postJobUpdate.useMutation({ onSuccess: () => { refetch(); setUpdateMsg(''); toast.success('Update posted'); } });
   const deleteUpdate = trpc.portal.deleteJobUpdate.useMutation({ onSuccess: () => { refetch(); toast.success('Update deleted'); } });
-  const { data: signOff } = trpc.portal.getJobSignOffStatus.useQuery({ hpOpportunityId }, { staleTime: 60_000 });
+  const { data: signOff, refetch: refetchSignOff } = trpc.portal.getJobSignOffStatus.useQuery({ hpOpportunityId }, { staleTime: 60_000 });
+  const skipReviewMutation = trpc.portal.skipReviewRequest.useMutation({ onSuccess: () => { refetchSignOff(); toast.success('Review request preference saved'); } });
+  const { data: changeOrders, refetch: refetchCOs } = trpc.portal.getChangeOrdersByJob.useQuery({ hpOpportunityId }, { staleTime: 30_000 });
+  const sendCOMutation = trpc.portal.sendChangeOrder.useMutation({ onSuccess: () => { refetchCOs(); toast.success('Change order sent to portal'); setCOForm(null); } });
+  const [coForm, setCOForm] = useState<null | { title: string; scopeOfWork: string; totalAmount: string; coNumber: string }>(null);
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editTitle, setEditTitle] = useState('');
@@ -640,15 +644,120 @@ function JobProgressSection({ hpOpportunityId }: { hpOpportunityId: string }) {
         )}
       </div>
 
-      {/* Sign-off status banner */}
+      {/* Sign-off status banner + review request toggle */}
       {signOff && (
-        <div className="mt-3 flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2">
-          <CheckCircle2 size={13} className="text-emerald-600 flex-shrink-0" />
-          <p className="text-[11px] text-emerald-800 font-medium">
-            Customer signed off on {new Date(signOff.signedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} — {signOff.signerName}
-          </p>
+        <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 space-y-1.5">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={13} className="text-emerald-600 flex-shrink-0" />
+            <p className="text-[11px] text-emerald-800 font-medium">
+              Customer signed off on {new Date(signOff.signedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} — {signOff.signerName}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 pl-5">
+            <input
+              type="checkbox"
+              id={`skip-review-${hpOpportunityId}`}
+              checked={!!signOff.skipReviewRequest}
+              onChange={e => skipReviewMutation.mutate({ hpOpportunityId, skip: e.target.checked })}
+              className="h-3 w-3 rounded border-emerald-400 accent-emerald-600"
+            />
+            <label htmlFor={`skip-review-${hpOpportunityId}`} className="text-[10px] text-emerald-700 cursor-pointer select-none">
+              Don't send review request email for this job
+            </label>
+          </div>
         </div>
       )}
+
+      {/* Change Orders panel */}
+      <div className="mt-4 border-t border-border pt-3">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Change Orders</p>
+          <Button
+            size="sm" variant="outline"
+            className="h-6 px-2 text-[10px] gap-1"
+            onClick={() => setCOForm(coForm ? null : { title: '', scopeOfWork: '', totalAmount: '', coNumber: `CO-${hpOpportunityId.slice(-4)}-${String((changeOrders?.length ?? 0) + 1).padStart(2, '0')}` })}
+          >
+            {coForm ? 'Cancel' : '+ New CO'}
+          </Button>
+        </div>
+
+        {coForm && (
+          <div className="space-y-2 mb-3 p-2 bg-muted/30 rounded-md border border-border">
+            <input
+              type="text" placeholder="CO Number (e.g. CO-HP-042-01)"
+              value={coForm.coNumber}
+              onChange={e => setCOForm(f => f ? { ...f, coNumber: e.target.value } : f)}
+              className="field-input w-full text-xs"
+            />
+            <input
+              type="text" placeholder="Title *"
+              value={coForm.title}
+              onChange={e => setCOForm(f => f ? { ...f, title: e.target.value } : f)}
+              className="field-input w-full text-xs"
+            />
+            <textarea
+              placeholder="Scope of work…"
+              value={coForm.scopeOfWork}
+              onChange={e => setCOForm(f => f ? { ...f, scopeOfWork: e.target.value } : f)}
+              className="field-input w-full text-xs resize-none"
+              rows={3}
+            />
+            <input
+              type="number" placeholder="Total amount ($)"
+              value={coForm.totalAmount}
+              onChange={e => setCOForm(f => f ? { ...f, totalAmount: e.target.value } : f)}
+              className="field-input w-full text-xs"
+              min="0" step="0.01"
+            />
+            <Button
+              size="sm"
+              className="h-7 px-3 text-xs bg-[#2d4a2d] hover:bg-[#1a2e1a] text-white"
+              disabled={!coForm.title.trim() || sendCOMutation.isPending}
+              onClick={() => {
+                const customer = data?.customer;
+                if (!customer) { toast.error('No customer linked to this job'); return; }
+                sendCOMutation.mutate({
+                  hpOpportunityId,
+                  customerId: customer.id,
+                  coNumber: coForm.coNumber.trim() || `CO-${Date.now()}`,
+                  title: coForm.title.trim(),
+                  scopeOfWork: coForm.scopeOfWork.trim() || undefined,
+                  totalAmount: Math.round(parseFloat(coForm.totalAmount || '0') * 100),
+                });
+              }}
+            >
+              {sendCOMutation.isPending ? 'Sending…' : 'Send to Portal'}
+            </Button>
+          </div>
+        )}
+
+        {!changeOrders?.length && !coForm && (
+          <p className="text-xs text-muted-foreground">No change orders for this job.</p>
+        )}
+        <div className="space-y-1.5">
+          {(changeOrders ?? []).map(co => (
+            <div key={co.id} className="flex items-center justify-between text-xs rounded border border-border px-2 py-1.5">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                  co.status === 'approved' ? 'bg-emerald-500' :
+                  co.status === 'declined' ? 'bg-red-500' :
+                  co.status === 'viewed' ? 'bg-blue-500' : 'bg-amber-400'
+                }`} />
+                <span className="font-mono text-[10px] text-muted-foreground shrink-0">{co.coNumber}</span>
+                <span className="truncate">{co.title}</span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-muted-foreground">${(co.totalAmount / 100).toFixed(2)}</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                  co.status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
+                  co.status === 'declined' ? 'bg-red-100 text-red-700' :
+                  co.status === 'viewed' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
+                }`}>{co.status}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* Progress updates */}
       <div className="mt-4 border-t border-border pt-3">
