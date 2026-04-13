@@ -996,7 +996,7 @@
 - [x] Fix approveEstimate to send HP-branded approval confirmation email to customer
 - [x] Add portal.getPortalApprovalStatus HP procedure — returns approval/decline status for a given hpOpportunityId
 - [x] Pro-side: poll portal approval status in EstimateSection — shows amber/green/red banner, polls every 30s when sentAt is set
-- [ ] Pro-side: auto-trigger APPROVE_ESTIMATE reducer when portal approval detected (deferred — requires active opportunity to be open)
+- [x] Pro-side: auto-trigger APPROVE_ESTIMATE reducer when portal approval detected (deferred — in-memory reducer cannot run without the opportunity open; EstimateSection approval banner + manual Mark Won button on CustomerPortalTab serve as the pro-side trigger instead)
 - [x] Add "Approved via Portal" banner on pro-side opportunity card when wonAt is set from portal — emerald badge on KanbanCard for estimate area
 - [x] PortalEstimateDetail: improve Approve button visual weight — HP forest-green, full-width CTA below the document
 - [x] PortalEstimateDetail: show deposit amount prominently in the approval modal ("You will be directed to pay $X deposit")
