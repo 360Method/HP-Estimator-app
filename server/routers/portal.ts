@@ -48,6 +48,12 @@ import {
   updatePortalInvoiceCheckoutSessionId,
   getPortalInvoicePaymentStatusByNumbers,
   getPortalRevenueStats,
+  getMilestonesByJob,
+  upsertMilestone,
+  deleteMilestone,
+  getUpdatesByJob,
+  createJobUpdate,
+  deleteJobUpdate,
 } from "../portalDb";
 import { sendEmail } from "../gmail";
 import { updateOpportunity } from "../db";
@@ -980,6 +986,82 @@ export const portalRouter = router({
     .mutation(async ({ input }) => {
       await updatePortalServiceRequestStatus(input.id, input.status, input.leadId);
       return { ok: true };
+    }),
+
+  // ─── JOB PROGRESS: HP PROCEDURES ─────────────────────────────────────────
+
+  /** HP staff: get milestones and updates for a job */
+  getJobProgress: hpProcedure
+    .input(z.object({ hpOpportunityId: z.string() }))
+    .query(async ({ input }) => {
+      const [milestones, updates] = await Promise.all([
+        getMilestonesByJob(input.hpOpportunityId),
+        getUpdatesByJob(input.hpOpportunityId),
+      ]);
+      return { milestones, updates };
+    }),
+
+  /** HP staff: create or update a milestone */
+  upsertMilestone: hpProcedure
+    .input(z.object({
+      id: z.number().optional(),
+      hpOpportunityId: z.string(),
+      title: z.string().min(1),
+      description: z.string().optional(),
+      status: z.enum(["pending", "in_progress", "complete"]).default("pending"),
+      scheduledDate: z.string().optional(),
+      sortOrder: z.number().default(0),
+    }))
+    .mutation(async ({ input }) => {
+      const id = await upsertMilestone(input);
+      return { id };
+    }),
+
+  /** HP staff: delete a milestone */
+  deleteMilestone: hpProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      await deleteMilestone(input.id);
+      return { ok: true };
+    }),
+
+  /** HP staff: post a progress update visible to the customer */
+  postJobUpdate: hpProcedure
+    .input(z.object({
+      hpOpportunityId: z.string(),
+      message: z.string().min(1),
+      photoUrl: z.string().optional(),
+      postedBy: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const id = await createJobUpdate({
+        hpOpportunityId: input.hpOpportunityId,
+        message: input.message,
+        photoUrl: input.photoUrl,
+        postedBy: input.postedBy ?? ctx.user?.name ?? "Handy Pioneers",
+      });
+      return { id };
+    }),
+
+  /** HP staff: delete a job update */
+  deleteJobUpdate: hpProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      await deleteJobUpdate(input.id);
+      return { ok: true };
+    }),
+
+  // ─── JOB PROGRESS: CUSTOMER PROCEDURES ───────────────────────────────────
+
+  /** Customer: get job progress (milestones + updates) for their job */
+  getCustomerJobProgress: portalProcedure
+    .input(z.object({ hpOpportunityId: z.string() }))
+    .query(async ({ input }) => {
+      const [milestones, updates] = await Promise.all([
+        getMilestonesByJob(input.hpOpportunityId),
+        getUpdatesByJob(input.hpOpportunityId),
+      ]);
+      return { milestones, updates };
     }),
 });
 // ─── EMAIL TEMPLATES ──────────────────────────────────────────────────────────

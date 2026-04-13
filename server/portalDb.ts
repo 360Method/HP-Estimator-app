@@ -14,6 +14,8 @@ import {
   portalMessages,
   portalGallery,
   portalReferrals,
+  portalJobMilestones,
+  portalJobUpdates,
   type InsertPortalCustomer,
   type InsertPortalToken,
   type InsertPortalSession,
@@ -23,6 +25,8 @@ import {
   type InsertPortalMessage,
   type InsertPortalGalleryItem,
   type InsertPortalReferral,
+  type InsertPortalJobMilestone,
+  type InsertPortalJobUpdate,
 } from "../drizzle/schema";
 
 async function d() {
@@ -576,4 +580,81 @@ export async function getPortalRevenueStats(): Promise<{
     totalCollectedCents: Number(collected?.total ?? 0),
     totalOutstandingCents,
   };
+}
+
+// ─── JOB MILESTONES ──────────────────────────────────────────────────────────
+
+export async function getMilestonesByJob(hpOpportunityId: string) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(portalJobMilestones)
+    .where(eq(portalJobMilestones.hpOpportunityId, hpOpportunityId))
+    .orderBy(portalJobMilestones.sortOrder, portalJobMilestones.createdAt);
+}
+
+export async function upsertMilestone(data: InsertPortalJobMilestone & { id?: number }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (data.id) {
+    await db
+      .update(portalJobMilestones)
+      .set({
+        title: data.title,
+        description: data.description ?? null,
+        status: data.status ?? "pending",
+        scheduledDate: data.scheduledDate ?? null,
+        completedAt: data.status === "complete" ? new Date() : null,
+        sortOrder: data.sortOrder ?? 0,
+      })
+      .where(eq(portalJobMilestones.id, data.id));
+    return data.id;
+  }
+  const [result] = await db.insert(portalJobMilestones).values({
+    hpOpportunityId: data.hpOpportunityId,
+    title: data.title,
+    description: data.description ?? null,
+    status: data.status ?? "pending",
+    scheduledDate: data.scheduledDate ?? null,
+    completedAt: data.status === "complete" ? new Date() : null,
+    sortOrder: data.sortOrder ?? 0,
+  });
+  return (result as any).insertId as number;
+}
+
+export async function deleteMilestone(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(portalJobMilestones).where(eq(portalJobMilestones.id, id));
+}
+
+// ─── JOB UPDATES ─────────────────────────────────────────────────────────────
+
+export async function getUpdatesByJob(hpOpportunityId: string) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(portalJobUpdates)
+    .where(eq(portalJobUpdates.hpOpportunityId, hpOpportunityId))
+    .orderBy(desc(portalJobUpdates.createdAt));
+}
+
+export async function createJobUpdate(data: InsertPortalJobUpdate) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [result] = await db.insert(portalJobUpdates).values({
+    hpOpportunityId: data.hpOpportunityId,
+    message: data.message,
+    photoUrl: data.photoUrl ?? null,
+    postedBy: data.postedBy ?? null,
+  });
+  return (result as any).insertId as number;
+}
+
+export async function deleteJobUpdate(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(portalJobUpdates).where(eq(portalJobUpdates.id, id));
 }

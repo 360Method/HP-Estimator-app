@@ -26,6 +26,7 @@ import PortalWallet from "./pages/portal/PortalWallet";
 import PortalReferral from "./pages/portal/PortalReferral";
 import PortalMessages from "./pages/portal/PortalMessages";
 import PortalRequest from "./pages/portal/PortalRequest";
+import PortalJobDetail from "./pages/portal/PortalJobDetail";
 
 // Domains that should serve only the customer portal (no admin app)
 const PORTAL_HOSTNAMES = ["client.handypioneers.com"];
@@ -62,6 +63,7 @@ function Router() {
       <Route path="/portal/appointments" component={PortalAppointments} />
       <Route path="/portal/invoices/:id" component={PortalInvoiceDetail} />
       <Route path="/portal/invoices" component={PortalInvoices} />
+      <Route path="/portal/job/:hpOpportunityId" component={PortalJobDetail} />
       <Route path="/portal/estimates/:id" component={PortalEstimateDetail} />
       <Route path="/portal/estimates" component={PortalEstimates} />
       <Route path="/portal/documents" component={PortalDocuments} />

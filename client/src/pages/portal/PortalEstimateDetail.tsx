@@ -164,8 +164,18 @@ export default function PortalEstimateDetail() {
 
         {/* Status banners */}
         {isApproved && (
-          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6 text-green-700 text-sm font-medium">
-            ✓ Estimate approved on {fmtDate(est.approvedAt)} — Thank you, {est.signerName}!
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6 text-green-700 text-sm">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <span className="font-medium">✓ Estimate approved on {fmtDate(est.approvedAt)} — Thank you, {est.signerName}!</span>
+              {est.hpOpportunityId && (
+                <button
+                  onClick={() => navigate(`/portal/job/${est.hpOpportunityId}`)}
+                  className="inline-flex items-center gap-1.5 bg-[#2d4a2d] hover:bg-[#1a2e1a] text-white text-xs font-medium px-3 py-1.5 rounded-md transition-colors"
+                >
+                  View Job Progress →
+                </button>
+              )}
+            </div>
           </div>
         )}
         {isDeclined && (

@@ -28,6 +28,7 @@ import {
   CheckCircle,
   Clock,
   CreditCard,
+  Briefcase,
 } from "lucide-react";
 
 function fmtMoney(cents: number) {
@@ -243,6 +244,8 @@ export default function PortalHome() {
     (a) => new Date(a.scheduledAt).getTime() >= Date.now() && a.status === "scheduled"
   );
   const totalDue = openInvoices.reduce((sum, inv) => sum + ((inv.amountDue ?? 0) - (inv.amountPaid ?? 0)), 0);
+  // Approved estimates with a linked HP opportunity = active jobs
+  const activeJobs = estimates.filter((e) => e.status === "approved" && e.hpOpportunityId);
 
   return (
     <PortalLayout>
@@ -404,6 +407,36 @@ export default function PortalHome() {
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <EstimateStatusBadge status={est.status} />
+                    <ChevronRight className="w-4 h-4 text-gray-300" />
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Active Jobs */}
+        {activeJobs.length > 0 && (
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+              <h3 className="font-semibold text-gray-900 text-sm">Active Jobs</h3>
+            </div>
+            <div className="divide-y divide-gray-100">
+              {activeJobs.map((est) => (
+                <button
+                  key={est.id}
+                  onClick={() => navigate(`/portal/job/${est.hpOpportunityId}`)}
+                  className="w-full flex items-center gap-3 px-5 py-3 hover:bg-gray-50 transition-colors text-left"
+                >
+                  <div className="w-7 h-7 rounded-full bg-[#2d4a2d] flex items-center justify-center shrink-0">
+                    <Briefcase className="w-3.5 h-3.5 text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{est.title}</p>
+                    <p className="text-xs text-gray-500">Approved {fmtDate(est.approvedAt ?? est.sentAt)}</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600">In Progress</span>
                     <ChevronRight className="w-4 h-4 text-gray-300" />
                   </div>
                 </button>

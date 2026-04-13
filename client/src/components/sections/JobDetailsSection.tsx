@@ -29,6 +29,7 @@ import {
   CheckCircle2, Circle, Upload, X, RefreshCw, Pencil,
   Save, ChevronUp, GitBranch, History,
   FileCheck, ArrowRight, Zap, Star,
+  Flag, ListChecks, Send as SendIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { nanoid } from 'nanoid';
@@ -506,8 +507,231 @@ function JobCompleteModal({
     </Dialog>
   );
 }
+// ── Job Progress Section ───────────────────────────────────────────────
+const MILESTONE_STATUS_CONFIG = {
+  pending:     { label: 'Pending',     color: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400', dot: 'bg-slate-400' },
+  in_progress: { label: 'In Progress', color: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',   dot: 'bg-sky-500' },
+  complete:    { label: 'Complete',    color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300', dot: 'bg-emerald-500' },
+} as const;
 
-// ── Main Component ────────────────────────────────────────────
+function JobProgressSection({ hpOpportunityId }: { hpOpportunityId: string }) {
+  const { data, refetch, isLoading } = trpc.portal.getJobProgress.useQuery({ hpOpportunityId }, { staleTime: 30_000 });
+  const upsertMilestone = trpc.portal.upsertMilestone.useMutation({ onSuccess: () => { refetch(); toast.success('Milestone saved'); } });
+  const deleteMilestone = trpc.portal.deleteMilestone.useMutation({ onSuccess: () => { refetch(); toast.success('Milestone deleted'); } });
+  const postUpdate = trpc.portal.postJobUpdate.useMutation({ onSuccess: () => { refetch(); setUpdateMsg(''); toast.success('Update posted'); } });
+  const deleteUpdate = trpc.portal.deleteJobUpdate.useMutation({ onSuccess: () => { refetch(); toast.success('Update deleted'); } });
+
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [editStatus, setEditStatus] = useState<'pending' | 'in_progress' | 'complete'>('pending');
+  const [editDate, setEditDate] = useState('');
+  const [addingNew, setAddingNew] = useState(false);
+  const [updateMsg, setUpdateMsg] = useState('');
+
+  const milestones = data?.milestones ?? [];
+  const updates = data?.updates ?? [];
+
+  const openEdit = (m: typeof milestones[0]) => {
+    setEditingId(m.id);
+    setEditTitle(m.title);
+    setEditDesc(m.description ?? '');
+    setEditStatus((m.status ?? 'pending') as 'pending' | 'in_progress' | 'complete');
+    setEditDate(m.scheduledDate ? new Date(m.scheduledDate).toISOString().slice(0, 10) : '');
+  };
+
+  const saveEdit = () => {
+    if (!editTitle.trim()) return;
+    upsertMilestone.mutate({
+      id: editingId ?? undefined,
+      hpOpportunityId,
+      title: editTitle.trim(),
+      description: editDesc.trim() || undefined,
+      status: editStatus,
+      scheduledDate: editDate || undefined,
+      sortOrder: editingId ? (milestones.find(m => m.id === editingId)?.sortOrder ?? 0) : milestones.length,
+    });
+    setEditingId(null);
+    setAddingNew(false);
+  };
+
+  const startNew = () => {
+    setEditingId(null);
+    setEditTitle('');
+    setEditDesc('');
+    setEditStatus('pending');
+    setEditDate('');
+    setAddingNew(true);
+  };
+
+  return (
+    <Section
+      icon={<ListChecks size={13} />}
+      title="Job Progress"
+      defaultOpen={true}
+      badge={
+        <span className="ml-2 text-[10px] font-normal normal-case tracking-normal text-muted-foreground">
+          Visible to customer
+        </span>
+      }
+      rightSlot={
+        <Button size="sm" variant="outline" className="h-6 text-xs px-2 gap-1" onClick={startNew}>
+          <Plus size={11} /> Milestone
+        </Button>
+      }
+    >
+      {isLoading && <p className="text-xs text-muted-foreground py-2">Loading…</p>}
+
+      {/* Milestones list */}
+      {milestones.length === 0 && !addingNew && (
+        <p className="text-xs text-muted-foreground py-1">No milestones yet. Add one to show the customer what to expect.</p>
+      )}
+      <div className="space-y-1.5">
+        {milestones.map(m => (
+          <div key={m.id} className="rounded-md border border-border bg-card px-3 py-2">
+            {editingId === m.id ? (
+              <MilestoneForm
+                title={editTitle} setTitle={setEditTitle}
+                desc={editDesc} setDesc={setEditDesc}
+                status={editStatus} setStatus={setEditStatus}
+                date={editDate} setDate={setEditDate}
+                onSave={saveEdit} onCancel={() => setEditingId(null)}
+              />
+            ) : (
+              <div className="flex items-start gap-2">
+                <div className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${MILESTONE_STATUS_CONFIG[m.status as keyof typeof MILESTONE_STATUS_CONFIG]?.dot ?? 'bg-slate-400'}`} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium leading-snug">{m.title}</p>
+                  {m.description && <p className="text-[11px] text-muted-foreground mt-0.5">{m.description}</p>}
+                  <div className="flex items-center gap-2 mt-1 flex-wrap">
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${MILESTONE_STATUS_CONFIG[m.status as keyof typeof MILESTONE_STATUS_CONFIG]?.color ?? ''}`}>
+                      {MILESTONE_STATUS_CONFIG[m.status as keyof typeof MILESTONE_STATUS_CONFIG]?.label ?? m.status}
+                    </span>
+                    {m.scheduledDate && (
+                      <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                        <Calendar size={9} /> {new Date(m.scheduledDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button onClick={() => openEdit(m)} className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors">
+                    <Pencil size={11} />
+                  </button>
+                  <button onClick={() => deleteMilestone.mutate({ id: m.id })} className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors">
+                    <Trash2 size={11} />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+        {addingNew && (
+          <div className="rounded-md border border-border bg-card px-3 py-2">
+            <MilestoneForm
+              title={editTitle} setTitle={setEditTitle}
+              desc={editDesc} setDesc={setEditDesc}
+              status={editStatus} setStatus={setEditStatus}
+              date={editDate} setDate={setEditDate}
+              onSave={saveEdit} onCancel={() => setAddingNew(false)}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Progress updates */}
+      <div className="mt-4 border-t border-border pt-3">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">Progress Updates</p>
+        <div className="flex gap-2 mb-3">
+          <input
+            type="text"
+            value={updateMsg}
+            onChange={e => setUpdateMsg(e.target.value)}
+            placeholder="Post an update visible to the customer…"
+            className="field-input flex-1 text-xs"
+            onKeyDown={e => { if (e.key === 'Enter' && updateMsg.trim()) postUpdate.mutate({ hpOpportunityId, message: updateMsg.trim() }); }}
+          />
+          <Button
+            size="sm" variant="default"
+            className="h-8 px-3 gap-1 bg-[#2d4a2d] hover:bg-[#1a2e1a] text-white"
+            disabled={!updateMsg.trim() || postUpdate.isPending}
+            onClick={() => postUpdate.mutate({ hpOpportunityId, message: updateMsg.trim() })}
+          >
+            <SendIcon size={12} /> Post
+          </Button>
+        </div>
+        {updates.length === 0 && <p className="text-xs text-muted-foreground">No updates posted yet.</p>}
+        <div className="space-y-1.5">
+          {updates.map(u => (
+            <div key={u.id} className="flex items-start gap-2 text-xs">
+              <Flag size={11} className="mt-0.5 text-[#c8922a] flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="leading-snug">{u.message}</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">{u.postedBy ?? 'Handy Pioneers'} · {new Date(u.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</p>
+              </div>
+              <button onClick={() => deleteUpdate.mutate({ id: u.id })} className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors flex-shrink-0">
+                <Trash2 size={10} />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+function MilestoneForm({
+  title, setTitle, desc, setDesc, status, setStatus, date, setDate, onSave, onCancel,
+}: {
+  title: string; setTitle: (v: string) => void;
+  desc: string; setDesc: (v: string) => void;
+  status: 'pending' | 'in_progress' | 'complete'; setStatus: (v: 'pending' | 'in_progress' | 'complete') => void;
+  date: string; setDate: (v: string) => void;
+  onSave: () => void; onCancel: () => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <input
+        autoFocus
+        type="text"
+        value={title}
+        onChange={e => setTitle(e.target.value)}
+        placeholder="Milestone title (e.g. Demo complete)"
+        className="field-input w-full text-xs"
+      />
+      <input
+        type="text"
+        value={desc}
+        onChange={e => setDesc(e.target.value)}
+        placeholder="Description (optional)"
+        className="field-input w-full text-xs"
+      />
+      <div className="flex gap-2">
+        <select
+          value={status}
+          onChange={e => setStatus(e.target.value as 'pending' | 'in_progress' | 'complete')}
+          className="field-input text-xs flex-1"
+        >
+          <option value="pending">Pending</option>
+          <option value="in_progress">In Progress</option>
+          <option value="complete">Complete</option>
+        </select>
+        <input
+          type="date"
+          value={date}
+          onChange={e => setDate(e.target.value)}
+          className="field-input text-xs flex-1"
+        />
+      </div>
+      <div className="flex gap-2 justify-end">
+        <Button size="sm" variant="outline" className="h-6 text-xs px-2" onClick={onCancel}>Cancel</Button>
+        <Button size="sm" className="h-6 text-xs px-2 bg-[#2d4a2d] hover:bg-[#1a2e1a] text-white" onClick={onSave} disabled={!title.trim()}>Save</Button>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Component ────────────────────────────────────────────────
 export default function JobDetailsSection() {
   const {
     state, setJobInfo, updateOpportunity, setSection, setScheduleFilter,
@@ -1594,6 +1818,9 @@ export default function JobDetailsSection() {
           </div>
         )}
       </Section>
+
+      {/* ── Job Progress Milestones ── */}
+      <JobProgressSection hpOpportunityId={activeOpp.id} />
 
       {/* ── Internal Notes ── */}
       <Section

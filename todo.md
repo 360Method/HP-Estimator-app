@@ -1002,3 +1002,25 @@
 - [x] PortalEstimateDetail: show deposit amount prominently in the approval modal ("You will be directed to pay $X deposit")
 - [x] PortalEstimateDetail: after approval, redirect to deposit invoice Pay Now page automatically
 - [x] PortalEstimates list: show "Approved" green badge and "Declined" red badge on estimate cards
+
+## Phase 2: Job Progress Tracker (Portal)
+
+- [x] Add portalJobMilestones DB table (id, hpOpportunityId, title, description, status: pending|in_progress|complete, scheduledDate, completedAt, sortOrder, createdAt)
+- [x] Add portalJobUpdates DB table (id, hpOpportunityId, message, photoUrl, createdAt) — HP team posts progress updates visible in portal
+- [x] Run db:push for new tables
+- [x] Add getJobMilestones(hpOpportunityId) and getJobUpdates(hpOpportunityId) helpers to portalDb.ts
+- [x] Add portal.getJobProgress HP procedure — returns job info, milestones, updates, scheduled dates for a given hpOpportunityId
+- [x] Add portal.upsertMilestone HP procedure — create/update a milestone (title, status, scheduledDate, description)
+- [x] Add portal.deleteMilestone HP procedure
+- [x] Add portal.postJobUpdate HP procedure — HP team posts a progress note/photo visible to customer
+- [x] Add portal.getJobProgress customer procedure — returns same data but gated by portal session (customer-facing)
+- [x] JobDetailsSection: add "Customer Milestones" panel — list of milestones with status toggles, date pickers, add/delete
+- [x] JobDetailsSection: add "Post Update to Portal" button — quick note + optional photo URL
+- [x] Build PortalJobDetail page (/portal/jobs/:id) — job header, progress stepper, milestone timeline, updates feed
+- [x] PortalJobDetail: progress stepper shows current stage (Scheduled → In Progress → Punch List → Complete)
+- [x] PortalJobDetail: milestone timeline — each milestone shows title, description, scheduled date, status badge
+- [x] PortalJobDetail: updates feed — chronological list of HP-posted notes with timestamps
+- [x] PortalJobs page: add "View Progress" link on each job card
+- [x] PortalHome: add "Your Active Jobs" section with progress summary cards
+- [x] Register /portal/jobs/:id route in App.tsx
+- [x] Write vitest tests for milestone upsert and job progress query

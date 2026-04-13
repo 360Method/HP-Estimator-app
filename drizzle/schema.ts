@@ -578,3 +578,41 @@ export const portalServiceRequests = mysqlTable("portalServiceRequests", {
 });
 export type PortalServiceRequest = typeof portalServiceRequests.$inferSelect;
 export type InsertPortalServiceRequest = typeof portalServiceRequests.$inferInsert;
+
+// ─── PORTAL: JOB MILESTONES ───────────────────────────────────────────────────
+// HP team manages milestones per job; customers see them in the portal.
+export const portalJobMilestones = mysqlTable("portalJobMilestones", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Pro-side opportunity ID (area='job') */
+  hpOpportunityId: varchar("hpOpportunityId", { length: 64 }).notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description"),
+  /** pending | in_progress | complete */
+  status: mysqlEnum("status", ["pending", "in_progress", "complete"]).default("pending").notNull(),
+  /** ISO date string for when this milestone is expected */
+  scheduledDate: varchar("scheduledDate", { length: 32 }),
+  completedAt: timestamp("completedAt"),
+  /** Controls display order */
+  sortOrder: int("sortOrder").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type PortalJobMilestone = typeof portalJobMilestones.$inferSelect;
+export type InsertPortalJobMilestone = typeof portalJobMilestones.$inferInsert;
+
+// ─── PORTAL: JOB UPDATES ─────────────────────────────────────────────────────
+// Progress notes/photos posted by the HP team, visible to the customer in portal.
+export const portalJobUpdates = mysqlTable("portalJobUpdates", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Pro-side opportunity ID (area='job') */
+  hpOpportunityId: varchar("hpOpportunityId", { length: 64 }).notNull(),
+  /** Short progress note */
+  message: text("message").notNull(),
+  /** Optional S3 URL for a progress photo */
+  photoUrl: text("photoUrl"),
+  /** HP team member who posted this */
+  postedBy: varchar("postedBy", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type PortalJobUpdate = typeof portalJobUpdates.$inferSelect;
+export type InsertPortalJobUpdate = typeof portalJobUpdates.$inferInsert;
