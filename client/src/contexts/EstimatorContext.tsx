@@ -289,7 +289,9 @@ type Action =
    *   any unsaved local edits (e.g. in-progress estimates).
    * - Opportunities from DB are merged per-customer the same way.
    */
-  | { type: 'MERGE_DB_CUSTOMERS'; payload: Customer[] };
+  | { type: 'MERGE_DB_CUSTOMERS'; payload: Customer[] }
+  /** Fired by SSE when a portal message arrives — triggers unread count re-query */
+  | { type: 'PORTAL_UNREAD_PING' };
 
 function makeActivity(
   type: ActivityEvent['type'],
@@ -1528,14 +1530,41 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
       return { ...state, customRoles: state.customRoles.filter(r => r.id !== action.id) };
 
     case 'MERGE_DB_CUSTOMERS': {
-      // Build a set of IDs already in local state for O(1) lookup
+      // Build a map of DB customers for O(1) lookup
+      const dbMap = new Map(action.payload.map(c => [c.id, c]));
       const localIds = new Set(state.customers.map(c => c.id));
-      // Only add customers that don't exist locally — preserve local edits
+      // New customers not yet in local state
       const newCustomers = action.payload.filter(c => !localIds.has(c.id));
-      if (newCustomers.length === 0) return state;
-      // Prepend new customers; existing ones stay untouched
-      return { ...state, customers: [...newCustomers, ...state.customers] };
+      // For existing customers: merge opportunities from DB (update stage/wonAt/portalApprovedAt
+      // for any opportunity whose DB updatedAt is newer than local updatedAt)
+      const updatedCustomers = state.customers.map(c => {
+        const dbCust = dbMap.get(c.id);
+        if (!dbCust) return c;
+        const dbOppMap = new Map((dbCust.opportunities ?? []).map((o: any) => [o.id, o]));
+        const mergedOpps = c.opportunities.map(o => {
+          const dbOpp = dbOppMap.get(o.id);
+          if (!dbOpp) return o;
+          const dbUpdated = new Date(dbOpp.updatedAt ?? 0).getTime();
+          const localUpdated = new Date(o.updatedAt ?? 0).getTime();
+          if (dbUpdated <= localUpdated) return o;
+          // DB is newer — merge stage, wonAt, portalApprovedAt from DB
+          return {
+            ...o,
+            stage: dbOpp.stage ?? o.stage,
+            wonAt: dbOpp.wonAt ?? o.wonAt,
+            portalApprovedAt: dbOpp.portalApprovedAt ?? o.portalApprovedAt,
+            updatedAt: dbOpp.updatedAt ?? o.updatedAt,
+          };
+        });
+        return { ...c, opportunities: mergedOpps };
+      });
+      if (newCustomers.length === 0 && updatedCustomers === state.customers) return state;
+      return { ...state, customers: [...newCustomers, ...updatedCustomers] };
     }
+
+    case 'PORTAL_UNREAD_PING':
+      // No state change needed — this ping causes React Query to re-fetch unread count
+      return { ...state, _portalUnreadPing: (state as any)._portalUnreadPing + 1 || 1 };
 
     case 'UPDATE_OPPORTUNITY_SCHEDULE': {
       const now = new Date().toISOString();

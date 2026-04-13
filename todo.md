@@ -1077,3 +1077,46 @@
 - [x] JobDetailsSection JobProgressSection: "Don't send review request" checkbox appears in sign-off banner
 - [x] Signature storage hardening: uploadSignatureToS3 helper in portal.ts; both approveEstimate and submitJobSignOff now store S3 URL
 - [x] All 96 tests passing
+
+## Phase 5: Pro ↔ Portal Sync (6 Workstreams)
+
+### WS-1: Opportunity SSE Push + Pro-Side Live Reload
+- [x] Add broadcastOpportunityUpdate(hpOpportunityId, fields) helper to sse.ts
+- [x] Call broadcastOpportunityUpdate in portal.approveEstimate after updateOpportunity
+- [x] Create useOpportunitySSE hook — listens for opportunity_updated SSE event, dispatches UPDATE_OPPORTUNITY to EstimatorContext
+- [x] Wire useOpportunitySSE into Home.tsx
+
+### WS-2: Stage Auto-Advance
+- [x] Add portalApprovedAt column to opportunities table in schema.ts; run db:push
+- [x] approveEstimate now writes stage='Won' + portalApprovedAt to opportunities table via updateOpportunity
+- [x] useDbSync dbOppToLocal now includes portalApprovedAt so initial load reflects DB state
+- [x] listOpportunities uses db.select() (all columns) — portalApprovedAt returned automatically
+
+### WS-3: Invoice Bridge
+- [x] Add getPortalInvoicesByHpOpportunityId(hpOpportunityId) helper to portalDb.ts (joins through portalEstimates)
+- [x] Add portal.getPortalInvoicesByJob HP procedure
+- [x] Add portal invoices query to InvoiceSection (refetchOnWindowFocus, 60s interval)
+- [x] Render read-only "Portal Invoices" panel in InvoiceSection when hpOpportunityId is set
+
+### WS-4: Bidirectional Messaging
+- [x] Add broadcastPortalMessage(customerId) helper to sse.ts
+- [x] Call broadcastPortalMessage in portal.sendMessage after createPortalMessage
+- [x] Rewrite useInboxSSE to handle portal_message and opportunity_updated events
+- [x] Add portal_message and opportunity_updated SSE handlers to InboxPage
+- [x] Add getGlobalUnreadPortalMessageCount() helper to portalDb.ts
+- [x] Add portal.getPortalUnreadCount HP procedure
+- [x] Add portalUnreadCount query to MetricsBar (30s poll)
+- [x] Add blue unread badge to Inbox nav item in MetricsBar (desktop + mobile)
+
+### WS-5: Portal Job Progress Polling
+- [x] Add refetchInterval: 60_000 + refetchOnWindowFocus: true to getCustomerJobProgress query in PortalJobDetail
+- [x] Add refetchInterval: 120_000 + refetchOnWindowFocus: true to getJobSignOff query in PortalJobDetail
+
+### WS-6: CO Pending Badge on Pipeline Cards
+- [x] Add getPendingChangeOrderCountsByJob() helper to portalDb.ts
+- [x] Add portal.getPendingCOCounts HP procedure
+- [x] Add getPendingCOCounts query to PipelineBoard (60s poll, job area only)
+- [x] Add pendingCoCount prop to KanbanCard function signature
+- [x] Pass pendingCoCount from pendingCOMap to KanbanCard
+- [x] Render amber "CO Pending" badge on KanbanCard when pendingCoCount > 0
+- [x] 96 tests passing

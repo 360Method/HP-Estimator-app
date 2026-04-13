@@ -37,6 +37,7 @@ function dbOppToLocal(o: any): Opportunity {
     convertedToJobAt: o.convertedToJobAt ?? undefined,
     sentAt: o.sentAt ?? undefined,
     wonAt: o.wonAt ?? undefined,
+    portalApprovedAt: o.portalApprovedAt ?? undefined,
     scheduledDate: o.scheduledDate ?? undefined,
     scheduledEndDate: o.scheduledEndDate ?? undefined,
     scheduledDuration: o.scheduledDuration ?? undefined,

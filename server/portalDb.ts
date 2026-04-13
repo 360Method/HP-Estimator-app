@@ -796,3 +796,71 @@ export async function setSkipReviewRequest(hpOpportunityId: string, skip: boolea
     .set({ skipReviewRequest: skip })
     .where(eq(portalJobSignOffs.hpOpportunityId, hpOpportunityId));
 }
+
+// ─── INVOICE BRIDGE (HP-side) ─────────────────────────────────────────────────
+
+/**
+ * Returns all portal invoices linked to a given hpOpportunityId.
+ * Joins portalInvoices → portalEstimates to resolve the link.
+ */
+export async function getPortalInvoicesByHpOpportunityId(hpOpportunityId: string) {
+  const db = await d();
+  // First resolve the portal estimate for this opportunity
+  const estRows = await db
+    .select({ id: portalEstimates.id })
+    .from(portalEstimates)
+    .where(eq(portalEstimates.hpOpportunityId, hpOpportunityId));
+  if (estRows.length === 0) return [];
+  const estimateIds = estRows.map(r => r.id);
+  return db
+    .select()
+    .from(portalInvoices)
+    .where(inArray(portalInvoices.estimateId, estimateIds))
+    .orderBy(desc(portalInvoices.sentAt));
+}
+
+// ─── GLOBAL UNREAD PORTAL MESSAGE COUNT ──────────────────────────────────────
+
+/**
+ * Returns the total count of unread portal messages from customers across
+ * all customers — used for the pro-side Inbox nav badge.
+ */
+export async function getGlobalUnreadPortalMessageCount(): Promise<number> {
+  const db = await d();
+  const rows = await db
+    .select({ id: portalMessages.id })
+    .from(portalMessages)
+    .where(
+      and(
+        eq(portalMessages.senderRole, "customer"),
+        isNull(portalMessages.readAt),
+      )
+    );
+  return rows.length;
+}
+
+// ─── PENDING CHANGE ORDER COUNTS (for pipeline badge) ────────────────────────
+
+/**
+ * Returns a map of hpOpportunityId → pending CO count for all jobs that have
+ * at least one pending/sent change order. Used by the pro-side pipeline badge.
+ */
+export async function getPendingChangeOrderCountsByJob(): Promise<Record<string, number>> {
+  const db = await d();
+  const rows = await db
+    .select({
+      hpOpportunityId: portalChangeOrders.hpOpportunityId,
+    })
+    .from(portalChangeOrders)
+    .where(
+      or(
+        eq(portalChangeOrders.status, "sent"),
+        eq(portalChangeOrders.status, "viewed"),
+      )
+    );
+  const counts: Record<string, number> = {};
+  for (const row of rows) {
+    counts[row.hpOpportunityId] = (counts[row.hpOpportunityId] ?? 0) + 1;
+  }
+  return counts;
+}

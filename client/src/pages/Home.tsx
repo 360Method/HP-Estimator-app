@@ -6,6 +6,7 @@ import { useMemo } from 'react';
 import { useAuth } from '@/_core/hooks/useAuth';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { useDbSync } from '@/hooks/useDbSync';
+import { useOpportunitySSE } from '@/hooks/useOpportunitySSE';
 import { calcPhase, calcTotals } from '@/lib/calc';
 import MetricsBar from '@/components/MetricsBar';
 import CustomerSection from '@/components/sections/CustomerSection';
@@ -54,6 +55,8 @@ function AdminApp() {
   const { state } = useEstimator();
   // Sync DB customers into local state once on authenticated load
   useDbSync(true);
+  // Subscribe to SSE for real-time portal updates (opportunity stage, portal messages)
+  useOpportunitySSE(true);
 
   const totals = useMemo(() => {
     const phaseResults = state.phases.map(p => calcPhase(p, state.global));

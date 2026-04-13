@@ -383,6 +383,13 @@ export default function InboxPage() {
       }
     },
     onNewConversation: () => refetchConvs(),
+    onPortalMessage: () => {
+      // Refresh portal messages list when a customer sends a portal message
+      refetchPortalMsgs();
+      if (Notification.permission === 'granted') {
+        new Notification('New portal message — Handy Pioneers', { body: 'A customer sent a message via the portal', icon: '/favicon.ico' });
+      }
+    },
   });
 
   const activeConv = conversations.find(c => c.id === activeConvId) ?? null;

@@ -588,6 +588,7 @@ export interface Opportunity {
   sentAt?: string;                  // ISO timestamp when estimate was last sent to customer
   // Approval / Won tracking
   wonAt?: string;                  // ISO timestamp when estimate was signed/approved
+  portalApprovedAt?: string;        // ISO timestamp when customer approved via portal
   signedEstimateDataUrl?: string;  // base64 PNG snapshot of the signed estimate document
   signedEstimateFilename?: string; // e.g. "Estimate-HP-2026-042-Signed-2026-04-06.png"
   // Schedule fields

@@ -62,11 +62,15 @@ import {
   createPortalChangeOrder,
   updatePortalChangeOrderStatus,
   setSkipReviewRequest,
+  getPortalInvoicesByHpOpportunityId,
+  getGlobalUnreadPortalMessageCount,
+  getPendingChangeOrderCountsByJob,
 } from "../portalDb";
 import { sendEmail } from "../gmail";
 import { updateOpportunity } from "../db";
 import { notifyOwner } from "../_core/notification";
 import { storagePut } from "../storage";
+import { broadcastOpportunityUpdate, broadcastPortalMessage } from "../sse";
 import Stripe from "stripe";
 import { ENV } from "../_core/env";
 
@@ -282,14 +286,21 @@ export const portalRouter = router({
         });
       }
 
-      // Mark pro-side opportunity as won (if linked)
+      // Mark pro-side opportunity as won (if linked) and broadcast SSE update
       if (est.hpOpportunityId) {
+        const now = new Date().toISOString();
         await updateOpportunity(est.hpOpportunityId, {
           stage: 'Won',
-          wonAt: new Date().toISOString(),
-          approvedAt: new Date().toISOString(),
+          wonAt: now,
+          portalApprovedAt: now,
         }).catch((e: unknown) => {
           console.warn('[portal.approveEstimate] Could not mark opportunity won:', e);
+        });
+        broadcastOpportunityUpdate(est.hpOpportunityId, {
+          stage: 'Won',
+          wonAt: now,
+          portalApprovedAt: now,
+          updatedAt: now,
         });
       }
 
@@ -452,6 +463,13 @@ export const portalRouter = router({
         senderRole: "customer",
         senderName: ctx.portalCustomer.name,
         body: input.body,
+      });
+      // Broadcast to pro-side SSE so InboxPage unread badge updates immediately
+      broadcastPortalMessage(ctx.portalCustomer.id, {
+        senderRole: 'customer',
+        senderName: ctx.portalCustomer.name,
+        body: input.body,
+        createdAt: new Date().toISOString(),
       });
       await notifyOwner({
         title: `New Portal Message from ${ctx.portalCustomer.name}`,
@@ -922,6 +940,12 @@ export const portalRouter = router({
     return getAllPortalMessages();
   }),
 
+  /** Returns count of unread portal messages (customer → HP) for the Inbox badge */
+  getPortalUnreadCount: hpProcedure.query(async () => {
+    const count = await getGlobalUnreadPortalMessageCount();
+    return { count };
+  }),
+
   // ── SERVICE REQUESTS (Booking) ──────────────────────────────────────────────────────
   /** Customer submits a new service/booking request */
   submitServiceRequest: portalProcedure
@@ -1386,6 +1410,23 @@ export const portalRouter = router({
 
       return { ok: true };
     }),
+
+  // ── INVOICE BRIDGE (HP-side) ──────────────────────────────────────────────
+
+  /** Returns portal invoices for a given hpOpportunityId (HP staff only) */
+  getPortalInvoicesByJob: hpProcedure
+    .input(z.object({ hpOpportunityId: z.string() }))
+    .query(async ({ input }) => {
+      return getPortalInvoicesByHpOpportunityId(input.hpOpportunityId);
+    }),
+
+  /**
+   * Returns a map of hpOpportunityId → pending CO count.
+   * Used by PipelineBoard to show a yellow badge on job cards with pending COs.
+   */
+  getPendingCOCounts: hpProcedure.query(async () => {
+    return getPendingChangeOrderCountsByJob();
+  }),
 });
 // ─── EMAIL TEMPLATES ──────────────────────────────────────────────────────────
 // HP brand palette: forest green #1a2e1a / #2d4a2d, warm gold #c8922a

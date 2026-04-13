@@ -86,6 +86,13 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
     staleTime: 30_000,
   });
   const unreadCount = unreadData?.count ?? 0;
+
+  // Portal unread message count for Inbox badge
+  const { data: portalUnreadData } = trpc.portal.getPortalUnreadCount.useQuery(undefined, {
+    refetchInterval: 30_000,
+    staleTime: 15_000,
+  });
+  const portalUnreadCount = portalUnreadData?.count ?? 0;
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [showNewMenu, setShowNewMenu] = useState(false);
@@ -289,6 +296,7 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
             <nav className="hidden md:flex items-center gap-0.5">
               {BACKEND_NAV.map(({ icon: Icon, label, section }) => {
                 const showBadge = unreadCount > 0 && label === 'Pipeline';
+                const showInboxBadge = portalUnreadCount > 0 && label === 'Inbox';
                 return (
                   <button
                     key={label}
@@ -305,6 +313,11 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
                       {showBadge && (
                         <span className="absolute -top-1.5 -right-1.5 flex items-center justify-center min-w-[14px] h-3.5 rounded-full bg-red-500 text-white text-[8px] font-bold leading-none px-0.5">
                           {unreadCount > 9 ? '9+' : unreadCount}
+                        </span>
+                      )}
+                      {showInboxBadge && (
+                        <span className="absolute -top-1.5 -right-1.5 flex items-center justify-center min-w-[14px] h-3.5 rounded-full bg-blue-500 text-white text-[8px] font-bold leading-none px-0.5">
+                          {portalUnreadCount > 9 ? '9+' : portalUnreadCount}
                         </span>
                       )}
                     </div>
@@ -408,6 +421,7 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
           <div className="px-3 py-2 grid grid-cols-4 gap-1">
             {BACKEND_NAV.map(({ icon: Icon, label, section }) => {
               const showBadge = unreadCount > 0 && label === 'Pipeline';
+              const showInboxBadge = portalUnreadCount > 0 && label === 'Inbox';
               return (
                 <button
                   key={label}
@@ -423,6 +437,11 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
                     {showBadge && (
                       <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[14px] h-3.5 rounded-full bg-red-500 text-white text-[8px] font-bold leading-none px-0.5">
                         {unreadCount > 9 ? '9+' : unreadCount}
+                      </span>
+                    )}
+                    {showInboxBadge && (
+                      <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[14px] h-3.5 rounded-full bg-blue-500 text-white text-[8px] font-bold leading-none px-0.5">
+                        {portalUnreadCount > 9 ? '9+' : portalUnreadCount}
                       </span>
                     )}
                   </div>

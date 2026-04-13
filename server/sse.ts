@@ -72,3 +72,16 @@ export function broadcastNewMessage(conversationId: number, message: unknown) {
 export function broadcastNewConversation(conversation: unknown) {
   broadcastSSE("new_conversation", { conversation });
 }
+
+/** Broadcast an opportunity update (portal approval, sign-off, CO approval, etc.) */
+export function broadcastOpportunityUpdate(
+  opportunityId: string,
+  data: { stage?: string; wonAt?: string | null; portalApprovedAt?: string | null; updatedAt?: string }
+) {
+  broadcastSSE("opportunity_updated", { opportunityId, ...data });
+}
+
+/** Broadcast a new portal message (customer → HP team) so InboxPage can show unread badge */
+export function broadcastPortalMessage(customerId: number, message: unknown) {
+  broadcastSSE("portal_message", { customerId, message });
+}

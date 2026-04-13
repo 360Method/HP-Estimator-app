@@ -29,7 +29,7 @@ export default function PortalJobDetail() {
 
   const { data, isLoading, error } = trpc.portal.getCustomerJobProgress.useQuery(
     { hpOpportunityId },
-    { enabled: !!hpOpportunityId, staleTime: 30_000 }
+    { enabled: !!hpOpportunityId, staleTime: 30_000, refetchInterval: 60_000, refetchOnWindowFocus: true }
   );
 
   const milestones = data?.milestones ?? [];
@@ -47,7 +47,7 @@ export default function PortalJobDetail() {
   // Check if customer has already signed off
   const { data: signOff } = trpc.portal.getJobSignOff.useQuery(
     { hpOpportunityId },
-    { enabled: !!hpOpportunityId, staleTime: 60_000 }
+    { enabled: !!hpOpportunityId, staleTime: 60_000, refetchInterval: 120_000, refetchOnWindowFocus: true }
   );
 
   return (

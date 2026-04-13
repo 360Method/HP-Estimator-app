@@ -29,7 +29,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
   CreditCard, DollarSign, CheckCircle2, Clock, AlertCircle, FileText,
-  Plus, Printer, Send, ChevronRight, Banknote, Smartphone, PenLine, ShieldCheck, Eye,
+  Plus, Printer, Send, ChevronRight, Banknote, Smartphone, PenLine, ShieldCheck, Eye, Globe,
 } from 'lucide-react';
 import { CLARK_COUNTY_TAX_RATES, getTaxRateForZip } from '@/lib/taxRates';
 
@@ -1159,6 +1159,13 @@ export default function InvoiceSection() {
     { enabled: invoiceNumbers.length > 0, staleTime: 30_000, refetchOnWindowFocus: true }
   );
 
+  // Fetch portal invoices (deposit/balance) created via customer portal approval
+  const hpOpportunityId = activeOpp?.id ?? '';
+  const { data: portalInvoices } = trpc.portal.getPortalInvoicesByJob.useQuery(
+    { hpOpportunityId },
+    { enabled: !!hpOpportunityId, staleTime: 30_000, refetchOnWindowFocus: true }
+  );
+
   // Invoice counter — global across all customers to avoid duplicates
   const nextInvoiceNumber = () => {
     const year = new Date().getFullYear();
@@ -1285,6 +1292,35 @@ export default function InvoiceSection() {
               portalPayment={portalPaymentStatus?.[inv.invoiceNumber]}
             />
           ))}
+        </div>
+      )}
+
+      {/* Portal Invoices (from customer portal approval) */}
+      {portalInvoices && portalInvoices.length > 0 && (
+        <div className="border rounded-lg p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Globe className="w-4 h-4 text-blue-500" />
+            <span className="font-semibold text-sm">Portal Invoices</span>
+            <span className="text-xs text-muted-foreground ml-1">(customer-facing)</span>
+          </div>
+          {portalInvoices.map(pi => {
+            const statusColor = pi.status === 'paid' ? 'text-green-600' : pi.status === 'due' ? 'text-yellow-600' : 'text-muted-foreground';
+            const amountDue = (pi.amountDue / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+            const amountPaid = (pi.amountPaid / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+            return (
+              <div key={pi.id} className="flex items-center justify-between text-sm border rounded p-2 bg-muted/30">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">{pi.invoiceNumber}</span>
+                  <span className="text-xs text-muted-foreground capitalize">{pi.type}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-muted-foreground">{amountDue}</span>
+                  <span className={`font-semibold capitalize ${statusColor}`}>{pi.status}</span>
+                  {pi.status === 'paid' && <span className="text-xs text-green-600">({amountPaid} paid)</span>}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 

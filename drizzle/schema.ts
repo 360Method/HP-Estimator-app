@@ -526,6 +526,8 @@ export const opportunities = mysqlTable("opportunities", {
   convertedToJobAt: varchar("convertedToJobAt", { length: 32 }),
   sentAt: varchar("sentAt", { length: 32 }),
   wonAt: varchar("wonAt", { length: 32 }),
+  /** Set when the customer approves via the client portal (distinct from in-app approval) */
+  portalApprovedAt: varchar("portalApprovedAt", { length: 32 }),
   // Schedule
   scheduledDate: varchar("scheduledDate", { length: 32 }),
   scheduledEndDate: varchar("scheduledEndDate", { length: 32 }),

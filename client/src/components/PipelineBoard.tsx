@@ -35,6 +35,7 @@ import { Opportunity, PipelineArea, OpportunityStage, Customer, LeadNote, JobAtt
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { nanoid } from 'nanoid';
 import { toast } from 'sonner';
+import { trpc } from '@/lib/trpc';
 import { ConvertToEstimateModal, ConvertToJobModal } from '@/components/ConversionModal';
 
 // ── Stage color map ───────────────────────────────────────────
@@ -104,7 +105,7 @@ export interface PipelineBoardProps {
 function KanbanCard({
   opp, area, stages, onUpdate, onRemove,
   onConvertToEstimate, onConvertToJob, onArchive, onOpen,
-  customerName,
+  customerName, pendingCoCount = 0,
 }: {
   opp: Opportunity;
   area: PipelineArea;
@@ -116,6 +117,7 @@ function KanbanCard({
   onArchive?: (id: string, value: number) => void;
   onOpen?: (id: string) => void;
   customerName?: string;
+  pendingCoCount?: number;
 }) {
   const {
     attributes, listeners, setNodeRef, transform, transition, isDragging,
@@ -202,6 +204,12 @@ function KanbanCard({
             <div className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-full text-[9px] font-semibold">
               <CheckCircle size={8} />
               Approved via Portal
+            </div>
+          )}
+          {pendingCoCount > 0 && (
+            <div className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 bg-amber-50 border border-amber-200 text-amber-700 rounded-full text-[9px] font-semibold">
+              <span className="w-3 h-3 rounded-full bg-amber-400 text-white text-[7px] font-bold flex items-center justify-center leading-none">{pendingCoCount}</span>
+              CO Pending
             </div>
           )}
         </div>
@@ -375,6 +383,7 @@ function KanbanColumn({
               onArchive={onArchive}
               onOpen={onOpen}
               customerName={customerName}
+              pendingCoCount={opp.hpOpportunityId ? (pendingCOMap?.[opp.hpOpportunityId] ?? 0) : 0}
             />
           ))}
         </SortableContext>
@@ -842,6 +851,13 @@ export default function PipelineBoard({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [sortField, setSortField] = useState<'title' | 'stage' | 'value' | 'created'>('created');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+
+  // Pending change order counts per hpOpportunityId — only relevant for job area
+  const { data: pendingCOMap } = trpc.portal.getPendingCOCounts.useQuery(undefined, {
+    enabled: area === 'job',
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
 
   // PointerSensor with a small movement threshold + TouchSensor for mobile
   const sensors = useSensors(
