@@ -1289,3 +1289,14 @@
 - [ ] Fix: mergeCustomers DB helper must actually set mergedIntoId on source record
 - [ ] Fix: CustomersListPage filter must exclude customers with mergedIntoId set
 - [ ] Fix: MergeCustomerDialog onMerged callback must trigger local state refresh
+
+## Customers List Redesign (reference layout)
+- [ ] Add customers.importCsv tRPC procedure (bulk upsert from CSV rows)
+- [ ] Add date range filters: dateCreatedFrom/To, dateAcquiredFrom/To, lastServiceDateFrom/To
+- [ ] Add lifetimeValue min/max filter
+- [ ] Rewrite CustomersListPage: header with breadcrumb, record count, search, Filter button, Edit Columns button, Create Customer button, Actions dropdown
+- [ ] Filter slide-over panel: date created range, date acquired range, last service date range, lifetime value min/max, lead source, customer tags, customer type
+- [ ] Edit Columns popover: toggle visibility of Company, Address, Mobile, Email, Lead Source, Notes, Tags
+- [ ] Table layout: Display Name, Company, Address, Mobile, Email, Lead Source, Notes, Tags columns with sortable headers
+- [ ] Actions dropdown: Import CSV (file picker + parse + upsert), Export CSV (all or selected), Merge selected, Delete selected
+- [ ] Import CSV: parse file client-side, show preview modal with row count, confirm to upsert

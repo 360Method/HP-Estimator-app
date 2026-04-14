@@ -299,4 +299,81 @@ export const customersRouter = router({
       await deleteCustomerAddress(input.id);
       return { success: true };
     }),
+
+  /** Import customers from CSV rows (upsert by email) */
+  importCsv: protectedProcedure
+    .input(z.object({
+      rows: z.array(z.object({
+        displayName: z.string().default(''),
+        firstName: z.string().default(''),
+        lastName: z.string().default(''),
+        company: z.string().default(''),
+        email: z.string().default(''),
+        mobilePhone: z.string().default(''),
+        homePhone: z.string().default(''),
+        workPhone: z.string().default(''),
+        street: z.string().default(''),
+        city: z.string().default(''),
+        state: z.string().default(''),
+        zip: z.string().default(''),
+        customerType: z.string().default(''),
+        leadSource: z.string().default(''),
+        notes: z.string().default(''),
+        tags: z.string().default(''),
+      }))
+    }))
+    .mutation(async ({ input }) => {
+      const { nanoid } = await import('nanoid');
+      let created = 0;
+      let updated = 0;
+      for (const row of input.rows) {
+        const existing = row.email ? await findCustomerByEmail(row.email) : null;
+        const tags = row.tags ? JSON.stringify(row.tags.split(';').map((t: string) => t.trim()).filter(Boolean)) : '[]';
+        if (existing) {
+          await updateCustomer(existing.id, {
+            ...(row.displayName && { displayName: row.displayName }),
+            ...(row.firstName && { firstName: row.firstName }),
+            ...(row.lastName && { lastName: row.lastName }),
+            ...(row.company && { company: row.company }),
+            ...(row.mobilePhone && { mobilePhone: row.mobilePhone }),
+            ...(row.homePhone && { homePhone: row.homePhone }),
+            ...(row.workPhone && { workPhone: row.workPhone }),
+            ...(row.street && { street: row.street }),
+            ...(row.city && { city: row.city }),
+            ...(row.state && { state: row.state }),
+            ...(row.zip && { zip: row.zip }),
+            ...(row.customerType && { customerType: row.customerType as any }),
+            ...(row.leadSource && { leadSource: row.leadSource as any }),
+            ...(row.notes && { notes: row.notes }),
+            ...(row.tags && { tags }),
+          });
+          updated++;
+        } else {
+          const name = row.displayName || `${row.firstName} ${row.lastName}`.trim() || row.email || 'Imported';
+          await createCustomer({
+            id: nanoid(),
+            displayName: name,
+            firstName: row.firstName || '',
+            lastName: row.lastName || '',
+            company: row.company || '',
+            email: row.email || '',
+            mobilePhone: row.mobilePhone || '',
+            homePhone: row.homePhone || '',
+            workPhone: row.workPhone || '',
+            street: row.street || '',
+            city: row.city || '',
+            state: row.state || '',
+            zip: row.zip || '',
+            customerType: (row.customerType as any) || 'homeowner',
+            leadSource: (row.leadSource as any) || 'other',
+            notes: row.notes || '',
+            tags,
+            lifetimeValue: '0',
+            outstandingBalance: '0',
+          });
+          created++;
+        }
+      }
+      return { created, updated, total: input.rows.length };
+    }),
 });
