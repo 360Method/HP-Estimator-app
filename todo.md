@@ -1407,3 +1407,12 @@
 - [x] Fix STRIPE_PRICE env var key pattern: STRIPE_PRICE_{TIER}_{CADENCE} (was STRIPE_PRICE_360_{TIER}_{CADENCE})
 - [x] Make threeSixty.checkout.createSession publicProcedure (unauthenticated 360.handypioneers.com visitors)
 - [x] ctx.user?.email and ctx.user?.id safely accessed with optional chaining for public procedure
+
+## Patch: 360 Lead Capture Backend
+- [x] createSession input: add customerPhone, serviceAddress, serviceCity, serviceState, serviceZip fields
+- [x] createSession metadata: pass all new fields to Stripe session metadata
+- [x] Webhook: update portalCustomers with phone/address on existing record
+- [x] Webhook: pass phone/address when creating new portalCustomers record
+- [x] Webhook: find or create CRM customer (customers table) from email + contact data
+- [x] Webhook: open 'New Lead' opportunity tagged '360 Funnel' in pro pipeline
+- [x] Webhook: link crmCustomerId back to threeSixtyMemberships.hpCustomerId

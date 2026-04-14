@@ -510,6 +510,13 @@ const checkoutRouter = router({
         customerName: z.string().optional(),
         /** Customer email for prefill */
         customerEmail: z.string().email().optional(),
+        /** Customer phone number */
+        customerPhone: z.string().optional(),
+        /** Service address fields */
+        serviceAddress: z.string().optional(),
+        serviceCity: z.string().optional(),
+        serviceState: z.string().optional(),
+        serviceZip: z.string().optional(),
         /** Internal HP customer ID to link after payment */
         hpCustomerId: z.string().optional(),
         /** Property address ID to associate with membership */
@@ -540,6 +547,11 @@ const checkoutRouter = router({
           enrolledByUserId: (ctx as any).user?.id?.toString() ?? "",
           customerName: input.customerName ?? "",
           customerEmail: input.customerEmail ?? "",
+          customerPhone: input.customerPhone ?? "",
+          serviceAddress: input.serviceAddress ?? "",
+          serviceCity: input.serviceCity ?? "",
+          serviceState: input.serviceState ?? "",
+          serviceZip: input.serviceZip ?? "",
         },
         subscription_data: {
           metadata: {

@@ -23,6 +23,12 @@ import { eq } from "drizzle-orm";
 import { TIER_DEFINITIONS, type MemberTier, type BillingCadence } from "../shared/threeSixtyTiers";
 import { sendEmail } from "./gmail";
 import { notifyOwner } from "./_core/notification";
+import {
+  findCustomerByEmail,
+  createCustomer,
+  createOpportunity,
+} from "./db";
+import { nanoid } from "nanoid";
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 
@@ -61,6 +67,11 @@ export async function create360MembershipFromWebhook(
   const propertyAddressId = meta.propertyAddressId ? parseInt(meta.propertyAddressId) : null;
   const customerEmail = meta.customerEmail || session.customer_email || "";
   const customerName = meta.customerName || "New Member";
+  const customerPhone = meta.customerPhone || "";
+  const serviceAddress = meta.serviceAddress || "";
+  const serviceCity = meta.serviceCity || "";
+  const serviceState = meta.serviceState || "";
+  const serviceZip = meta.serviceZip || "";
 
   const tierDef = TIER_DEFINITIONS[tier];
   const now = Date.now();
@@ -76,18 +87,22 @@ export async function create360MembershipFromWebhook(
 
     if (existing) {
       portalCustomerId = existing.id;
-      // Update stripeCustomerId if we have it
-      if (session.customer && !existing.stripeCustomerId) {
-        await db
-          .update(portalCustomers)
-          .set({ stripeCustomerId: session.customer as string })
-          .where(eq(portalCustomers.id, existing.id));
-      }
+      // Update stripeCustomerId and phone/address if we have them
+      await db
+        .update(portalCustomers)
+        .set({
+          ...(session.customer && !existing.stripeCustomerId ? { stripeCustomerId: session.customer as string } : {}),
+          ...(customerPhone && !(existing as any).phone ? { phone: customerPhone } : {}),
+          ...(serviceAddress && !(existing as any).address ? { address: `${serviceAddress}, ${serviceCity}, ${serviceState} ${serviceZip}`.trim() } : {}),
+        })
+        .where(eq(portalCustomers.id, existing.id));
     } else {
       // Create new portal customer
       const result = await db.insert(portalCustomers).values({
         name: customerName,
         email: customerEmail,
+        phone: customerPhone || undefined,
+        address: serviceAddress ? `${serviceAddress}, ${serviceCity}, ${serviceState} ${serviceZip}`.trim() : undefined,
         hpCustomerId: hpCustomerId ?? undefined,
         stripeCustomerId: session.customer as string | undefined,
       });
@@ -180,7 +195,62 @@ export async function create360MembershipFromWebhook(
     }).catch((err) => console.error("[360 Webhook] Welcome email failed:", err));
   }
 
-  // ── 6. Notify HP owner ────────────────────────────────────────────────────
+  // ── 6. Create/match CRM customer + open lead opportunity in pro app ────────
+  let crmCustomerId: number | null = null;
+  try {
+    if (customerEmail) {
+      const existingCrm = await findCustomerByEmail(customerEmail);
+      if (existingCrm) {
+        crmCustomerId = existingCrm.id;
+      } else {
+        const nameParts = customerName.trim().split(" ");
+        const firstName = nameParts[0] ?? "";
+        const lastName = nameParts.slice(1).join(" ") || "";
+        const displayName = `${firstName} ${lastName}`.trim();
+        const newCrm = await createCustomer({
+          id: nanoid(),
+          firstName,
+          lastName,
+          displayName,
+          email: customerEmail.toLowerCase().trim(),
+          mobilePhone: customerPhone || "",
+          street: serviceAddress,
+          city: serviceCity,
+          state: serviceState,
+          zip: serviceZip,
+          customerType: "homeowner",
+          leadSource: "360 Funnel",
+          customerNotes: `Enrolled via 360° Method funnel — ${tier} tier (${cadence})`,
+          sendNotifications: true,
+          tags: "[]",
+        });
+        crmCustomerId = newCrm.id;
+      }
+      // Link CRM customer back to membership
+      if (crmCustomerId) {
+        await db
+          .update(threeSixtyMemberships)
+          .set({ hpCustomerId: crmCustomerId.toString() })
+          .where(eq(threeSixtyMemberships.id, membershipId));
+      }
+      // Open a lead opportunity tagged as 360-funnel
+      if (crmCustomerId) {
+        await createOpportunity({
+          id: nanoid(),
+          customerId: String(crmCustomerId),
+          area: "lead",
+          stage: "New Lead",
+          title: `360° Membership — ${tier.charAt(0).toUpperCase() + tier.slice(1)} (${cadence})`,
+          notes: `Enrolled via 360° funnel. Stripe subscription: ${session.subscription ?? "n/a"}. Membership ID: ${membershipId}.\nService address: ${serviceAddress}, ${serviceCity}, ${serviceState} ${serviceZip}`,
+          archived: false,
+        }).catch((err: Error) => console.error("[360 Webhook] createOpportunity failed:", err));
+      }
+    }
+  } catch (err) {
+    console.error("[360 Webhook] CRM customer/opportunity creation failed:", err);
+  }
+
+  // ── 7. Notify HP owner ────────────────────────────────────────────────────
   await notifyOwner({
     title: `🏠 New 360° Member — ${tier.charAt(0).toUpperCase() + tier.slice(1)}`,
     content: `${customerName} (${customerEmail}) enrolled in the ${tier} tier (${cadence} billing). Membership ID: ${membershipId}. Schedule their Annual 360° Home Scan within 48 hours.`,
