@@ -81,19 +81,20 @@ export default function ThreeSixtyPage() {
   return (
     <div className="container py-6 max-w-6xl">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-md">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-md shrink-0">
             <RefreshCw className="w-5 h-5 text-white" />
           </div>
-          <div>
+          <div className="min-w-0">
             <h1 className="text-xl font-bold tracking-tight">360 Method</h1>
-            <p className="text-sm text-muted-foreground">Proactive home maintenance memberships — PNW</p>
+            <p className="text-sm text-muted-foreground truncate">Proactive home maintenance memberships — PNW</p>
           </div>
         </div>
-        <Button onClick={() => setView('new')} className="gap-2">
+        <Button onClick={() => setView('new')} className="gap-2 shrink-0">
           <Plus className="w-4 h-4" />
-          New Membership
+          <span className="hidden xs:inline">New Membership</span>
+          <span className="xs:hidden">New</span>
         </Button>
       </div>
 
@@ -141,17 +142,17 @@ export default function ThreeSixtyPage() {
 
       {/* Tier Cards */}
       <div className="mb-8">
-        <div className="flex items-center justify-between mb-4">
-          <div>
+        <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+          <div className="min-w-0">
             <h2 className="text-base font-semibold">Membership Tiers</h2>
             <p className="text-sm text-muted-foreground">Step-ladder discounts protect margin on large jobs</p>
           </div>
           {/* Billing cadence toggle */}
-          <Tabs value={cadence} onValueChange={v => setCadence(v as BillingCadence)}>
+          <Tabs value={cadence} onValueChange={v => setCadence(v as BillingCadence)} className="shrink-0">
             <TabsList className="h-8">
               {(Object.keys(CADENCE_LABELS) as BillingCadence[]).map(c => (
-                <TabsTrigger key={c} value={c} className="text-xs px-3">
-                  {CADENCE_LABELS[c]}
+                <TabsTrigger key={c} value={c} className="text-xs px-2 sm:px-3">
+                  {c === 'quarterly' ? 'Qtrly' : CADENCE_LABELS[c]}
                 </TabsTrigger>
               ))}
             </TabsList>
@@ -234,7 +235,7 @@ export default function ThreeSixtyPage() {
       </div>
 
       {/* Members quick-list */}
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
         <h2 className="text-base font-semibold">Recent Members</h2>
         <Button variant="ghost" size="sm" onClick={() => setView('members')} className="text-xs gap-1">
           View all <span className="text-muted-foreground">→</span>

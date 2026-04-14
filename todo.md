@@ -1362,3 +1362,9 @@
 
 ## Handyman Rate Correction
 - [x] Update L_HANDY from $85 to $150/hr in phases.ts (Phase 18)
+
+## Mobile / Desktop Overflow Fix
+- [x] MetricsBar: header flex rows use flex-wrap, no forced overflow
+- [x] ThreeSixtyPage: header/tier section use flex-wrap, cadence toggle shrinks, tier cards stack on mobile
+- [x] ThreeSixtyMemberDetail: KPI grid stacks on mobile (grid-cols-1 sm:grid-cols-3), tabs wrap, discount table has overflow-x-auto
+- [x] Global: overflow-x: hidden + max-width: 100vw on html/body in index.css

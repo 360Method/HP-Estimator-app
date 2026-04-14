@@ -104,7 +104,7 @@ export default function ThreeSixtyMemberDetail({ membershipId, onBack }: Props) 
       </div>
 
       {/* KPI strip */}
-      <div className="grid grid-cols-3 gap-3 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
         <Card className="border-0 shadow-sm bg-gradient-to-br from-emerald-50 to-white">
           <CardContent className="p-4">
             <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
@@ -143,11 +143,11 @@ export default function ThreeSixtyMemberDetail({ membershipId, onBack }: Props) 
       </div>
 
       <Tabs defaultValue="visits">
-        <TabsList className="mb-4">
-          <TabsTrigger value="visits">Seasonal Visits</TabsTrigger>
-          <TabsTrigger value="labor-bank">Labor Bank</TabsTrigger>
-          <TabsTrigger value="scans">Annual Scans</TabsTrigger>
-          <TabsTrigger value="discounts">Discount Schedule</TabsTrigger>
+        <TabsList className="mb-4 flex flex-wrap h-auto gap-1">
+          <TabsTrigger value="visits" className="text-xs">Visits</TabsTrigger>
+          <TabsTrigger value="labor-bank" className="text-xs">Labor Bank</TabsTrigger>
+          <TabsTrigger value="scans" className="text-xs">Scans</TabsTrigger>
+          <TabsTrigger value="discounts" className="text-xs">Discounts</TabsTrigger>
         </TabsList>
 
         {/* ── VISITS ──────────────────────────────────────────────── */}
@@ -305,9 +305,9 @@ export default function ThreeSixtyMemberDetail({ membershipId, onBack }: Props) 
         {/* ── DISCOUNT SCHEDULE ───────────────────────────────────── */}
         <TabsContent value="discounts">
           <h3 className="text-sm font-semibold mb-3">Member Discount Schedule — {tierDef.label}</h3>
-          <Card className="border shadow-sm">
-            <CardContent className="p-4">
-              <table className="w-full text-sm">
+            <Card className="border shadow-sm">
+            <CardContent className="p-4 overflow-x-auto">
+              <table className="w-full text-sm min-w-[280px]">
                 <thead>
                   <tr className="text-xs text-muted-foreground border-b">
                     <th className="text-left pb-2">Job Size</th>
