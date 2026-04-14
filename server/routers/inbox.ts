@@ -18,6 +18,7 @@ import {
   updateConversationLastMessage,
 } from "../db";
 import { sendSms, generateVoiceToken, isTwilioConfigured } from "../twilio";
+import { findPortalCustomerByHpId, getPortalMessagesByCustomer } from "../portalDb";
 
 // ─── CONVERSATIONS ────────────────────────────────────────────────────────────
 
@@ -191,6 +192,125 @@ const twilioRouter = router({
   }),
 });
 
+// ─── UNIFIED FEED ────────────────────────────────────────────────────────────
+
+/**
+ * Returns a single chronological feed for a given HP CRM customer,
+ * merging conversation messages (SMS/email/notes/calls) with portal messages.
+ */
+const unifiedFeedRouter = router({
+  getByCustomer: protectedProcedure
+    .input(z.object({ customerId: z.string() }))
+    .query(async ({ input }) => {
+      // 1. Get all conversations for this customer
+      const convs = await listConversationsByCustomer(input.customerId, 10);
+
+      // 2. Fetch messages from all conversations
+      const msgArrays = await Promise.all(
+        convs.map(c => listMessages(c.id, 200, 0))
+      );
+      const convMessages = msgArrays.flat().map(m => ({
+        id: `msg-${m.id}`,
+        source: "conversation" as const,
+        channel: m.channel as "sms" | "email" | "note" | "call",
+        direction: m.direction as "inbound" | "outbound",
+        body: m.body ?? "",
+        subject: m.subject ?? null,
+        isInternal: m.isInternal,
+        sentAt: m.sentAt,
+        readAt: m.readAt ?? null,
+        conversationId: m.conversationId,
+        twilioSid: m.twilioSid ?? null,
+        gmailMessageId: m.gmailMessageId ?? null,
+        attachmentUrl: m.attachmentUrl ?? null,
+        attachmentMime: m.attachmentMime ?? null,
+        senderName: null as string | null,
+      }));
+
+      // 3. Get portal messages via hpCustomerId
+      const portalCustomer = await findPortalCustomerByHpId(input.customerId);
+      const portalMsgs = portalCustomer
+        ? await getPortalMessagesByCustomer(portalCustomer.id)
+        : [];
+      const portalFeedItems = portalMsgs.map(m => ({
+        id: `portal-${m.id}`,
+        source: "portal" as const,
+        channel: "portal" as const,
+        direction: (m.senderRole === "hp_team" ? "outbound" : "inbound") as "inbound" | "outbound",
+        body: m.body,
+        subject: null as string | null,
+        isInternal: false,
+        sentAt: m.createdAt,
+        readAt: m.readAt ?? null,
+        conversationId: null as number | null,
+        twilioSid: null as string | null,
+        gmailMessageId: null as string | null,
+        attachmentUrl: null as string | null,
+        attachmentMime: null as string | null,
+        senderName: m.senderName ?? null,
+      }));
+
+      // 4. Merge and sort chronologically (oldest first)
+      const feed = [...convMessages, ...portalFeedItems].sort(
+        (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
+      );
+
+      // 5. Return feed + conversation metadata for compose bar
+      const primaryConv = convs[0] ?? null;
+      return {
+        feed,
+        conversationId: primaryConv?.id ?? null,
+        contactPhone: primaryConv?.contactPhone ?? null,
+        contactEmail: primaryConv?.contactEmail ?? null,
+        portalCustomerId: portalCustomer?.id ?? null,
+        unreadCount: convs.reduce((s, c) => s + (c.unreadCount ?? 0), 0),
+      };
+    }),
+});
+
+// ─── CUSTOMER INBOX LIST ─────────────────────────────────────────────────────
+
+/**
+ * Returns HP CRM customers sorted by most recent communication,
+ * with last-message preview and unread count for the inbox left panel.
+ */
+const customerListRouter = router({
+  listWithActivity: protectedProcedure
+    .query(async () => {
+      const convs = await listConversations(200, 0);
+      const customerConvs = convs.filter(c => c.customerId);
+
+      // Build a map: customerId → { lastMessageAt, lastMessagePreview, unreadCount }
+      const activityMap = new Map<string, {
+        lastMessageAt: Date;
+        lastMessagePreview: string | null;
+        unreadCount: number;
+      }>();
+
+      for (const c of customerConvs) {
+        const existing = activityMap.get(c.customerId!);
+        const ts = new Date(c.lastMessageAt);
+        if (!existing || ts > existing.lastMessageAt) {
+          activityMap.set(c.customerId!, {
+            lastMessageAt: ts,
+            lastMessagePreview: c.lastMessagePreview ?? null,
+            unreadCount: (existing?.unreadCount ?? 0) + (c.unreadCount ?? 0),
+          });
+        } else {
+          activityMap.set(c.customerId!, {
+            ...existing,
+            unreadCount: existing.unreadCount + (c.unreadCount ?? 0),
+          });
+        }
+      }
+
+      return Array.from(activityMap.entries()).map(([customerId, activity]) => ({
+        customerId,
+        ...activity,
+      }));
+    }),
+});
+
 // ─── COMBINED INBOX ROUTER ───────────────────────────────────────────────────
 
 export const inboxRouter = router({
@@ -198,4 +318,6 @@ export const inboxRouter = router({
   messages: messagesRouter,
   callLogs: callLogsRouter,
   twilio: twilioRouter,
+  unifiedFeed: unifiedFeedRouter,
+  customerList: customerListRouter,
 });

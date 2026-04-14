@@ -1425,3 +1425,16 @@
 - [x] Add hourly drip email scheduler (3 emails: 24h, 72h, 7d) to server/_core/index.ts
 - [x] Add listOpportunities + updateOpportunity imports to threeSixtyWebhook.ts
 - [x] Auto-archive Cart Abandoned leads on successful 360 checkout
+
+## Unified Inbox Rebuild
+- [x] Add getUnifiedFeedByCustomer tRPC procedure (merges conversations + portal messages chronologically)
+- [x] Add customerList.listWithActivity tRPC procedure (HP CRM customers sorted by last message)
+- [x] Rebuild InboxPage left panel: customer list with last-message preview + unread badge
+- [x] Rebuild InboxPage right panel: unified chronological feed with channel badges (SMS/Email/Note/Portal/Call)
+- [x] Add compose bar with SMS / Email / Note channel selector
+- [x] Mobile 2-screen stack (list → thread) with back button
+- [x] Desktop 2-panel layout (customer list | thread)
+- [x] SSE real-time updates wired to refetch feed + activity list
+- [x] Deep-link from CommunicationTab via inboxCustomerId in context
+- [x] VoiceCallPanel preserved in thread header
+- [x] Date separator labels (Today / Yesterday / full date) between message groups

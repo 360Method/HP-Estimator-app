@@ -1,87 +1,78 @@
 // ============================================================
-// InboxPage — Unified Communications Hub
-// Mobile-first 3-screen navigation:
-//   Screen 1: Inbox Home (sections list)
-//   Screen 2: Conversation List (with back button)
-//   Screen 3: Thread View (with back button)
-// Desktop: shows all 3 panels side-by-side
+// InboxPage — Customer-Centric Unified Inbox
+// Desktop: 2-panel (customer list | unified feed)
+// Mobile: 2-screen stack (customer list → unified thread)
 // ============================================================
-
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
 import VoiceCallPanel from '@/components/VoiceCallPanel';
 import { useInboxSSE } from '@/hooks/useInboxSSE';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import {
-  MessageSquare, Mail, Phone, StickyNote, Search, Plus,
-  Send, Paperclip, Inbox, Users, Briefcase,
-  PhoneIncoming, PhoneOutgoing, PhoneMissed,
-  RefreshCw, MoreHorizontal, X, CheckCheck, AlertCircle, Clock,
-  ChevronRight, ChevronLeft, Settings, Edit,
+  MessageSquare, Mail, Phone, StickyNote, Search,
+  Send, Inbox, Users, Globe,
+  PhoneIncoming, PhoneOutgoing,
+  RefreshCw, MoreHorizontal, ChevronLeft,
+  CheckCheck, AlertCircle, Clock, MessageCircle,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import PortalThreadPanel from '@/components/PortalThreadPanel';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+type Channel = 'sms' | 'email' | 'note';
+type MobileScreen = 'list' | 'thread';
 
-type Channel = 'sms' | 'email' | 'call' | 'note';
-type SidebarFilter = 'all' | 'customers' | 'employees' | 'calls' | 'portal';
-// Mobile screen stack
-type MobileScreen = 'home' | 'list' | 'thread';
-
-interface Conversation {
-  id: number;
-  contactName: string | null;
-  contactPhone: string | null;
-  contactEmail: string | null;
-  lastMessagePreview: string | null;
-  lastMessageAt: Date | null;
-  unreadCount: number;
-}
-
-interface Message {
-  id: number;
-  conversationId: number;
-  channel: Channel;
+interface FeedItem {
+  id: string;
+  source: 'conversation' | 'portal';
+  channel: 'sms' | 'email' | 'note' | 'call' | 'portal';
   direction: 'inbound' | 'outbound';
-  body: string | null;
+  body: string;
   subject: string | null;
-  status: string | null;
   isInternal: boolean;
-  attachmentUrl: string | null;
   sentAt: Date;
+  readAt: Date | null;
+  conversationId: number | null;
+  senderName: string | null;
+  attachmentUrl: string | null;
+  attachmentMime: string | null;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function getInitials(name: string | null) {
+function getInitials(name: string | null | undefined) {
   if (!name) return '?';
-  return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+  const parts = name.trim().split(' ');
+  return parts.length >= 2
+    ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+    : name.slice(0, 2).toUpperCase();
 }
 
-function getAvatarColor(name: string | null) {
-  const colors = [
-    'bg-slate-400', 'bg-blue-400', 'bg-emerald-500', 'bg-violet-500',
-    'bg-amber-500', 'bg-rose-500', 'bg-cyan-500', 'bg-orange-500',
-  ];
-  if (!name) return colors[0];
-  return colors[name.charCodeAt(0) % colors.length];
+const AVATAR_COLORS = [
+  'bg-blue-500', 'bg-emerald-500', 'bg-violet-500', 'bg-amber-500',
+  'bg-rose-500', 'bg-cyan-500', 'bg-orange-500', 'bg-teal-500',
+];
+function getAvatarColor(name: string | null | undefined) {
+  if (!name) return 'bg-slate-400';
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffff;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length];
 }
 
-function fmtTime(d: Date | null) {
+function fmtTime(d: Date | string | null | undefined) {
   if (!d) return '';
   const date = new Date(d);
   const now = new Date();
   const isToday = date.toDateString() === now.toDateString();
   if (isToday) return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
   const isThisYear = date.getFullYear() === now.getFullYear();
   return date.toLocaleDateString([], { month: 'short', day: 'numeric', ...(isThisYear ? {} : { year: 'numeric' }) });
 }
 
-function fmtDateLabel(d: Date | null) {
+function fmtDateLabel(d: Date | string | null | undefined) {
   if (!d) return '';
   const date = new Date(d);
   const now = new Date();
@@ -91,55 +82,143 @@ function fmtDateLabel(d: Date | null) {
   return date.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
 }
 
-const CHANNEL_ICONS = {
-  sms: MessageSquare,
+// ─── Channel badge ────────────────────────────────────────────────────────────
+const CHANNEL_ICON: Record<string, React.ElementType> = {
+  sms: MessageCircle,
   email: Mail,
-  call: Phone,
   note: StickyNote,
+  call: Phone,
+  portal: Globe,
+};
+const CHANNEL_COLOR: Record<string, string> = {
+  sms: 'bg-blue-100 text-blue-600',
+  email: 'bg-violet-100 text-violet-600',
+  note: 'bg-amber-100 text-amber-700',
+  call: 'bg-emerald-100 text-emerald-600',
+  portal: 'bg-rose-100 text-rose-600',
 };
 
-const CHANNEL_COLORS = {
-  sms: 'text-blue-500',
-  email: 'text-violet-500',
-  call: 'text-emerald-500',
-  note: 'text-amber-500',
-};
+function ChannelBadge({ channel }: { channel: string }) {
+  const Icon = CHANNEL_ICON[channel] ?? MessageSquare;
+  const color = CHANNEL_COLOR[channel] ?? 'bg-muted text-muted-foreground';
+  return (
+    <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${color}`}>
+      <Icon className="w-2.5 h-2.5" />
+      {channel}
+    </span>
+  );
+}
 
-// ─── ConversationItem ─────────────────────────────────────────────────────────
+// ─── Feed bubble ──────────────────────────────────────────────────────────────
+function FeedBubble({ item }: { item: FeedItem }) {
+  const isOut = item.direction === 'outbound';
 
-function ConversationItem({
-  conv, isActive, onClick,
-}: { conv: Conversation; isActive: boolean; onClick: () => void }) {
-  const initials = getInitials(conv.contactName);
-  const avatarColor = getAvatarColor(conv.contactName);
-  const displayName = conv.contactName || conv.contactPhone || conv.contactEmail || 'Unknown';
+  // Call log — centered pill
+  if (item.channel === 'call') {
+    return (
+      <div className="flex justify-center my-3">
+        <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2 text-xs text-emerald-800">
+          {isOut
+            ? <PhoneOutgoing className="w-3.5 h-3.5 text-blue-500" />
+            : <PhoneIncoming className="w-3.5 h-3.5 text-emerald-600" />}
+          <span className="font-medium">{isOut ? 'Outbound call' : 'Inbound call'}</span>
+          <span className="text-emerald-600">{fmtTime(item.sentAt)}</span>
+        </div>
+      </div>
+    );
+  }
 
+  // Internal note — centered card
+  if (item.isInternal || item.channel === 'note') {
+    return (
+      <div className="flex justify-center my-3">
+        <div className="max-w-[85%] bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+          <div className="flex items-center gap-1.5 mb-1.5 text-amber-600 font-semibold text-[11px]">
+            <StickyNote className="w-3 h-3" />
+            Internal Note · {fmtTime(item.sentAt)}
+          </div>
+          <p className="text-sm text-amber-900 whitespace-pre-wrap">{item.body}</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`flex gap-2 mb-3 ${isOut ? 'flex-row-reverse' : 'flex-row'}`}>
+      <div className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold ${isOut ? 'bg-primary' : 'bg-slate-400'}`}>
+        {isOut ? 'HP' : getInitials(item.senderName)}
+      </div>
+      <div className={`max-w-[72%] flex flex-col gap-1 ${isOut ? 'items-end' : 'items-start'}`}>
+        <div className={`flex items-center gap-1.5 ${isOut ? 'flex-row-reverse' : 'flex-row'}`}>
+          <ChannelBadge channel={item.channel} />
+          <span className="text-[10px] text-muted-foreground">{fmtTime(item.sentAt)}</span>
+        </div>
+        {item.subject && (
+          <div className={`text-xs font-semibold text-foreground/70 ${isOut ? 'text-right' : 'text-left'}`}>
+            {item.subject}
+          </div>
+        )}
+        <div className={`px-3 py-2 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap break-words ${
+          isOut
+            ? 'bg-primary text-primary-foreground rounded-tr-sm'
+            : 'bg-muted text-foreground rounded-tl-sm'
+        }`}>
+          {item.body || <span className="italic opacity-50">(empty)</span>}
+        </div>
+        {item.attachmentUrl && (
+          <a href={item.attachmentUrl} target="_blank" rel="noopener noreferrer"
+            className="text-xs text-primary underline">
+            Attachment
+          </a>
+        )}
+        {item.readAt && isOut && (
+          <div className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
+            <CheckCheck className="w-3 h-3" /> Read
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Customer list item ───────────────────────────────────────────────────────
+function CustomerListItem({
+  name, phone, lastPreview, lastAt, unread, isActive, onClick,
+}: {
+  name: string;
+  phone?: string | null;
+  lastPreview?: string | null;
+  lastAt?: Date | null;
+  unread: number;
+  isActive: boolean;
+  onClick: () => void;
+}) {
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left px-4 py-3.5 border-b border-border/40 hover:bg-muted/40 active:bg-muted/60 transition-colors flex items-center gap-3.5 ${
-        isActive ? 'bg-primary/5' : ''
+      className={`w-full text-left px-4 py-3.5 border-b border-border/40 hover:bg-muted/40 transition-colors flex items-center gap-3 ${
+        isActive ? 'bg-primary/5 border-l-2 border-l-primary' : ''
       }`}
     >
-      {/* Avatar */}
-      <div className={`flex-shrink-0 w-11 h-11 rounded-full ${avatarColor} flex items-center justify-center text-white text-sm font-bold`}>
-        {initials}
+      <div className={`flex-shrink-0 w-10 h-10 rounded-full ${getAvatarColor(name)} flex items-center justify-center text-white text-sm font-bold`}>
+        {getInitials(name)}
       </div>
-      {/* Content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline justify-between gap-2">
-          <span className={`text-[15px] font-semibold truncate ${conv.unreadCount > 0 ? 'text-foreground' : 'text-foreground/80'}`}>
-            {displayName}
+          <span className={`text-[14px] font-semibold truncate ${unread > 0 ? 'text-foreground' : 'text-foreground/80'}`}>
+            {name}
           </span>
-          <span className="text-xs text-muted-foreground flex-shrink-0">{fmtTime(conv.lastMessageAt)}</span>
+          {lastAt && (
+            <span className="text-[11px] text-muted-foreground flex-shrink-0">{fmtTime(lastAt)}</span>
+          )}
         </div>
         <div className="flex items-center justify-between gap-2 mt-0.5">
-          <p className={`text-sm truncate ${conv.unreadCount > 0 ? 'text-foreground/70 font-medium' : 'text-muted-foreground'}`}>
-            {conv.lastMessagePreview || 'No messages yet'}
+          <p className={`text-xs truncate ${unread > 0 ? 'text-foreground/70 font-medium' : 'text-muted-foreground'}`}>
+            {lastPreview || phone || 'No messages yet'}
           </p>
-          {conv.unreadCount > 0 && (
+          {unread > 0 && (
             <span className="flex-shrink-0 bg-primary text-primary-foreground text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
-              {conv.unreadCount > 9 ? '9+' : conv.unreadCount}
+              {unread > 9 ? '9+' : unread}
             </span>
           )}
         </div>
@@ -148,322 +227,187 @@ function ConversationItem({
   );
 }
 
-// ─── MessageBubble ────────────────────────────────────────────────────────────
-
-function MessageBubble({ msg }: { msg: Message }) {
-  const isOutbound = msg.direction === 'outbound';
-  const isNote = msg.channel === 'note' || msg.isInternal;
-  const isCall = msg.channel === 'call';
-  const ChanIcon = CHANNEL_ICONS[msg.channel] ?? MessageSquare;
-
-  if (isCall) {
-    return (
-      <div className="flex justify-center my-3">
-        <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-xs text-amber-800">
-          {msg.direction === 'inbound'
-            ? <PhoneIncoming className="w-3.5 h-3.5 text-emerald-600" />
-            : <PhoneOutgoing className="w-3.5 h-3.5 text-blue-600" />}
-          <span className="font-medium">{msg.direction === 'inbound' ? 'Inbound call' : 'Outbound call'}</span>
-          <span className="text-amber-600">{fmtTime(msg.sentAt)}</span>
-        </div>
-      </div>
-    );
-  }
-
-  if (isNote) {
-    return (
-      <div className="flex justify-center my-3">
-        <div className="max-w-[85%] bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-xs text-amber-900">
-          <div className="flex items-center gap-1.5 mb-1.5 text-amber-600 font-semibold">
-            <StickyNote className="w-3 h-3" />
-            Internal Note
-          </div>
-          <p className="text-sm text-amber-900 whitespace-pre-wrap">{msg.body}</p>
-          <div className="mt-1.5 text-[10px] text-amber-600 text-right">{fmtTime(msg.sentAt)}</div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className={`flex ${isOutbound ? 'justify-end' : 'justify-start'} mb-3`}>
-      <div className={`max-w-[78%] ${isOutbound ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
-        {msg.subject && (
-          <div className="text-[10px] text-muted-foreground font-medium px-1">Re: {msg.subject}</div>
-        )}
-        <div className={`rounded-2xl px-4 py-2.5 text-[15px] leading-relaxed ${
-          isOutbound
-            ? 'bg-blue-500 text-white rounded-br-md'
-            : 'bg-muted text-foreground rounded-bl-md'
-        }`}>
-          <p className="whitespace-pre-wrap">{msg.body}</p>
-          {msg.attachmentUrl && (
-            <a href={msg.attachmentUrl} target="_blank" rel="noopener noreferrer"
-              className="flex items-center gap-1.5 mt-2 text-xs underline opacity-80">
-              <Paperclip className="w-3 h-3" />
-              Attachment
-            </a>
-          )}
-        </div>
-        <div className={`flex items-center gap-1.5 text-[11px] text-muted-foreground px-1 ${isOutbound ? 'flex-row-reverse' : ''}`}>
-          <ChanIcon className={`w-3 h-3 ${CHANNEL_COLORS[msg.channel]}`} />
-          <span>{fmtTime(msg.sentAt)}</span>
-          {isOutbound && (
-            msg.status === 'delivered' ? <CheckCheck className="w-3 h-3 text-blue-500" /> :
-            msg.status === 'failed' ? <AlertCircle className="w-3 h-3 text-destructive" /> :
-            <Clock className="w-3 h-3 opacity-50" />
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── NewConversationModal ─────────────────────────────────────────────────────
-
-function NewConversationModal({ onClose, onCreated }: { onClose: () => void; onCreated: (id: number) => void }) {
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
-  const findOrCreate = trpc.inbox.conversations.findOrCreate.useMutation();
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!phone && !email) { toast.error('Enter a phone number or email'); return; }
-    try {
-      const conv = await findOrCreate.mutateAsync({
-        contactName: name || null,
-        contactPhone: phone || null,
-        contactEmail: email || null,
-      });
-      onCreated(conv.id);
-    } catch {
-      toast.error('Failed to create conversation');
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center">
-      <div className="bg-background rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-md p-6 pb-8 sm:pb-6">
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-lg font-semibold">New Conversation</h2>
-          <button onClick={onClose} className="p-1.5 rounded-full hover:bg-muted"><X className="w-5 h-5" /></button>
-        </div>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Contact Name</label>
-            <Input value={name} onChange={e => setName(e.target.value)} placeholder="Jane Smith" className="h-11 text-base" />
-          </div>
-          <div>
-            <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Phone Number</label>
-            <Input value={phone} onChange={e => setPhone(e.target.value)} placeholder="+1 (360) 555-0100" type="tel" className="h-11 text-base" />
-          </div>
-          <div>
-            <label className="text-sm font-medium text-muted-foreground mb-1.5 block">Email</label>
-            <Input value={email} onChange={e => setEmail(e.target.value)} placeholder="jane@example.com" type="email" className="h-11 text-base" />
-          </div>
-          <div className="flex gap-3 pt-1">
-            <Button type="button" variant="outline" onClick={onClose} className="flex-1 h-11">Cancel</Button>
-            <Button type="submit" disabled={findOrCreate.isPending} className="flex-1 h-11">
-              {findOrCreate.isPending ? 'Creating...' : 'Start Conversation'}
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-// ─── InboxPage (main) ─────────────────────────────────────────────────────────
+// ─── Main Component ───────────────────────────────────────────────────────────
 export default function InboxPage() {
-  const { state, setInboxCustomer, setInboxConversation } = useEstimator();
-  const { inboxCustomerId, inboxConversationId, inboxChannel } = state;
-  const [sidebarFilter, setSidebarFilter] = useState<SidebarFilter>('all');
-  const [activeConvId, setActiveConvId] = useState<number | null>(null);
+  const { state, setInboxCustomer } = useEstimator();
+  const { inboxCustomerId } = state;
+
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [composeChannel, setComposeChannel] = useState<Channel>('sms');
   const [composeBody, setComposeBody] = useState('');
   const [composeSubject, setComposeSubject] = useState('');
-  const [showSubject, setShowSubject] = useState(false);
-  const [showNewConv, setShowNewConv] = useState(false);
-  const [notifPermission, setNotifPermission] = useState<NotificationPermission>(
-    typeof Notification !== 'undefined' ? Notification.permission : 'default'
-  );
-  // Mobile navigation state
-  const [mobileScreen, setMobileScreen] = useState<MobileScreen>('home');
-  // Deep-link: HP customer id to pre-select in portal thread panel
-  const [deepLinkHpCustomerId, setDeepLinkHpCustomerId] = useState<string | null>(null);
+  const [mobileScreen, setMobileScreen] = useState<MobileScreen>('list');
+
   const threadEndRef = useRef<HTMLDivElement>(null);
 
-  const requestNotifPermission = async () => {
-    if (typeof Notification === 'undefined') return;
-    const result = await Notification.requestPermission();
-    setNotifPermission(result);
-    if (result === 'granted') toast.success('Browser notifications enabled');
-  };
-
-  const utils = trpc.useUtils();
-
   // ── Data queries ──
-  const { data: conversations = [], isLoading: convsLoading, refetch: refetchConvs } =
-    trpc.inbox.conversations.list.useQuery({ limit: 50, offset: 0 });
+  const { data: activityList = [], refetch: refetchActivity } =
+    trpc.inbox.customerList.listWithActivity.useQuery();
 
-  const { data: messages = [], isLoading: msgsLoading, refetch: refetchMsgs } =
-    trpc.inbox.messages.list.useQuery(
-      { conversationId: activeConvId!, limit: 100, offset: 0 },
-      { enabled: activeConvId !== null }
+  const { data: unifiedFeed, isLoading: feedLoading, refetch: refetchFeed } =
+    trpc.inbox.unifiedFeed.getByCustomer.useQuery(
+      { customerId: selectedCustomerId! },
+      { enabled: !!selectedCustomerId }
     );
-
-  const { data: callLogs = [], isLoading: callLogsLoading } = trpc.inbox.callLogs.list.useQuery(
-    { limit: 100, offset: 0 },
-    { enabled: sidebarFilter === 'calls' }
-  );
-
-  // Portal messages (all customers, HP-side view)
-  const { data: portalMsgsAll = [], isLoading: portalMsgsLoading, refetch: refetchPortalMsgs } =
-    trpc.portal.getAllPortalMessages.useQuery(
-      undefined,
-      { enabled: sidebarFilter === 'portal' || !!deepLinkHpCustomerId }
-    );
-  const [activePortalCustomerId, setActivePortalCustomerId] = useState<number | null>(null);
-  const [portalReplyText, setPortalReplyText] = useState('');
-  const replyPortalMsg = trpc.portal.replyToPortalMessage.useMutation({
-    onSuccess: () => { setPortalReplyText(''); refetchPortalMsgs(); },
-    onError: (err) => toast.error(err.message),
-  });
 
   const { data: twilioStatus } = trpc.inbox.twilio.status.useQuery();
   const { data: gmailStatus } = trpc.gmail.status.useQuery();
 
   // ── Mutations ──
+  const findOrCreateConv = trpc.inbox.conversations.findOrCreateByCustomer.useMutation();
   const sendMessage = trpc.inbox.messages.send.useMutation({
-    onSuccess: () => { setComposeBody(''); setComposeSubject(''); refetchMsgs(); refetchConvs(); },
+    onSuccess: () => { setComposeBody(''); setComposeSubject(''); refetchFeed(); refetchActivity(); },
     onError: (err) => toast.error(`Send failed: ${err.message}`),
   });
-
   const sendSms = trpc.inbox.twilio.sendSms.useMutation({
-    onSuccess: () => { setComposeBody(''); refetchMsgs(); refetchConvs(); },
+    onSuccess: () => { setComposeBody(''); refetchFeed(); refetchActivity(); },
     onError: (err) => toast.error(`SMS failed: ${err.message}`),
   });
-
   const sendEmailMutation = trpc.gmail.sendEmail.useMutation({
-    onSuccess: () => { setComposeBody(''); setComposeSubject(''); refetchMsgs(); refetchConvs(); },
+    onSuccess: () => { setComposeBody(''); setComposeSubject(''); refetchFeed(); refetchActivity(); },
     onError: (err) => toast.error(`Email failed: ${err.message}`),
   });
-
-  const markRead = trpc.inbox.conversations.markRead.useMutation({
-    onSuccess: () => utils.inbox.conversations.list.invalidate(),
+  const replyPortalMsg = trpc.portal.replyToPortalMessage.useMutation({
+    onSuccess: () => { setComposeBody(''); refetchFeed(); refetchActivity(); },
+    onError: (err) => toast.error(err.message),
   });
 
-  // ── Deep-link: when inboxCustomerId is set, switch to portal filter for that customer ──
+  // ── Deep-link: when inboxCustomerId is set from CommunicationTab ──
   useEffect(() => {
     if (!inboxCustomerId) return;
-    setSidebarFilter('portal');
-    setDeepLinkHpCustomerId(inboxCustomerId);
+    setSelectedCustomerId(inboxCustomerId);
+    setMobileScreen('thread');
     setInboxCustomer(null);
   }, [inboxCustomerId]);
 
-  // ── Deep-link: when inboxConversationId is set, auto-select that conversation ──
+  // ── Auto-scroll to bottom on new messages ──
   useEffect(() => {
-    if (!inboxConversationId) return;
-    setActiveConvId(inboxConversationId);
-    if (inboxChannel && (inboxChannel === 'sms' || inboxChannel === 'email' || inboxChannel === 'note')) {
-      setComposeChannel(inboxChannel as Channel);
+    if (unifiedFeed?.feed?.length) {
+      setTimeout(() => threadEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     }
-    setMobileScreen('thread');
-    // Clear context values after consuming
-    setInboxConversation(null, null);
-  }, [inboxConversationId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [unifiedFeed?.feed?.length]);
 
-  // ── Resolve deepLinkHpCustomerId to a portal customer id once messages load ──
-  useEffect(() => {
-    if (!deepLinkHpCustomerId || !portalMsgsAll.length) return;
-    const match = (portalMsgsAll as any[]).find((m: any) => m.hpCustomerId === deepLinkHpCustomerId);
-    if (match) {
-      setActivePortalCustomerId(match.customerId);
-      setMobileScreen('thread');
-      setDeepLinkHpCustomerId(null);
-    }
-  }, [deepLinkHpCustomerId, portalMsgsAll]);
-
-  // ── Auto-scroll to bottom of thread ──
-  useEffect(() => {
-    threadEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  // ── Mark as read when opening a conversation ──
-  useEffect(() => {
-    if (activeConvId !== null) {
-      const conv = conversations.find(c => c.id === activeConvId);
-      if (conv && conv.unreadCount > 0) markRead.mutate({ id: activeConvId });
-    }
-  }, [activeConvId]);
-
-  // ── When channel switches to email, show subject ──
-  useEffect(() => {
-    setShowSubject(composeChannel === 'email');
-  }, [composeChannel]);
-
-  // ── Real-time SSE updates ──
+  // ── SSE real-time updates ──
   useInboxSSE({
-    onNewMessage: (conversationId) => {
-      refetchMsgs();
-      refetchConvs();
-      if (conversationId !== activeConvId) {
-        const conv = conversations.find(c => c.id === conversationId);
-        const name = conv?.contactName || conv?.contactPhone || 'Someone';
-        if (Notification.permission === 'granted') {
-          new Notification('New message — Handy Pioneers', { body: `${name} sent a message`, icon: '/favicon.ico' });
-        }
-      }
-    },
-    onNewConversation: () => refetchConvs(),
-    onPortalMessage: () => {
-      // Refresh portal messages list when a customer sends a portal message
-      refetchPortalMsgs();
-      if (Notification.permission === 'granted') {
-        new Notification('New portal message — Handy Pioneers', { body: 'A customer sent a message via the portal', icon: '/favicon.ico' });
-      }
-    },
+    onNewMessage: () => { refetchFeed(); refetchActivity(); },
+    onNewConversation: () => refetchActivity(),
   });
 
-  const activeConv = conversations.find(c => c.id === activeConvId) ?? null;
-
-  const filteredConvs = conversations.filter(conv => {
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      return (
-        conv.contactName?.toLowerCase().includes(q) ||
-        conv.contactPhone?.includes(q) ||
-        conv.contactEmail?.toLowerCase().includes(q) ||
-        conv.lastMessagePreview?.toLowerCase().includes(q)
-      );
+  // ── Build customer list from EstimatorContext + activity data ──
+  const activityMap = useMemo(() => {
+    const m = new Map<string, { lastMessageAt: Date; lastMessagePreview: string | null; unreadCount: number }>();
+    for (const a of activityList) {
+      m.set(a.customerId, {
+        lastMessageAt: new Date(a.lastMessageAt),
+        lastMessagePreview: a.lastMessagePreview,
+        unreadCount: a.unreadCount,
+      });
     }
-    return true;
-  });
+    return m;
+  }, [activityList]);
 
-  const handleSend = useCallback(() => {
-    if (!activeConvId || !composeBody.trim()) return;
+  const customerList = useMemo(() => {
+    const customers = state.customers.filter(c => !(c as any).mergedIntoId);
+    const q = searchQuery.toLowerCase();
+    const filtered = q
+      ? customers.filter(c =>
+          `${c.firstName} ${c.lastName}`.toLowerCase().includes(q) ||
+          c.mobilePhone?.includes(q) ||
+          c.email?.toLowerCase().includes(q)
+        )
+      : customers;
+
+    return filtered
+      .map(c => ({
+        id: c.id,
+        name: `${c.firstName} ${c.lastName}`.trim() || c.email || c.mobilePhone || 'Unknown',
+        phone: c.mobilePhone,
+        email: c.email,
+        activity: activityMap.get(c.id),
+      }))
+      .sort((a, b) => {
+        const ta = a.activity?.lastMessageAt?.getTime() ?? 0;
+        const tb = b.activity?.lastMessageAt?.getTime() ?? 0;
+        return tb - ta;
+      });
+  }, [state.customers, activityMap, searchQuery]);
+
+  const totalUnread = useMemo(() =>
+    activityList.reduce((s, a) => s + (a.unreadCount ?? 0), 0),
+    [activityList]
+  );
+
+  const selectedCustomer = useMemo(
+    () => customerList.find(c => c.id === selectedCustomerId) ?? null,
+    [customerList, selectedCustomerId]
+  );
+
+  // ── Feed grouped by date ──
+  const groupedFeed = useMemo(() => {
+    const feed = (unifiedFeed?.feed ?? []) as FeedItem[];
+    const groups: { date: string; items: FeedItem[] }[] = [];
+    for (const item of feed) {
+      const label = fmtDateLabel(item.sentAt);
+      const last = groups[groups.length - 1];
+      if (last && last.date === label) last.items.push(item);
+      else groups.push({ date: label, items: [item] });
+    }
+    return groups;
+  }, [unifiedFeed?.feed]);
+
+  // ── Send handler ──
+  const handleSend = useCallback(async () => {
+    if (!composeBody.trim() || !selectedCustomerId) return;
+
+    // Portal reply if the compose channel is note and there's a portal customer
+    if (composeChannel === 'note' && unifiedFeed?.portalCustomerId) {
+      replyPortalMsg.mutate({ customerId: unifiedFeed.portalCustomerId, body: composeBody.trim() });
+      return;
+    }
+
+    // Ensure a conversation exists
+    let convId = unifiedFeed?.conversationId ?? null;
+    if (!convId) {
+      try {
+        const result = await findOrCreateConv.mutateAsync({
+          customerId: selectedCustomerId,
+          phone: selectedCustomer?.phone,
+          email: selectedCustomer?.email,
+          name: selectedCustomer?.name,
+          channel: composeChannel,
+        });
+        convId = result.conversationId;
+      } catch (e: any) {
+        toast.error(`Could not create conversation: ${e.message}`);
+        return;
+      }
+    }
+
     if (composeChannel === 'sms') {
-      if (!activeConv?.contactPhone) { toast.error('No phone number on this conversation'); return; }
-      sendSms.mutate({ conversationId: activeConvId, to: activeConv.contactPhone, body: composeBody.trim() });
+      const phone = unifiedFeed?.contactPhone || selectedCustomer?.phone;
+      if (!phone) { toast.error('No phone number for this customer'); return; }
+      if (!twilioStatus?.configured) { toast.error('Twilio not configured — add credentials in Settings → Secrets'); return; }
+      sendSms.mutate({ conversationId: convId, to: phone, body: composeBody.trim() });
     } else if (composeChannel === 'email') {
-      if (!activeConv?.contactEmail) { toast.error('No email address on this conversation'); return; }
+      const email = unifiedFeed?.contactEmail || selectedCustomer?.email;
+      if (!email) { toast.error('No email address for this customer'); return; }
+      if (!gmailStatus?.connected) { toast.error('Gmail not connected — go to Settings → Integrations'); return; }
       sendEmailMutation.mutate({
-        conversationId: activeConvId,
-        to: activeConv.contactEmail,
+        conversationId: convId,
+        to: email,
         subject: composeSubject.trim() || 'Message from Handy Pioneers',
         body: composeBody.trim(),
       });
     } else {
       sendMessage.mutate({
-        conversationId: activeConvId,
+        conversationId: convId,
         channel: 'note',
         body: composeBody.trim(),
         isInternal: true,
       });
     }
-  }, [activeConvId, activeConv, composeBody, composeChannel, composeSubject]);
+  }, [composeBody, composeChannel, composeSubject, selectedCustomerId, selectedCustomer, unifiedFeed, twilioStatus, gmailStatus]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
@@ -472,871 +416,230 @@ export default function InboxPage() {
     }
   };
 
-  const isSending = sendMessage.isPending || sendSms.isPending || sendEmailMutation.isPending;
+  const isSending = sendMessage.isPending || sendSms.isPending || sendEmailMutation.isPending
+    || replyPortalMsg.isPending || findOrCreateConv.isPending;
 
-  const groupedMessages = messages.reduce<{ date: string; msgs: Message[] }[]>((acc, msg) => {
-    const label = fmtDateLabel(msg.sentAt);
-    const last = acc[acc.length - 1];
-    if (last && last.date === label) last.msgs.push(msg);
-    else acc.push({ date: label, msgs: [msg] });
-    return acc;
-  }, []);
-
-  // Navigate to list screen and set filter
-  const goToList = (filter: SidebarFilter) => {
-    setSidebarFilter(filter);
-    setMobileScreen('list');
-  };
-
-  // Navigate to thread
-  const openConversation = (id: number) => {
-    setActiveConvId(id);
-    setMobileScreen('thread');
-  };
-
-  // Total unread count
-  const totalUnread = conversations.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
-
-  // ── Section items for home screen ──
-  const chatSections = [
-    { id: 'all' as SidebarFilter, label: 'All comms', unread: totalUnread },
-    { id: 'customers' as SidebarFilter, label: 'Customers', unread: 0 },
-    { id: 'employees' as SidebarFilter, label: 'Employees', unread: 0 },
-  ];
-
-  const callSections = [
-    { id: 'calls' as SidebarFilter, label: 'Voice call log', unread: 0 },
-  ];
-
-  // ─── Screen: Home ─────────────────────────────────────────────────────────
-
-  const HomeScreen = (
-    <div className="flex flex-col h-full bg-[#f0f0f5]">
-      {/* Header */}
-      <div className="flex items-center justify-between px-5 pt-5 pb-3 bg-[#f0f0f5]">
-        <h1 className="text-3xl font-bold text-foreground">Inbox</h1>
-        <button className="p-1.5 rounded-full hover:bg-black/10 transition-colors">
-          <Settings className="w-6 h-6 text-foreground/70" />
+  // ─── Customer List Panel ──────────────────────────────────────────────────
+  const CustomerListPanel = (
+    <div className="flex flex-col h-full">
+      <div className="px-4 py-3 border-b border-border flex items-center justify-between flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold">Inbox</h2>
+          {totalUnread > 0 && (
+            <span className="bg-primary text-primary-foreground text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+              {totalUnread}
+            </span>
+          )}
+        </div>
+        <button onClick={() => refetchActivity()} className="p-1.5 rounded hover:bg-muted transition-colors">
+          <RefreshCw className="w-3.5 h-3.5 text-muted-foreground" />
         </button>
       </div>
-
-      {/* Notification banner */}
-      {notifPermission === 'default' && (
-        <div className="mx-4 mb-3 flex items-center justify-between px-4 py-2.5 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800">
-          <span className="text-xs">Enable notifications for new messages</span>
-          <button onClick={requestNotifPermission} className="text-xs font-semibold text-amber-900 underline ml-3">Turn on</button>
-        </div>
-      )}
-
-      <div className="flex-1 overflow-y-auto px-4 pb-6 space-y-4">
-        {/* CHAT section */}
-        <div>
-          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-2">Chat</div>
-
-          {/* All comms — standalone card */}
-          <div className="bg-white rounded-xl shadow-sm overflow-hidden mb-3">
-            <button
-              onClick={() => goToList('all')}
-              className="w-full flex items-center justify-between px-4 py-4 hover:bg-muted/30 active:bg-muted/50 transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <span className="text-[16px] font-medium text-foreground">All comms</span>
-                {totalUnread > 0 && (
-                  <span className="bg-primary text-primary-foreground text-xs font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1.5">
-                    {totalUnread}
-                  </span>
-                )}
-              </div>
-              <ChevronRight className="w-5 h-5 text-muted-foreground" />
-            </button>
-          </div>
-
-          {/* Customers / Employees / etc — grouped card */}
-          <div className="bg-white rounded-xl shadow-sm overflow-hidden divide-y divide-border/50">
-            {[
-              { id: 'customers' as SidebarFilter, label: 'Customers' },
-              { id: 'employees' as SidebarFilter, label: 'Employees' },
-            ].map(({ id, label }) => (
-              <button
-                key={id}
-                onClick={() => goToList(id)}
-                className="w-full flex items-center justify-between px-4 py-4 hover:bg-muted/30 active:bg-muted/50 transition-colors"
-              >
-                <span className="text-[16px] font-medium text-foreground">{label}</span>
-                <ChevronRight className="w-5 h-5 text-muted-foreground" />
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* CALLS section */}
-        <div>
-          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-2">Calls</div>
-          <div className="bg-white rounded-xl shadow-sm overflow-hidden divide-y divide-border/50">
-            <button
-              onClick={() => goToList('calls')}
-              className="w-full flex items-center justify-between px-4 py-4 hover:bg-muted/30 active:bg-muted/50 transition-colors"
-            >
-              <span className="text-[16px] font-medium text-foreground">Voice call log</span>
-              <ChevronRight className="w-5 h-5 text-muted-foreground" />
-            </button>
-          </div>
-        </div>
-        {/* PORTAL section */}
-        <div>
-          <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1 mb-2">Client Portal</div>
-          <div className="bg-white rounded-xl shadow-sm overflow-hidden divide-y divide-border/50">
-            <button
-              onClick={() => goToList('portal')}
-              className="w-full flex items-center justify-between px-4 py-4 hover:bg-muted/30 active:bg-muted/50 transition-colors"
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-[16px] font-medium text-foreground">Portal Messages</span>
-              </div>
-              <ChevronRight className="w-5 h-5 text-muted-foreground" />
-            </button>
-          </div>
+      <div className="px-3 py-2 border-b border-border flex-shrink-0">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <Input
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search customers..."
+            className="pl-8 h-8 text-xs"
+          />
         </div>
       </div>
-    </div>
-  );
-
-  // ─── Screen: Conversation List ────────────────────────────────────────────
-
-  const listTitle =
-    sidebarFilter === 'all' ? 'All Comms' :
-    sidebarFilter === 'customers' ? 'Customers' :
-    sidebarFilter === 'employees' ? 'Employees' :
-    sidebarFilter === 'portal' ? 'Portal Messages' : 'Voice Call Log';
-
-  const ListScreen = (
-    <div className="flex flex-col h-full bg-background">
-      {/* Header */}
-      <div className="flex items-center justify-between px-2 py-3 border-b border-border bg-background">
-        <button
-          onClick={() => setMobileScreen('home')}
-          className="flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-muted transition-colors text-primary font-medium"
-        >
-          <ChevronLeft className="w-5 h-5" />
-          <span className="text-[15px]">Inbox</span>
-        </button>
-        <h2 className="text-[17px] font-semibold">{listTitle}</h2>
-        {sidebarFilter !== 'calls' ? (
-          <button
-            onClick={() => setShowNewConv(true)}
-            className="p-2 rounded-lg hover:bg-muted transition-colors"
-          >
-            <Edit className="w-5 h-5 text-primary" />
-          </button>
-        ) : (
-          <button
-            onClick={() => refetchConvs()}
-            className="p-2 rounded-lg hover:bg-muted transition-colors"
-          >
-            <RefreshCw className="w-4 h-4 text-muted-foreground" />
-          </button>
-        )}
-      </div>
-
-      {/* Search */}
-      {sidebarFilter !== 'calls' && sidebarFilter !== 'portal' && (
-        <div className="px-4 py-2.5 border-b border-border bg-background">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search conversations..."
-              className="pl-9 h-9 text-sm bg-muted/50 border-0 rounded-lg"
-            />
-          </div>
-        </div>
-      )}
-
-      {/* List */}
       <div className="flex-1 overflow-y-auto">
-        {sidebarFilter === 'portal' ? (
-          portalMsgsLoading ? (
-            <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">Loading...</div>
-          ) : portalMsgsAll.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 gap-3 text-center px-4">
-              <MessageSquare className="w-10 h-10 text-muted-foreground/30" />
-              <p className="text-sm font-medium text-muted-foreground">No portal messages yet</p>
-            </div>
-          ) : (
-            <div>
-              {/* Group by customer */}
-              {Object.entries(
-                (portalMsgsAll as any[]).reduce((acc: Record<number, any>, msg: any) => {
-                  if (!acc[msg.customerId]) acc[msg.customerId] = { customerId: msg.customerId, messages: [] };
-                  acc[msg.customerId].messages.push(msg);
-                  return acc;
-                }, {})
-              ).map(([custId, group]: [string, any]) => {
-                const latest = group.messages[0];
-                const unread = group.messages.filter((m: any) => m.senderRole === 'customer' && !m.readAt).length;
-                const isActive = activePortalCustomerId === group.customerId;
-                return (
-                  <button
-                    key={custId}
-                    onClick={() => setActivePortalCustomerId(group.customerId)}
-                    className={`w-full text-left px-4 py-3.5 border-b border-border/40 hover:bg-muted/40 transition-colors flex items-center gap-3.5 ${
-                      isActive ? 'bg-primary/5' : ''
-                    }`}
-                  >
-                    <div className="flex-shrink-0 w-11 h-11 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 text-sm font-bold">
-                      {latest.senderName ? latest.senderName.charAt(0).toUpperCase() : 'C'}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-baseline justify-between gap-2">
-                        <span className={`text-[15px] font-semibold truncate ${unread > 0 ? 'text-foreground' : 'text-foreground/80'}`}>
-                          {latest.senderName || `Customer #${custId}`}
-                        </span>
-                        <span className="text-xs text-muted-foreground flex-shrink-0">{fmtTime(latest.createdAt)}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-2 mt-0.5">
-                        <p className={`text-sm truncate ${unread > 0 ? 'text-foreground/70 font-medium' : 'text-muted-foreground'}`}>
-                          {latest.senderRole === 'customer' ? '' : 'You: '}{latest.body}
-                        </p>
-                        {unread > 0 && (
-                          <span className="flex-shrink-0 bg-amber-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
-                            {unread}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          )
-        ) : sidebarFilter === 'calls' ? (
-          callLogsLoading ? (
-            <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">Loading...</div>
-          ) : (callLogs as any[]).length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 gap-3 text-center px-4">
-              <Phone className="w-10 h-10 text-muted-foreground/30" />
-              <p className="text-sm font-medium text-muted-foreground">No call logs yet</p>
-            </div>
-          ) : (
-            <div>
-              {(callLogs as any[]).map((log) => (
-                <div key={log.id} className="px-4 py-3.5 border-b border-border/40 flex items-center gap-3.5 hover:bg-muted/30">
-                  <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
-                    log.status === 'missed' ? 'bg-red-100' :
-                    log.direction === 'inbound' ? 'bg-emerald-100' : 'bg-blue-100'
-                  }`}>
-                    {log.status === 'missed' ? <PhoneMissed className="w-5 h-5 text-destructive" /> :
-                     log.direction === 'inbound' ? <PhoneIncoming className="w-5 h-5 text-emerald-600" /> :
-                     <PhoneOutgoing className="w-5 h-5 text-blue-600" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[15px] font-medium truncate">{log.callerPhone || 'Unknown'}</span>
-                      <span className="text-xs text-muted-foreground flex-shrink-0">
-                        {log.durationSecs ? `${Math.floor(log.durationSecs / 60)}m ${log.durationSecs % 60}s` : '—'}
-                      </span>
-                    </div>
-                    <div className="text-sm text-muted-foreground mt-0.5 capitalize">
-                      {log.status} · {log.startedAt ? fmtTime(log.startedAt) : ''}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )
-        ) : convsLoading ? (
-          <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">Loading...</div>
-        ) : filteredConvs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 gap-4 text-center px-6">
-            <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center">
-              <MessageSquare className="w-8 h-8 text-muted-foreground/40" />
-            </div>
-            <div>
-              <p className="text-base font-semibold text-foreground">No conversations yet</p>
-              <p className="text-sm text-muted-foreground mt-1">Tap the compose button to start one</p>
-            </div>
+        {customerList.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 gap-3 text-center px-4">
+            <Users className="w-10 h-10 text-muted-foreground/30" />
+            <p className="text-sm font-medium text-muted-foreground">
+              {searchQuery ? 'No customers match' : 'No customers yet'}
+            </p>
           </div>
         ) : (
-          <div>
-            {filteredConvs.map(conv => (
-              <ConversationItem
-                key={conv.id}
-                conv={conv as Conversation}
-                isActive={conv.id === activeConvId}
-                onClick={() => openConversation(conv.id)}
-              />
-            ))}
-          </div>
+          customerList.map(c => (
+            <CustomerListItem
+              key={c.id}
+              name={c.name}
+              phone={c.phone}
+              lastPreview={c.activity?.lastMessagePreview}
+              lastAt={c.activity?.lastMessageAt}
+              unread={c.activity?.unreadCount ?? 0}
+              isActive={selectedCustomerId === c.id}
+              onClick={() => {
+                setSelectedCustomerId(c.id);
+                setMobileScreen('thread');
+              }}
+            />
+          ))
         )}
       </div>
     </div>
   );
 
-  // ─── Screen: Thread View ──────────────────────────────────────────────────
-
-  const ThreadScreen = (
-    <div className="flex flex-col h-full bg-background">
-      {/* Thread header */}
-      <div className="flex items-center gap-2 px-2 py-3 border-b border-border bg-background">
-        <button
-          onClick={() => setMobileScreen('list')}
-          className="flex items-center gap-0.5 px-2 py-1.5 rounded-lg hover:bg-muted transition-colors text-primary font-medium flex-shrink-0"
-        >
-          <ChevronLeft className="w-5 h-5" />
-          <span className="text-[15px]">{listTitle}</span>
-        </button>
-        {activeConv && (
-          <>
-            <div className={`flex-shrink-0 w-8 h-8 rounded-full ${getAvatarColor(activeConv.contactName)} flex items-center justify-center text-white text-xs font-bold`}>
-              {getInitials(activeConv.contactName)}
+  // ─── Thread Panel ─────────────────────────────────────────────────────────
+  const ThreadPanel = (
+    <div className="flex flex-col h-full min-w-0">
+      {selectedCustomer ? (
+        <>
+          {/* Header */}
+          <div className="px-4 py-3 border-b border-border flex items-center gap-3 flex-shrink-0 bg-background">
+            <button
+              onClick={() => setMobileScreen('list')}
+              className="md:hidden p-1.5 rounded hover:bg-muted transition-colors flex-shrink-0"
+            >
+              <ChevronLeft className="w-5 h-5" />
+            </button>
+            <div className={`flex-shrink-0 w-9 h-9 rounded-full ${getAvatarColor(selectedCustomer.name)} flex items-center justify-center text-white text-sm font-bold`}>
+              {getInitials(selectedCustomer.name)}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-[15px] font-semibold truncate">
-                {activeConv.contactName || activeConv.contactPhone || activeConv.contactEmail || 'Unknown'}
+              <div className="text-sm font-semibold truncate">{selectedCustomer.name}</div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                {selectedCustomer.phone && <span>{selectedCustomer.phone}</span>}
+                {selectedCustomer.email && <span className="truncate">{selectedCustomer.email}</span>}
               </div>
             </div>
             <div className="flex items-center gap-1 flex-shrink-0">
               <VoiceCallPanel
-                toNumber={activeConv.contactPhone ?? undefined}
-                toName={activeConv.contactName ?? undefined}
+                toNumber={selectedCustomer.phone ?? undefined}
+                toName={selectedCustomer.name}
                 onCallEnd={(secs) => {
-                  refetchMsgs();
-                  refetchConvs();
+                  refetchFeed();
                   toast.success(`Call ended — ${Math.floor(secs / 60)}m ${secs % 60}s`);
                 }}
               />
               <button className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground">
-                <MoreHorizontal className="w-5 h-5" />
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-4">
-        {msgsLoading ? (
-          <div className="flex items-center justify-center h-full text-muted-foreground text-sm">Loading messages...</div>
-        ) : messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
-            <MessageSquare className="w-10 h-10 text-muted-foreground/30" />
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">No messages yet</p>
-              <p className="text-xs text-muted-foreground/60 mt-1">Send the first message below</p>
-            </div>
-          </div>
-        ) : (
-          <div>
-            {groupedMessages.map(group => (
-              <div key={group.date}>
-                <div className="flex items-center gap-3 my-4">
-                  <div className="flex-1 h-px bg-border" />
-                  <span className="text-xs text-muted-foreground font-medium">{group.date}</span>
-                  <div className="flex-1 h-px bg-border" />
-                </div>
-                {group.msgs.map(msg => (
-                  <MessageBubble key={msg.id} msg={msg as Message} />
-                ))}
-              </div>
-            ))}
-          </div>
-        )}
-        <div ref={threadEndRef} />
-      </div>
-
-      {/* Compose bar */}
-      <div className="border-t border-border bg-background px-3 py-3 pb-safe">
-        {/* Subject line (email only) */}
-        {showSubject && (
-          <Input
-            value={composeSubject}
-            onChange={e => setComposeSubject(e.target.value)}
-            placeholder="Subject"
-            className="mb-2 h-9 text-sm"
-          />
-        )}
-
-        {/* Input row */}
-        <div className="flex items-end gap-2">
-          {/* Channel + attach button */}
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <button
-              onClick={() => setShowNewConv(true)}
-              className="w-9 h-9 rounded-full border border-border flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
-            {/* Channel dropdown button */}
-            <div className="relative">
-              <button
-                onClick={() => {
-                  const channels: Channel[] = ['sms', 'email', 'note'];
-                  const idx = channels.indexOf(composeChannel);
-                  setComposeChannel(channels[(idx + 1) % channels.length]);
-                }}
-                className="flex items-center gap-1 px-2 h-9 rounded-full border border-border text-muted-foreground hover:bg-muted transition-colors text-xs font-medium"
-              >
-                {(() => {
-                  const Icon = CHANNEL_ICONS[composeChannel];
-                  return <Icon className="w-3.5 h-3.5" />;
-                })()}
-                <span className="uppercase text-[10px]">{composeChannel}</span>
-                <ChevronRight className="w-3 h-3 rotate-90" />
+                <MoreHorizontal className="w-4 h-4" />
               </button>
             </div>
           </div>
 
-          {/* Text input */}
-          <div className="flex-1 relative">
-            <Textarea
-              value={composeBody}
-              onChange={e => setComposeBody(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={
-                composeChannel === 'sms' ? 'Type a message' :
-                composeChannel === 'email' ? 'Type an email...' :
-                'Add an internal note...'
-              }
-              className={`resize-none text-[15px] min-h-[40px] max-h-[120px] rounded-2xl py-2 px-4 ${
-                composeChannel === 'note' ? 'bg-amber-50/80 border-amber-200' : 'bg-muted/50 border-border'
-              }`}
-              rows={1}
-            />
-          </div>
-
-          {/* Send button */}
-          {composeBody.trim() ? (
-            <Button
-              onClick={handleSend}
-              disabled={isSending}
-              size="icon"
-              className="w-9 h-9 rounded-full flex-shrink-0"
-            >
-              <Send className="w-4 h-4" />
-            </Button>
-          ) : (
-            <button className="w-9 h-9 rounded-full border border-border flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors flex-shrink-0">
-              <Paperclip className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-
-        {/* Channel status hints */}
-        {composeChannel === 'sms' && (
-          <p className={`text-[10px] mt-1.5 px-1 ${twilioStatus?.configured ? 'text-emerald-600' : 'text-muted-foreground'}`}>
-            {twilioStatus?.configured
-              ? `SMS via ${twilioStatus.phoneNumber}`
-              : 'SMS not configured — add Twilio credentials in Settings'}
-          </p>
-        )}
-        {composeChannel === 'email' && (
-          <p className={`text-[10px] mt-1.5 px-1 ${gmailStatus?.connected ? 'text-emerald-600' : 'text-muted-foreground'}`}>
-            {gmailStatus?.connected
-              ? `Email via ${gmailStatus.email}`
-              : 'Gmail not connected — go to Settings → Inbox → Gmail Connect'}
-          </p>
-        )}
-      </div>
-    </div>
-  );
-
-  // ─── Desktop layout (md+): show all 3 panels side by side ────────────────
-
-  return (
-    <>
-      {/* ── MOBILE: single-screen stack ── */}
-      <div className="md:hidden flex flex-col h-[calc(100vh-57px)] overflow-hidden">
-        {mobileScreen === 'home' && HomeScreen}
-        {mobileScreen === 'list' && ListScreen}
-        {mobileScreen === 'thread' && (
-        sidebarFilter === 'portal' && activePortalCustomerId ? (
-          <PortalThreadPanel
-            customerId={activePortalCustomerId}
-            messages={(portalMsgsAll as any[]).filter((m: any) => m.customerId === activePortalCustomerId)}
-            replyText={portalReplyText}
-            onReplyChange={setPortalReplyText}
-            onReply={() => replyPortalMsg.mutate({ customerId: activePortalCustomerId, body: portalReplyText.trim() })}
-            isSending={replyPortalMsg.isPending}
-            onBack={() => setMobileScreen('list')}
-          />
-        ) : activeConv ? ThreadScreen : ListScreen
-      )}
-      </div>
-
-      {/* ── DESKTOP: 3-panel side-by-side ── */}
-      <div className="hidden md:flex h-[calc(100vh-57px)] overflow-hidden">
-
-        {/* Sidebar */}
-        <div className="w-48 flex-shrink-0 border-r border-border bg-[#f0f0f5] flex flex-col py-4 gap-0.5 px-3">
-          <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-2 mb-1">Chat</div>
-          {[
-            { id: 'all' as SidebarFilter, icon: Inbox, label: 'All Comms', unread: totalUnread },
-            { id: 'customers' as SidebarFilter, icon: Users, label: 'Customers', unread: 0 },
-            { id: 'employees' as SidebarFilter, icon: Briefcase, label: 'Employees', unread: 0 },
-          ].map(({ id, icon: Icon, label, unread }) => (
-            <button
-              key={id}
-              onClick={() => setSidebarFilter(id)}
-              className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-colors text-left ${
-                sidebarFilter === id
-                  ? 'bg-primary/10 text-primary font-semibold'
-                  : 'text-foreground/70 hover:bg-muted hover:text-foreground'
-              }`}
-            >
-              <Icon className="w-4 h-4 flex-shrink-0" />
-              <span className="truncate flex-1">{label}</span>
-              {unread > 0 && (
-                <span className="bg-primary text-primary-foreground text-[10px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
-                  {unread}
-                </span>
-              )}
-            </button>
-          ))}
-
-          <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-2 mt-3 mb-1">Calls</div>
-          <button
-            onClick={() => setSidebarFilter('calls')}
-            className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-colors text-left ${
-              sidebarFilter === 'calls'
-                ? 'bg-primary/10 text-primary font-semibold'
-                : 'text-foreground/70 hover:bg-muted hover:text-foreground'
-            }`}
-          >
-            <Phone className="w-4 h-4 flex-shrink-0" />
-            <span className="truncate">Voice Call Log</span>
-          </button>
-          <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-2 mt-3 mb-1">Portal</div>
-          <button
-            onClick={() => setSidebarFilter('portal')}
-            className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm transition-colors text-left ${
-              sidebarFilter === 'portal'
-                ? 'bg-amber-100 text-amber-700 font-semibold'
-                : 'text-foreground/70 hover:bg-muted hover:text-foreground'
-            }`}
-          >
-            <MessageSquare className="w-4 h-4 flex-shrink-0" />
-            <span className="truncate">Portal Messages</span>
-          </button>
-        </div>
-
-        {/* Conversation list */}
-        <div className="w-80 flex-shrink-0 border-r border-border flex flex-col">
-          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-            <h2 className="text-sm font-semibold">{listTitle}</h2>
-            <div className="flex items-center gap-1">
-              <button onClick={() => refetchConvs()} className="p-1.5 rounded hover:bg-muted transition-colors">
-                <RefreshCw className="w-3.5 h-3.5 text-muted-foreground" />
-              </button>
-              {sidebarFilter !== 'calls' && (
-                <button onClick={() => setShowNewConv(true)} className="p-1.5 rounded hover:bg-muted transition-colors">
-                  <Plus className="w-3.5 h-3.5 text-muted-foreground" />
-                </button>
-              )}
-            </div>
-          </div>
-          {sidebarFilter !== 'calls' && (
-            <div className="px-3 py-2 border-b border-border">
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                <Input
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  placeholder="Search..."
-                  className="pl-8 h-8 text-xs"
-                />
-              </div>
-            </div>
-          )}
-          <div className="flex-1 overflow-y-auto">
-            {sidebarFilter === 'portal' ? (
-              portalMsgsLoading ? (
-                <div className="flex items-center justify-center py-12 text-muted-foreground text-sm">Loading...</div>
-              ) : portalMsgsAll.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 gap-3 text-center px-4">
-                  <MessageSquare className="w-8 h-8 text-muted-foreground/40" />
-                  <p className="text-sm font-medium text-muted-foreground">No portal messages yet</p>
-                </div>
-              ) : (
+          {/* Feed */}
+          <div className="flex-1 overflow-y-auto px-4 py-4">
+            {feedLoading ? (
+              <div className="flex items-center justify-center h-full text-muted-foreground text-sm">Loading...</div>
+            ) : groupedFeed.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
+                <MessageSquare className="w-10 h-10 text-muted-foreground/30" />
                 <div>
-                  {Object.entries(
-                    (portalMsgsAll as any[]).reduce((acc: Record<number, any>, msg: any) => {
-                      if (!acc[msg.customerId]) acc[msg.customerId] = { customerId: msg.customerId, messages: [] };
-                      acc[msg.customerId].messages.push(msg);
-                      return acc;
-                    }, {})
-                  ).map(([custId, group]: [string, any]) => {
-                    const latest = group.messages[0];
-                    const unread = group.messages.filter((m: any) => m.senderRole === 'customer' && !m.readAt).length;
-                    const isActive = activePortalCustomerId === group.customerId;
-                    return (
-                      <button
-                        key={custId}
-                        onClick={() => setActivePortalCustomerId(group.customerId)}
-                        className={`w-full text-left px-4 py-3 border-b border-border/50 hover:bg-muted/40 transition-colors flex items-center gap-3 ${
-                          isActive ? 'bg-amber-50' : ''
-                        }`}
-                      >
-                        <div className="flex-shrink-0 w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 text-sm font-bold">
-                          {latest.senderName ? latest.senderName.charAt(0).toUpperCase() : 'C'}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-baseline justify-between gap-2">
-                            <span className={`text-sm font-semibold truncate ${unread > 0 ? 'text-foreground' : 'text-foreground/80'}`}>
-                              {latest.senderName || `Customer #${custId}`}
-                            </span>
-                            <span className="text-[10px] text-muted-foreground flex-shrink-0">{fmtTime(latest.createdAt)}</span>
-                          </div>
-                          <div className="flex items-center justify-between gap-2 mt-0.5">
-                            <p className={`text-xs truncate ${unread > 0 ? 'text-foreground/70 font-medium' : 'text-muted-foreground'}`}>
-                              {latest.senderRole === 'customer' ? '' : 'You: '}{latest.body}
-                            </p>
-                            {unread > 0 && (
-                              <span className="flex-shrink-0 bg-amber-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
-                                {unread}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              )
-            ) : sidebarFilter === 'calls' ? (
-              callLogsLoading ? (
-                <div className="flex items-center justify-center py-12 text-muted-foreground text-sm">Loading...</div>
-              ) : (callLogs as any[]).length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 gap-3 text-center px-4">
-                  <Phone className="w-8 h-8 text-muted-foreground/40" />
-                  <p className="text-sm font-medium text-muted-foreground">No call logs yet</p>
-                </div>
-              ) : (
-                <div>
-                  {(callLogs as any[]).map((log) => (
-                    <div key={log.id} className="px-4 py-3 border-b border-border/50 flex items-start gap-3 hover:bg-muted/30">
-                      <div className={`mt-0.5 flex-shrink-0 ${
-                        log.status === 'missed' ? 'text-destructive' :
-                        log.direction === 'inbound' ? 'text-emerald-600' : 'text-blue-600'
-                      }`}>
-                        {log.status === 'missed' ? <PhoneMissed className="w-4 h-4" /> :
-                         log.direction === 'inbound' ? <PhoneIncoming className="w-4 h-4" /> :
-                         <PhoneOutgoing className="w-4 h-4" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium truncate">{log.callerPhone || 'Unknown'}</span>
-                          <span className="text-[10px] text-muted-foreground flex-shrink-0">
-                            {log.durationSecs ? `${Math.floor(log.durationSecs / 60)}m ${log.durationSecs % 60}s` : '—'}
-                          </span>
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-0.5 capitalize">
-                          {log.status} · {log.startedAt ? fmtTime(log.startedAt) : ''}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )
-            ) : convsLoading ? (
-              <div className="flex items-center justify-center py-12 text-muted-foreground text-sm">Loading...</div>
-            ) : filteredConvs.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 gap-3 text-center px-4">
-                <MessageSquare className="w-8 h-8 text-muted-foreground/40" />
-                <p className="text-sm font-medium text-muted-foreground">No conversations yet</p>
-                <p className="text-xs text-muted-foreground/60">Click + to start a new conversation</p>
-              </div>
-            ) : (
-              <div>
-                {filteredConvs.map(conv => (
-                  <ConversationItem
-                    key={conv.id}
-                    conv={conv as Conversation}
-                    isActive={conv.id === activeConvId}
-                    onClick={() => setActiveConvId(conv.id)}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Thread panel — portal mode */}
-        {sidebarFilter === 'portal' ? (
-          activePortalCustomerId ? (
-            <PortalThreadPanel
-              customerId={activePortalCustomerId}
-              messages={(portalMsgsAll as any[]).filter((m: any) => m.customerId === activePortalCustomerId)}
-              replyText={portalReplyText}
-              onReplyChange={setPortalReplyText}
-              onReply={() => replyPortalMsg.mutate({ customerId: activePortalCustomerId, body: portalReplyText.trim() })}
-              isSending={replyPortalMsg.isPending}
-            />
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center p-8">
-              <div className="w-16 h-16 rounded-2xl bg-amber-50 flex items-center justify-center">
-                <MessageSquare className="w-8 h-8 text-amber-400" />
-              </div>
-              <div>
-                <h3 className="text-base font-semibold mb-1">Select a portal conversation</h3>
-                <p className="text-sm text-muted-foreground max-w-xs">Choose a customer from the list to view their messages.</p>
-              </div>
-            </div>
-          )
-        ) : activeConv ? (
-          <div className="flex-1 flex flex-col min-w-0">
-            <div className="px-5 py-3 border-b border-border flex items-center justify-between bg-background">
-              <div className="flex items-center gap-3">
-                <div className={`w-8 h-8 rounded-full ${getAvatarColor(activeConv.contactName)} flex items-center justify-center text-white text-xs font-bold`}>
-                  {getInitials(activeConv.contactName)}
-                </div>
-                <div>
-                  <div className="text-sm font-semibold">
-                    {activeConv.contactName || activeConv.contactPhone || activeConv.contactEmail || 'Unknown'}
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    {activeConv.contactPhone && <span>{activeConv.contactPhone}</span>}
-                    {activeConv.contactEmail && <span>{activeConv.contactEmail}</span>}
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <VoiceCallPanel
-                  toNumber={activeConv.contactPhone ?? undefined}
-                  toName={activeConv.contactName ?? undefined}
-                  onCallEnd={(secs) => {
-                    refetchMsgs();
-                    refetchConvs();
-                    toast.success(`Call ended — ${Math.floor(secs / 60)}m ${secs % 60}s`);
-                  }}
-                />
-                <button className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground">
-                  <MoreHorizontal className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-            <div className="flex-1 overflow-y-auto px-5 py-4">
-              {msgsLoading ? (
-                <div className="flex items-center justify-center h-full text-muted-foreground text-sm">Loading messages...</div>
-              ) : messages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
-                  <MessageSquare className="w-10 h-10 text-muted-foreground/30" />
                   <p className="text-sm font-medium text-muted-foreground">No messages yet</p>
                   <p className="text-xs text-muted-foreground/60 mt-1">Send the first message below</p>
                 </div>
-              ) : (
-                <div>
-                  {groupedMessages.map(group => (
-                    <div key={group.date}>
-                      <div className="flex items-center gap-3 my-4">
-                        <div className="flex-1 h-px bg-border" />
-                        <span className="text-[10px] text-muted-foreground font-medium">{group.date}</span>
-                        <div className="flex-1 h-px bg-border" />
-                      </div>
-                      {group.msgs.map(msg => (
-                        <MessageBubble key={msg.id} msg={msg as Message} />
-                      ))}
+              </div>
+            ) : (
+              <div>
+                {groupedFeed.map(group => (
+                  <div key={group.date}>
+                    <div className="flex items-center gap-3 my-4">
+                      <div className="flex-1 h-px bg-border" />
+                      <span className="text-[10px] text-muted-foreground font-medium">{group.date}</span>
+                      <div className="flex-1 h-px bg-border" />
                     </div>
-                  ))}
-                </div>
+                    {group.items.map(item => (
+                      <FeedBubble key={item.id} item={item} />
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+            <div ref={threadEndRef} />
+          </div>
+
+          {/* Compose bar */}
+          <div className="border-t border-border bg-background px-4 py-3 flex-shrink-0">
+            <div className="flex items-center gap-1 mb-2">
+              {(['sms', 'email', 'note'] as Channel[]).map(ch => {
+                const Icon = CHANNEL_ICON[ch] ?? MessageSquare;
+                const labels: Record<string, string> = { sms: 'SMS', email: 'Email', note: 'Note' };
+                return (
+                  <button
+                    key={ch}
+                    onClick={() => setComposeChannel(ch)}
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                      composeChannel === ch
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                    }`}
+                  >
+                    <Icon className="w-3 h-3" />
+                    {labels[ch]}
+                  </button>
+                );
+              })}
+              {composeChannel === 'sms' && !twilioStatus?.configured && (
+                <span className="ml-auto flex items-center gap-1 text-[10px] text-amber-600">
+                  <AlertCircle className="w-3 h-3" /> Twilio not configured
+                </span>
               )}
-              <div ref={threadEndRef} />
+              {composeChannel === 'email' && !gmailStatus?.connected && (
+                <span className="ml-auto flex items-center gap-1 text-[10px] text-amber-600">
+                  <AlertCircle className="w-3 h-3" /> Gmail not connected
+                </span>
+              )}
             </div>
-            {/* Desktop compose bar */}
-            <div className="border-t border-border bg-background px-4 py-3">
-              <div className="flex items-center gap-1 mb-2">
-                {(['sms', 'email', 'note'] as Channel[]).map(ch => {
-                  const Icon = CHANNEL_ICONS[ch];
-                  const labels: Record<string, string> = { sms: 'SMS', email: 'Email', note: 'Note' };
-                  return (
-                    <button
-                      key={ch}
-                      onClick={() => setComposeChannel(ch)}
-                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
-                        composeChannel === ch
-                          ? ch === 'note'
-                            ? 'bg-amber-100 text-amber-700 border border-amber-300'
-                            : 'bg-primary/10 text-primary border border-primary/30'
-                          : 'text-muted-foreground hover:bg-muted border border-transparent'
-                      }`}
-                    >
-                      <Icon className="w-3 h-3" />
-                      {labels[ch]}
-                    </button>
-                  );
-                })}
-                <div className="ml-auto text-[10px] text-muted-foreground">⌘↵ to send</div>
-              </div>
-              {showSubject && (
-                <Input
-                  value={composeSubject}
-                  onChange={e => setComposeSubject(e.target.value)}
-                  placeholder="Subject"
-                  className="mb-2 h-8 text-sm"
-                />
-              )}
-              <div className="flex items-end gap-2">
-                <Textarea
-                  value={composeBody}
-                  onChange={e => setComposeBody(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder={
-                    composeChannel === 'sms' ? 'Type a text message...' :
-                    composeChannel === 'email' ? 'Type an email...' :
-                    'Add an internal note (not visible to customer)...'
-                  }
-                  className={`flex-1 resize-none text-sm min-h-[60px] max-h-[160px] ${
-                    composeChannel === 'note' ? 'bg-amber-50/50 border-amber-200 focus-visible:ring-amber-300' : ''
-                  }`}
-                  rows={2}
-                />
-                <Button
-                  onClick={handleSend}
-                  disabled={!composeBody.trim() || isSending}
-                  size="sm"
-                  className="px-3"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                </Button>
-              </div>
-              {composeChannel === 'sms' && (
-                <p className={`text-[10px] mt-1.5 ${twilioStatus?.configured ? 'text-emerald-600' : 'text-muted-foreground'}`}>
-                  {twilioStatus?.configured ? `SMS via ${twilioStatus.phoneNumber}` : 'SMS not configured'}
-                </p>
-              )}
+            {composeChannel === 'email' && (
+              <Input
+                value={composeSubject}
+                onChange={e => setComposeSubject(e.target.value)}
+                placeholder="Subject"
+                className="mb-2 h-8 text-sm"
+              />
+            )}
+            <div className="flex items-end gap-2">
+              <Textarea
+                value={composeBody}
+                onChange={e => setComposeBody(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={
+                  composeChannel === 'sms' ? 'Type a message... (⌘↵ to send)' :
+                  composeChannel === 'email' ? 'Type an email...' :
+                  'Add an internal note...'
+                }
+                className="flex-1 min-h-[60px] max-h-[160px] resize-none text-sm"
+              />
+              <Button
+                onClick={handleSend}
+                disabled={!composeBody.trim() || isSending}
+                size="icon"
+                className="h-10 w-10 flex-shrink-0"
+              >
+                {isSending ? <Clock className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              </Button>
             </div>
           </div>
-        ) : (
-          <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center p-8">
-            <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
-              <MessageSquare className="w-8 h-8 text-primary" />
-            </div>
-            <div>
-              <h3 className="text-base font-semibold mb-1">Select a conversation</h3>
-              <p className="text-sm text-muted-foreground max-w-xs">
-                Choose a conversation from the list, or start a new one.
-              </p>
-            </div>
-            <Button onClick={() => setShowNewConv(true)} className="gap-2">
-              <Plus className="w-4 h-4" />
-              New Conversation
-            </Button>
+        </>
+      ) : (
+        <div className="flex flex-col items-center justify-center h-full gap-4 text-center p-8">
+          <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
+            <Inbox className="w-8 h-8 text-primary/60" />
           </div>
-        )}
+          <div>
+            <h3 className="text-base font-semibold mb-1">Select a customer</h3>
+            <p className="text-sm text-muted-foreground max-w-xs">
+              Choose a customer from the list to view their full communication history.
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  // ─── Layout ───────────────────────────────────────────────────────────────
+  return (
+    <>
+      {/* Mobile */}
+      <div className="md:hidden flex flex-col h-[calc(100vh-57px)] overflow-hidden">
+        {mobileScreen === 'list' ? CustomerListPanel : ThreadPanel}
       </div>
 
-      {/* New Conversation Modal */}
-      {showNewConv && (
-        <NewConversationModal
-          onClose={() => setShowNewConv(false)}
-          onCreated={(id) => {
-            setShowNewConv(false);
-            refetchConvs();
-            setActiveConvId(id);
-            setMobileScreen('thread');
-          }}
-        />
-      )}
+      {/* Desktop: 2-panel */}
+      <div className="hidden md:flex h-[calc(100vh-57px)] overflow-hidden">
+        <div className="w-80 flex-shrink-0 border-r border-border flex flex-col">
+          {CustomerListPanel}
+        </div>
+        <div className="flex-1 flex flex-col min-w-0">
+          {ThreadPanel}
+        </div>
+      </div>
     </>
   );
 }
