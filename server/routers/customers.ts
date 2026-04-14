@@ -376,4 +376,79 @@ export const customersRouter = router({
       }
       return { created, updated, total: input.rows.length };
     }),
+
+  // ── Real-time duplicate lookup (used during intake forms) ─────────────────
+  findSimilar: protectedProcedure
+    .input(z.object({
+      name: z.string().optional(),
+      phone: z.string().optional(),
+      email: z.string().optional(),
+      excludeId: z.string().optional(),
+    }))
+    .query(async ({ input }) => {
+      const all = await listCustomers(undefined, 1000, 0);
+      const active = all.filter((c: any) => !c.mergedIntoId && c.id !== input.excludeId);
+
+      const normPhone = (p?: string | null) => (p ?? '').replace(/\D/g, '').replace(/^1/, '').slice(-10);
+      const normName = (s?: string | null) => (s ?? '').toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+      function lev(a: string, b: string, max = 4): number {
+        if (a === b) return 0;
+        if (Math.abs(a.length - b.length) > max) return max + 1;
+        const dp = Array.from({ length: b.length + 1 }, (_: unknown, i: number) => i);
+        for (let i = 1; i <= a.length; i++) {
+          let prev = dp[0]; dp[0] = i;
+          for (let j = 1; j <= b.length; j++) {
+            const tmp = dp[j];
+            dp[j] = a[i-1] === b[j-1] ? prev : 1 + Math.min(prev, dp[j], dp[j-1]);
+            prev = tmp;
+          }
+        }
+        return dp[b.length];
+      }
+
+      const inPhone = normPhone(input.phone);
+      const inName = normName(input.name);
+      const inEmail = (input.email ?? '').toLowerCase().trim();
+
+      const results: Array<{ customer: typeof active[0]; reason: string; score: number }> = [];
+
+      for (const c of active) {
+        let score = 0;
+        let reason = '';
+
+        const cEmail = ((c as any).email ?? '').toLowerCase().trim();
+        if (inEmail && cEmail && inEmail === cEmail) { score = 100; reason = 'Same email'; }
+
+        if (!reason) {
+          const cPhone = normPhone((c as any).mobilePhone || (c as any).homePhone || (c as any).workPhone);
+          if (inPhone.length >= 7 && cPhone.length >= 7 && inPhone === cPhone) { score = 95; reason = 'Same phone number'; }
+        }
+
+        if (!reason && inName.length >= 3) {
+          const cName = normName((c as any).displayName || `${(c as any).firstName} ${(c as any).lastName}`);
+          if (cName.length >= 3) {
+            const dist = lev(inName, cName, 3);
+            if (dist === 0) { score = 90; reason = 'Same name'; }
+            else if (dist <= 2) { score = 75; reason = 'Similar name'; }
+            else if (dist <= 3) { score = 55; reason = 'Possible name match'; }
+          }
+        }
+
+        if (score >= 55) results.push({ customer: c, reason, score });
+      }
+
+      return results
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 5)
+        .map(({ customer, reason, score }) => ({
+          id: (customer as any).id,
+          displayName: (customer as any).displayName || `${(customer as any).firstName} ${(customer as any).lastName}`.trim(),
+          email: (customer as any).email,
+          mobilePhone: (customer as any).mobilePhone,
+          city: (customer as any).city,
+          state: (customer as any).state,
+          reason,
+          score,
+        }));
+    }),
 });

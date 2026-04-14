@@ -9,10 +9,12 @@
 import { useState, useEffect, useRef } from 'react';
 import AddressAutocomplete, { ParsedAddress } from '@/components/AddressAutocomplete';
 import AddressMapPreview from '@/components/AddressMapPreview';
+import DuplicateSuggestionBanner from '@/components/DuplicateSuggestionBanner';
 import { X, Plus, MapPin, User, Building2, Phone, Mail, AlertTriangle } from 'lucide-react';
 import { Customer, CustomerType, LeadSource } from '@/lib/types';
 import { nanoid } from 'nanoid';
 import { toast } from 'sonner';
+import { useEstimator } from '@/contexts/EstimatorContext';
 
 const LEAD_SOURCES: LeadSource[] = [
   'Google', 'Referral', 'Facebook', 'Instagram',
@@ -59,10 +61,28 @@ const EMPTY: Omit<Customer, 'id' | 'createdAt' | 'lifetimeValue' | 'outstandingB
 };
 
 export default function NewCustomerModal({ onClose, onCreated }: Props) {
+  const { state, setActiveCustomer } = useEstimator();
   const [form, setForm] = useState({ ...EMPTY });
   const [tagInput, setTagInput] = useState('');
   const [lastParsedLatLng, setLastParsedLatLng] = useState<{ lat?: number; lng?: number }>({});
   const firstNameRef = useRef<HTMLInputElement>(null);
+
+  // Debounced values for duplicate detection
+  const [debouncedName, setDebouncedName] = useState('');
+  const [debouncedPhone, setDebouncedPhone] = useState('');
+  const [debouncedEmail, setDebouncedEmail] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedName(form.displayName || `${form.firstName} ${form.lastName}`.trim()), 600);
+    return () => clearTimeout(t);
+  }, [form.firstName, form.lastName, form.displayName]);
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedPhone(form.mobilePhone), 600);
+    return () => clearTimeout(t);
+  }, [form.mobilePhone]);
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedEmail(form.email), 600);
+    return () => clearTimeout(t);
+  }, [form.email]);
 
   // Auto-build display name from first + last
   useEffect(() => {
@@ -145,6 +165,19 @@ export default function NewCustomerModal({ onClose, onCreated }: Props) {
         </div>
 
         <div className="px-6 py-5 space-y-8">
+
+          {/* ── Duplicate Suggestion Banner ── */}
+          <DuplicateSuggestionBanner
+            name={debouncedName}
+            phone={debouncedPhone}
+            email={debouncedEmail}
+            onUseExisting={(customerId) => {
+              // Navigate to the existing customer and close this modal
+              setActiveCustomer(customerId);
+              toast.success('Switched to existing customer');
+              onClose();
+            }}
+          />
 
           {/* ── Contact Info ── */}
           <section>

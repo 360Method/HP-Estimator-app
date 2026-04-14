@@ -1300,3 +1300,13 @@
 - [ ] Table layout: Display Name, Company, Address, Mobile, Email, Lead Source, Notes, Tags columns with sortable headers
 - [ ] Actions dropdown: Import CSV (file picker + parse + upsert), Export CSV (all or selected), Merge selected, Delete selected
 - [ ] Import CSV: parse file client-side, show preview modal with row count, confirm to upsert
+
+## Duplicate Suggestion + Manual Merge Feature
+
+- [ ] Add customers.findSimilar tRPC procedure (accepts name, phone, email; returns top fuzzy matches)
+- [ ] Add DuplicateSuggestionBanner component (inline warning with "Use existing" / "Create anyway" actions)
+- [ ] Integrate DuplicateSuggestionBanner into CustomerSection new-customer form (debounced on name/phone/email change)
+- [ ] Integrate DuplicateSuggestionBanner into lead intake modal CustomerSearch step
+- [ ] Add "Merge with another customer" button in CustomerSection profile header
+- [ ] Add "Merge" action in CustomersListPage row context menu (single-row, opens MergeCustomerDialog with customer picker)
+- [ ] Extend MergeCustomerDialog to support selecting merge target from a searchable customer picker

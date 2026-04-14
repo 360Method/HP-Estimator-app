@@ -30,6 +30,7 @@ import {
   Activity, Send, CheckCircle2, XCircle, Clock, PhoneCall, Wallet,
   ExternalLink, Edit3, Save, X, AlertCircle, TrendingUp, Archive,
   RefreshCw, FolderOpen, Download, Wrench, Trophy, FileUp, Camera, CalendarPlus,
+  GitMerge, Search,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import PipelineBoard from '@/components/PipelineBoard';
@@ -37,6 +38,8 @@ import AddressAutocomplete, { ParsedAddress } from '@/components/AddressAutocomp
 import AddressMapPreview from '@/components/AddressMapPreview';
 import InvoiceSection from '@/components/sections/InvoiceSection';
 import VoiceCallPanel from '@/components/VoiceCallPanel';
+import ManualMergeFlow from '@/components/ManualMergeFlow';
+import DuplicateSuggestionBanner from '@/components/DuplicateSuggestionBanner';
 import { toast } from 'sonner';
 import { nanoid } from 'nanoid';
 
@@ -593,6 +596,8 @@ export default function CustomerSection() {
   const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
   const [addrForm, setAddrForm] = useState({ label: 'Home', street: '', unit: '', city: 'Vancouver', state: 'WA', zip: '', lat: undefined as number | undefined, lng: undefined as number | undefined });
   const [addrLatLng, setAddrLatLng] = useState<{ lat?: number; lng?: number }>({}); // for map preview in form
+  // Merge dialog state
+  const [showMergeDialog, setShowMergeDialog] = useState(false);
 
   // ── Derived ──
   // Prefer the customer record's name fields so DB-synced customers always show
@@ -1374,6 +1379,17 @@ export default function CustomerSection() {
                 <PhoneCall size={13} />
                 <span className="hidden sm:inline">Call</span>
               </a>
+              {/* Merge button */}
+              {activeCustomerId && (
+                <button
+                  onClick={() => setShowMergeDialog(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+                  title="Merge this customer with another"
+                >
+                  <GitMerge size={13} />
+                  <span className="hidden sm:inline">Merge</span>
+                </button>
+              )}
               {/* Sync to DB button */}
               {activeCustomerId && (
                 <button
@@ -1590,6 +1606,19 @@ export default function CustomerSection() {
         onClose={() => setIntakeModal(null)}
         prefill={intakePrefill}
         onSaved={(oppId) => { setIntakeModal(null); setActiveOpportunity(oppId); setSection('opp-details'); }}
+      />
+    )}
+
+    {/* Manual Merge Dialog — two-step: pick customer, then compare & confirm */}
+    {showMergeDialog && activeCustomer && (
+      <ManualMergeFlow
+        currentCustomer={activeCustomer}
+        allCustomers={customers.filter(c => c.id !== activeCustomerId && !(c as any).mergedIntoId)}
+        onClose={() => setShowMergeDialog(false)}
+        onMerged={(sourceId, targetId) => {
+          updateCustomerLocal(sourceId, { mergedIntoId: targetId } as any);
+          setShowMergeDialog(false);
+        }}
       />
     )}
 
