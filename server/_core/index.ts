@@ -12,7 +12,7 @@ import Stripe from "stripe";
 import { handleInboundSms, handleCallStatusUpdate, generateVoiceToken, isTwilioConfigured } from "../twilio";
 import twilio from "twilio";
 import { exchangeGmailCode, pollInboundEmails, sendOverdueReminderEmail } from "../gmail";
-import { getFirstGmailToken } from "../db";
+import { getFirstGmailToken, listOpportunities, updateOpportunity } from "../db";
 import { addSSEClient, broadcastNewMessage } from "../sse";
 import { getPortalInvoiceByStripePaymentIntentId, updatePortalInvoicePaid, getPortalInvoiceByCheckoutSessionId, findPortalCustomerById, getOverdueInvoicesForReminder, markPortalInvoiceReminderSent, getSignOffsEligibleForReviewRequest, getSignOffsEligibleForReviewReminder, markReviewRequestSent, markReviewReminderSent } from "../portalDb";
 import { create360MembershipFromWebhook } from "../threeSixtyWebhook.ts";
@@ -614,6 +614,63 @@ async function startServer() {
   runReviewRequests().catch(console.error);
   setInterval(runReviewRequests, 60 * 60 * 1000);
   console.log('[Review] Review request scheduler started (runs every hour)');
+
+  // ── 360° Cart Abandonment Drip Emails (runs every hour) ────────────────────────────────────────────────────
+  const FUNNEL_URL = process.env.FUNNEL_ORIGIN ?? "https://360.handypioneers.com";
+  const run360DripEmails = async () => {
+    try {
+      const abandoned = await listOpportunities("lead", undefined, false, 500);
+      const cartLeads = abandoned.filter((o: { stage: string }) => o.stage === "Cart Abandoned");
+      if (cartLeads.length === 0) return;
+      const now = Date.now();
+      const H24 = 24 * 60 * 60 * 1000;
+      const H72 = 72 * 60 * 60 * 1000;
+      const D7  = 7 * 24 * 60 * 60 * 1000;
+      for (const lead of cartLeads) {
+        const emailMatch = (lead.notes ?? "").match(/<([^>]+@[^>]+)>/);
+        const nameMatch  = (lead.notes ?? "").match(/Contact: ([^<]+)</);
+        const tierMatch  = (lead.notes ?? "").match(/Tier: (\w+)/);
+        if (!emailMatch) continue;
+        const to        = emailMatch[1].trim();
+        const firstName = nameMatch ? nameMatch[1].trim().split(" ")[0] : "there";
+        const tier      = tierMatch  ? tierMatch[1] : "Essential";
+        const tierLabel = tier.charAt(0).toUpperCase() + tier.slice(1);
+        const createdAt = new Date((lead as any).createdAt ?? 0).getTime();
+        const age  = now - createdAt;
+        const sent = lead.notes ?? "";
+        if (age >= H24 && age < H72 && !sent.includes("[Drip-1 sent]")) {
+          await sendEmail({
+            to,
+            subject: `Still thinking about protecting your home, ${firstName}?`,
+            html: `<p>Hi ${firstName},</p><p>You started enrolling in the <strong>360\u00b0 ${tierLabel} Plan</strong> but didn't finish. We saved your spot.</p><p>The 360\u00b0 Method gives you one annual home scan, four seasonal tune-ups, and a labor credit that pays for itself \u2014 starting at $49/mo.</p><p><a href="${FUNNEL_URL}" style="background:#b45309;color:#fff;padding:12px 24px;border-radius:4px;text-decoration:none;font-weight:bold;display:inline-block;">Complete My Enrollment \u2192</a></p><p>Questions? Reply to this email or call us at (360) 544-9858.</p><p>\u2014 The Handy Pioneers Team</p>`,
+          }).catch(() => null);
+          await updateOpportunity(lead.id, { notes: sent + "\n[Drip-1 sent]" }).catch(() => null);
+          console.log(`[360 Drip] Email 1 sent to ${to}`);
+        } else if (age >= H72 && age < D7 && !sent.includes("[Drip-2 sent]")) {
+          await sendEmail({
+            to,
+            subject: `Your home is losing value every season you wait`,
+            html: `<p>Hi ${firstName},</p><p>Most homeowners don't realize the cost of deferred maintenance until it's too late. A leaky gutter becomes a $4,000 foundation repair. A missed HVAC filter becomes a $6,000 replacement.</p><p>The <strong>360\u00b0 ${tierLabel} Plan</strong> catches these issues early \u2014 and your labor credit covers the fixes.</p><p><a href="${FUNNEL_URL}" style="background:#b45309;color:#fff;padding:12px 24px;border-radius:4px;text-decoration:none;font-weight:bold;display:inline-block;">Protect My Home Now \u2192</a></p><p>\u2014 The Handy Pioneers Team</p>`,
+          }).catch(() => null);
+          await updateOpportunity(lead.id, { notes: sent + "\n[Drip-2 sent]" }).catch(() => null);
+          console.log(`[360 Drip] Email 2 sent to ${to}`);
+        } else if (age >= D7 && !sent.includes("[Drip-3 sent]")) {
+          await sendEmail({
+            to,
+            subject: `Last chance \u2014 your 360\u00b0 enrollment spot`,
+            html: `<p>Hi ${firstName},</p><p>We've been holding your spot in the <strong>360\u00b0 ${tierLabel} Plan</strong>, but we can only hold it a little longer.</p><p>If protecting your home proactively isn't the right fit right now, no worries \u2014 we'll be here when you're ready. But if you're still interested, now is the time:</p><p><a href="${FUNNEL_URL}" style="background:#b45309;color:#fff;padding:12px 24px;border-radius:4px;text-decoration:none;font-weight:bold;display:inline-block;">Claim My Spot \u2192</a></p><p>\u2014 The Handy Pioneers Team</p>`,
+          }).catch(() => null);
+          await updateOpportunity(lead.id, { notes: sent + "\n[Drip-3 sent]" }).catch(() => null);
+          console.log(`[360 Drip] Email 3 sent to ${to}`);
+        }
+      }
+    } catch (err) {
+      console.error("[360 Drip] Drip email job error:", err);
+    }
+  };
+  run360DripEmails().catch(console.error);
+  setInterval(run360DripEmails, 60 * 60 * 1000);
+  console.log("[360 Drip] Cart abandonment drip scheduler started (runs every hour)");
 
   // tRPC API
   app.use(

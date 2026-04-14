@@ -524,7 +524,8 @@ export type LeadStage =
   | 'Third Contact'
   | 'On Hold'
   | 'Won'
-  | 'Lost';
+  | 'Lost'
+  | 'Cart Abandoned';
 
 export type EstimateStage =
   | 'Unscheduled'
@@ -654,7 +655,7 @@ export interface Opportunity {
 
 export const LEAD_STAGES: LeadStage[] = [
   'New Lead', 'Return Call Needed', 'First Contact', 'Second Contact',
-  'Third Contact', 'On Hold', 'Won', 'Lost',
+  'Third Contact', 'On Hold', 'Won', 'Lost', 'Cart Abandoned',
 ];
 
 export const ESTIMATE_STAGES: EstimateStage[] = [

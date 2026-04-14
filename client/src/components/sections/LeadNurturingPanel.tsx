@@ -51,6 +51,7 @@ const STAGE_CONFIG: Record<LeadStage, { color: string; dot: string; cta: string;
   'On Hold':            { color: 'bg-slate-100 text-slate-600 border-slate-200',    dot: 'bg-slate-400',   cta: 'Check back in — set a reminder to revisit',    ctaIcon: <Clock size={14} /> },
   'Won':                { color: 'bg-emerald-100 text-emerald-800 border-emerald-200', dot: 'bg-emerald-500', cta: 'Convert to an Estimate to start the project', ctaIcon: <CheckCircle2 size={14} /> },
   'Lost':               { color: 'bg-red-100 text-red-700 border-red-200',          dot: 'bg-red-400',     cta: 'Log why this lead was lost for future reference', ctaIcon: <AlertCircle size={14} /> },
+  'Cart Abandoned':     { color: 'bg-orange-100 text-orange-800 border-orange-200',   dot: 'bg-orange-500',  cta: "Follow up — customer started 360° checkout but didn't complete", ctaIcon: <ArrowRight size={14} /> },
 };
 
 const CONTACT_TYPES: { type: LeadContactType; label: string; icon: React.ReactNode; color: string }[] = [

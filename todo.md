@@ -1416,3 +1416,12 @@
 - [x] Webhook: find or create CRM customer (customers table) from email + contact data
 - [x] Webhook: open 'New Lead' opportunity tagged '360 Funnel' in pro pipeline
 - [x] Webhook: link crmCustomerId back to threeSixtyMemberships.hpCustomerId
+
+## Patch: 360 Cart Abandonment
+- [x] Add 'Cart Abandoned' to LeadStage type union in types.ts
+- [x] Add 'Cart Abandoned' to LEAD_STAGES array in types.ts
+- [x] Add Cart Abandoned config to LeadNurturingPanel STAGE_CONFIG
+- [x] Add updateOpportunity import to server/_core/index.ts
+- [x] Add hourly drip email scheduler (3 emails: 24h, 72h, 7d) to server/_core/index.ts
+- [x] Add listOpportunities + updateOpportunity imports to threeSixtyWebhook.ts
+- [x] Auto-archive Cart Abandoned leads on successful 360 checkout

@@ -27,6 +27,8 @@ import {
   findCustomerByEmail,
   createCustomer,
   createOpportunity,
+  listOpportunities,
+  updateOpportunity,
 } from "./db";
 import { nanoid } from "nanoid";
 
@@ -232,6 +234,27 @@ export async function create360MembershipFromWebhook(
           .update(threeSixtyMemberships)
           .set({ hpCustomerId: crmCustomerId.toString() })
           .where(eq(threeSixtyMemberships.id, membershipId));
+      }
+      // Archive any open "Cart Abandoned" leads for this customer
+      if (crmCustomerId) {
+        try {
+          const abandoned = await listOpportunities("lead", String(crmCustomerId), false);
+          const cartAbandoned = abandoned.filter(o => o.stage === "Cart Abandoned");
+          await Promise.all(
+            cartAbandoned.map(o =>
+              updateOpportunity(o.id, {
+                archived: true,
+                notes: (o.notes ? o.notes + "\n" : "") +
+                  `[Auto-archived] Customer completed 360° checkout on ${new Date().toLocaleDateString()}. Membership ID: ${membershipId}.`,
+              })
+            )
+          );
+          if (cartAbandoned.length > 0) {
+            console.log(`[360 Webhook] Archived ${cartAbandoned.length} Cart Abandoned lead(s) for customer ${crmCustomerId}`);
+          }
+        } catch (err) {
+          console.error("[360 Webhook] Failed to archive Cart Abandoned leads:", err);
+        }
       }
       // Open a lead opportunity tagged as 360-funnel
       if (crmCustomerId) {
