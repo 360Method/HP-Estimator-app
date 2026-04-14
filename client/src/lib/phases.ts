@@ -133,23 +133,23 @@ const phase2: PhaseGroup = {
   items: [
     matItem('p2-demo-int', 'Interior Demolition', 'Interior demo', 'sqft',
       tiers(
-        0.65,'Standard demo','Walls, ceilings, flooring, fixtures',
-        1.00,'Selective demo','Careful removal preserving adjacent surfaces',
-        1.50,'Precision demo','Detailed selective demo, minimal disruption'
+        0.75,'Standard demo','Walls, ceilings, flooring, fixtures',
+        1.20,'Selective demo','Careful removal preserving adjacent surfaces',
+        1.80,'Precision demo','Detailed selective demo, minimal disruption'
       ),
-      0.012, L_DEMO,
+      0.018, L_DEMO,
       'Removal of existing walls, ceilings, flooring, and fixtures.',
       'Interior demolition — {qty} sq ft', 0),
     matItem('p2-demo-ext', 'Exterior Demolition', 'Exterior demo', 'sqft',
       tiers(
-        0.80,'Standard exterior demo','Siding, decking, fencing, roofing',
-        1.20,'Selective exterior demo','Careful removal',
-        1.75,'Precision exterior demo','Detailed selective removal'
+        0.90,'Standard exterior demo','Siding, decking, fencing, roofing',
+        1.40,'Selective exterior demo','Careful removal',
+        2.00,'Precision exterior demo','Detailed selective removal'
       ),
-      0.015, L_DEMO,
+      0.022, L_DEMO,
       'Removal of existing siding, decking, fencing, or roofing.',
       'Exterior demolition — {qty} sq ft', 0),
-    laborItem('p2-haul', 'Haul-Away / Dumpster', 'Debris haul-away', 'load', 3, L_DEMO,
+    laborItem('p2-haul', 'Haul-Away / Dumpster', 'Debris haul-away', 'load', 4, L_DEMO,
       'Debris removal and dumpster service.',
       'Debris haul-away — {qty} load(s)'),
     laborItem('p2-hazmat', 'Asbestos / Hazmat Testing & Abatement', 'Hazmat abatement', 'unit', 8, L_GC,
@@ -166,16 +166,16 @@ const phase3: PhaseGroup = {
   id: 3, name: 'Mechanical Rough-In', icon: '🔧',
   description: 'Rough-in of plumbing, electrical, HVAC, and gas lines before walls are closed — all work performed by licensed contractors.',
   items: [
-    laborItem('p3-plumb', 'Plumbing Rough-In', 'Plumbing rough-in', 'fixture', 4, L_PLUMB,
+    laborItem('p3-plumb', 'Plumbing Rough-In', 'Plumbing rough-in', 'fixture', 6, L_PLUMB,
       'Supply lines, DWV, and new drain locations.',
       'Plumbing rough-in — {qty} fixture(s)', true, 'Licensed plumber required'),
-    laborItem('p3-elec', 'Electrical Rough-In', 'Electrical rough-in', 'circuit', 3, L_ELEC,
+    laborItem('p3-elec', 'Electrical Rough-In', 'Electrical rough-in', 'circuit', 4.5, L_ELEC,
       'Panel work, new circuits, and rough wire.',
       'Electrical rough-in — {qty} circuit(s)', true, 'Licensed electrician required'),
-    laborItem('p3-hvac', 'HVAC Rough-In', 'HVAC rough-in', 'unit', 8, L_HVAC,
+    laborItem('p3-hvac', 'HVAC Rough-In', 'HVAC rough-in', 'unit', 12, L_HVAC,
       'Duct work, new runs, and equipment sizing.',
       'HVAC rough-in — {qty} unit(s)', true, 'Licensed HVAC contractor required'),
-    laborItem('p3-gas', 'Gas Lines', 'Gas lines', 'unit', 4, L_PLUMB,
+    laborItem('p3-gas', 'Gas Lines', 'Gas lines', 'unit', 6, L_PLUMB,
       'New gas runs and appliance stubs.',
       'Gas line work — {qty} location(s)', true, 'Licensed gas contractor required'),
   ],
@@ -188,11 +188,11 @@ const phase4: PhaseGroup = {
   items: [
     matItem('p4-batt', 'Batt Insulation', 'Batt insulation', 'sqft',
       tiers(
-        0.65,'R-13 fiberglass batt','Standard 2×4 wall insulation',
-        1.00,'R-19 fiberglass batt','Upgraded 2×6 wall/ceiling insulation',
-        1.60,'R-21 mineral wool','Premium sound + thermal insulation'
+        0.75,'R-13 fiberglass batt','Standard 2×4 wall insulation',
+        1.10,'R-19 fiberglass batt','Upgraded 2×6 wall/ceiling insulation',
+        1.80,'R-21 mineral wool','Premium sound + thermal insulation'
       ),
-      0.004, L_CARP,
+      0.006, L_CARP,
       'Fiberglass or mineral wool batt insulation for walls and ceilings.',
       'Batt insulation — {qty} sq ft', 5,
       false, false, '',
@@ -206,11 +206,11 @@ const phase4: PhaseGroup = {
       ]),
     matItem('p4-foam', 'Spray Foam Insulation', 'Spray foam', 'sqft',
       tiers(
-        1.80,'Open-cell spray foam','Air sealing, rim joist, 0.5 lb',
-        3.00,'Closed-cell spray foam','Superior moisture barrier, 2 lb',
-        4.50,'2-lb closed-cell foam','Maximum R-value per inch'
+        2.00,'Open-cell spray foam','Air sealing, rim joist, 0.5 lb',
+        3.50,'Closed-cell spray foam','Superior moisture barrier, 2 lb',
+        5.50,'2-lb closed-cell foam','Maximum R-value per inch'
       ),
-      0.005, L_CARP,
+      0.007, L_CARP,
       'Spray foam insulation for rim joists and air sealing.',
       'Spray foam insulation — {qty} sq ft', 5,
       false, false, '',
@@ -222,20 +222,20 @@ const phase4: PhaseGroup = {
       ]),
     matItem('p4-wrap', 'House Wrap / Weather Barrier', 'House wrap', 'sqft',
       tiers(
-        0.28,'Standard house wrap','Tyvek HomeWrap',
-        0.45,'Premium house wrap','Tyvek DrainWrap',
-        0.75,'Fluid-applied WRB','Superior air/water barrier'
+        0.35,'Standard house wrap','Tyvek HomeWrap',
+        0.55,'Premium house wrap','Tyvek DrainWrap',
+        0.95,'Fluid-applied WRB','Superior air/water barrier'
       ),
-      0.003, L_CARP,
+      0.004, L_CARP,
       'Exterior weather barrier installation.',
       'House wrap / weather barrier — {qty} sq ft', 10),
     matItem('p4-vapor', 'Vapor Barrier (Crawl Space)', 'Vapor barrier', 'sqft',
       tiers(
-        0.22,'6-mil poly','Standard crawl space vapor barrier',
-        0.38,'10-mil poly','Heavy-duty vapor barrier',
-        0.65,'20-mil reinforced','Commercial-grade encapsulation'
+        0.28,'6-mil poly','Standard crawl space vapor barrier',
+        0.45,'10-mil poly','Heavy-duty vapor barrier',
+        0.75,'20-mil reinforced','Commercial-grade encapsulation'
       ),
-      0.003, L_CARP,
+      0.004, L_CARP,
       'Crawl space vapor barrier installation.',
       'Vapor barrier — {qty} sq ft', 5),
   ],
@@ -248,11 +248,11 @@ const phase5: PhaseGroup = {
   items: [
     matItem('p5-hang', 'Hang Drywall', 'Drywall hang', 'sqft',
       tiers(
-        0.55,'1/2" standard drywall','Walls and ceilings',
-        0.70,'5/8" Type X drywall','Fire-rated, ceilings',
-        0.95,'5/8" soundboard','Sound-dampening drywall'
+        0.65,'1/2" standard drywall','Walls and ceilings',
+        0.85,'5/8" Type X drywall','Fire-rated, ceilings',
+        1.20,'5/8" soundboard','Sound-dampening drywall'
       ),
-      0.006, L_DRYWALL,
+      0.009, L_DRYWALL,
       'Drywall installation on walls and ceilings.',
       'Drywall hang — {qty} sq ft', 10,
       false, false, '',
@@ -267,29 +267,29 @@ const phase5: PhaseGroup = {
       ]),
     matItem('p5-tape', 'Tape, Mud & Finish', 'Tape & mud', 'sqft',
       tiers(
-        0.80,'Level 3 finish','Standard residential finish',
-        1.20,'Level 4 finish','Smooth, ready for flat paint',
-        1.80,'Level 5 finish','Skim coat, premium smooth finish'
+        0.90,'Level 3 finish','Standard residential finish',
+        1.35,'Level 4 finish','Smooth, ready for flat paint',
+        2.00,'Level 5 finish','Skim coat, premium smooth finish'
       ),
-      0.010, L_DRYWALL,
+      0.014, L_DRYWALL,
       'Taping, mudding, and finishing drywall to specified level.',
       'Tape, mud & finish — {qty} sq ft (Level {tier})', 0),
     matItem('p5-texture', 'Texture', 'Drywall texture', 'sqft',
       tiers(
-        0.45,'Knockdown texture','Standard spray knockdown',
-        0.65,'Orange peel texture','Fine spray texture',
-        1.00,'Skip trowel texture','Hand-applied artisan texture'
+        0.50,'Knockdown texture','Standard spray knockdown',
+        0.75,'Orange peel texture','Fine spray texture',
+        1.15,'Skip trowel texture','Hand-applied artisan texture'
       ),
-      0.005, L_DRYWALL,
+      0.007, L_DRYWALL,
       'Spray or hand-applied texture to match existing or new finish.',
       'Drywall texture — {qty} sq ft', 0),
     matItem('p5-repair', 'Drywall Repair / Patch', 'Drywall repair', 'patch',
       tiers(
-        65,'Small patch repair','Up to 6" patch',
-        120,'Medium patch repair','6"–12" patch',
-        200,'Large patch repair','12"+ patch, full float'
+        75,'Small patch repair','Up to 6" patch',
+        140,'Medium patch repair','6"–12" patch',
+        225,'Large patch repair','12"+ patch, full float'
       ),
-      0.75, L_DRYWALL,
+      1.25, L_DRYWALL,
       'Patching and repairing existing drywall.',
       'Drywall repair — {qty} patch(es)', 0),
   ],
@@ -302,20 +302,20 @@ const phase6: PhaseGroup = {
   items: [
     matItem('p6-subfloor', 'Subfloor Prep', 'Subfloor prep', 'sqft',
       tiers(
-        0.65,'Basic leveling','Self-leveler, minor repairs',
-        1.20,'Subfloor repair','Sheathing replacement, sistering',
-        2.00,'Full subfloor replacement','New 3/4" T&G sheathing'
+        0.75,'Basic leveling','Self-leveler, minor repairs',
+        1.40,'Subfloor repair','Sheathing replacement, sistering',
+        2.25,'Full subfloor replacement','New 3/4" T&G sheathing'
       ),
-      0.008, L_CARP,
+      0.012, L_CARP,
       'Subfloor leveling, repair, or replacement.',
       'Subfloor prep — {qty} sq ft', 0),
     matItem('p6-lvp', 'LVP / LVT Flooring', 'LVP flooring', 'sqft',
       tiers(
-        3.50,'Good LVP — 4mm','Entry-level luxury vinyl plank, 4mm wear layer',
-        5.50,'Better LVP — 6mm','Mid-grade with attached underlayment, 6mm',
-        8.50,'Best LVP — 8mm','Commercial-grade, waterproof core, 8mm'
+        4.00,'Good LVP — 4mm','Entry-level luxury vinyl plank, 4mm wear layer',
+        6.50,'Better LVP — 6mm','Mid-grade with attached underlayment, 6mm',
+        10.00,'Best LVP — 8mm','Commercial-grade, waterproof core, 8mm'
       ),
-      0.012, L_FLOOR_LVP,
+      0.016, L_FLOOR_LVP,
       'Luxury vinyl plank or tile flooring — waterproof, durable, and stylish.',
       'LVP flooring — {qty} sq ft ({tier} grade)', 12,
       false, false, '',
@@ -329,11 +329,11 @@ const phase6: PhaseGroup = {
       ]),
     matItem('p6-tile', 'Tile Flooring', 'Floor tile', 'sqft',
       tiers(
-        4.00,'Ceramic tile','Standard floor tile',
-        7.50,'Porcelain tile','Premium porcelain',
-        14.00,'Large format tile','Designer large format / natural stone'
+        4.50,'Ceramic tile','Standard floor tile',
+        9.00,'Porcelain tile','Premium porcelain',
+        18.00,'Large format tile','Designer large format / natural stone'
       ),
-      0.020, L_TILE,
+      0.028, L_TILE,
       'Ceramic or porcelain floor tile with backer and grout.',
       'Floor tile — {qty} sq ft ({tier} grade)', 15,
       false, false, '',
@@ -349,11 +349,11 @@ const phase6: PhaseGroup = {
       ]),
     matItem('p6-hardwood', 'Hardwood Flooring', 'Hardwood', 'sqft',
       tiers(
-        6.50,'Engineered hardwood','Floating or glue-down, 3/8"–1/2"',
-        10.00,'Solid hardwood 3/4"','Nail-down, can be refinished multiple times',
-        16.00,'Wide-plank hardwood','Premium 5"–7" solid or engineered'
+        7.50,'Engineered hardwood','Floating or glue-down, 3/8"–1/2"',
+        12.00,'Solid hardwood 3/4"','Nail-down, can be refinished multiple times',
+        20.00,'Wide-plank hardwood','Premium 5"–7" solid or engineered'
       ),
-      0.018, L_FLOOR,
+      0.025, L_FLOOR,
       'Hardwood flooring — nail-down or glue-down installation.',
       'Hardwood flooring — {qty} sq ft ({tier} grade)', 12,
       false, false, '',
@@ -368,11 +368,11 @@ const phase6: PhaseGroup = {
       ]),
     matItem('p6-carpet', 'Carpet', 'Carpet', 'sqft',
       tiers(
-        2.80,'Builder-grade carpet','Standard residential carpet + 6lb pad',
-        4.50,'Mid-grade carpet','Better texture and durability + 8lb pad',
-        7.50,'Premium carpet','Plush or patterned, thick 10lb pad'
+        3.25,'Builder-grade carpet','Standard residential carpet + 6lb pad',
+        5.50,'Mid-grade carpet','Better texture and durability + 8lb pad',
+        9.00,'Premium carpet','Plush or patterned, thick 10lb pad'
       ),
-      0.010, L_FLOOR_LVP,
+      0.014, L_FLOOR_LVP,
       'Carpet with pad — supply and installation.',
       'Carpet — {qty} sq ft ({tier} grade)', 10,
       false, false, '',
@@ -385,20 +385,20 @@ const phase6: PhaseGroup = {
       ]),
     matItem('p6-trans', 'Transitions & Thresholds', 'Transitions', 'unit',
       tiers(
-        18,'Standard transition strip','T-molding or reducer',
-        32,'Hardwood transition','Matching wood threshold',
-        55,'Custom threshold','Solid wood or metal custom'
+        22,'Standard transition strip','T-molding or reducer',
+        38,'Hardwood transition','Matching wood threshold',
+        65,'Custom threshold','Solid wood or metal custom'
       ),
-      0.25, L_FLOOR,
+      0.35, L_FLOOR,
       'Transition strips and thresholds between flooring types.',
       'Transitions/thresholds — {qty} piece(s)', 0),
     matItem('p6-demo', 'Floor Demo / Removal', 'Floor removal', 'sqft',
       tiers(
-        0.45,'Standard floor removal','Carpet, vinyl, LVP',
-        0.75,'Tile floor removal','Ceramic/porcelain removal',
-        1.20,'Hardwood removal','Nail-down hardwood removal'
+        0.50,'Standard floor removal','Carpet, vinyl, LVP',
+        0.85,'Tile floor removal','Ceramic/porcelain removal',
+        1.40,'Hardwood removal','Nail-down hardwood removal'
       ),
-      0.008, L_DEMO,
+      0.012, L_DEMO,
       'Removal of existing flooring.',
       'Floor removal — {qty} sq ft', 0),
   ],
@@ -411,11 +411,11 @@ const phase7: PhaseGroup = {
   items: [
     matItem('p7-shower', 'Shower Wall Tile', 'Shower tile', 'sqft',
       tiers(
-        5.50,'Ceramic subway tile','3×6 classic subway, standard layout',
-        9.00,'Porcelain wall tile','12×24 porcelain, stacked or offset',
-        16.00,'Natural stone tile','Marble, travertine, or slate'
+        6.50,'Ceramic subway tile','3×6 classic subway, standard layout',
+        11.00,'Porcelain wall tile','12×24 porcelain, stacked or offset',
+        20.00,'Natural stone tile','Marble, travertine, or slate'
       ),
-      0.025, L_TILE,
+      0.035, L_TILE,
       'Shower wall tile — supply and installation including waterproofing.',
       'Shower wall tile — {qty} sq ft ({tier} grade)', 15,
       false, false, '',
@@ -434,11 +434,11 @@ const phase7: PhaseGroup = {
       ]),
     matItem('p7-tub', 'Tub Surround Tile', 'Tub surround', 'sqft',
       tiers(
-        4.50,'Ceramic subway tile','3×6 classic subway',
-        7.50,'Porcelain wall tile','12×24 porcelain',
-        13.00,'Natural stone tile','Marble or travertine'
+        5.50,'Ceramic subway tile','3×6 classic subway',
+        9.00,'Porcelain wall tile','12×24 porcelain',
+        16.00,'Natural stone tile','Marble or travertine'
       ),
-      0.022, L_TILE,
+      0.030, L_TILE,
       'Tub surround tile — supply and installation.',
       'Tub surround tile — {qty} sq ft ({tier} grade)', 15,
       false, false, '',
@@ -453,11 +453,11 @@ const phase7: PhaseGroup = {
       ]),
     matItem('p7-backsplash', 'Backsplash Tile', 'Backsplash', 'sqft',
       tiers(
-        6.00,'Ceramic subway tile','3×6 or 4×4 ceramic',
-        11.00,'Glass mosaic tile','Glass or mixed mosaic',
-        18.00,'Natural stone mosaic','Marble or travertine mosaic'
+        7.00,'Ceramic subway tile','3×6 or 4×4 ceramic',
+        13.00,'Glass mosaic tile','Glass or mixed mosaic',
+        22.00,'Natural stone mosaic','Marble or travertine mosaic'
       ),
-      0.030, L_TILE_ADV,
+      0.040, L_TILE_ADV,
       'Kitchen or bath backsplash tile — supply and installation.',
       'Backsplash tile — {qty} sq ft ({tier} grade)', 10,
       false, false, '',
@@ -475,11 +475,11 @@ const phase7: PhaseGroup = {
       ]),
     matItem('p7-feature', 'Feature Wall / Fireplace Tile', 'Feature wall tile', 'sqft',
       tiers(
-        7.50,'Ceramic feature tile','Decorative ceramic',
-        14.00,'Porcelain feature tile','Large format porcelain',
-        22.00,'Natural stone feature','Ledger stone or marble'
+        9.00,'Ceramic feature tile','Decorative ceramic',
+        16.00,'Porcelain feature tile','Large format porcelain',
+        28.00,'Natural stone feature','Ledger stone or marble'
       ),
-      0.035, L_TILE_ADV,
+      0.045, L_TILE_ADV,
       'Decorative feature wall or fireplace tile.',
       'Feature wall tile — {qty} sq ft ({tier} grade)', 10,
       false, false, '',
@@ -494,14 +494,14 @@ const phase7: PhaseGroup = {
       ]),
     matItem('p7-waterproof', 'Waterproofing / Membrane', 'Waterproofing', 'sqft',
       tiers(
-        1.20,'Liquid waterproofing','Redgard or similar',
-        1.80,'Sheet membrane','Schluter Kerdi or similar',
-        2.80,'Full system waterproofing','Schluter system + corners + curb'
+        1.50,'Liquid waterproofing','Redgard or similar',
+        2.20,'Sheet membrane','Schluter Kerdi or similar',
+        3.50,'Full system waterproofing','Schluter system + corners + curb'
       ),
-      0.006, L_TILE,
+      0.009, L_TILE,
       'Waterproofing membrane for wet areas.',
       'Waterproofing membrane — {qty} sq ft', 10),
-    laborItem('p7-grout', 'Grout, Caulk & Sealing', 'Grout & caulk', 'sqft', 0.004, L_TILE,
+    laborItem('p7-grout', 'Grout, Caulk & Sealing', 'Grout & caulk', 'sqft', 0.007, L_TILE,
       'Grouting all tile joints, caulking transitions, and sealing.',
       'Grout, caulk & sealing — {qty} sq ft'),
   ],
@@ -514,11 +514,11 @@ const phase8: PhaseGroup = {
   items: [
     matItem('p8-wall', 'New Wall Framing', 'Wall framing', 'lf',
       tiers(
-        7.00,'2×4 stud wall','Standard interior partition, 16" OC',
-        10.00,'2×6 stud wall','Exterior or plumbing wall, 16" OC',
-        14.00,'Steel stud framing','Commercial-grade metal framing'
+        8.50,'2×4 stud wall','Standard interior partition, 16" OC',
+        12.00,'2×6 stud wall','Exterior or plumbing wall, 16" OC',
+        16.00,'Steel stud framing','Commercial-grade metal framing'
       ),
-      0.08, L_CARP,
+      0.12, L_CARP,
       'New interior partition wall framing.',
       'Wall framing — {qty} lf', 10,
       false, false, '',
@@ -533,23 +533,23 @@ const phase8: PhaseGroup = {
       ]),
     matItem('p8-ceiling', 'Ceiling Framing', 'Ceiling framing', 'sqft',
       tiers(
-        3.50,'Simple soffit','Basic drop or soffit',
-        5.50,'Tray ceiling framing','Stepped tray ceiling',
-        9.00,'Coffered ceiling','Full coffered framing'
+        4.50,'Simple soffit','Basic drop or soffit',
+        7.00,'Tray ceiling framing','Stepped tray ceiling',
+        11.00,'Coffered ceiling','Full coffered framing'
       ),
-      0.015, L_CARP,
+      0.022, L_CARP,
       'Soffit, drop, or tray ceiling framing.',
       'Ceiling framing — {qty} sq ft', 10),
-    laborItem('p8-block', 'Blocking (Grab Bars, TV, Cabinets)', 'Blocking', 'unit', 1.5, L_CARP,
+    laborItem('p8-block', 'Blocking (Grab Bars, TV, Cabinets)', 'Blocking', 'unit', 2.0, L_CARP,
       'Structural backing for grab bars, TV mounts, and cabinets.',
       'Blocking — {qty} location(s)'),
     matItem('p8-joist', 'Subfloor Framing Repair', 'Joist repair', 'lf',
       tiers(
-        12,'Joist sistering','Sister existing joists',
-        20,'Rim joist repair','Rim joist replacement',
-        32,'Full joist replacement','New joist installation'
+        15,'Joist sistering','Sister existing joists',
+        24,'Rim joist repair','Rim joist replacement',
+        40,'Full joist replacement','New joist installation'
       ),
-      0.12, L_CARP,
+      0.18, L_CARP,
       'Joist sistering, rim joist, and subfloor framing repair.',
       'Subfloor framing repair — {qty} lf', 5,
       false, false, '',
@@ -563,7 +563,7 @@ const phase8: PhaseGroup = {
         { label: 'LVL beam (3.5×14)', value: 'lvl-14', rateMultiplier: 2.30 },
         { label: 'LVL beam (3.5×16)', value: 'lvl-16', rateMultiplier: 2.60 },
       ]),
-    laborItem('p8-opening', 'Exterior Framing (New Openings)', 'New openings', 'opening', 6, L_CARP,
+    laborItem('p8-opening', 'Exterior Framing (New Openings)', 'New openings', 'opening', 9, L_CARP,
       'New window or door openings with headers.',
       'New exterior openings — {qty} opening(s)', true, 'Structural review recommended'),
   ],
@@ -576,11 +576,11 @@ const phase9: PhaseGroup = {
   items: [
     matItem('p9-siding', 'Siding Installation', 'Siding', 'sqft',
       tiers(
-        4.00,'LP SmartSide lap','Engineered wood lap siding',
-        6.00,'Fiber cement (HardiePlank)','James Hardie lap siding',
-        9.50,'Cedar siding','Natural wood siding'
+        4.50,'LP SmartSide lap','Engineered wood lap siding',
+        7.00,'Fiber cement (HardiePlank)','James Hardie lap siding',
+        11.00,'Cedar siding','Natural wood siding'
       ),
-      0.015, L_CARP,
+      0.022, L_CARP,
       'New siding installation — lap, shingle, board & batten, or T1-11.',
       'Siding installation — {qty} sq ft ({tier} grade)', 10,
       false, false, '',
@@ -598,29 +598,29 @@ const phase9: PhaseGroup = {
       ]),
     matItem('p9-siding-paint', 'Siding Paint / Stain', 'Siding paint', 'sqft',
       tiers(
-        0.40,'1-coat exterior paint','Primer + 1 finish coat',
-        0.65,'2-coat exterior paint','Primer + 2 finish coats',
-        1.00,'Solid stain','Premium solid stain system'
+        0.50,'1-coat exterior paint','Primer + 1 finish coat',
+        0.80,'2-coat exterior paint','Primer + 2 finish coats',
+        1.20,'Solid stain','Premium solid stain system'
       ),
-      0.006, L_PAINT,
+      0.009, L_PAINT,
       'Exterior siding paint or stain.',
       'Siding paint/stain — {qty} sq ft', 0, true),
     matItem('p9-soffit', 'Soffit & Fascia', 'Soffit & fascia', 'lf',
       tiers(
-        7.00,'Vinyl soffit & fascia','Standard vinyl',
-        11.00,'Aluminum soffit & fascia','Commercial aluminum',
-        16.00,'Cedar soffit & fascia','Natural wood'
+        8.00,'Vinyl soffit & fascia','Standard vinyl',
+        12.00,'Aluminum soffit & fascia','Commercial aluminum',
+        18.00,'Cedar soffit & fascia','Natural wood'
       ),
-      0.06, L_CARP,
+      0.08, L_CARP,
       'Soffit and fascia replacement or repainting.',
       'Soffit & fascia — {qty} lf', 10),
     matItem('p9-gutter', 'Gutters', 'Gutters', 'lf',
       tiers(
-        5.50,'5" aluminum gutters','Standard K-style aluminum',
-        8.00,'6" aluminum gutters','Oversized K-style',
-        14.00,'Copper gutters','Premium copper gutters'
+        6.50,'5" aluminum gutters','Standard K-style aluminum',
+        9.50,'6" aluminum gutters','Oversized K-style',
+        18.00,'Copper gutters','Premium copper gutters'
       ),
-      0.04, L_CARP,
+      0.06, L_CARP,
       'Gutter installation or replacement.',
       'Gutters — {qty} lf', 5,
       false, false, '',
@@ -632,16 +632,16 @@ const phase9: PhaseGroup = {
         { label: '5" K-style copper', value: '5k-copper', rateMultiplier: 2.20 },
         { label: '6" K-style copper', value: '6k-copper', rateMultiplier: 2.50 },
       ]),
-    laborItem('p9-roof', 'Roofing', 'Roofing', 'sqft', 0.008, L_ROOF,
+    laborItem('p9-roof', 'Roofing', 'Roofing', 'sqft', 0.014, L_ROOF,
       'Shingle, flat, or metal roofing.',
       'Roofing — {qty} sq ft', true, 'Sub specialty — roofing contractor required'),
     matItem('p9-deck', 'Deck — New Build', 'New deck', 'sqft',
       tiers(
-        18,'Pressure-treated deck','PT framing + decking',
-        28,'Composite deck','Trex or similar composite',
-        42,'Hardwood deck','Ipe or cedar decking'
+        20,'Pressure-treated deck','PT framing + decking',
+        32,'Composite deck','Trex or similar composite',
+        50,'Hardwood deck','Ipe or cedar decking'
       ),
-      0.025, L_CARP,
+      0.038, L_CARP,
       'New deck construction — framing and decking.',
       'New deck — {qty} sq ft ({tier} grade)', 10,
       false, false, '',
@@ -656,20 +656,20 @@ const phase9: PhaseGroup = {
       ]),
     matItem('p9-deck-repair', 'Deck Refinish / Repair', 'Deck repair', 'sqft',
       tiers(
-        2.00,'Deck clean & seal','Power wash + sealer',
-        4.00,'Deck refinish','Sand, stain, and seal',
-        8.00,'Board replacement','Replace damaged boards'
+        2.50,'Deck clean & seal','Power wash + sealer',
+        5.00,'Deck refinish','Sand, stain, and seal',
+        10.00,'Board replacement','Replace damaged boards'
       ),
-      0.010, L_CARP,
+      0.015, L_CARP,
       'Deck refinishing, repair, or board replacement.',
       'Deck refinish/repair — {qty} sq ft', 0),
     matItem('p9-fence', 'Fence — New Install', 'New fence', 'lf',
       tiers(
-        28,'Dog-ear cedar fence','6\' dog-ear cedar',
-        42,'Shadowbox cedar fence','Shadowbox style',
-        65,'Cedar privacy fence','Custom cedar privacy'
+        32,'Dog-ear cedar fence','6\' dog-ear cedar',
+        48,'Shadowbox cedar fence','Shadowbox style',
+        75,'Cedar privacy fence','Custom cedar privacy'
       ),
-      0.06, L_CARP,
+      0.09, L_CARP,
       'New fence installation.',
       'New fence — {qty} lf ({tier} grade)', 5,
       false, false, '',
@@ -684,20 +684,20 @@ const phase9: PhaseGroup = {
       ]),
     matItem('p9-fence-repair', 'Fence Repair', 'Fence repair', 'unit',
       tiers(
-        50,'Post reset / board replace','Standard repair',
-        95,'Section rebuild','Rebuild damaged section',
-        175,'Full panel replacement','Replace full fence panel'
+        60,'Post reset / board replace','Standard repair',
+        110,'Section rebuild','Rebuild damaged section',
+        200,'Full panel replacement','Replace full fence panel'
       ),
-      1.5, L_CARP,
+      2.5, L_CARP,
       'Fence repair — post reset, board replacement, or section rebuild.',
       'Fence repair — {qty} repair(s)', 0),
     matItem('p9-concrete', 'Concrete / Flatwork', 'Concrete', 'sqft',
       tiers(
-        9.00,'Standard broom finish','Driveway, walkway, patio',
-        14.00,'Exposed aggregate','Decorative exposed aggregate',
-        20.00,'Stamped concrete','Stamped pattern concrete'
+        10.00,'Standard broom finish','Driveway, walkway, patio',
+        16.00,'Exposed aggregate','Decorative exposed aggregate',
+        24.00,'Stamped concrete','Stamped pattern concrete'
       ),
-      0.015, L_MASON,
+      0.022, L_MASON,
       'Concrete flatwork — driveway, walkway, or patio.',
       'Concrete/flatwork — {qty} sq ft ({tier} grade)', 5,
       false, false, '',
@@ -723,11 +723,11 @@ const phase10: PhaseGroup = {
   items: [
     matItem('p10-int-door', 'Interior Doors', 'Interior doors', 'door',
       tiers(
-        180,'Hollow-core prehung','Standard hollow-core',
-        320,'Solid-core prehung','Solid-core 1-3/4"',
-        550,'Solid wood prehung','Knotty alder or pine'
+        220,'Hollow-core prehung','Standard hollow-core',
+        380,'Solid-core prehung','Solid-core 1-3/4"',
+        650,'Solid wood prehung','Knotty alder or pine'
       ),
-      1.5, L_CARP,
+      2.0, L_CARP,
       'Interior prehung or slab door installation.',
       'Interior doors — {qty} door(s) ({tier} grade)', 0,
       false, false, '',
@@ -743,11 +743,11 @@ const phase10: PhaseGroup = {
       ]),
     matItem('p10-ext-door', 'Exterior Doors', 'Exterior doors', 'door',
       tiers(
-        450,'Fiberglass entry door','Standard fiberglass prehung',
-        750,'Steel entry door','Heavy-duty steel prehung',
-        1200,'Wood entry door','Solid wood entry door'
+        550,'Fiberglass entry door','Standard fiberglass prehung',
+        900,'Steel entry door','Heavy-duty steel prehung',
+        1500,'Wood entry door','Solid wood entry door'
       ),
-      2.5, L_CARP,
+      3.5, L_CARP,
       'Exterior prehung door with weatherstripping and threshold.',
       'Exterior doors — {qty} door(s) ({tier} grade)', 0,
       false, false, '',
@@ -763,11 +763,11 @@ const phase10: PhaseGroup = {
       ]),
     matItem('p10-pocket', 'Sliding / Pocket Doors', 'Pocket doors', 'door',
       tiers(
-        280,'Hollow-core pocket','Standard pocket door kit',
-        480,'Solid-core pocket','Solid-core pocket door',
-        800,'Barn door','Sliding barn door hardware + door'
+        320,'Hollow-core pocket','Standard pocket door kit',
+        550,'Solid-core pocket','Solid-core pocket door',
+        950,'Barn door','Sliding barn door hardware + door'
       ),
-      3, L_CARP,
+      4, L_CARP,
       'Sliding or pocket door installation.',
       'Sliding/pocket doors — {qty} door(s) ({tier} grade)', 0,
       false, false, '',
@@ -782,11 +782,11 @@ const phase10: PhaseGroup = {
       ]),
     matItem('p10-window', 'Window Replacement', 'Windows', 'window',
       tiers(
-        420,'Vinyl double-pane','Standard vinyl replacement',
-        650,'Fiberglass window','Premium fiberglass',
-        1050,'Wood-clad window','Wood-clad interior/exterior'
+        500,'Vinyl double-pane','Standard vinyl replacement',
+        800,'Fiberglass window','Premium fiberglass',
+        1300,'Wood-clad window','Wood-clad interior/exterior'
       ),
-      2.5, L_CARP,
+      3.5, L_CARP,
       'Window replacement — vinyl, fiberglass, or wood-clad.',
       'Window replacement — {qty} window(s) ({tier} grade)', 0,
       false, false, '',
@@ -804,23 +804,23 @@ const phase10: PhaseGroup = {
       ]),
     matItem('p10-win-trim', 'Window Trim — Exterior', 'Exterior window trim', 'window',
       tiers(
-        65,'PVC exterior trim','Low-maintenance PVC',
-        100,'Fiber cement trim','James Hardie trim',
-        160,'Cedar exterior trim','Natural cedar trim'
+        75,'PVC exterior trim','Low-maintenance PVC',
+        115,'Fiber cement trim','James Hardie trim',
+        185,'Cedar exterior trim','Natural cedar trim'
       ),
-      1.5, L_CARP,
+      2.0, L_CARP,
       'Exterior window trim installation.',
       'Exterior window trim — {qty} window(s) ({tier} grade)', 10),
     matItem('p10-hardware', 'Door Hardware', 'Door hardware', 'door',
       tiers(
-        55,'Builder-grade hardware','Kwikset or similar',
-        110,'Mid-grade hardware','Schlage or similar',
-        220,'Premium hardware','Baldwin or Emtek'
+        65,'Builder-grade hardware','Kwikset or similar',
+        130,'Mid-grade hardware','Schlage or similar',
+        260,'Premium hardware','Baldwin or Emtek'
       ),
-      0.5, L_CARP,
+      0.75, L_CARP,
       'Door knobs, levers, and deadbolts.',
       'Door hardware — {qty} door(s) ({tier} grade)', 0),
-    laborItem('p10-garage', 'Garage Door Install / Replace', 'Garage door', 'door', 4, L_CARP,
+    laborItem('p10-garage', 'Garage Door Install / Replace', 'Garage door', 'door', 6, L_CARP,
       'Garage door installation or replacement.',
       'Garage door — {qty} door(s)', true, 'Sub specialty — garage door contractor recommended'),
   ],
@@ -833,11 +833,11 @@ const phase11: PhaseGroup = {
   items: [
     matItem('p11-bb', 'Baseboard', 'Baseboard', 'lf',
       tiers(
-        1.20,'Finger-joint pine, primed','Colonial 3.5" — paint-grade',
-        1.80,'MDF colonial base, primed','Colonial 4.25" — smooth MDF',
-        3.20,'Solid poplar, unfinished','Colonial 5.5" — stain-grade'
+        1.40,'Finger-joint pine, primed','Colonial 3.5" — paint-grade',
+        2.00,'MDF colonial base, primed','Colonial 4.25" — smooth MDF',
+        3.80,'Solid poplar, unfinished','Colonial 5.5" — stain-grade'
       ),
-      0.04, L_CARP,
+      0.055, L_CARP,
       'Baseboard installation — colonial, ranch, craftsman, or farmhouse profiles.',
       'Baseboard — {qty} lf ({tier} grade)', 10, true,
       false, '',
@@ -856,11 +856,11 @@ const phase11: PhaseGroup = {
         // Good:   26 LF × $1.20/lf = ~$31  (FJ pine, primed)
         // Better: 26 LF × $1.80/lf = ~$47  (MDF colonial)
         // Best:   26 LF × $3.50/lf = ~$91  (solid poplar)
-        31,'Finger-joint pine, primed','Colonial 2.5" — paint-grade, both sides',
-        47,'MDF colonial casing, primed','Colonial 3.5" — smooth MDF, both sides',
-        91,'Solid poplar, unfinished','Colonial 3.5" — stain-grade, both sides'
+        38,'Finger-joint pine, primed','Colonial 2.5" — paint-grade, both sides',
+        58,'MDF colonial casing, primed','Colonial 3.5" — smooth MDF, both sides',
+        110,'Solid poplar, unfinished','Colonial 3.5" — stain-grade, both sides'
       ),
-      2.5, L_CARP,
+      3.0, L_CARP,
       'Door casing installation — colonial or craftsman profiles. Material rate is per opening (both sides of door, ~26 LF). Labor billed separately at 2.5 hrs/opening.',
       'Door casing — {qty} opening(s) ({tier} grade)', 10, true,
       false, '',
@@ -877,11 +877,11 @@ const phase11: PhaseGroup = {
       ]),
     matItem('p11-wc', 'Window Casing', 'Window casing', 'window',
       tiers(
-        1.20,'Finger-joint pine, primed','Colonial 2.5" — paint-grade',
-        1.80,'MDF colonial casing, primed','Colonial 3.5" — smooth MDF',
-        3.50,'Solid poplar, unfinished','Colonial 3.5" — stain-grade'
+        1.40,'Finger-joint pine, primed','Colonial 2.5" — paint-grade',
+        2.00,'MDF colonial casing, primed','Colonial 3.5" — smooth MDF',
+        4.00,'Solid poplar, unfinished','Colonial 3.5" — stain-grade'
       ),
-      1.5, L_CARP,
+      2.0, L_CARP,
       'Window casing installation — colonial or craftsman profiles.',
       'Window casing — {qty} window(s) ({tier} grade)', 10, true,
       false, '',
@@ -893,11 +893,11 @@ const phase11: PhaseGroup = {
       ]),
     matItem('p11-crown', 'Crown Molding', 'Crown molding', 'lf',
       tiers(
-        2.00,'Finger-joint pine crown','3.5" colonial crown — paint-grade',
-        3.00,'MDF crown molding','4.5" MDF — smooth finish',
-        5.00,'Solid poplar crown','5.5" solid — stain-grade'
+        2.40,'Finger-joint pine crown','3.5" colonial crown — paint-grade',
+        3.60,'MDF crown molding','4.5" MDF — smooth finish',
+        6.00,'Solid poplar crown','5.5" solid — stain-grade'
       ),
-      0.06, L_CARP,
+      0.08, L_CARP,
       'Crown molding installation.',
       'Crown molding — {qty} lf ({tier} grade)', 15, true,
       false, '',
@@ -911,11 +911,11 @@ const phase11: PhaseGroup = {
       ]),
     matItem('p11-chair', 'Chair Rail', 'Chair rail', 'lf',
       tiers(
-        0.90,'Finger-joint pine','2.5" chair rail — paint-grade',
-        1.40,'MDF chair rail','3" MDF — smooth finish',
-        2.40,'Solid poplar','3" solid — stain-grade'
+        1.10,'Finger-joint pine','2.5" chair rail — paint-grade',
+        1.60,'MDF chair rail','3" MDF — smooth finish',
+        2.80,'Solid poplar','3" solid — stain-grade'
       ),
-      0.04, L_CARP,
+      0.055, L_CARP,
       'Chair rail installation.',
       'Chair rail — {qty} lf ({tier} grade)', 10, true,
       false, '',
@@ -926,11 +926,11 @@ const phase11: PhaseGroup = {
       ]),
     matItem('p11-wains', 'Wainscoting / Board & Batten', 'Wainscoting', 'sqft',
       tiers(
-        4.00,'MDF board & batten','Standard board & batten',
-        6.00,'Beadboard wainscoting','Classic beadboard panels',
-        8.50,'Solid wood wainscoting','Raised panel solid wood'
+        5.00,'MDF board & batten','Standard board & batten',
+        7.50,'Beadboard wainscoting','Classic beadboard panels',
+        11.00,'Solid wood wainscoting','Raised panel solid wood'
       ),
-      0.018, L_CARP,
+      0.025, L_CARP,
       'Wainscoting or board and batten installation.',
       'Wainscoting/board & batten — {qty} sq ft ({tier} grade)', 10, true,
       false, '',
@@ -945,20 +945,20 @@ const phase11: PhaseGroup = {
       ]),
     matItem('p11-shelf', 'Built-In Shelving', 'Built-in shelving', 'lf',
       tiers(
-        50,'Melamine shelving','Standard melamine built-ins',
-        95,'Plywood shelving','Paint-grade plywood built-ins',
-        160,'Solid wood built-ins','Solid wood custom built-ins'
+        60,'Melamine shelving','Standard melamine built-ins',
+        110,'Plywood shelving','Paint-grade plywood built-ins',
+        190,'Solid wood built-ins','Solid wood custom built-ins'
       ),
-      0.5, L_CARP,
+      0.75, L_CARP,
       'Built-in shelving installation.',
       'Built-in shelving — {qty} lf ({tier} grade)', 5),
     matItem('p11-stair', 'Stair Treads & Risers', 'Stair treads', 'step',
       tiers(
-        65,'Pine treads & risers','Paint-grade pine',
-        125,'Oak treads, pine risers','Stain-grade oak treads',
-        220,'Solid oak treads & risers','Full stain-grade oak'
+        80,'Pine treads & risers','Paint-grade pine',
+        150,'Oak treads, pine risers','Stain-grade oak treads',
+        260,'Solid oak treads & risers','Full stain-grade oak'
       ),
-      1.5, L_CARP,
+      2.0, L_CARP,
       'Stair tread and riser installation.',
       'Stair treads & risers — {qty} step(s) ({tier} grade)', 5,
       false, false, '',
@@ -970,32 +970,32 @@ const phase11: PhaseGroup = {
       ]),
     matItem('p11-rail', 'Handrail & Balusters', 'Handrail', 'lf',
       tiers(
-        28,'Pine handrail + wood balusters','Standard wood',
-        48,'Oak handrail + wood balusters','Stain-grade oak',
-        80,'Oak handrail + metal balusters','Premium iron balusters'
+        35,'Pine handrail + wood balusters','Standard wood',
+        58,'Oak handrail + wood balusters','Stain-grade oak',
+        95,'Oak handrail + metal balusters','Premium iron balusters'
       ),
-      0.12, L_CARP,
+      0.18, L_CARP,
       'Handrail and baluster installation.',
       'Handrail & balusters — {qty} lf ({tier} grade)', 10),
     matItem('p11-mantel', 'Fireplace Mantel', 'Fireplace mantel', 'unit',
       tiers(
-        380,'MDF mantel surround','Paint-grade MDF mantel',
-        680,'Poplar mantel surround','Stain-grade poplar',
-        1200,'Custom wood mantel','Custom built solid wood mantel'
+        450,'MDF mantel surround','Paint-grade MDF mantel',
+        800,'Poplar mantel surround','Stain-grade poplar',
+        1400,'Custom wood mantel','Custom built solid wood mantel'
       ),
-      6, L_CARP,
+      8, L_CARP,
       'Fireplace mantel installation.',
       'Fireplace mantel — {qty} unit(s) ({tier} grade)', 0),
     matItem('p11-closet', 'Closet Systems', 'Closet systems', 'closet',
       tiers(
-        250,'Wire shelving system','ClosetMaid wire system',
-        550,'Melamine closet system','Modular melamine system',
-        1100,'Custom closet system','Custom built-in closet'
+        300,'Wire shelving system','ClosetMaid wire system',
+        650,'Melamine closet system','Modular melamine system',
+        1400,'Custom closet system','Custom built-in closet'
       ),
-      4, L_CARP,
+      5, L_CARP,
       'Closet organization system installation.',
       'Closet systems — {qty} closet(s) ({tier} grade)', 0),
-    laborItem('p11-attic', 'Attic Access / Pull-Down Stair', 'Attic access', 'unit', 3, L_CARP,
+    laborItem('p11-attic', 'Attic Access / Pull-Down Stair', 'Attic access', 'unit', 4, L_CARP,
       'Attic access hatch or pull-down stair installation.',
       'Attic access/pull-down stair — {qty} unit(s)'),
   ],
@@ -1008,11 +1008,11 @@ const phase12: PhaseGroup = {
   items: [
     matItem('p12-cab', 'Kitchen Cabinets', 'Kitchen cabinets', 'lf',
       tiers(
-        280,'Stock cabinets','Home Depot/Lowe\'s stock, basic finish',
-        500,'Semi-custom cabinets','IKEA or semi-custom, soft-close',
-        900,'Custom cabinets','Full custom cabinetry, dovetail joints'
+        350,'Stock cabinets','Home Depot/Lowe\'s stock, basic finish',
+        650,'Semi-custom cabinets','IKEA or semi-custom, soft-close',
+        1200,'Custom cabinets','Full custom cabinetry, dovetail joints'
       ),
-      1.5, L_CARP,
+      2.0, L_CARP,
       'Kitchen cabinet supply and installation — base and upper.',
       'Kitchen cabinets — {qty} lf ({tier} grade)', 5,
       false, false, '',
@@ -1027,11 +1027,11 @@ const phase12: PhaseGroup = {
       ]),
     matItem('p12-vanity', 'Bathroom Vanity', 'Bathroom vanity', 'unit',
       tiers(
-        380,'Stock vanity','Standard stock vanity',
-        700,'Semi-custom vanity','Upgraded semi-custom',
-        1200,'Custom vanity','Custom built vanity'
+        450,'Stock vanity','Standard stock vanity',
+        850,'Semi-custom vanity','Upgraded semi-custom',
+        1500,'Custom vanity','Custom built vanity'
       ),
-      3, L_CARP,
+      4, L_CARP,
       'Bathroom vanity supply and installation.',
       'Bathroom vanity — {qty} unit(s) ({tier} grade)', 0,
       false, false, '',
@@ -1047,11 +1047,11 @@ const phase12: PhaseGroup = {
       ]),
     matItem('p12-counter', 'Countertops', 'Countertops', 'sqft',
       tiers(
-        28,'Laminate countertop','Formica or similar',
-        80,'Quartz countertop','Engineered quartz (Silestone, Cambria)',
-        120,'Granite/Marble countertop','Natural stone slab'
+        32,'Laminate countertop','Formica or similar',
+        95,'Quartz countertop','Engineered quartz (Silestone, Cambria)',
+        145,'Granite/Marble countertop','Natural stone slab'
       ),
-      0.025, L_CARP,
+      0.035, L_CARP,
       'Countertop supply and installation.',
       'Countertops — {qty} sq ft ({tier} grade)', 5,
       false, false, '',
@@ -1070,20 +1070,20 @@ const phase12: PhaseGroup = {
       ]),
     matItem('p12-hardware', 'Cabinet Hardware', 'Cabinet hardware', 'unit',
       tiers(
-        6,'Builder-grade pulls','Basic bar pulls',
-        18,'Mid-grade hardware','Brushed nickel or matte black',
-        42,'Premium hardware','Emtek, Top Knobs, or similar'
+        8,'Builder-grade pulls','Basic bar pulls',
+        22,'Mid-grade hardware','Brushed nickel or matte black',
+        50,'Premium hardware','Emtek, Top Knobs, or similar'
       ),
-      0.15, L_CARP,
+      0.20, L_CARP,
       'Cabinet pulls, knobs, and hinges.',
       'Cabinet hardware — {qty} piece(s) ({tier} grade)', 0),
     matItem('p12-shelf', 'Shelving (Pantry / Laundry)', 'Pantry shelving', 'lf',
       tiers(
-        18,'Wire shelving','Standard wire shelving',
-        32,'Melamine shelving','Melamine fixed shelving',
-        55,'Solid wood shelving','Solid wood pantry shelving'
+        22,'Wire shelving','Standard wire shelving',
+        38,'Melamine shelving','Melamine fixed shelving',
+        65,'Solid wood shelving','Solid wood pantry shelving'
       ),
-      0.3, L_CARP,
+      0.4, L_CARP,
       'Pantry or laundry room shelving.',
       'Pantry/laundry shelving — {qty} lf ({tier} grade)', 5),
   ],
@@ -1096,29 +1096,29 @@ const phase13: PhaseGroup = {
   items: [
     matItem('p13-faucet', 'Fixture Swap (Faucet / Showerhead)', 'Fixture swap', 'fixture',
       tiers(
-        120,'Builder-grade fixture','Standard chrome fixture',
-        280,'Mid-grade fixture','Brushed nickel or matte black',
-        580,'Premium fixture','Kohler, Moen, or Delta premium'
+        140,'Builder-grade fixture','Standard chrome fixture',
+        320,'Mid-grade fixture','Brushed nickel or matte black',
+        680,'Premium fixture','Kohler, Moen, or Delta premium'
       ),
-      1.5, L_PLUMB,
+      2.0, L_PLUMB,
       'Faucet, showerhead, or hose bib replacement.',
       'Fixture swap — {qty} fixture(s) ({tier} grade)', 0),
     matItem('p13-toilet', 'Toilet Supply & Install', 'Toilet', 'unit',
       tiers(
-        280,'Standard toilet','Elongated 2-piece toilet',
-        480,'Comfort height toilet','ADA comfort height, 1-piece',
-        850,'Wall-hung toilet','Wall-mounted toilet + carrier'
+        320,'Standard toilet','Elongated 2-piece toilet',
+        550,'Comfort height toilet','ADA comfort height, 1-piece',
+        1050,'Wall-hung toilet','Wall-mounted toilet + carrier'
       ),
-      2, L_PLUMB,
+      2.5, L_PLUMB,
       'Toilet supply and installation.',
       'Toilet — {qty} unit(s) ({tier} grade)', 0),
     matItem('p13-sink', 'Sink Supply & Install', 'Sink', 'unit',
       tiers(
-        180,'Drop-in sink','Standard drop-in basin',
-        320,'Undermount sink','Undermount stainless or porcelain',
-        650,'Farmhouse sink','Apron-front farmhouse sink'
+        220,'Drop-in sink','Standard drop-in basin',
+        380,'Undermount sink','Undermount stainless or porcelain',
+        780,'Farmhouse sink','Apron-front farmhouse sink'
       ),
-      2, L_PLUMB,
+      2.5, L_PLUMB,
       'Sink supply and installation.',
       'Sink — {qty} unit(s) ({tier} grade)', 0,
       false, false, '',
@@ -1134,11 +1134,11 @@ const phase13: PhaseGroup = {
       ]),
     matItem('p13-tub', 'Tub Supply & Install', 'Tub', 'unit',
       tiers(
-        580,'Alcove tub','Standard 60" alcove tub',
-        1050,'Freestanding tub','Freestanding soaking tub',
-        2200,'Jetted tub','Jetted or air tub'
+        680,'Alcove tub','Standard 60" alcove tub',
+        1250,'Freestanding tub','Freestanding soaking tub',
+        2800,'Jetted tub','Jetted or air tub'
       ),
-      4, L_PLUMB,
+      5, L_PLUMB,
       'Bathtub supply and installation.',
       'Tub — {qty} unit(s) ({tier} grade)', 0,
       false, false, '',
@@ -1155,23 +1155,23 @@ const phase13: PhaseGroup = {
       ]),
     matItem('p13-shower', 'Shower System (Valve, Head, Trim)', 'Shower system', 'unit',
       tiers(
-        280,'Standard shower valve','Pressure-balance valve + head',
-        580,'Thermostatic valve','Thermostatic shower system',
-        1200,'Multi-function system','Rain head + handheld + body sprays'
+        340,'Standard shower valve','Pressure-balance valve + head',
+        700,'Thermostatic valve','Thermostatic shower system',
+        1500,'Multi-function system','Rain head + handheld + body sprays'
       ),
-      3, L_PLUMB,
+      4, L_PLUMB,
       'Shower valve, head, and trim kit.',
       'Shower system — {qty} unit(s) ({tier} grade)', 0),
-    laborItem('p13-wh', 'Water Heater Replacement', 'Water heater', 'unit', 4, L_PLUMB,
+    laborItem('p13-wh', 'Water Heater Replacement', 'Water heater', 'unit', 6, L_PLUMB,
       'Water heater replacement.',
       'Water heater — {qty} unit(s)', true, 'Licensed plumber required'),
-    laborItem('p13-dw', 'Dishwasher Hookup', 'Dishwasher hookup', 'unit', 1.5, L_PLUMB,
+    laborItem('p13-dw', 'Dishwasher Hookup', 'Dishwasher hookup', 'unit', 2.0, L_PLUMB,
       'Dishwasher hookup and installation.',
       'Dishwasher hookup — {qty} unit(s)'),
-    laborItem('p13-disp', 'Garbage Disposal', 'Garbage disposal', 'unit', 1.5, L_PLUMB,
+    laborItem('p13-disp', 'Garbage Disposal', 'Garbage disposal', 'unit', 2.0, L_PLUMB,
       'Garbage disposal installation.',
       'Garbage disposal — {qty} unit(s)'),
-    laborItem('p13-washer', 'Washer Hookup', 'Washer hookup', 'unit', 1, L_PLUMB,
+    laborItem('p13-washer', 'Washer Hookup', 'Washer hookup', 'unit', 1.5, L_PLUMB,
       'Washer supply and drain hookup.',
       'Washer hookup — {qty} unit(s)'),
   ],
@@ -1184,20 +1184,20 @@ const phase14: PhaseGroup = {
   items: [
     matItem('p14-light', 'Light Fixture Swap', 'Light fixtures', 'fixture',
       tiers(
-        65,'Builder-grade fixture','Standard light fixture',
-        180,'Mid-grade fixture','Brushed nickel or matte black',
-        420,'Designer fixture','Premium designer fixture'
+        75,'Builder-grade fixture','Standard light fixture',
+        220,'Mid-grade fixture','Brushed nickel or matte black',
+        500,'Designer fixture','Premium designer fixture'
       ),
-      0.75, L_ELEC,
+      1.0, L_ELEC,
       'Light fixture replacement.',
       'Light fixtures — {qty} fixture(s) ({tier} grade)', 0),
     matItem('p14-fan', 'Ceiling Fan Install', 'Ceiling fans', 'fan',
       tiers(
-        120,'Builder-grade fan','Standard ceiling fan',
-        280,'Mid-grade fan','Remote-control fan, 52"',
-        580,'Premium fan','Hunter or Minka premium fan'
+        140,'Builder-grade fan','Standard ceiling fan',
+        320,'Mid-grade fan','Remote-control fan, 52"',
+        680,'Premium fan','Hunter or Minka premium fan'
       ),
-      1.5, L_ELEC,
+      2.0, L_ELEC,
       'Ceiling fan installation.',
       'Ceiling fans — {qty} fan(s) ({tier} grade)', 0,
       false, false, '',
@@ -1210,28 +1210,28 @@ const phase14: PhaseGroup = {
         { label: 'Downrod 12" extension', value: 'downrod-12', rateMultiplier: 1.05 },
         { label: 'Downrod 24" extension', value: 'downrod-24', rateMultiplier: 1.08 },
       ]),
-    laborItem('p14-outlet', 'Outlet / Switch Replacement', 'Outlets/switches', 'device', 0.5, L_ELEC,
+    laborItem('p14-outlet', 'Outlet / Switch Replacement', 'Outlets/switches', 'device', 0.75, L_ELEC,
       'Outlet and switch replacement.',
       'Outlets/switches — {qty} device(s)'),
-    laborItem('p14-gfci', 'GFCI Outlet Install', 'GFCI outlets', 'device', 0.75, L_ELEC,
+    laborItem('p14-gfci', 'GFCI Outlet Install', 'GFCI outlets', 'device', 1.0, L_ELEC,
       'GFCI outlet installation.',
       'GFCI outlets — {qty} outlet(s)'),
     matItem('p14-undercab', 'Under-Cabinet Lighting', 'Under-cabinet lighting', 'lf',
       tiers(
-        18,'Plug-in LED strip','Basic LED strip',
-        32,'Hardwired LED strip','Hardwired LED system',
-        55,'Premium LED system','Kichler or similar premium'
+        22,'Plug-in LED strip','Basic LED strip',
+        38,'Hardwired LED strip','Hardwired LED system',
+        65,'Premium LED system','Kichler or similar premium'
       ),
-      0.3, L_ELEC,
+      0.4, L_ELEC,
       'Under-cabinet lighting installation.',
       'Under-cabinet lighting — {qty} lf ({tier} grade)', 5),
     matItem('p14-can', 'Recessed Can Lights', 'Recessed lights', 'can',
       tiers(
-        28,'Standard 6" can','Basic recessed can',
-        48,'LED retrofit can','Integrated LED can',
-        85,'Premium LED can','Halo or Lutron premium'
+        35,'Standard 6" can','Basic recessed can',
+        58,'LED retrofit can','Integrated LED can',
+        100,'Premium LED can','Halo or Lutron premium'
       ),
-      1, L_ELEC,
+      1.25, L_ELEC,
       'Recessed can light installation.',
       'Recessed lights — {qty} can(s) ({tier} grade)', 0,
       false, false, '',
@@ -1243,16 +1243,16 @@ const phase14: PhaseGroup = {
         { label: '6" wafer (ultra-slim, no housing)', value: '6in-wafer', rateMultiplier: 0.90, note: 'No housing needed' },
         { label: '8" can (large space)', value: '8in', rateMultiplier: 1.15 },
       ]),
-    laborItem('p14-exhaust', 'Exhaust Fan (Bath)', 'Exhaust fans', 'fan', 1.5, L_ELEC,
+    laborItem('p14-exhaust', 'Exhaust Fan (Bath)', 'Exhaust fans', 'fan', 2.0, L_ELEC,
       'Bathroom exhaust fan installation.',
       'Exhaust fans — {qty} fan(s)'),
-    laborItem('p14-circuit', 'Dedicated Appliance Circuits', 'Appliance circuits', 'circuit', 3, L_ELEC,
+    laborItem('p14-circuit', 'Dedicated Appliance Circuits', 'Appliance circuits', 'circuit', 4.5, L_ELEC,
       'Dedicated circuits for range, dryer, EV charger.',
       'Appliance circuits — {qty} circuit(s)', true, 'Licensed electrician required'),
-    laborItem('p14-smart', 'Smart Switch / Dimmer', 'Smart switches', 'device', 0.75, L_ELEC,
+    laborItem('p14-smart', 'Smart Switch / Dimmer', 'Smart switches', 'device', 1.0, L_ELEC,
       'Smart switch and dimmer installation.',
       'Smart switches/dimmers — {qty} device(s)'),
-    laborItem('p14-doorbell', 'Doorbell / Camera Rough-In', 'Doorbell/camera', 'unit', 1.5, L_ELEC,
+    laborItem('p14-doorbell', 'Doorbell / Camera Rough-In', 'Doorbell/camera', 'unit', 2.0, L_ELEC,
       'Doorbell and security camera rough-in.',
       'Doorbell/camera rough-in — {qty} location(s)'),
   ],
@@ -1265,83 +1265,83 @@ const phase15: PhaseGroup = {
   items: [
     matItem('p15-int-wall', 'Interior Walls', 'Interior walls', 'sqft',
       tiers(
-        0.55,'1-coat paint','Primer + 1 finish coat',
-        0.85,'2-coat paint','Primer + 2 finish coats',
-        1.25,'Premium paint','Sherwin-Williams Emerald 2-coat'
+        0.65,'1-coat paint','Primer + 1 finish coat',
+        1.00,'2-coat paint','Primer + 2 finish coats',
+        1.50,'Premium paint','Sherwin-Williams Emerald 2-coat'
       ),
-      0.008, L_PAINT,
+      0.012, L_PAINT,
       'Interior wall painting — prep, prime, and finish coats.',
       'Interior walls — {qty} sq ft ({tier} grade)', 0, false),
     matItem('p15-ceiling', 'Interior Ceilings', 'Interior ceilings', 'sqft',
       tiers(
-        0.45,'1-coat ceiling paint','Primer + 1 coat flat',
-        0.70,'2-coat ceiling paint','Primer + 2 coats flat',
-        1.00,'Premium ceiling paint','Sherwin-Williams 2-coat'
+        0.55,'1-coat ceiling paint','Primer + 1 coat flat',
+        0.85,'2-coat ceiling paint','Primer + 2 coats flat',
+        1.20,'Premium ceiling paint','Sherwin-Williams 2-coat'
       ),
-      0.006, L_PAINT,
+      0.009, L_PAINT,
       'Interior ceiling painting.',
       'Interior ceilings — {qty} sq ft ({tier} grade)', 0),
     matItem('p15-trim', 'Interior Trim & Doors — Paint', 'Trim & door paint', 'lf',
       tiers(
-        0.70,'1-coat trim paint','Brush + 1 coat semi-gloss',
-        1.10,'2-coat trim paint','Sand + 2 coats semi-gloss',
-        1.65,'Spray finish trim','Spray-applied semi-gloss'
+        0.80,'1-coat trim paint','Brush + 1 coat semi-gloss',
+        1.25,'2-coat trim paint','Sand + 2 coats semi-gloss',
+        1.90,'Spray finish trim','Spray-applied semi-gloss'
       ),
-      0.010, L_PAINT,
+      0.014, L_PAINT,
       'Interior trim and door painting.',
       'Interior trim/doors — {qty} lf ({tier} grade)', 0, false),
     matItem('p15-cab', 'Cabinet Painting', 'Cabinet painting', 'box',
       tiers(
-        80,'Brush/roll cabinet paint','Brush-applied cabinet paint',
-        130,'Spray cabinet paint','Spray-applied finish',
-        200,'Premium spray finish','Fine finish spray + primer'
+        95,'Brush/roll cabinet paint','Brush-applied cabinet paint',
+        160,'Spray cabinet paint','Spray-applied finish',
+        240,'Premium spray finish','Fine finish spray + primer'
       ),
-      3, L_PAINT,
+      4, L_PAINT,
       'Cabinet painting — spray finish.',
       'Cabinet painting — {qty} door/box ({tier} grade)', 0),
     matItem('p15-ext-wall', 'Exterior Walls / Siding', 'Exterior paint', 'sqft',
       tiers(
-        0.60,'1-coat exterior paint','Primer + 1 finish coat',
-        0.95,'2-coat exterior paint','Primer + 2 finish coats',
-        1.40,'Premium exterior paint','Sherwin-Williams Duration 2-coat'
+        0.70,'1-coat exterior paint','Primer + 1 finish coat',
+        1.10,'2-coat exterior paint','Primer + 2 finish coats',
+        1.65,'Premium exterior paint','Sherwin-Williams Duration 2-coat'
       ),
-      0.008, L_PAINT,
+      0.012, L_PAINT,
       'Exterior wall and siding painting.',
       'Exterior walls/siding — {qty} sq ft ({tier} grade)', 0),
     matItem('p15-ext-trim', 'Exterior Trim, Fascia, Soffits', 'Exterior trim paint', 'lf',
       tiers(
-        0.75,'1-coat exterior trim','Brush + 1 coat',
-        1.20,'2-coat exterior trim','Sand + 2 coats',
-        1.80,'Premium exterior trim','Spray + 2 coats'
+        0.85,'1-coat exterior trim','Brush + 1 coat',
+        1.35,'2-coat exterior trim','Sand + 2 coats',
+        2.00,'Premium exterior trim','Spray + 2 coats'
       ),
-      0.010, L_PAINT,
+      0.014, L_PAINT,
       'Exterior trim, fascia, and soffit painting.',
       'Exterior trim/fascia — {qty} lf ({tier} grade)', 0),
     matItem('p15-deck', 'Deck Stain / Paint', 'Deck stain', 'sqft',
       tiers(
-        0.55,'Solid deck stain','1-coat solid stain',
-        0.85,'Premium solid stain','2-coat solid stain',
-        1.20,'Deck paint system','Primer + 2 coats deck paint'
+        0.65,'Solid deck stain','1-coat solid stain',
+        1.00,'Premium solid stain','2-coat solid stain',
+        1.45,'Deck paint system','Primer + 2 coats deck paint'
       ),
-      0.006, L_PAINT,
+      0.009, L_PAINT,
       'Deck staining or painting.',
       'Deck stain/paint — {qty} sq ft ({tier} grade)', 0),
     matItem('p15-fence', 'Fence Stain / Paint', 'Fence stain', 'lf',
       tiers(
-        0.60,'Solid fence stain','1-coat solid stain',
-        0.95,'Premium fence stain','2-coat solid stain',
-        1.35,'Fence paint','Primer + 2 coats'
+        0.70,'Solid fence stain','1-coat solid stain',
+        1.10,'Premium fence stain','2-coat solid stain',
+        1.60,'Fence paint','Primer + 2 coats'
       ),
-      0.006, L_PAINT,
+      0.009, L_PAINT,
       'Fence staining or painting.',
       'Fence stain/paint — {qty} lf ({tier} grade)', 0),
     matItem('p15-epoxy', 'Epoxy Floor Coating (Garage)', 'Epoxy floor', 'sqft',
       tiers(
-        2.50,'Single-layer epoxy','Standard epoxy coating',
-        4.00,'2-layer epoxy','Base + topcoat epoxy',
-        6.50,'Polyaspartic coating','Premium polyaspartic system'
+        3.00,'Single-layer epoxy','Standard epoxy coating',
+        4.75,'2-layer epoxy','Base + topcoat epoxy',
+        7.50,'Polyaspartic coating','Premium polyaspartic system'
       ),
-      0.012, L_PAINT,
+      0.016, L_PAINT,
       'Garage floor epoxy coating.',
       'Epoxy floor coating — {qty} sq ft ({tier} grade)', 5),
   ],
@@ -1352,19 +1352,19 @@ const phase16: PhaseGroup = {
   id: 16, name: 'Appliances & Specialties', icon: '🔌',
   description: 'Appliance installation, specialty items, and finishing touches including range hoods, fireplaces, and window treatments.',
   items: [
-    laborItem('p16-appliance', 'Appliance Install (Range, Fridge, DW, Microwave)', 'Appliance install', 'unit', 1.5, L_GC,
+    laborItem('p16-appliance', 'Appliance Install (Range, Fridge, DW, Microwave)', 'Appliance install', 'unit', 2.0, L_GC,
       'Appliance installation and hookup.',
       'Appliance install — {qty} unit(s)'),
-    laborItem('p16-hood', 'Hood Vent Install', 'Hood vent', 'unit', 3, L_GC,
+    laborItem('p16-hood', 'Hood Vent Install', 'Hood vent', 'unit', 4, L_GC,
       'Range hood vent installation.',
       'Hood vent — {qty} unit(s)'),
-    laborItem('p16-fireplace', 'Fireplace Gas Insert', 'Gas fireplace', 'unit', 6, L_GC,
+    laborItem('p16-fireplace', 'Fireplace Gas Insert', 'Gas fireplace', 'unit', 9, L_GC,
       'Gas fireplace insert installation.',
       'Gas fireplace insert — {qty} unit(s)', true, 'Sub specialty — gas contractor required'),
-    laborItem('p16-bath-acc', 'Bathroom Accessories', 'Bath accessories', 'unit', 0.5, L_CARP,
+    laborItem('p16-bath-acc', 'Bathroom Accessories', 'Bath accessories', 'unit', 0.75, L_CARP,
       'Towel bars, TP holders, mirrors, and accessories.',
       'Bathroom accessories — {qty} piece(s)'),
-    laborItem('p16-blinds', 'Window Treatments / Blinds', 'Window treatments', 'window', 0.75, L_CARP,
+    laborItem('p16-blinds', 'Window Treatments / Blinds', 'Window treatments', 'window', 1.0, L_CARP,
       'Window blind and treatment installation.',
       'Window treatments — {qty} window(s)'),
   ],
@@ -1375,10 +1375,10 @@ const phase17: PhaseGroup = {
   id: 17, name: 'Final Cleaning & Closeout', icon: '✅',
   description: 'Post-construction cleaning, exterior site cleanup, punch list completion, and final walkthrough with client sign-off.',
   items: [
-    laborItem('p17-clean', 'Post-Construction Clean — Interior', 'Post-construction clean', 'sqft', 0.004, L_GC,
+    laborItem('p17-clean', 'Post-Construction Clean — Interior', 'Post-construction clean', 'sqft', 0.006, L_GC,
       'Final interior post-construction cleaning.',
       'Post-construction clean — {qty} sq ft'),
-    laborItem('p17-windows', 'Window Cleaning — Post-Construction', 'Window cleaning', 'window', 0.5, L_GC,
+    laborItem('p17-windows', 'Window Cleaning — Post-Construction', 'Window cleaning', 'window', 0.75, L_GC,
       'Post-construction window cleaning.',
       'Window cleaning — {qty} window(s)'),
     laborItem('p17-ext-clean', 'Exterior Site Cleanup', 'Exterior cleanup', 'hr', 1, L_DEMO,

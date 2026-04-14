@@ -1317,3 +1317,18 @@
 - [x] Billing address flag on customerAddresses (isBilling boolean)
 - [x] Show billing address in customer profile header sub-info line
 - [x] Lifetime value auto-updates when opportunities are marked won (APPROVE_ESTIMATE reducer)
+
+## Material Rate Calibration (2026 Research)
+- [x] Phase 2: bump demo material rates (interior/exterior)
+- [x] Phase 4: bump insulation/wrap/vapor barrier material rates
+- [x] Phase 5: bump drywall hang/tape/texture/repair material rates
+- [x] Phase 6: bump all flooring material rates (subfloor, LVP, tile, hardwood, carpet, transitions, demo)
+- [x] Phase 7: bump all tile work material rates (shower, tub, backsplash, feature wall, waterproofing)
+- [x] Phase 8: bump framing material rates (wall, ceiling, joist)
+- [x] Phase 9: bump exterior material rates (siding, paint, soffit, gutters, deck, fence, concrete)
+- [x] Phase 10: bump doors/windows material rates
+- [x] Phase 11: bump trim/finish carpentry material rates
+- [x] Phase 12: bump cabinetry/countertop material rates
+- [x] Phase 13: bump plumbing fixture material rates
+- [x] Phase 14: bump electrical fixture material rates
+- [x] Phase 15: bump painting material rates
