@@ -15,6 +15,8 @@ import { customersRouter } from "./routers/customers";
 import { opportunitiesRouter } from "./routers/opportunities";
 import { bookingRouter } from "./routers/booking";
 import { threeSixtyRouter } from "./routers/threeSixty";
+import { invoicesRouter } from "./routers/invoices";
+import { scheduleRouter } from "./routers/schedule";
 import {
   getAdminAllowlist,
   addAdminAllowlistEmail,
@@ -35,6 +37,8 @@ export const appRouter = router({
   opportunities: opportunitiesRouter,
   booking: bookingRouter,
   threeSixty: threeSixtyRouter,
+  invoices: invoicesRouter,
+  schedule: scheduleRouter,
 
   auth: router({
     /**

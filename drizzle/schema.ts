@@ -1,6 +1,7 @@
 import {
   bigint,
   boolean,
+  double,
   int,
   mysqlEnum,
   mysqlTable,
@@ -831,3 +832,116 @@ export const threeSixtyScans = mysqlTable("threeSixtyScans", {
 });
 export type ThreeSixtyScan = typeof threeSixtyScans.$inferSelect;
 export type InsertThreeSixtyScan = typeof threeSixtyScans.$inferInsert;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PRO-SIDE INVOICES  (source of truth — replaces localStorage)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── INVOICES ────────────────────────────────────────────────────────────────
+export const invoices = mysqlTable("invoices", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  /** 'deposit' | 'final' */
+  type: varchar("type", { length: 16 }).notNull().default("deposit"),
+  /** draft | sent | due | paid | void | partial | pending_signoff */
+  status: varchar("status", { length: 32 }).notNull().default("draft"),
+  /** e.g. INV-2026-001 */
+  invoiceNumber: varchar("invoiceNumber", { length: 64 }).notNull(),
+  customerId: varchar("customerId", { length: 64 }).notNull(),
+  opportunityId: varchar("opportunityId", { length: 64 }).notNull(),
+  sourceEstimateId: varchar("sourceEstimateId", { length: 64 }),
+  // Amounts — stored as integers (cents) for precision
+  subtotal: int("subtotal").notNull().default(0),
+  taxRate: int("taxRate").notNull().default(0),    // basis points e.g. 890 = 8.90%
+  taxAmount: int("taxAmount").notNull().default(0),
+  total: int("total").notNull().default(0),
+  depositPercent: int("depositPercent"),
+  amountPaid: int("amountPaid").notNull().default(0),
+  balance: int("balance").notNull().default(0),
+  // Dates (ISO strings)
+  issuedAt: varchar("issuedAt", { length: 32 }).notNull(),
+  dueDate: varchar("dueDate", { length: 32 }).notNull(),
+  paidAt: varchar("paidAt", { length: 32 }),
+  serviceDate: varchar("serviceDate", { length: 32 }),
+  // Content
+  notes: text("notes"),
+  internalNotes: text("internalNotes"),
+  paymentTerms: varchar("paymentTerms", { length: 128 }),
+  taxLabel: varchar("taxLabel", { length: 64 }),
+  // Stripe / PayPal
+  stripePaymentIntentId: varchar("stripePaymentIntentId", { length: 128 }),
+  stripeClientSecret: text("stripeClientSecret"),
+  paypalOrderId: varchar("paypalOrderId", { length: 128 }),
+  // Job completion sign-off
+  completionSignatureUrl: text("completionSignatureUrl"),
+  completionSignedBy: varchar("completionSignedBy", { length: 255 }),
+  completionSignedAt: varchar("completionSignedAt", { length: 32 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbInvoice = typeof invoices.$inferSelect;
+export type InsertDbInvoice = typeof invoices.$inferInsert;
+
+// ─── INVOICE LINE ITEMS ───────────────────────────────────────────────────────
+export const invoiceLineItems = mysqlTable("invoiceLineItems", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  invoiceId: varchar("invoiceId", { length: 64 }).notNull(),
+  description: text("description").notNull(),
+  qty: double("qty").notNull().default(1),
+  unitPrice: int("unitPrice").notNull().default(0), // cents
+  total: int("total").notNull().default(0),         // cents
+  notes: text("notes"),
+  sortOrder: int("sortOrder").notNull().default(0),
+});
+export type DbInvoiceLineItem = typeof invoiceLineItems.$inferSelect;
+export type InsertDbInvoiceLineItem = typeof invoiceLineItems.$inferInsert;
+
+// ─── INVOICE PAYMENTS ────────────────────────────────────────────────────────
+export const invoicePayments = mysqlTable("invoicePayments", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  invoiceId: varchar("invoiceId", { length: 64 }).notNull(),
+  /** stripe | paypal | cash | check | zelle | venmo | other */
+  method: varchar("method", { length: 32 }).notNull(),
+  /** cents */
+  amount: int("amount").notNull(),
+  paidAt: varchar("paidAt", { length: 32 }).notNull(),
+  /** Stripe PaymentIntent ID, PayPal order ID, or manual note */
+  reference: varchar("reference", { length: 255 }).notNull().default(""),
+  note: text("note"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbInvoicePayment = typeof invoicePayments.$inferSelect;
+export type InsertDbInvoicePayment = typeof invoicePayments.$inferInsert;
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PRO-SIDE SCHEDULE EVENTS  (source of truth — replaces localStorage)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+export const scheduleEvents = mysqlTable("scheduleEvents", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  /** estimate | job | recurring | task | follow_up | three_sixty */
+  type: varchar("type", { length: 32 }).notNull().default("task"),
+  title: varchar("title", { length: 255 }).notNull(),
+  /** ISO datetime */
+  start: varchar("start", { length: 32 }).notNull(),
+  /** ISO datetime */
+  end: varchar("end", { length: 32 }).notNull(),
+  allDay: boolean("allDay").default(false).notNull(),
+  // Links
+  opportunityId: varchar("opportunityId", { length: 64 }),
+  customerId: varchar("customerId", { length: 64 }),
+  // People — JSON string[]
+  assignedTo: text("assignedTo"),
+  // Content
+  notes: text("notes"),
+  color: varchar("color", { length: 16 }),
+  // Recurrence — JSON RecurrenceRule
+  recurrence: text("recurrence"),
+  parentEventId: varchar("parentEventId", { length: 64 }),
+  // Status
+  completed: boolean("completed").default(false).notNull(),
+  completedAt: varchar("completedAt", { length: 32 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbScheduleEvent = typeof scheduleEvents.$inferSelect;
+export type InsertDbScheduleEvent = typeof scheduleEvents.$inferInsert;

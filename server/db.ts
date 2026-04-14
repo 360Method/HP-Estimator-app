@@ -8,17 +8,29 @@ import {
   customers,
   DbCustomer,
   DbCustomerAddress,
+  DbInvoice,
+  DbInvoiceLineItem,
+  DbInvoicePayment,
   DbOpportunity,
+  DbScheduleEvent,
   gmailTokens,
   InsertCallLog,
   InsertConversation,
   InsertDbCustomer,
   InsertDbCustomerAddress,
+  InsertDbInvoice,
+  InsertDbInvoiceLineItem,
+  InsertDbInvoicePayment,
   InsertDbOpportunity,
+  InsertDbScheduleEvent,
   InsertMessage,
   InsertUser,
+  invoiceLineItems,
+  invoicePayments,
+  invoices,
   messages,
   opportunities,
+  scheduleEvents,
   users,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
@@ -801,4 +813,161 @@ export async function listCustomersFiltered(opts: {
   }
 
   return result;
+}
+
+// ─── INVOICE HELPERS ─────────────────────────────────────────────────────────
+
+export async function listInvoices(opts: {
+  customerId?: string;
+  opportunityId?: string;
+  status?: string;
+  limit?: number;
+  offset?: number;
+} = {}): Promise<DbInvoice[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions: any[] = [];
+  if (opts.customerId) conditions.push(eq(invoices.customerId, opts.customerId));
+  if (opts.opportunityId) conditions.push(eq(invoices.opportunityId, opts.opportunityId));
+  if (opts.status) conditions.push(eq(invoices.status, opts.status));
+  const q = conditions.length > 0
+    ? db.select().from(invoices).where(and(...conditions))
+    : db.select().from(invoices);
+  return (q as any)
+    .orderBy(desc(invoices.createdAt))
+    .limit(opts.limit ?? 200)
+    .offset(opts.offset ?? 0);
+}
+
+export async function getInvoiceById(id: string): Promise<DbInvoice | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(invoices).where(eq(invoices.id, id)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function createInvoice(data: InsertDbInvoice): Promise<DbInvoice> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(invoices).values(data);
+  const row = await db.select().from(invoices).where(eq(invoices.id, data.id)).limit(1);
+  return row[0];
+}
+
+export async function updateInvoice(id: string, data: Partial<InsertDbInvoice>): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(invoices).set(data as any).where(eq(invoices.id, id));
+}
+
+export async function deleteInvoice(id: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(invoicePayments).where(eq(invoicePayments.invoiceId, id));
+  await db.delete(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, id));
+  await db.delete(invoices).where(eq(invoices.id, id));
+}
+
+// ─── INVOICE LINE ITEMS ───────────────────────────────────────────────────────
+
+export async function listInvoiceLineItems(invoiceId: string): Promise<DbInvoiceLineItem[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(invoiceLineItems)
+    .where(eq(invoiceLineItems.invoiceId, invoiceId))
+    .orderBy(asc(invoiceLineItems.sortOrder));
+}
+
+export async function replaceInvoiceLineItems(
+  invoiceId: string,
+  items: Omit<InsertDbInvoiceLineItem, 'invoiceId'>[],
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(invoiceLineItems).where(eq(invoiceLineItems.invoiceId, invoiceId));
+  if (items.length > 0) {
+    await db.insert(invoiceLineItems).values(
+      items.map((item, i) => ({ ...item, invoiceId, sortOrder: i }))
+    );
+  }
+}
+
+// ─── INVOICE PAYMENTS ────────────────────────────────────────────────────────
+
+export async function listInvoicePayments(invoiceId: string): Promise<DbInvoicePayment[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(invoicePayments)
+    .where(eq(invoicePayments.invoiceId, invoiceId))
+    .orderBy(asc(invoicePayments.createdAt));
+}
+
+export async function addInvoicePayment(data: InsertDbInvoicePayment): Promise<DbInvoicePayment> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(invoicePayments).values(data);
+  const row = await db.select().from(invoicePayments)
+    .where(eq(invoicePayments.id, data.id)).limit(1);
+  return row[0];
+}
+
+export async function deleteInvoicePayment(id: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(invoicePayments).where(eq(invoicePayments.id, id));
+}
+
+// ─── SCHEDULE EVENT HELPERS ──────────────────────────────────────────────────
+
+export async function listScheduleEvents(opts: {
+  customerId?: string;
+  opportunityId?: string;
+  from?: string;
+  to?: string;
+  limit?: number;
+} = {}): Promise<DbScheduleEvent[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions: any[] = [];
+  if (opts.customerId) conditions.push(eq(scheduleEvents.customerId, opts.customerId));
+  if (opts.opportunityId) conditions.push(eq(scheduleEvents.opportunityId, opts.opportunityId));
+  const q = conditions.length > 0
+    ? db.select().from(scheduleEvents).where(and(...conditions))
+    : db.select().from(scheduleEvents);
+  return (q as any)
+    .orderBy(asc(scheduleEvents.start))
+    .limit(opts.limit ?? 500);
+}
+
+export async function getScheduleEventById(id: string): Promise<DbScheduleEvent | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(scheduleEvents).where(eq(scheduleEvents.id, id)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function createScheduleEvent(data: InsertDbScheduleEvent): Promise<DbScheduleEvent> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(scheduleEvents).values(data);
+  const row = await db.select().from(scheduleEvents).where(eq(scheduleEvents.id, data.id)).limit(1);
+  return row[0];
+}
+
+export async function updateScheduleEvent(id: string, data: Partial<InsertDbScheduleEvent>): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(scheduleEvents).set(data as any).where(eq(scheduleEvents.id, id));
+}
+
+export async function deleteScheduleEvent(id: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(scheduleEvents).where(eq(scheduleEvents.id, id));
+}
+
+export async function deleteScheduleEventsByOpportunity(opportunityId: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(scheduleEvents).where(eq(scheduleEvents.opportunityId, opportunityId));
 }

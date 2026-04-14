@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { ScheduleEvent, ScheduleEventType, Customer, Opportunity } from '@/lib/types';
+import { trpc } from '@/lib/trpc';
 
 // ── Color palette per event type ──────────────────────────────
 const EVENT_COLORS: Record<ScheduleEventType, { bg: string; border: string; text: string; dot: string; badge: string }> = {
@@ -571,6 +572,17 @@ type CalendarView = 'month' | 'week' | 'day' | 'agenda';
 export default function SchedulePage() {
   const { state, addScheduleEvent, updateScheduleEvent, removeScheduleEvent, navigateToTopLevel, setActiveCustomer, setActiveOpportunity, setSection, setScheduleFilter } = useEstimator();
 
+  // ── DB mutations (dual-write: localStorage + DB) ─────────────────────────────────────
+  const createScheduleEventMutation = trpc.schedule.create.useMutation({
+    onError: (err) => console.warn('[SchedulePage] DB create failed:', err.message),
+  });
+  const updateScheduleEventMutation = trpc.schedule.update.useMutation({
+    onError: (err) => console.warn('[SchedulePage] DB update failed:', err.message),
+  });
+  const deleteScheduleEventMutation = trpc.schedule.delete.useMutation({
+    onError: (err) => console.warn('[SchedulePage] DB delete failed:', err.message),
+  });
+
   const [view, setView] = useState<CalendarView>('week');
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [selectedEvent, setSelectedEvent] = useState<ScheduleEvent | null>(null);
@@ -758,16 +770,53 @@ export default function SchedulePage() {
 
   function handleSaveEvent(payload: Omit<ScheduleEvent, 'id' | 'createdAt' | 'updatedAt'>) {
     if (editingEvent?.id) {
+      // 1. Update local state
       updateScheduleEvent(editingEvent.id, payload);
+      // 2. Persist to DB
+      updateScheduleEventMutation.mutate({
+        id: editingEvent.id,
+        data: {
+          ...payload,
+          assignedTo: Array.isArray(payload.assignedTo)
+            ? JSON.stringify(payload.assignedTo)
+            : (payload.assignedTo ?? '[]'),
+        },
+      });
     } else {
-      addScheduleEvent(payload);
+      // Pre-generate ID so we can write to both local state and DB with the same ID
+      const newId = Math.random().toString(36).slice(2, 10);
+      // 1. Update local state with pre-generated ID
+      addScheduleEvent({ ...payload, id: newId });
+      // 2. Persist to DB
+      createScheduleEventMutation.mutate({
+        id: newId,
+        type: payload.type,
+        title: payload.title,
+        start: payload.start,
+        end: payload.end,
+        allDay: payload.allDay ?? false,
+        opportunityId: payload.opportunityId,
+        customerId: payload.customerId,
+        assignedTo: Array.isArray(payload.assignedTo)
+          ? JSON.stringify(payload.assignedTo)
+          : (payload.assignedTo ?? '[]'),
+        notes: payload.notes ?? '',
+        color: payload.color,
+        completed: payload.completed ?? false,
+        completedAt: payload.completedAt,
+        recurrence: payload.recurrence ? JSON.stringify(payload.recurrence) : undefined,
+        parentEventId: payload.parentEventId,
+      });
     }
     setEditingEvent(null);
     setIsCreating(false);
   }
 
   function handleDeleteEvent(id: string) {
+    // 1. Update local state
     removeScheduleEvent(id);
+    // 2. Persist to DB
+    deleteScheduleEventMutation.mutate({ id });
     setSelectedEvent(null);
   }
 
@@ -814,6 +863,10 @@ export default function SchedulePage() {
     const newEnd = new Date(newStart.getTime() + duration);
     if (!ev.id.startsWith('synth-')) {
       updateScheduleEvent(ev.id, { start: newStart.toISOString(), end: newEnd.toISOString() });
+      updateScheduleEventMutation.mutate({
+        id: ev.id,
+        data: { start: newStart.toISOString(), end: newEnd.toISOString() },
+      });
     }
     handleDragEnd();
   }
@@ -840,7 +893,9 @@ export default function SchedulePage() {
       const newEnd = new Date(resizeOrigEndRef.current.getTime() + deltaMs);
       const minEnd = new Date(new Date(resizeEventRef.current!.start).getTime() + 30 * 60 * 1000);
       if (newEnd > minEnd && !resizeEventRef.current!.id.startsWith('synth-')) {
-        updateScheduleEvent(resizeEventRef.current!.id, { end: newEnd.toISOString() });
+        const evId = resizeEventRef.current!.id;
+        updateScheduleEvent(evId, { end: newEnd.toISOString() });
+        updateScheduleEventMutation.mutate({ id: evId, data: { end: newEnd.toISOString() } });
       }
       setResizingId(null);
       resizeEventRef.current = null;

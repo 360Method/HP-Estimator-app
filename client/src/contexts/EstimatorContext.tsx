@@ -247,7 +247,7 @@ type Action =
     }
   | { type: 'RESET' }
   // ── Schedule actions ──────────────────────────────────────
-  | { type: 'ADD_SCHEDULE_EVENT'; payload: Omit<ScheduleEvent, 'id' | 'createdAt' | 'updatedAt'> }
+  | { type: 'ADD_SCHEDULE_EVENT'; payload: Omit<ScheduleEvent, 'id' | 'createdAt' | 'updatedAt'> & { id?: string } }
   | { type: 'UPDATE_SCHEDULE_EVENT'; id: string; payload: Partial<ScheduleEvent> }
   | { type: 'REMOVE_SCHEDULE_EVENT'; id: string }
   | { type: 'UPDATE_OPPORTUNITY_SCHEDULE'; id: string; scheduledDate?: string; scheduledEndDate?: string; scheduledDuration?: number; assignedTo?: string; scheduleNotes?: string }
@@ -299,6 +299,10 @@ type Action =
    * - Opportunities from DB are merged per-customer the same way.
    */
   | { type: 'MERGE_DB_CUSTOMERS'; payload: Customer[] }
+  /** Replace global invoices[] with DB-sourced data; also patches customer.invoices[] */
+  | { type: 'MERGE_DB_INVOICES'; payload: Invoice[] }
+  /** Replace global scheduleEvents[] with DB-sourced data */
+  | { type: 'MERGE_DB_SCHEDULE_EVENTS'; payload: ScheduleEvent[] }
   /** Fired by SSE when a portal message arrives — triggers unread count re-query */
   | { type: 'PORTAL_UNREAD_PING' };
 
@@ -1512,7 +1516,7 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
       const now = new Date().toISOString();
       const newEvent: ScheduleEvent = {
         ...action.payload,
-        id: nanoid(8),
+        id: action.payload.id ?? nanoid(8),
         createdAt: now,
         updatedAt: now,
       };
@@ -1589,6 +1593,26 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
       if (newCustomers.length === 0 && updatedCustomers === state.customers) return state;
       return { ...state, customers: [...newCustomers, ...updatedCustomers] };
     }
+
+    case 'MERGE_DB_INVOICES': {
+      // Replace global invoices[] with DB data.
+      // Also patch customer.invoices[] so InvoiceSection keeps reading from the right place.
+      const byCustomer = new Map<string, Invoice[]>();
+      for (const inv of action.payload) {
+        const arr = byCustomer.get(inv.customerId) ?? [];
+        arr.push(inv);
+        byCustomer.set(inv.customerId, arr);
+      }
+      const patchedCustomers = state.customers.map(c => {
+        const dbInvs = byCustomer.get(c.id);
+        if (!dbInvs) return c;
+        return { ...c, invoices: dbInvs };
+      });
+      return { ...state, invoices: action.payload, customers: patchedCustomers };
+    }
+
+    case 'MERGE_DB_SCHEDULE_EVENTS':
+      return { ...state, scheduleEvents: action.payload };
 
     case 'PORTAL_UNREAD_PING':
       // No state change needed — this ping causes React Query to re-fetch unread count
@@ -1765,6 +1789,8 @@ interface EstimatorContextValue {
   setActiveOpportunity: (id: string | null) => void;
   addCustomer: (customer: Customer) => void;
   mergeDbCustomers: (customers: Customer[]) => void;
+  mergeDbInvoices: (invoices: Invoice[]) => void;
+  mergeDbScheduleEvents: (events: ScheduleEvent[]) => void;
   updateCustomer: (id: string, payload: Partial<Customer>) => void;
   setActiveCustomer: (id: string | null) => void;
   addCustomerAddress: (customerId: string, address: CustomerAddress) => void;
@@ -1775,7 +1801,7 @@ interface EstimatorContextValue {
   reset: () => void;
   navigateToTopLevel: (section: AppSection) => void;
   // Schedule
-  addScheduleEvent: (payload: Omit<ScheduleEvent, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  addScheduleEvent: (payload: Omit<ScheduleEvent, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => void;
   updateScheduleEvent: (id: string, payload: Partial<ScheduleEvent>) => void;
   removeScheduleEvent: (id: string) => void;
   updateOpportunitySchedule: (id: string, fields: { scheduledDate?: string; scheduledEndDate?: string; scheduledDuration?: number; assignedTo?: string; scheduleNotes?: string }) => void;
@@ -2065,6 +2091,14 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'MERGE_DB_CUSTOMERS', payload: customers });
   }, []);
 
+  const mergeDbInvoices = useCallback((invoices: Invoice[]) => {
+    dispatch({ type: 'MERGE_DB_INVOICES', payload: invoices });
+  }, []);
+
+  const mergeDbScheduleEvents = useCallback((events: ScheduleEvent[]) => {
+    dispatch({ type: 'MERGE_DB_SCHEDULE_EVENTS', payload: events });
+  }, []);
+
   const updateCustomer = useCallback((id: string, payload: Partial<Customer>) => {
     dispatch({ type: 'UPDATE_CUSTOMER', id, payload });
   }, []);
@@ -2099,7 +2133,7 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
   const reset = useCallback(() => dispatch({ type: 'RESET' }), []);
 
   // ── Schedule callbacks ────────────────────────────────────
-  const addScheduleEvent = useCallback((payload: Omit<ScheduleEvent, 'id' | 'createdAt' | 'updatedAt'>) => {
+  const addScheduleEvent = useCallback((payload: Omit<ScheduleEvent, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => {
     dispatch({ type: 'ADD_SCHEDULE_EVENT', payload });
   }, []);
 
@@ -2256,7 +2290,7 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
       setCustomerProfile, addActivityEvent, setCustomerTab,
       convertLeadToEstimate, convertEstimateToJob, archiveJob,
       setActiveOpportunity,
-      addCustomer, mergeDbCustomers, updateCustomer, setActiveCustomer,
+      addCustomer, mergeDbCustomers, mergeDbInvoices, mergeDbScheduleEvents, updateCustomer, setActiveCustomer,
       addCustomerAddress, updateCustomerAddress, removeCustomerAddress, setPrimaryAddress, setBillingAddress,
       navigateToTopLevel,
       reset,

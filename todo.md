@@ -1379,3 +1379,18 @@
 - [x] Build hp-360-funnel standalone static project (FunnelPage, CheckoutPage, ConfirmationPage)
 - [ ] Set domain 360.handypioneers.com on hp-360-funnel project
 - [ ] Add 9 STRIPE_PRICE_360_* env vars to pro project secrets (after Stripe product setup)
+
+## DB as Source of Truth — localStorage → DB Migration
+- [x] Add `invoices` table to drizzle/schema.ts (mirrors Invoice interface)
+- [x] Add `invoiceLineItems` table to drizzle/schema.ts
+- [x] Add `invoicePayments` table to drizzle/schema.ts
+- [x] Add `scheduleEvents` table to drizzle/schema.ts (mirrors ScheduleEvent interface)
+- [x] Run pnpm db:push to push new tables
+- [x] Build server/routers/invoices.ts (list, get, create, update, delete, addPayment, void, bulkUpsert)
+- [x] Build server/routers/schedule.ts (list, get, create, update, delete, complete, bulkUpsert)
+- [x] Wire invoices + schedule routers into server/routers.ts
+- [x] Dual-write invoices to DB from InvoiceSection (create + update + addPayment)
+- [x] Dual-write schedule events to DB from SchedulePage, EstimateApprovedModal, NewJobModal
+- [x] useDbSync loads invoices + schedule events from DB on login (mergeDbInvoices, mergeDbScheduleEvents)
+- [x] addScheduleEvent accepts optional pre-generated ID for DB alignment
+- [x] Write vitest tests for invoices + schedule DB helpers (8 tests passing)

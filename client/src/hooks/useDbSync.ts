@@ -1,21 +1,31 @@
 /**
  * useDbSync — On-login DB → EstimatorContext sync.
  *
- * Fires once when the user is authenticated. Fetches all customers with
- * their opportunities from the database and merges them into the local
- * EstimatorContext state via MERGE_DB_CUSTOMERS.
+ * Fires once when the user is authenticated. Fetches:
+ *  1. All customers with their opportunities
+ *  2. All invoices (with line items + payments)
+ *  3. All schedule events
+ * …and merges them into the local EstimatorContext state.
  *
  * Merge strategy:
  *  - Customers already in local state are skipped (preserves unsaved edits).
- *  - New DB-only customers are prepended to the list.
- *
- * This ensures the Customers list is always populated from the DB on login,
- * without requiring the admin to navigate through the Requests page.
+ *  - Invoices and schedule events replace whatever is in localStorage.
  */
 import { useEffect, useRef } from "react";
 import { trpc } from "@/lib/trpc";
 import { useEstimator } from "@/contexts/EstimatorContext";
-import type { Customer, Opportunity, PipelineArea, OpportunityStage } from "@/lib/types";
+import type {
+  Customer,
+  Opportunity,
+  PipelineArea,
+  OpportunityStage,
+  Invoice,
+  InvoiceLineItem,
+  PaymentRecord,
+  ScheduleEvent,
+  ScheduleEventType,
+  RecurrenceRule,
+} from "@/lib/types";
 
 /** Convert a DB opportunity row to the in-memory Opportunity shape */
 function dbOppToLocal(o: any): Opportunity {
@@ -95,6 +105,92 @@ function dbCustomerToLocal(dbCust: any): Customer {
   };
 }
 
+/** Convert a DB invoice row (with lineItems + payments) to the in-memory Invoice shape */
+function dbInvoiceToLocal(dbInv: any): Invoice {
+  const lineItems: InvoiceLineItem[] = (dbInv.lineItems ?? []).map((li: any) => ({
+    id: li.id,
+    description: li.description ?? "",
+    qty: li.qty ?? 1,
+    unitPrice: li.unitPrice ?? 0,
+    total: li.total ?? 0,
+    notes: li.notes ?? undefined,
+  }));
+  const payments: PaymentRecord[] = (dbInv.payments ?? []).map((p: any) => ({
+    id: p.id,
+    method: p.method ?? "other",
+    amount: p.amount ?? 0,
+    paidAt: p.paidAt ?? new Date().toISOString(),
+    reference: p.reference ?? "",
+    note: p.note ?? "",
+  }));
+  return {
+    id: dbInv.id,
+    type: (dbInv.type ?? "deposit") as "deposit" | "final",
+    status: dbInv.status ?? "draft",
+    invoiceNumber: dbInv.invoiceNumber ?? "",
+    customerId: dbInv.customerId ?? "",
+    opportunityId: dbInv.opportunityId ?? "",
+    sourceEstimateId: dbInv.sourceEstimateId ?? undefined,
+    subtotal: dbInv.subtotal ?? 0,
+    taxRate: dbInv.taxRate ?? 0,
+    taxAmount: dbInv.taxAmount ?? 0,
+    total: dbInv.total ?? 0,
+    depositPercent: dbInv.depositPercent ?? undefined,
+    amountPaid: dbInv.amountPaid ?? 0,
+    balance: dbInv.balance ?? 0,
+    issuedAt: dbInv.issuedAt ?? new Date().toISOString(),
+    dueDate: dbInv.dueDate ?? new Date().toISOString(),
+    paidAt: dbInv.paidAt ?? undefined,
+    serviceDate: dbInv.serviceDate ?? undefined,
+    payments,
+    lineItems,
+    notes: dbInv.notes ?? "",
+    internalNotes: dbInv.internalNotes ?? "",
+    paymentTerms: dbInv.paymentTerms ?? undefined,
+    taxLabel: dbInv.taxLabel ?? undefined,
+    stripePaymentIntentId: dbInv.stripePaymentIntentId ?? undefined,
+    stripeClientSecret: dbInv.stripeClientSecret ?? undefined,
+    paypalOrderId: dbInv.paypalOrderId ?? undefined,
+    completionSignatureUrl: dbInv.completionSignatureUrl ?? undefined,
+    completionSignedBy: dbInv.completionSignedBy ?? undefined,
+    completionSignedAt: dbInv.completionSignedAt ?? undefined,
+  };
+}
+
+/** Convert a DB schedule event row to the in-memory ScheduleEvent shape */
+function dbScheduleEventToLocal(dbEv: any): ScheduleEvent {
+  let assignedTo: string[] = [];
+  try { assignedTo = JSON.parse(dbEv.assignedTo ?? "[]"); } catch { assignedTo = []; }
+  let recurrence: RecurrenceRule | undefined;
+  try {
+    const r = JSON.parse(dbEv.recurrence ?? "null");
+    if (r) recurrence = r;
+  } catch { recurrence = undefined; }
+  return {
+    id: dbEv.id,
+    type: (dbEv.type ?? "task") as ScheduleEventType,
+    title: dbEv.title ?? "",
+    start: dbEv.start ?? "",
+    end: dbEv.end ?? "",
+    allDay: dbEv.allDay ?? false,
+    opportunityId: dbEv.opportunityId ?? undefined,
+    customerId: dbEv.customerId ?? undefined,
+    assignedTo,
+    notes: dbEv.notes ?? "",
+    color: dbEv.color ?? undefined,
+    recurrence,
+    parentEventId: dbEv.parentEventId ?? undefined,
+    completed: dbEv.completed ?? false,
+    completedAt: dbEv.completedAt ?? undefined,
+    createdAt: dbEv.createdAt instanceof Date
+      ? dbEv.createdAt.toISOString()
+      : (dbEv.createdAt ?? new Date().toISOString()),
+    updatedAt: dbEv.updatedAt instanceof Date
+      ? dbEv.updatedAt.toISOString()
+      : (dbEv.updatedAt ?? new Date().toISOString()),
+  };
+}
+
 /**
  * Call this hook once inside an authenticated component (e.g. Home.tsx).
  * It runs the sync exactly once per session (guarded by a ref).
@@ -102,7 +198,7 @@ function dbCustomerToLocal(dbCust: any): Customer {
  * @param isAuthenticated - pass `true` only when the user is logged in.
  */
 export function useDbSync(isAuthenticated: boolean) {
-  const { mergeDbCustomers } = useEstimator();
+  const { mergeDbCustomers, mergeDbInvoices, mergeDbScheduleEvents } = useEstimator();
   const hasSynced = useRef(false);
   const utils = trpc.useUtils();
 
@@ -110,14 +206,34 @@ export function useDbSync(isAuthenticated: boolean) {
     if (!isAuthenticated || hasSynced.current) return;
     hasSynced.current = true;
 
+    // 1. Customers + opportunities
     utils.customers.listWithOpportunities.fetch({ limit: 500 })
       .then((dbCustomers) => {
         const locals = dbCustomers.map(dbCustomerToLocal);
         mergeDbCustomers(locals);
       })
       .catch((err) => {
-        // Non-fatal — local state still works; log for debugging
         console.warn("[useDbSync] Failed to sync customers from DB:", err);
       });
-  }, [isAuthenticated, mergeDbCustomers, utils]);
+
+    // 2. Invoices (all, with line items + payments)
+    utils.invoices.list.fetch({ limit: 500 })
+      .then((dbInvoices) => {
+        const locals = dbInvoices.map(dbInvoiceToLocal);
+        mergeDbInvoices(locals);
+      })
+      .catch((err) => {
+        console.warn("[useDbSync] Failed to sync invoices from DB:", err);
+      });
+
+    // 3. Schedule events
+    utils.schedule.list.fetch({})
+      .then((dbEvents) => {
+        const locals = dbEvents.map(dbScheduleEventToLocal);
+        mergeDbScheduleEvents(locals);
+      })
+      .catch((err) => {
+        console.warn("[useDbSync] Failed to sync schedule events from DB:", err);
+      });
+  }, [isAuthenticated, mergeDbCustomers, mergeDbInvoices, mergeDbScheduleEvents, utils]);
 }

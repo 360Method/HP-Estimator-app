@@ -10,12 +10,16 @@ import { Calendar, Edit3, Paperclip, Hash, Tag, Globe, User } from 'lucide-react
 import { toast } from 'sonner';
 import { nanoid } from 'nanoid';
 import { useEstimator } from '@/contexts/EstimatorContext';
+import { trpc } from '@/lib/trpc';
 import IntakeShell, {
   CustomerSearchBox, SidebarSection, PrivateNotesPanel, LineItemsPanel, LineItem, SelectedCustomer,
 } from './IntakeShell';
 
 export default function NewJobModal({ onClose, prefill, onSaved }: { onClose: () => void; prefill?: any; onSaved?: (oppId: string) => void }) {
   const { addOpportunity, addCustomer, setActiveCustomer, addScheduleEvent, state } = useEstimator();
+  const createScheduleEventMutation = trpc.schedule.create.useMutation({
+    onError: (err) => console.warn('[NewJobModal] Schedule DB write failed:', err.message),
+  });
   const [customer, setCustomer] = useState(prefill?.displayName ?? '');
   const [selectedCustomer, setSelectedCustomer] = useState<SelectedCustomer | null>(
     prefill ? { id: prefill.id ?? '', displayName: prefill.displayName ?? '', phone: prefill.phone ?? '', email: prefill.email ?? '', address: prefill.address ?? '', city: prefill.city ?? '', state: prefill.state ?? '', zip: prefill.zip ?? '' } : null
@@ -69,14 +73,30 @@ export default function NewJobModal({ onClose, prefill, onSaved }: { onClose: ()
       const endISO = toDate
         ? (toTime ? new Date(`${toDate}T${toTime}`).toISOString() : new Date(`${toDate}T17:00`).toISOString())
         : new Date(new Date(startISO).getTime() + 8 * 60 * 60 * 1000).toISOString();
+      const newEvId = Math.random().toString(36).slice(2, 10);
       addScheduleEvent({
+        id: newEvId,
         type: 'job',
         title: newJobTitle,
         start: startISO,
         end: endISO,
         allDay: false,
         customerId,
+        opportunityId: oppId,
         assignedTo: team ? team.split(',').map(s => s.trim()).filter(Boolean) : [],
+        notes: notes || '',
+        completed: false,
+      });
+      createScheduleEventMutation.mutate({
+        id: newEvId,
+        type: 'job',
+        title: newJobTitle,
+        start: startISO,
+        end: endISO,
+        allDay: false,
+        customerId,
+        opportunityId: oppId,
+        assignedTo: JSON.stringify(team ? team.split(',').map(s => s.trim()).filter(Boolean) : []),
         notes: notes || '',
         completed: false,
       });

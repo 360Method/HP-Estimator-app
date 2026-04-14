@@ -1175,6 +1175,17 @@ export default function InvoiceSection() {
     return `INV-${year}-${String(globalCount + 1).padStart(3, '0')}`;
   };
 
+  // ── DB mutations for invoices (dual-write: localStorage + DB) ─────────────────
+  const createInvoiceMutation = trpc.invoices.create.useMutation({
+    onError: (err) => console.warn('[InvoiceSection] DB create failed:', err.message),
+  });
+  const updateInvoiceMutation = trpc.invoices.update.useMutation({
+    onError: (err) => console.warn('[InvoiceSection] DB update failed:', err.message),
+  });
+  const addPaymentMutation = trpc.invoices.addPayment.useMutation({
+    onError: (err) => console.warn('[InvoiceSection] DB addPayment failed:', err.message),
+  });
+
   const handleCreate = (invoice: Invoice) => {
     if (!customer) return;
     const filled: Invoice = {
@@ -1183,15 +1194,51 @@ export default function InvoiceSection() {
       opportunityId: activeOpp?.id ?? '',
       sourceEstimateId: activeOpp?.sourceEstimateId,
     };
+    // 1. Update local state (localStorage)
     const updated = [...allInvoices, filled];
     updateCustomer(customer.id, { invoices: updated });
+    // 2. Persist to DB
+    createInvoiceMutation.mutate({
+      ...filled,
+      notes: filled.notes ?? '',
+      internalNotes: filled.internalNotes ?? '',
+      lineItems: filled.lineItems.map(li => ({ ...li, notes: li.notes ?? undefined })),
+      payments: [],
+    });
     toast.success(`Invoice ${invoice.invoiceNumber} created`);
   };
 
   const handleUpdate = (updated: Invoice) => {
     if (!customer) return;
+    // 1. Update local state
     const newInvoices = allInvoices.map(inv => inv.id === updated.id ? updated : inv);
     updateCustomer(customer.id, { invoices: newInvoices });
+    // 2. Persist invoice fields to DB
+    const { payments: _p, lineItems: _li, ...rest } = updated;
+    updateInvoiceMutation.mutate({
+      id: updated.id,
+      data: { ...rest, notes: rest.notes ?? '', internalNotes: rest.internalNotes ?? '' },
+    });
+    // 3. Sync any newly-added payments to DB
+    const existingInv = allInvoices.find(inv => inv.id === updated.id);
+    if (existingInv) {
+      const existingPaymentIds = new Set(existingInv.payments.map(p => p.id));
+      for (const payment of updated.payments) {
+        if (!existingPaymentIds.has(payment.id)) {
+          addPaymentMutation.mutate({
+            invoiceId: updated.id,
+            payment: {
+              id: payment.id,
+              method: payment.method,
+              amount: payment.amount,
+              paidAt: payment.paidAt,
+              reference: payment.reference ?? '',
+              note: payment.note ?? '',
+            },
+          });
+        }
+      }
+    }
   };
 
    const estimateValue = activeOpp?.value ?? 0;
