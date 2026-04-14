@@ -1394,9 +1394,9 @@ const phase17: PhaseGroup = {
 };
 
 // ─── PHASE 18: HANDYMAN & MAINTENANCE ───────────────────────
-// Portland Metro handyman rate: $85/hr (75th-percentile field time)
+// Handy Pioneers handyman rate: $150/hr
 // All items are labor-only unless noted; material is user-supplied or quoted separately
-const L_HANDY = 85; // Handyman / Maintenance Tech
+const L_HANDY = 150; // Handyman / Maintenance Tech
 
 const phase18: PhaseGroup = {
   id: 18, name: 'Handyman & Maintenance', icon: '🔧',

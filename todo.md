@@ -1359,3 +1359,6 @@
 - [x] Vitest tests for discount calculator (in threeSixtyTiers.ts)
 - [x] Tier pricing: monthly/quarterly/annual rates with savings callout
 - [x] UI: billing cadence toggle on enrollment form
+
+## Handyman Rate Correction
+- [x] Update L_HANDY from $85 to $150/hr in phases.ts (Phase 18)
