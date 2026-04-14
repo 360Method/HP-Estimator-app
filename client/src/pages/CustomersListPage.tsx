@@ -166,24 +166,22 @@ export default function CustomersListPage() {
 
   const bulkAddTagMutation = trpc.customers.bulkAddTag.useMutation({
     onSuccess: () => {
-      toast({ title: 'Tag added', description: `Tag added to ${selected.size} customer(s).` });
+      toast.success(`Tag added to ${selected.size} customer(s).`);
       utils.customers.list.invalidate();
       setShowTagPopover(false);
       setTagInput('');
     },
-    onError: (e) => toast({ title: 'Failed', description: e.message, variant: 'destructive' }),
+    onError: (e) => toast.error(e.message),
   });
 
   const bulkDeleteMutation = trpc.customers.bulkDelete.useMutation({
     onSuccess: (res) => {
-      toast({
-        title: `Deleted ${res.deleted.length} customer(s)`,
-        description: res.skipped.length > 0 ? `${res.skipped.length} skipped (have linked jobs/estimates).` : undefined,
-      });
+      const msg = res.skipped.length > 0 ? `Deleted ${res.deleted.length} — ${res.skipped.length} skipped (have linked jobs/estimates).` : `Deleted ${res.deleted.length} customer(s).`;
+      toast.success(msg);
       utils.customers.listWithOpportunities.invalidate();
       setSelected(new Set());
     },
-    onError: (e) => toast({ title: 'Delete failed', description: e.message, variant: 'destructive' }),
+    onError: (e) => toast.error(e.message),
   });
 
   const exportCsvMutation = trpc.customers.exportCsv.useMutation({
@@ -195,15 +193,15 @@ export default function CustomersListPage() {
       a.download = `customers-${new Date().toISOString().slice(0, 10)}.csv`;
       a.click();
       URL.revokeObjectURL(url);
-      toast({ title: 'CSV exported' });
+      toast.success('CSV exported');
     },
-    onError: (e) => toast({ title: 'Export failed', description: e.message, variant: 'destructive' }),
+    onError: (e) => toast.error(e.message),
   });
 
   const handleBulkMerge = () => {
     const ids = Array.from(selected);
     if (ids.length !== 2) {
-      toast({ title: 'Select exactly 2 customers to merge', variant: 'destructive' });
+      toast.error('Select exactly 2 customers to merge');
       return;
     }
     const a = customers.find(c => c.id === ids[0]);

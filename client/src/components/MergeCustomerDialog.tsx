@@ -47,12 +47,12 @@ export default function MergeCustomerDialog({ open, onOpenChange, customerA, cus
 
   const mergeMutation = trpc.customers.merge.useMutation({
     onSuccess: () => {
-      toast({ title: 'Customers merged', description: 'The duplicate record has been removed.' });
+      toast.success('Customers merged — duplicate record removed.');
       onMerged();
       onOpenChange(false);
     },
     onError: (err) => {
-      toast({ title: 'Merge failed', description: err.message, variant: 'destructive' });
+      toast.error(err.message);
     },
   });
 
