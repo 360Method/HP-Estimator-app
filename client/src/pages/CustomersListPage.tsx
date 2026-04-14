@@ -110,7 +110,7 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function CustomersListPage() {
-  const { state, addCustomer, setActiveCustomer, updateCustomer: updateCtxCustomer } = useEstimator();
+  const { state, addCustomer, setActiveCustomer, updateCustomer: updateCtxCustomer, removeCustomer } = useEstimator();
   const { customers } = state;
   const utils = trpc.useUtils();
 
@@ -461,7 +461,7 @@ export default function CustomersListPage() {
 
       {/* ── Duplicates banner ── */}
       <div className="px-6 pt-3">
-        <DuplicatesPanel onMerged={(sourceId, targetId) => updateCtxCustomer(sourceId, { mergedIntoId: targetId } as any)} />
+        <DuplicatesPanel onMerged={(sourceId) => removeCustomer(sourceId)} />
       </div>
 
       {/* ── Table ── */}
@@ -702,8 +702,8 @@ export default function CustomersListPage() {
           onOpenChange={v => { if (!v) setMergeTarget(null); }}
           customerA={mergeTarget.a}
           customerB={mergeTarget.b}
-          onMerged={(sourceId, targetId) => {
-            updateCtxCustomer(sourceId, { mergedIntoId: targetId } as any);
+          onMerged={(sourceId) => {
+            removeCustomer(sourceId);
             setSelected(new Set());
             setMergeTarget(null);
           }}

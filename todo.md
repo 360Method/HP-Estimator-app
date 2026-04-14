@@ -1394,3 +1394,16 @@
 - [x] useDbSync loads invoices + schedule events from DB on login (mergeDbInvoices, mergeDbScheduleEvents)
 - [x] addScheduleEvent accepts optional pre-generated ID for DB alignment
 - [x] Write vitest tests for invoices + schedule DB helpers (8 tests passing)
+
+## Customer DB Sync + Merge Fix
+- [x] Debounced auto-save (1.5s) for CustomerSection profile field changes (tags, leadSource, notes, notifications, taxCode)
+- [x] isSilentSaveRef: auto-saves suppress toast; manual "Sync to DB" shows "Customer saved"
+- [x] listCustomers DB helper now filters mergedIntoId IS NULL (merged customers no longer reappear after reload)
+- [x] REMOVE_CUSTOMER action + reducer added to EstimatorContext (removes from list + clears activeCustomerId)
+- [x] removeCustomer callback exposed on context
+- [x] onMerged callbacks in CustomerSection, DuplicatesPanel, CustomersListPage now call removeCustomer(sourceId) for instant list removal
+
+## Patch: 360 Checkout Fixes
+- [x] Fix STRIPE_PRICE env var key pattern: STRIPE_PRICE_{TIER}_{CADENCE} (was STRIPE_PRICE_360_{TIER}_{CADENCE})
+- [x] Make threeSixty.checkout.createSession publicProcedure (unauthenticated 360.handypioneers.com visitors)
+- [x] ctx.user?.email and ctx.user?.id safely accessed with optional chaining for public procedure

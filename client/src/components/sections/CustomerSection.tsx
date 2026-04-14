@@ -563,6 +563,7 @@ export default function CustomerSection() {
     setActiveOpportunity, setSection, setInboxCustomer, setInboxConversation,
     addCustomerAddress, updateCustomerAddress, removeCustomerAddress, setPrimaryAddress, setBillingAddress,
     updateCustomer: updateCustomerLocal,
+    removeCustomer,
   } = useEstimator();
   const { jobInfo, customerProfile, activityFeed, activeCustomerTab, opportunities, activePipelineArea, activeCustomerId, customers } = state;
   const activeCustomer = customers.find(c => c.id === activeCustomerId);
@@ -641,6 +642,8 @@ export default function CustomerSection() {
     setCustomerProfile({ tags: customerProfile.tags.filter(t => t !== tag) });
   };
 
+  // isSilentSaveRef: true = auto-save (no toast), false = manual save (shows toast)
+  const isSilentSaveRef = useRef(false);
   const syncToDbMutation = trpc.customers.update.useMutation({
     onSuccess: (updated) => {
       if (updated && activeCustomerId) {
@@ -665,12 +668,14 @@ export default function CustomerSection() {
           sendMarketingOptIn: updated.sendMarketingOptIn,
         });
       }
-      toast.success('Customer synced to database');
+      if (!isSilentSaveRef.current) toast.success('Customer saved');
+      isSilentSaveRef.current = false;
     },
-    onError: (err) => toast.error(`Sync failed: ${err.message}`),
+    onError: (err) => { isSilentSaveRef.current = false; toast.error(`Save failed: ${err.message}`); },
   });
   const handleSyncToDb = () => {
     if (!activeCustomerId || !activeCustomer) { toast.error('No active customer'); return; }
+    isSilentSaveRef.current = false;
     syncToDbMutation.mutate({
       id: activeCustomerId,
       firstName: activeCustomer.firstName || jobInfo.client.split(' ')[0] || '',
@@ -690,6 +695,52 @@ export default function CustomerSection() {
       sendMarketingOptIn: activeCustomer.sendMarketingOptIn ?? customerProfile.emailMarketingConsent,
     });
   };
+
+  // ── Auto-save profile changes to DB (debounced 1.5s) ─────────────────────
+  // Watches: tags, leadSource, customerNotes, sendNotifications, sendMarketingOptIn, defaultTaxCode
+  // These are the fields that setCustomerProfile updates but don't have their own save button.
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!activeCustomerId || !activeCustomer) return;
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      isSilentSaveRef.current = true;
+      syncToDbMutation.mutate({
+        id: activeCustomerId,
+        firstName: activeCustomer.firstName || jobInfo.client.split(' ')[0] || '',
+        lastName: activeCustomer.lastName || jobInfo.client.split(' ').slice(1).join(' ') || '',
+        displayName: activeCustomer.displayName || jobInfo.client || '',
+        company: activeCustomer.company || jobInfo.companyName || '',
+        mobilePhone: activeCustomer.mobilePhone || jobInfo.phone || '',
+        email: activeCustomer.email || jobInfo.email || '',
+        street: activeCustomer.street || jobInfo.address || '',
+        city: activeCustomer.city || jobInfo.city || '',
+        state: activeCustomer.state || jobInfo.state || '',
+        zip: activeCustomer.zip || jobInfo.zip || '',
+        tags: activeCustomer.tags ?? customerProfile.tags ?? [],
+        leadSource: (activeCustomer.leadSource || customerProfile.leadSource || '') as any,
+        customerNotes: activeCustomer.customerNotes || customerProfile.privateNotes || '',
+        sendNotifications: activeCustomer.sendNotifications ?? customerProfile.notificationsEnabled,
+        sendMarketingOptIn: activeCustomer.sendMarketingOptIn ?? customerProfile.emailMarketingConsent,
+        defaultTaxCode: customerProfile.defaultTaxCode,
+      });
+    }, 1500);
+    return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    activeCustomerId,
+    activeCustomer?.tags,
+    activeCustomer?.leadSource,
+    activeCustomer?.customerNotes,
+    activeCustomer?.sendNotifications,
+    activeCustomer?.sendMarketingOptIn,
+    customerProfile.tags,
+    customerProfile.leadSource,
+    customerProfile.privateNotes,
+    customerProfile.notificationsEnabled,
+    customerProfile.emailMarketingConsent,
+    customerProfile.defaultTaxCode,
+  ]);
   // ── Address DB mutations ──────────────────────────────────────────────────
   const addAddressMutation = trpc.customers.addAddress.useMutation({
     onError: (err) => toast.error(`Failed to add address: ${err.message}`),
@@ -1761,7 +1812,7 @@ export default function CustomerSection() {
         allCustomers={customers.filter(c => c.id !== activeCustomerId && !(c as any).mergedIntoId)}
         onClose={() => setShowMergeDialog(false)}
         onMerged={(sourceId, targetId) => {
-          updateCustomerLocal(sourceId, { mergedIntoId: targetId } as any);
+          removeCustomer(sourceId);
           setShowMergeDialog(false);
         }}
       />

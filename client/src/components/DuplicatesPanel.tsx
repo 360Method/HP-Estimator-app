@@ -29,7 +29,7 @@ const REASON_LABEL: Record<string, string> = {
 };
 
 export default function DuplicatesPanel({ onMerged }: Props) {
-  const { updateCustomer } = useEstimator();
+  const { removeCustomer } = useEstimator();
   const [expanded, setExpanded] = useState(false);
   const [mergeTarget, setMergeTarget] = useState<{ a: Customer; b: Customer } | null>(null);
 
@@ -103,7 +103,7 @@ export default function DuplicatesPanel({ onMerged }: Props) {
           customerA={mergeTarget.a}
           customerB={mergeTarget.b}
           onMerged={(sourceId, targetId) => {
-            updateCustomer(sourceId, { mergedIntoId: targetId } as any);
+            removeCustomer(sourceId);
             refetch();
             onMerged(sourceId, targetId);
           }}

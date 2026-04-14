@@ -4,7 +4,7 @@
  */
 
 import { z } from "zod";
-import { protectedProcedure, router } from "../_core/trpc";
+import { protectedProcedure, publicProcedure, router } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "../db";
 import {
@@ -484,7 +484,7 @@ const scansRouter = router({
  * These are set via environment variables after creating products in Stripe dashboard.
  */
 function getStripePriceId(tier: MemberTier, cadence: BillingCadence): string {
-  const key = `STRIPE_PRICE_360_${tier.toUpperCase()}_${cadence.toUpperCase()}`;
+  const key = `STRIPE_PRICE_${tier.toUpperCase()}_${cadence.toUpperCase()}`;
   const priceId = process.env[key];
   if (!priceId) {
     throw new TRPCError({
@@ -501,7 +501,7 @@ const checkoutRouter = router({
    * Returns the Stripe-hosted checkout URL.
    * The webhook (checkout.session.completed) handles DB record creation.
    */
-  createSession: protectedProcedure
+  createSession: publicProcedure
     .input(
       z.object({
         tier: z.enum(["bronze", "silver", "gold"]),
@@ -528,7 +528,7 @@ const checkoutRouter = router({
       const session = await stripe.checkout.sessions.create({
         mode: "subscription",
         line_items: [{ price: priceId, quantity: 1 }],
-        customer_email: input.customerEmail ?? ctx.user.email ?? undefined,
+        customer_email: input.customerEmail ?? (ctx as any).user?.email ?? undefined,
         allow_promotion_codes: true,
         success_url: `${input.origin}/360/confirmation?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${input.origin}/360/checkout?tier=${input.tier}&cadence=${input.cadence}&cancelled=1`,
@@ -537,7 +537,7 @@ const checkoutRouter = router({
           cadence: input.cadence,
           hpCustomerId: input.hpCustomerId ?? "",
           propertyAddressId: input.propertyAddressId?.toString() ?? "",
-          enrolledByUserId: ctx.user.id.toString(),
+          enrolledByUserId: (ctx as any).user?.id?.toString() ?? "",
           customerName: input.customerName ?? "",
           customerEmail: input.customerEmail ?? "",
         },

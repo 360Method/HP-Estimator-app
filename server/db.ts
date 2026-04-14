@@ -316,20 +316,24 @@ export async function removeAdminAllowlistEmail(email: string) {
 export async function listCustomers(search?: string, limit = 200, offset = 0): Promise<DbCustomer[]> {
   const db = await getDb();
   if (!db) return [];
+  const notMerged = sql`${customers.mergedIntoId} IS NULL`;
   const q = db.select().from(customers);
   if (search) {
     const s = `%${search}%`;
     return q.where(
-      or(
-        like(customers.firstName, s),
-        like(customers.lastName, s),
-        like(customers.email, s),
-        like(customers.mobilePhone, s),
-        like(customers.company, s),
+      and(
+        notMerged,
+        or(
+          like(customers.firstName, s),
+          like(customers.lastName, s),
+          like(customers.email, s),
+          like(customers.mobilePhone, s),
+          like(customers.company, s),
+        )
       )
     ).orderBy(asc(customers.lastName)).limit(limit).offset(offset);
   }
-  return q.orderBy(asc(customers.lastName)).limit(limit).offset(offset);
+  return q.where(notMerged).orderBy(asc(customers.lastName)).limit(limit).offset(offset);
 }
 
 export async function getCustomerById(id: string): Promise<DbCustomer | null> {

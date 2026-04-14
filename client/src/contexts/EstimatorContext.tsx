@@ -201,6 +201,7 @@ type Action =
   | { type: 'SET_ACTIVE_OPPORTUNITY'; payload: string | null }
   | { type: 'ADD_CUSTOMER'; payload: Customer }
   | { type: 'UPDATE_CUSTOMER'; id: string; payload: Partial<Customer> }
+  | { type: 'REMOVE_CUSTOMER'; id: string }
   | { type: 'SET_ACTIVE_CUSTOMER'; payload: string | null }
   | { type: 'ADD_CUSTOMER_ADDRESS'; customerId: string; address: CustomerAddress }
   | { type: 'UPDATE_CUSTOMER_ADDRESS'; customerId: string; addressId: string; payload: Partial<CustomerAddress> }
@@ -655,6 +656,13 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
         customers: state.customers.map(c =>
           c.id === action.id ? { ...c, ...action.payload } : c
         ),
+      };
+
+    case 'REMOVE_CUSTOMER':
+      return {
+        ...state,
+        customers: state.customers.filter(c => c.id !== action.id),
+        activeCustomerId: state.activeCustomerId === action.id ? null : state.activeCustomerId,
       };
 
     case 'ADD_CUSTOMER_ADDRESS':
@@ -1792,6 +1800,7 @@ interface EstimatorContextValue {
   mergeDbInvoices: (invoices: Invoice[]) => void;
   mergeDbScheduleEvents: (events: ScheduleEvent[]) => void;
   updateCustomer: (id: string, payload: Partial<Customer>) => void;
+  removeCustomer: (id: string) => void;
   setActiveCustomer: (id: string | null) => void;
   addCustomerAddress: (customerId: string, address: CustomerAddress) => void;
   updateCustomerAddress: (customerId: string, addressId: string, payload: Partial<CustomerAddress>) => void;
@@ -2103,6 +2112,10 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'UPDATE_CUSTOMER', id, payload });
   }, []);
 
+  const removeCustomer = useCallback((id: string) => {
+    dispatch({ type: 'REMOVE_CUSTOMER', id });
+  }, []);
+
   const addCustomerAddress = useCallback((customerId: string, address: CustomerAddress) => {
     dispatch({ type: 'ADD_CUSTOMER_ADDRESS', customerId, address });
   }, []);
@@ -2290,7 +2303,7 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
       setCustomerProfile, addActivityEvent, setCustomerTab,
       convertLeadToEstimate, convertEstimateToJob, archiveJob,
       setActiveOpportunity,
-      addCustomer, mergeDbCustomers, mergeDbInvoices, mergeDbScheduleEvents, updateCustomer, setActiveCustomer,
+      addCustomer, mergeDbCustomers, mergeDbInvoices, mergeDbScheduleEvents, updateCustomer, removeCustomer, setActiveCustomer,
       addCustomerAddress, updateCustomerAddress, removeCustomerAddress, setPrimaryAddress, setBillingAddress,
       navigateToTopLevel,
       reset,
