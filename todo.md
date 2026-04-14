@@ -1200,7 +1200,7 @@
 - [ ] PortalReferral page: code display, copy button, referral count
 
 ### Phase 11 — Pro: customer save-to-DB + tests + checkpoint
-- [ ] Wire CustomerSection save button to trpc.customers.update mutation
+- [x] Wire CustomerSection save button to trpc.customers.update mutation
 - [x] Write vitest tests for all new procedures
 - [x] Save final checkpoint
 

@@ -1583,7 +1583,7 @@ export default function CustomerSection() {
                   title="Save current customer data to the database"
                 >
                   <Save size={13} />
-                  <span className="hidden sm:inline">{syncToDbMutation.isPending ? 'Saving…' : 'Sync to DB'}</span>
+                  <span className="hidden sm:inline">{syncToDbMutation.isPending ? 'Saving…' : 'Save'}</span>
                 </button>
               )}
             </div>
