@@ -5,6 +5,7 @@
 import { useState } from 'react';
 import { trpc } from '@/lib/trpc';
 import { Customer } from '@/lib/types';
+import { useEstimator } from '@/contexts/EstimatorContext';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { AlertTriangle, ChevronDown, ChevronUp, GitMerge } from 'lucide-react';
@@ -16,7 +17,7 @@ interface DuplicateGroup {
 }
 
 interface Props {
-  onMerged: () => void;
+  onMerged: (sourceId: string, targetId: string) => void;
 }
 
 const REASON_LABEL: Record<string, string> = {
@@ -26,6 +27,7 @@ const REASON_LABEL: Record<string, string> = {
 };
 
 export default function DuplicatesPanel({ onMerged }: Props) {
+  const { updateCustomer } = useEstimator();
   const [expanded, setExpanded] = useState(false);
   const [mergeTarget, setMergeTarget] = useState<{ a: Customer; b: Customer } | null>(null);
 
@@ -98,9 +100,10 @@ export default function DuplicatesPanel({ onMerged }: Props) {
           onOpenChange={(v) => { if (!v) setMergeTarget(null); }}
           customerA={mergeTarget.a}
           customerB={mergeTarget.b}
-          onMerged={() => {
+          onMerged={(sourceId, targetId) => {
+            updateCustomer(sourceId, { mergedIntoId: targetId } as any);
             refetch();
-            onMerged();
+            onMerged(sourceId, targetId);
           }}
         />
       )}

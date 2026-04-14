@@ -24,7 +24,7 @@ interface Props {
   onOpenChange: (v: boolean) => void;
   customerA: Customer;
   customerB: Customer;
-  onMerged: () => void;
+  onMerged: (sourceId: string, targetId: string) => void;
 }
 
 function Field({ label, a, b, keepA }: { label: string; a: string; b: string; keepA: boolean }) {
@@ -48,7 +48,7 @@ export default function MergeCustomerDialog({ open, onOpenChange, customerA, cus
   const mergeMutation = trpc.customers.merge.useMutation({
     onSuccess: () => {
       toast.success('Customers merged — duplicate record removed.');
-      onMerged();
+      onMerged(sourceId, targetId);
       onOpenChange(false);
     },
     onError: (err) => {

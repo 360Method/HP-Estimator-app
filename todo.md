@@ -1283,3 +1283,9 @@
 - [x] Slide-over panel on customer row hover (Eye icon)
 - [x] Panel shows: contact info, address list, open opps count, outstanding balance
 - [x] Quick-action buttons: Open Full Profile, New Lead
+
+## Bug: Merge customers still shows duplicates after merge
+- [ ] Fix: after merge, source customer still appears in list (mergedIntoId filter not working)
+- [ ] Fix: mergeCustomers DB helper must actually set mergedIntoId on source record
+- [ ] Fix: CustomersListPage filter must exclude customers with mergedIntoId set
+- [ ] Fix: MergeCustomerDialog onMerged callback must trigger local state refresh

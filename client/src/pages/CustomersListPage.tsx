@@ -450,7 +450,7 @@ export default function CustomersListPage() {
       <div className="max-w-6xl mx-auto px-6 py-4">
 
         {/* Duplicates panel */}
-        <DuplicatesPanel onMerged={() => utils.customers.listWithOpportunities.invalidate()} />
+        <DuplicatesPanel onMerged={(sourceId, targetId) => updateCtxCustomer(sourceId, { mergedIntoId: targetId } as any)} />
 
         {customers.filter(c => !(c as any).mergedIntoId).length === 0 ? (
           <div className="text-center py-20 border-2 border-dashed border-border rounded-xl">
@@ -707,8 +707,9 @@ export default function CustomersListPage() {
           onOpenChange={v => { if (!v) setMergeTarget(null); }}
           customerA={mergeTarget.a}
           customerB={mergeTarget.b}
-          onMerged={() => {
-            utils.customers.listWithOpportunities.invalidate();
+          onMerged={(sourceId, targetId) => {
+            // Immediately hide the merged-away record in local state
+            updateCtxCustomer(sourceId, { mergedIntoId: targetId } as any);
             setSelected(new Set());
             setMergeTarget(null);
           }}
