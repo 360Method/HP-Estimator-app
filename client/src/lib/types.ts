@@ -458,6 +458,7 @@ export interface EstimatorState {
   // Multi-customer list
   customers: Customer[];
   activeCustomerId: string | null;  // which customer is currently open
+  customerNavSource: 'list' | 'search' | 'new' | 'direct' | null; // how we navigated to this customer
   // Invoices (working set for active customer)
   invoices: Invoice[];
   // Invoice counter for sequential numbering

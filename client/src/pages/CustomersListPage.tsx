@@ -532,7 +532,7 @@ export default function CustomersListPage() {
                     <tr
                       key={c.id}
                       className={`border-b border-border/50 hover:bg-muted/30 transition-colors cursor-pointer ${isSelected ? 'bg-primary/5' : ''}`}
-                      onClick={() => setActiveCustomer(c.id)}
+                      onClick={() => setActiveCustomer(c.id, 'list')}
                     >
                       <td className="py-2.5 pr-2" onClick={e => { e.stopPropagation(); toggleSelect(c.id); }}>
                         <Checkbox checked={isSelected} onCheckedChange={() => toggleSelect(c.id)} />

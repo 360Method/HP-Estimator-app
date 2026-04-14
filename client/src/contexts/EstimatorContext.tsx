@@ -78,6 +78,7 @@ const initialState: EstimatorState = {
   activeOpportunityId: null,
   customers: [] as Customer[],
   activeCustomerId: null,
+  customerNavSource: null,
   invoices: [],
   invoiceCounter: 1,
   scheduleEvents: [],
@@ -202,7 +203,7 @@ type Action =
   | { type: 'ADD_CUSTOMER'; payload: Customer }
   | { type: 'UPDATE_CUSTOMER'; id: string; payload: Partial<Customer> }
   | { type: 'REMOVE_CUSTOMER'; id: string }
-  | { type: 'SET_ACTIVE_CUSTOMER'; payload: string | null }
+  | { type: 'SET_ACTIVE_CUSTOMER'; payload: string | null; source?: 'list' | 'search' | 'new' | 'direct' }
   | { type: 'ADD_CUSTOMER_ADDRESS'; customerId: string; address: CustomerAddress }
   | { type: 'UPDATE_CUSTOMER_ADDRESS'; customerId: string; addressId: string; payload: Partial<CustomerAddress> }
   | { type: 'REMOVE_CUSTOMER_ADDRESS'; customerId: string; addressId: string }
@@ -881,6 +882,7 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
           activeCustomerId: null,
           activeSection: nextSection,
           activeOpportunityId: null,
+          customerNavSource: null,
         };
       }
       // ── Flush current working opportunities (with snapshots) back to the outgoing customer ──
@@ -923,6 +925,7 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
           activeCustomerId: action.payload,
           activeSection: 'customer',
           activeOpportunityId: null,
+          customerNavSource: action.source ?? 'direct',
         };
       }
       // Load customer data into working state
@@ -966,6 +969,7 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
         customerProfile: loadedProfile,
         activityFeed: customer.activityFeed || [],
         opportunities: customer.opportunities || [],
+        customerNavSource: action.source ?? 'direct',
       };
     }
 
@@ -1801,7 +1805,7 @@ interface EstimatorContextValue {
   mergeDbScheduleEvents: (events: ScheduleEvent[]) => void;
   updateCustomer: (id: string, payload: Partial<Customer>) => void;
   removeCustomer: (id: string) => void;
-  setActiveCustomer: (id: string | null) => void;
+  setActiveCustomer: (id: string | null, source?: 'list' | 'search' | 'new' | 'direct') => void;
   addCustomerAddress: (customerId: string, address: CustomerAddress) => void;
   updateCustomerAddress: (customerId: string, addressId: string, payload: Partial<CustomerAddress>) => void;
   removeCustomerAddress: (customerId: string, addressId: string) => void;
@@ -2135,8 +2139,8 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'SET_BILLING_ADDRESS', customerId, addressId });
   }, []);
 
-  const setActiveCustomer = useCallback((id: string | null) => {
-    dispatch({ type: 'SET_ACTIVE_CUSTOMER', payload: id });
+  const setActiveCustomer = useCallback((id: string | null, source?: 'list' | 'search' | 'new' | 'direct') => {
+    dispatch({ type: 'SET_ACTIVE_CUSTOMER', payload: id, source });
   }, []);
 
   const navigateToTopLevel = useCallback((section: AppSection) => {

@@ -1438,3 +1438,6 @@
 - [x] Deep-link from CommunicationTab via inboxCustomerId in context
 - [x] VoiceCallPanel preserved in thread header
 - [x] Date separator labels (Today / Yesterday / full date) between message groups
+
+## MetricsBar Back Button Fix
+- [x] Back button in profile-nav should only show when user navigated into customer from Customers list (not on default landing state)
