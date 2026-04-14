@@ -130,10 +130,10 @@ export const TIER_DEFINITIONS: Record<MemberTier, TierDefinition> = {
       { ceilingCents: Infinity, rate: 0.00 }, // 0% above $10,000
     ],
     stripePriceIds: {
-      monthly: process.env.STRIPE_PRICE_BRONZE_MONTHLY ?? "",
-      quarterly: process.env.STRIPE_PRICE_BRONZE_QUARTERLY ?? "",
-      annual: process.env.STRIPE_PRICE_BRONZE_ANNUAL ?? "",
-    },
+      monthly: "",
+      quarterly: "",
+      annual: "",
+    },  // IDs resolved server-side via STRIPE_PRICE_360_BRONZE_* env vars
   },
 
   silver: {
@@ -164,10 +164,10 @@ export const TIER_DEFINITIONS: Record<MemberTier, TierDefinition> = {
       { ceilingCents: Infinity, rate: 0.02 }, // 2% above $10,000
     ],
     stripePriceIds: {
-      monthly: process.env.STRIPE_PRICE_SILVER_MONTHLY ?? "",
-      quarterly: process.env.STRIPE_PRICE_SILVER_QUARTERLY ?? "",
-      annual: process.env.STRIPE_PRICE_SILVER_ANNUAL ?? "",
-    },
+      monthly: "",
+      quarterly: "",
+      annual: "",
+    },  // IDs resolved server-side via STRIPE_PRICE_360_SILVER_* env vars
   },
 
   gold: {
@@ -199,10 +199,10 @@ export const TIER_DEFINITIONS: Record<MemberTier, TierDefinition> = {
       { ceilingCents: Infinity, rate: 0.03 }, // 3% above $10,000
     ],
     stripePriceIds: {
-      monthly: process.env.STRIPE_PRICE_GOLD_MONTHLY ?? "",
-      quarterly: process.env.STRIPE_PRICE_GOLD_QUARTERLY ?? "",
-      annual: process.env.STRIPE_PRICE_GOLD_ANNUAL ?? "",
-    },
+      monthly: "",
+      quarterly: "",
+      annual: "",
+    },  // IDs resolved server-side via STRIPE_PRICE_360_GOLD_* env vars
   },
 };
 
