@@ -48,6 +48,13 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function parseTags(raw: unknown): string[] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw as string[];
+  try { const v = JSON.parse(raw as string); return Array.isArray(v) ? v : []; } catch { return []; }
+}
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 const LEAD_SOURCES = ['Google', 'Referral', 'Facebook', 'Instagram', 'Nextdoor', 'Yelp', 'Direct Mail', 'Repeat Customer', 'Other'];
 
@@ -189,8 +196,7 @@ export default function CustomersListPage() {
   const allTags = useMemo(() => {
     const set = new Set<string>();
     customers.forEach(c => {
-      const tags: string[] = c.tags ? JSON.parse(c.tags as unknown as string) : [];
-      tags.forEach(t => set.add(t));
+      parseTags(c.tags).forEach(t => set.add(t));
     });
     return Array.from(set).sort();
   }, [customers]);
@@ -217,7 +223,7 @@ export default function CustomersListPage() {
     if (filterCity) list = list.filter(c => (c.city ?? '').toLowerCase().includes(filterCity.toLowerCase()));
     if (filterTags.length) {
       list = list.filter(c => {
-        const tags: string[] = c.tags ? JSON.parse(c.tags as unknown as string) : [];
+        const tags = parseTags(c.tags);
         return filterTags.every(t => tags.includes(t));
       });
     }
@@ -520,7 +526,7 @@ export default function CustomersListPage() {
                 filtered.map(c => {
                   const displayName = c.displayName || `${c.firstName ?? ''} ${c.lastName ?? ''}`.trim() || '—';
                   const address = [c.street, c.city, c.state, c.zip].filter(Boolean).join(', ') || '—';
-                  const tags: string[] = c.tags ? JSON.parse(c.tags as unknown as string) : [];
+                  const tags = parseTags(c.tags);
                   const isSelected = selected.has(c.id);
                   return (
                     <tr
