@@ -537,13 +537,68 @@ export async function getOnlineRequestById(id: number) {
 // ─── CUSTOMER DEDUPLICATION & MERGE HELPERS ───────────────────────────────────
 
 export interface DuplicateGroup {
-  reason: 'email' | 'phone' | 'name_zip';
+  reason: 'email' | 'phone' | 'name_zip' | 'name_address' | 'address';
   customers: DbCustomer[];
 }
 
+// ─── Fuzzy helpers ────────────────────────────────────────────────────────────
+function normalizePhone(p: string | null | undefined): string {
+  return (p ?? '').replace(/\D/g, '').replace(/^1/, '').slice(-10);
+}
+function normalizeName(s: string | null | undefined): string {
+  return (s ?? '').toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+}
+function normalizeStreet(s: string | null | undefined): string {
+  return (s ?? '').toLowerCase()
+    .replace(/\bstreet\b/g, 'st').replace(/\bavenue\b/g, 'ave')
+    .replace(/\bdrive\b/g, 'dr').replace(/\broad\b/g, 'rd')
+    .replace(/\bboulevard\b/g, 'blvd').replace(/\blane\b/g, 'ln')
+    .replace(/[^a-z0-9 ]/g, '').trim();
+}
+/** Levenshtein distance (capped at maxDist for performance) */
+function levenshtein(a: string, b: string, maxDist = 4): number {
+  if (a === b) return 0;
+  if (Math.abs(a.length - b.length) > maxDist) return maxDist + 1;
+  const m = a.length, n = b.length;
+  const dp: number[] = Array.from({ length: n + 1 }, (_, i) => i);
+  for (let i = 1; i <= m; i++) {
+    let prev = dp[0]; dp[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const tmp = dp[j];
+      dp[j] = a[i-1] === b[j-1] ? prev : 1 + Math.min(prev, dp[j], dp[j-1]);
+      prev = tmp;
+    }
+  }
+  return dp[n];
+}
+function nameSimilar(a: DbCustomer, b: DbCustomer): boolean {
+  // Full display name comparison
+  const na = normalizeName(a.displayName || `${a.firstName} ${a.lastName}`);
+  const nb = normalizeName(b.displayName || `${b.firstName} ${b.lastName}`);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  // Allow up to 2 edits for short names, 3 for longer
+  const maxDist = Math.min(3, Math.floor(Math.max(na.length, nb.length) / 5));
+  if (levenshtein(na, nb, maxDist) <= maxDist) return true;
+  // Last name exact + first name similar
+  const la = normalizeName(a.lastName), lb = normalizeName(b.lastName);
+  const fa = normalizeName(a.firstName), fb = normalizeName(b.firstName);
+  if (la && lb && la === lb && fa && fb && levenshtein(fa, fb, 2) <= 2) return true;
+  return false;
+}
+function addressSimilar(a: DbCustomer, b: DbCustomer): boolean {
+  const sa = normalizeStreet(a.street), sb = normalizeStreet(b.street);
+  const za = (a.zip ?? '').trim(), zb = (b.zip ?? '').trim();
+  const ca = (a.city ?? '').toLowerCase().trim(), cb = (b.city ?? '').toLowerCase().trim();
+  if (!sa || !sb) return false;
+  const streetMatch = sa === sb || levenshtein(sa, sb, 3) <= 3;
+  const locMatch = (za && zb && za === zb) || (ca && cb && ca === cb);
+  return streetMatch && locMatch;
+}
+
 /**
- * Detect likely duplicate customers.
- * Groups by: same non-empty email, same non-empty mobilePhone, or same lastName+zip.
+ * Detect likely duplicate customers using fuzzy matching.
+ * Scoring: exact email/phone = definite; fuzzy name + address/phone = probable.
  * Excludes already-merged records (mergedIntoId IS NOT NULL).
  */
 export async function detectDuplicates(): Promise<DuplicateGroup[]> {
@@ -551,55 +606,47 @@ export async function detectDuplicates(): Promise<DuplicateGroup[]> {
   if (!db) return [];
 
   const all = await db.select().from(customers)
-    .where(sql`${customers.mergedIntoId} IS NULL`)
-    .orderBy(asc(customers.lastName));
+    .where(sql`${customers.mergedIntoId} IS NULL`);
 
+  // Track which pairs have already been grouped to avoid duplicates
+  const pairedIds = new Set<string>();
   const groups: DuplicateGroup[] = [];
 
-  // Group by email
-  const byEmail = new Map<string, DbCustomer[]>();
-  for (const c of all) {
-    const key = c.email?.toLowerCase().trim();
-    if (!key) continue;
-    if (!byEmail.has(key)) byEmail.set(key, []);
-    byEmail.get(key)!.push(c);
-  }
-  for (const [, group] of byEmail) {
-    if (group.length > 1) groups.push({ reason: 'email', customers: group });
+  function pairKey(a: string, b: string) { return [a, b].sort().join('|'); }
+  function addGroup(reason: string, cs: DbCustomer[]) {
+    const key = pairKey(cs[0].id, cs[1].id);
+    if (pairedIds.has(key)) return;
+    pairedIds.add(key);
+    groups.push({ reason, customers: cs });
   }
 
-  // Group by mobilePhone
-  const byPhone = new Map<string, DbCustomer[]>();
-  for (const c of all) {
-    const key = c.mobilePhone?.replace(/\D/g, '');
-    if (!key || key.length < 7) continue;
-    if (!byPhone.has(key)) byPhone.set(key, []);
-    byPhone.get(key)!.push(c);
-  }
-  for (const [, group] of byPhone) {
-    if (group.length > 1) {
-      // Avoid double-reporting if already captured by email
-      const ids = new Set(group.map(c => c.id));
-      const alreadyReported = groups.some(g => g.customers.some(c => ids.has(c.id)));
-      if (!alreadyReported) groups.push({ reason: 'phone', customers: group });
-    }
-  }
+  for (let i = 0; i < all.length; i++) {
+    for (let j = i + 1; j < all.length; j++) {
+      const a = all[i], b = all[j];
 
-  // Group by lastName + zip
-  const byNameZip = new Map<string, DbCustomer[]>();
-  for (const c of all) {
-    const lastName = c.lastName?.toLowerCase().trim();
-    const zip = c.zip?.trim();
-    if (!lastName || !zip) continue;
-    const key = `${lastName}|${zip}`;
-    if (!byNameZip.has(key)) byNameZip.set(key, []);
-    byNameZip.get(key)!.push(c);
-  }
-  for (const [, group] of byNameZip) {
-    if (group.length > 1) {
-      const ids = new Set(group.map(c => c.id));
-      const alreadyReported = groups.some(g => g.customers.some(c => ids.has(c.id)));
-      if (!alreadyReported) groups.push({ reason: 'name_zip', customers: group });
+      // 1. Exact email match (non-empty)
+      const ea = a.email?.toLowerCase().trim(), eb = b.email?.toLowerCase().trim();
+      if (ea && eb && ea === eb) { addGroup('email', [a, b]); continue; }
+
+      // 2. Exact phone match (normalized to 10 digits)
+      const pa = normalizePhone(a.mobilePhone || a.homePhone || a.workPhone);
+      const pb = normalizePhone(b.mobilePhone || b.homePhone || b.workPhone);
+      if (pa.length >= 7 && pa === pb) { addGroup('phone', [a, b]); continue; }
+
+      // 3. Fuzzy name + (same phone OR same address OR same zip)
+      if (nameSimilar(a, b)) {
+        const sameZip = a.zip && b.zip && a.zip.trim() === b.zip.trim();
+        const samePhone = pa.length >= 7 && pa === pb;
+        if (sameZip || samePhone || addressSimilar(a, b)) {
+          addGroup('name_address', [a, b]); continue;
+        }
+      }
+
+      // 4. Same street address + same city/zip (different names — could be family)
+      if (addressSimilar(a, b)) {
+        const sameLastName = normalizeName(a.lastName) && normalizeName(a.lastName) === normalizeName(b.lastName);
+        if (sameLastName) { addGroup('address', [a, b]); continue; }
+      }
     }
   }
 

@@ -12,7 +12,7 @@ import { AlertTriangle, ChevronDown, ChevronUp, GitMerge } from 'lucide-react';
 import MergeCustomerDialog from './MergeCustomerDialog';
 
 interface DuplicateGroup {
-  reason: 'email' | 'phone' | 'name_zip';
+  reason: 'email' | 'phone' | 'name_zip' | 'name_address' | 'address';
   customers: Customer[];
 }
 
@@ -24,6 +24,8 @@ const REASON_LABEL: Record<string, string> = {
   email: 'Same email',
   phone: 'Same phone',
   name_zip: 'Same name + zip',
+  name_address: 'Similar name + address',
+  address: 'Same address + last name',
 };
 
 export default function DuplicatesPanel({ onMerged }: Props) {
