@@ -206,6 +206,7 @@ type Action =
   | { type: 'UPDATE_CUSTOMER_ADDRESS'; customerId: string; addressId: string; payload: Partial<CustomerAddress> }
   | { type: 'REMOVE_CUSTOMER_ADDRESS'; customerId: string; addressId: string }
   | { type: 'SET_PRIMARY_ADDRESS'; customerId: string; addressId: string }
+  | { type: 'SET_BILLING_ADDRESS'; customerId: string; addressId: string }
   // ── Job task actions ─────────────────────────────────────────
   | { type: 'ADD_JOB_TASK'; oppId: string; task: JobTask }
   | { type: 'UPDATE_JOB_TASK'; oppId: string; taskId: string; payload: Partial<JobTask> }
@@ -743,6 +744,19 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
             state: primary?.state ?? c.state,
             zip: primary?.zip ?? c.zip,
           };
+        }),
+      };
+
+    case 'SET_BILLING_ADDRESS':
+      return {
+        ...state,
+        customers: state.customers.map(c => {
+          if (c.id !== action.customerId) return c;
+          const newAddresses = (c.addresses ?? []).map(a => ({
+            ...a,
+            isBilling: a.id === action.addressId,
+          }));
+          return { ...c, addresses: newAddresses };
         }),
       };
 
@@ -1456,11 +1470,13 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
           .concat(jobOpp);
       }
 
-      // 6. Sync to customer record
+      // 6. Sync to customer record + increment lifetime value
+      const newLifetimeValue = (state.customerProfile.lifetimeValue || 0) + action.totalPrice;
+      const newProfile = { ...state.customerProfile, lifetimeValue: newLifetimeValue };
       const syncedCustomers = state.activeCustomerId
         ? state.customers.map(c =>
             c.id === state.activeCustomerId
-              ? { ...c, opportunities: updatedOpps, activityFeed: newFeed, invoices: updatedInvoices }
+              ? { ...c, opportunities: updatedOpps, activityFeed: newFeed, invoices: updatedInvoices, profile: newProfile, lifetimeValue: newLifetimeValue }
               : c
           )
         : state.customers;
@@ -1471,6 +1487,7 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
         activityFeed: newFeed,
         customers: syncedCustomers,
         scheduleEvents: newScheduleEvents,
+        customerProfile: newProfile,
         activePipelineArea: 'job',
         activeCustomerTab: 'jobs',
       };
@@ -1754,6 +1771,7 @@ interface EstimatorContextValue {
   updateCustomerAddress: (customerId: string, addressId: string, payload: Partial<CustomerAddress>) => void;
   removeCustomerAddress: (customerId: string, addressId: string) => void;
   setPrimaryAddress: (customerId: string, addressId: string) => void;
+  setBillingAddress: (customerId: string, addressId: string) => void;
   reset: () => void;
   navigateToTopLevel: (section: AppSection) => void;
   // Schedule
@@ -2066,6 +2084,9 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
   const setPrimaryAddress = useCallback((customerId: string, addressId: string) => {
     dispatch({ type: 'SET_PRIMARY_ADDRESS', customerId, addressId });
   }, []);
+  const setBillingAddress = useCallback((customerId: string, addressId: string) => {
+    dispatch({ type: 'SET_BILLING_ADDRESS', customerId, addressId });
+  }, []);
 
   const setActiveCustomer = useCallback((id: string | null) => {
     dispatch({ type: 'SET_ACTIVE_CUSTOMER', payload: id });
@@ -2236,7 +2257,7 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
       convertLeadToEstimate, convertEstimateToJob, archiveJob,
       setActiveOpportunity,
       addCustomer, mergeDbCustomers, updateCustomer, setActiveCustomer,
-      addCustomerAddress, updateCustomerAddress, removeCustomerAddress, setPrimaryAddress,
+      addCustomerAddress, updateCustomerAddress, removeCustomerAddress, setPrimaryAddress, setBillingAddress,
       navigateToTopLevel,
       reset,
       addScheduleEvent, updateScheduleEvent, removeScheduleEvent, updateOpportunitySchedule,

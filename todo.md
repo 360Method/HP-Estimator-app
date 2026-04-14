@@ -1310,3 +1310,10 @@
 - [ ] Add "Merge with another customer" button in CustomerSection profile header
 - [ ] Add "Merge" action in CustomersListPage row context menu (single-row, opens MergeCustomerDialog with customer picker)
 - [ ] Extend MergeCustomerDialog to support selecting merge target from a searchable customer picker
+
+## CustomerSection Improvements (visual edit session)
+- [x] Multiple email addresses in contact info (add/remove rows)
+- [x] Multiple phone numbers in contact info (add/remove rows)
+- [x] Billing address flag on customerAddresses (isBilling boolean)
+- [x] Show billing address in customer profile header sub-info line
+- [x] Lifetime value auto-updates when opportunities are marked won (APPROVE_ESTIMATE reducer)

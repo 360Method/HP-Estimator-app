@@ -50,6 +50,8 @@ const CustomerInput = z.object({
   sendNotifications: z.boolean().default(true),
   sendMarketingOptIn: z.boolean().default(false),
   defaultTaxCode: z.string().optional(),
+  additionalPhones: z.string().optional(), // JSON: [{label, number}]
+  additionalEmails: z.string().optional(), // JSON: [{label, address}]
 });
 
 export const customersRouter = router({
@@ -264,11 +266,35 @@ export const customersRouter = router({
       state: z.string(),
       zip: z.string(),
       isPrimary: z.boolean().default(false),
+      isBilling: z.boolean().default(false),
       propertyNotes: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
       const id = nanoid();
       return createCustomerAddress({ id, ...input });
+    }),
+
+  /** Set one address as primary (clears isPrimary on all others for this customer) */
+  setPrimaryAddress: protectedProcedure
+    .input(z.object({ customerId: z.string(), addressId: z.string() }))
+    .mutation(async ({ input }) => {
+      // Clear all primary flags for this customer then set the chosen one
+      const allAddresses = await listCustomerAddresses(input.customerId);
+      for (const addr of allAddresses) {
+        await updateCustomerAddress(addr.id, { isPrimary: addr.id === input.addressId });
+      }
+      return { success: true };
+    }),
+
+  /** Set one address as billing (clears isBilling on all others for this customer) */
+  setBillingAddress: protectedProcedure
+    .input(z.object({ customerId: z.string(), addressId: z.string() }))
+    .mutation(async ({ input }) => {
+      const allAddresses = await listCustomerAddresses(input.customerId);
+      for (const addr of allAddresses) {
+        await updateCustomerAddress(addr.id, { isBilling: addr.id === input.addressId });
+      }
+      return { success: true };
     }),
 
   /** Update an address */
@@ -282,6 +308,7 @@ export const customersRouter = router({
       state: z.string().optional(),
       zip: z.string().optional(),
       isPrimary: z.boolean().optional(),
+      isBilling: z.boolean().optional(),
       propertyNotes: z.string().optional(),
       lat: z.string().optional(),
       lng: z.string().optional(),

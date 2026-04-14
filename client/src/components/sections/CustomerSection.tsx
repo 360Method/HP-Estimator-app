@@ -561,7 +561,7 @@ export default function CustomerSection() {
     addOpportunity, updateOpportunity, removeOpportunity, setPipelineArea,
     convertLeadToEstimate, convertEstimateToJob, archiveJob,
     setActiveOpportunity, setSection, setInboxCustomer, setInboxConversation,
-    addCustomerAddress, updateCustomerAddress, removeCustomerAddress, setPrimaryAddress,
+    addCustomerAddress, updateCustomerAddress, removeCustomerAddress, setPrimaryAddress, setBillingAddress,
     updateCustomer: updateCustomerLocal,
   } = useEstimator();
   const { jobInfo, customerProfile, activityFeed, activeCustomerTab, opportunities, activePipelineArea, activeCustomerId, customers } = state;
@@ -573,11 +573,20 @@ export default function CustomerSection() {
   const [intakeModal, setIntakeModal] = useState<'lead' | 'estimate' | 'job' | null>(null);
   const [showDuplicateWarning, setShowDuplicateWarning] = useState<{ area: 'lead' | 'estimate' | 'job'; existing: string } | null>(null);
   // Local draft for contact info — prevents global dispatch on every keystroke
-  const [contactDraft, setContactDraft] = useState({ client: '', companyName: '', phone: '', email: '' });
+  const [contactDraft, setContactDraft] = useState<{
+    client: string; companyName: string; phone: string; email: string;
+    additionalPhones: { label: string; number: string }[];
+    additionalEmails: { label: string; address: string }[];
+  }>({ client: '', companyName: '', phone: '', email: '', additionalPhones: [], additionalEmails: [] });
   // Sync draft from global state when entering edit mode
   useEffect(() => {
     if (editingContact) {
-      setContactDraft({ client: jobInfo.client, companyName: jobInfo.companyName, phone: jobInfo.phone, email: jobInfo.email });
+      const safeParseArr = (v: unknown) => { try { const r = typeof v === 'string' ? JSON.parse(v) : v; return Array.isArray(r) ? r : []; } catch { return []; } };
+      setContactDraft({
+        client: jobInfo.client, companyName: jobInfo.companyName, phone: jobInfo.phone, email: jobInfo.email,
+        additionalPhones: safeParseArr((activeCustomer as any)?.additionalPhones),
+        additionalEmails: safeParseArr((activeCustomer as any)?.additionalEmails),
+      });
     }
   }, [editingContact]); // eslint-disable-line react-hooks/exhaustive-deps
   // Local draft for Job Details text fields — flush to global onBlur to avoid keystroke dispatches
@@ -681,6 +690,56 @@ export default function CustomerSection() {
       sendMarketingOptIn: activeCustomer.sendMarketingOptIn ?? customerProfile.emailMarketingConsent,
     });
   };
+  // ── Address DB mutations ──────────────────────────────────────────────────
+  const addAddressMutation = trpc.customers.addAddress.useMutation({
+    onError: (err) => toast.error(`Failed to add address: ${err.message}`),
+  });
+  const updateAddressMutation = trpc.customers.updateAddress.useMutation({
+    onError: (err) => toast.error(`Failed to update address: ${err.message}`),
+  });
+  const removeAddressMutation = trpc.customers.removeAddress.useMutation({
+    onError: (err) => toast.error(`Failed to remove address: ${err.message}`),
+  });
+  const setPrimaryAddressMutation = trpc.customers.setPrimaryAddress.useMutation({
+    onError: (err) => toast.error(`Failed to set primary: ${err.message}`),
+  });
+  const setBillingAddressMutation = trpc.customers.setBillingAddress.useMutation({
+    onError: (err) => toast.error(`Failed to set billing: ${err.message}`),
+  });
+
+  // Wrapped address helpers that update both context and DB
+  const handleAddAddress = (customerId: string, addr: Parameters<typeof addCustomerAddress>[1]) => {
+    addCustomerAddress(customerId, addr);
+    addAddressMutation.mutate({
+      customerId,
+      label: addr.label,
+      street: addr.street,
+      unit: addr.unit ?? '',
+      city: addr.city,
+      state: addr.state,
+      zip: addr.zip,
+      isPrimary: addr.isPrimary ?? false,
+      isBilling: (addr as any).isBilling ?? false,
+      propertyNotes: (addr as any).propertyNotes ?? '',
+    });
+  };
+  const handleUpdateAddress = (customerId: string, addrId: string, patch: Parameters<typeof updateCustomerAddress>[2]) => {
+    updateCustomerAddress(customerId, addrId, patch);
+    updateAddressMutation.mutate({ id: addrId, ...patch } as any);
+  };
+  const handleRemoveAddress = (customerId: string, addrId: string) => {
+    removeCustomerAddress(customerId, addrId);
+    removeAddressMutation.mutate({ id: addrId });
+  };
+  const handleSetPrimary = (customerId: string, addrId: string) => {
+    setPrimaryAddress(customerId, addrId);
+    setPrimaryAddressMutation.mutate({ customerId, addressId: addrId });
+  };
+  const handleSetBilling = (customerId: string, addrId: string) => {
+    setBillingAddress(customerId, addrId);
+    setBillingAddressMutation.mutate({ customerId, addressId: addrId });
+  };
+
   const inviteToPortalMutation = trpc.portal.inviteCustomerToPortal.useMutation({
     onSuccess: () => {
       setCustomerProfile({ portalInviteSent: true, portalInvitedAt: new Date().toISOString() });
@@ -785,22 +844,71 @@ export default function CustomerSection() {
                   <input type="text" value={contactDraft.companyName} onChange={e => setContactDraft(d => ({ ...d, companyName: e.target.value }))}
                     placeholder="Acme Corp" className="field-input w-full text-sm" />
                 </div>
+                {/* Primary phone + additional phones */}
                 <div>
-                  <label className="block text-[10px] text-muted-foreground mb-1">Phone</label>
+                  <label className="block text-[10px] text-muted-foreground mb-1">Primary Phone</label>
                   <input type="tel" value={contactDraft.phone} onChange={e => setContactDraft(d => ({ ...d, phone: e.target.value }))}
                     placeholder="(360) 555-0100" className="field-input w-full text-sm" />
                 </div>
+                {contactDraft.additionalPhones.map((p, i) => (
+                  <div key={i} className="flex gap-1">
+                    <input value={p.label} onChange={e => setContactDraft(d => ({ ...d, additionalPhones: d.additionalPhones.map((x, j) => j === i ? { ...x, label: e.target.value } : x) }))}
+                      placeholder="Label" className="field-input text-xs w-20 shrink-0" />
+                    <input type="tel" value={p.number} onChange={e => setContactDraft(d => ({ ...d, additionalPhones: d.additionalPhones.map((x, j) => j === i ? { ...x, number: e.target.value } : x) }))}
+                      placeholder="(360) 555-0101" className="field-input text-xs flex-1" />
+                    <button onClick={() => setContactDraft(d => ({ ...d, additionalPhones: d.additionalPhones.filter((_, j) => j !== i) }))} className="p-1 text-muted-foreground hover:text-destructive"><X size={12} /></button>
+                  </div>
+                ))}
+                <button onClick={() => setContactDraft(d => ({ ...d, additionalPhones: [...d.additionalPhones, { label: 'Alt', number: '' }] }))}
+                  className="text-[11px] text-primary hover:underline flex items-center gap-1"><Plus size={11} /> Add phone</button>
+
+                {/* Primary email + additional emails */}
                 <div>
-                  <label className="block text-[10px] text-muted-foreground mb-1">Email</label>
+                  <label className="block text-[10px] text-muted-foreground mb-1">Primary Email</label>
                   <input type="email" value={contactDraft.email} onChange={e => setContactDraft(d => ({ ...d, email: e.target.value }))}
                     placeholder="jane@example.com" className="field-input w-full text-sm" />
                 </div>
+                {contactDraft.additionalEmails.map((em, i) => (
+                  <div key={i} className="flex gap-1">
+                    <input value={em.label} onChange={e => setContactDraft(d => ({ ...d, additionalEmails: d.additionalEmails.map((x, j) => j === i ? { ...x, label: e.target.value } : x) }))}
+                      placeholder="Label" className="field-input text-xs w-20 shrink-0" />
+                    <input type="email" value={em.address} onChange={e => setContactDraft(d => ({ ...d, additionalEmails: d.additionalEmails.map((x, j) => j === i ? { ...x, address: e.target.value } : x) }))}
+                      placeholder="alt@example.com" className="field-input text-xs flex-1" />
+                    <button onClick={() => setContactDraft(d => ({ ...d, additionalEmails: d.additionalEmails.filter((_, j) => j !== i) }))} className="p-1 text-muted-foreground hover:text-destructive"><X size={12} /></button>
+                  </div>
+                ))}
+                <button onClick={() => setContactDraft(d => ({ ...d, additionalEmails: [...d.additionalEmails, { label: 'Alt', address: '' }] }))}
+                  className="text-[11px] text-primary hover:underline flex items-center gap-1"><Plus size={11} /> Add email</button>
+
                 <button onClick={() => {
                   if (contactDraft.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactDraft.email)) {
                     toast.error('Invalid email — check for missing @ or typos');
                     return;
                   }
                   setJobInfo(contactDraft);
+                  // Persist additional phones/emails to DB
+                  if (activeCustomerId) {
+                    syncToDbMutation.mutate({
+                      id: activeCustomerId,
+                      firstName: activeCustomer?.firstName || contactDraft.client.split(' ')[0] || '',
+                      lastName: activeCustomer?.lastName || contactDraft.client.split(' ').slice(1).join(' ') || '',
+                      displayName: contactDraft.client,
+                      company: contactDraft.companyName,
+                      mobilePhone: contactDraft.phone,
+                      email: contactDraft.email,
+                      street: activeCustomer?.street || '',
+                      city: activeCustomer?.city || '',
+                      state: activeCustomer?.state || '',
+                      zip: activeCustomer?.zip || '',
+                      tags: activeCustomer?.tags ?? [],
+                      leadSource: (activeCustomer?.leadSource || '') as any,
+                      customerNotes: activeCustomer?.customerNotes || '',
+                      sendNotifications: activeCustomer?.sendNotifications ?? true,
+                      sendMarketingOptIn: activeCustomer?.sendMarketingOptIn ?? false,
+                      additionalPhones: JSON.stringify(contactDraft.additionalPhones),
+                      additionalEmails: JSON.stringify(contactDraft.additionalEmails),
+                    });
+                  }
                   setEditingContact(false);
                 }}
                   className="w-full px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-semibold hover:bg-primary/90 transition-colors">
@@ -825,12 +933,28 @@ export default function CustomerSection() {
                     <a href={`tel:${jobInfo.phone}`} className="text-primary hover:underline">{jobInfo.phone}</a>
                   </div>
                 )}
+                {/* Additional phones */}
+                {((): { label: string; number: string }[] => { try { const v = (activeCustomer as any)?.additionalPhones; const r = typeof v === 'string' ? JSON.parse(v) : v; return Array.isArray(r) ? r : []; } catch { return []; } })().filter(p => p.number).map((p, i) => (
+                  <div key={i} className="flex items-center gap-2 text-sm">
+                    <Phone size={13} className="text-muted-foreground shrink-0" />
+                    <span className="text-[10px] text-muted-foreground bg-muted px-1 rounded">{p.label}</span>
+                    <a href={`tel:${p.number}`} className="text-primary hover:underline">{p.number}</a>
+                  </div>
+                ))}
                 {jobInfo.email && (
                   <div className="flex items-center gap-2 text-sm">
                     <Mail size={13} className="text-muted-foreground shrink-0" />
                     <a href={`mailto:${jobInfo.email}`} className="text-primary hover:underline truncate">{jobInfo.email}</a>
                   </div>
                 )}
+                {/* Additional emails */}
+                {((): { label: string; address: string }[] => { try { const v = (activeCustomer as any)?.additionalEmails; const r = typeof v === 'string' ? JSON.parse(v) : v; return Array.isArray(r) ? r : []; } catch { return []; } })().filter(em => em.address).map((em, i) => (
+                  <div key={i} className="flex items-center gap-2 text-sm">
+                    <Mail size={13} className="text-muted-foreground shrink-0" />
+                    <span className="text-[10px] text-muted-foreground bg-muted px-1 rounded">{em.label}</span>
+                    <a href={`mailto:${em.address}`} className="text-primary hover:underline truncate">{em.address}</a>
+                  </div>
+                ))}
                 {/* Customer portal invite */}
                 <div className="pt-2 border-t border-border">
                   {customerProfile.portalInviteSent ? (
@@ -1094,12 +1218,21 @@ export default function CustomerSection() {
                   {addr.isPrimary && (
                     <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-primary/10 text-primary">Primary</span>
                   )}
+                  {(addr as any).isBilling && (
+                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600">Billing</span>
+                  )}
                   <div className="ml-auto flex items-center gap-2">
                     {!addr.isPrimary && (
                       <button
-                        onClick={() => activeCustomerId && setPrimaryAddress(activeCustomerId, addr.id)}
+                        onClick={() => activeCustomerId && handleSetPrimary(activeCustomerId, addr.id)}
                         className="text-[11px] text-muted-foreground hover:text-primary"
                       >Set Primary</button>
+                    )}
+                    {!addr.isBilling && (
+                      <button
+                        onClick={() => activeCustomerId && handleSetBilling(activeCustomerId, addr.id)}
+                        className="text-[11px] text-muted-foreground hover:text-blue-500"
+                      >Set Billing</button>
                     )}
                     <button
                       onClick={() => {
@@ -1111,7 +1244,7 @@ export default function CustomerSection() {
                       className="text-[11px] text-muted-foreground hover:text-foreground"
                     ><Edit3 size={11} /></button>
                     <button
-                      onClick={() => activeCustomerId && removeCustomerAddress(activeCustomerId, addr.id)}
+                      onClick={() => activeCustomerId && handleRemoveAddress(activeCustomerId, addr.id)}
                       className="text-[11px] text-muted-foreground hover:text-destructive"
                     ><Trash2 size={11} /></button>
                   </div>
@@ -1139,7 +1272,7 @@ export default function CustomerSection() {
                     <div className="flex gap-2">
                       <button onClick={() => {
                         if (!activeCustomerId) return;
-                        updateCustomerAddress(activeCustomerId, addr.id, { label: addrForm.label, street: addrForm.street, unit: addrForm.unit, city: addrForm.city, state: addrForm.state, zip: addrForm.zip, lat: addrForm.lat, lng: addrForm.lng, propertyNotes: addrForm.propertyNotes });
+                        handleUpdateAddress(activeCustomerId, addr.id, { label: addrForm.label, street: addrForm.street, unit: addrForm.unit, city: addrForm.city, state: addrForm.state, zip: addrForm.zip, lat: addrForm.lat, lng: addrForm.lng, propertyNotes: addrForm.propertyNotes });
                         // Sync jobInfo if this is primary
                         if (addr.isPrimary) setJobInfo({ address: addrForm.street, city: addrForm.city, state: addrForm.state, zip: addrForm.zip });
                         setEditingAddressId(null);
@@ -1184,7 +1317,7 @@ export default function CustomerSection() {
                   <button onClick={() => {
                     if (!activeCustomerId || !addrForm.street) { toast.error('Street is required'); return; }
                     const isFirst = (activeCustomer?.addresses ?? []).length === 0;
-                    addCustomerAddress(activeCustomerId, { id: nanoid(), label: addrForm.label || 'Home', street: addrForm.street, unit: addrForm.unit, city: addrForm.city, state: addrForm.state, zip: addrForm.zip, isPrimary: isFirst, lat: addrForm.lat, lng: addrForm.lng, propertyNotes: (addrForm as any).propertyNotes });
+                    handleAddAddress(activeCustomerId, { id: nanoid(), label: addrForm.label || 'Home', street: addrForm.street, unit: addrForm.unit, city: addrForm.city, state: addrForm.state, zip: addrForm.zip, isPrimary: isFirst, lat: addrForm.lat, lng: addrForm.lng, propertyNotes: (addrForm as any).propertyNotes });
                     if (isFirst) setJobInfo({ address: addrForm.street, city: addrForm.city, state: addrForm.state, zip: addrForm.zip });
                     setAddingAddress(false);
                   }} className="flex-1 text-xs bg-primary text-primary-foreground rounded px-2 py-1.5">Add Address</button>
@@ -1405,12 +1538,24 @@ export default function CustomerSection() {
             </div>
           </div>
           {/* Sub-info */}
-          <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-muted-foreground">
-            {jobInfo.companyName && <span className="flex items-center gap-1"><Building2 size={11} />{jobInfo.companyName}</span>}
-            {jobInfo.phone && <span className="flex items-center gap-1"><Phone size={11} />{jobInfo.phone}</span>}
-            {jobInfo.email && <span className="flex items-center gap-1"><Mail size={11} />{jobInfo.email}</span>}
-            {jobInfo.address && <span className="flex items-center gap-1"><MapPin size={11} />{jobInfo.address}{jobInfo.city ? `, ${jobInfo.city}` : ''}</span>}
-          </div>
+          {(() => {
+            const addrs: any[] = (activeCustomer as any)?.addresses ?? [];
+            const billingAddr = addrs.find(a => a.isBilling) ?? addrs.find(a => a.isPrimary) ?? addrs[0];
+            const addrStr = billingAddr ? [billingAddr.street, billingAddr.city].filter(Boolean).join(', ') : (jobInfo.address ? `${jobInfo.address}${jobInfo.city ? `, ${jobInfo.city}` : ''}` : null);
+            return (
+              <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-muted-foreground">
+                {jobInfo.companyName && <span className="flex items-center gap-1"><Building2 size={11} />{jobInfo.companyName}</span>}
+                {jobInfo.phone && <span className="flex items-center gap-1"><Phone size={11} />{jobInfo.phone}</span>}
+                {jobInfo.email && <span className="flex items-center gap-1"><Mail size={11} />{jobInfo.email}</span>}
+                {addrStr && (
+                  <span className="flex items-center gap-1">
+                    <MapPin size={11} />{addrStr}
+                    {billingAddr?.isBilling && <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-blue-500/10 text-blue-600">Billing</span>}
+                  </span>
+                )}
+              </div>
+            );
+          })()}
         </div>
       </div>
 

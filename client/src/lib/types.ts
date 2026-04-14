@@ -375,6 +375,8 @@ export interface CustomerAddress {
   state: string;
   zip: string;
   isPrimary: boolean;
+  isBilling?: boolean;    // billing address flag
+  propertyNotes?: string; // gate codes, access instructions, etc.
   lat?: number;
   lng?: number;
 }
@@ -389,7 +391,9 @@ export interface Customer {
   mobilePhone: string;
   homePhone: string;
   workPhone: string;
+  additionalPhones?: { label: string; number: string }[]; // extra phone numbers
   email: string;
+  additionalEmails?: { label: string; address: string }[]; // extra email addresses
   role: string;               // e.g. Property Manager
   customerType: CustomerType;
   doNotService: boolean;

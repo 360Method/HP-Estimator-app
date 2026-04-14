@@ -483,6 +483,8 @@ export const customers = mysqlTable("customers", {
   sendNotifications: boolean("sendNotifications").default(true).notNull(),
   sendMarketingOptIn: boolean("sendMarketingOptIn").default(false).notNull(),
   defaultTaxCode: varchar("defaultTaxCode", { length: 16 }),
+  additionalPhones: text("additionalPhones"), // JSON: [{label, number}]
+  additionalEmails: text("additionalEmails"), // JSON: [{label, address}]
   // Financials (computed/cached)
   lifetimeValue: int("lifetimeValue").default(0).notNull(),
   outstandingBalance: int("outstandingBalance").default(0).notNull(),
@@ -513,6 +515,7 @@ export const customerAddresses = mysqlTable("customerAddresses", {
   lng: text("lng"),
   /** Optional notes for this specific property/unit (access instructions, gate codes, etc.) */
   propertyNotes: text("propertyNotes"),
+  isBilling: boolean("isBilling").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type DbCustomerAddress = typeof customerAddresses.$inferSelect;
