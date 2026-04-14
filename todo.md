@@ -1368,3 +1368,14 @@
 - [x] ThreeSixtyPage: header/tier section use flex-wrap, cadence toggle shrinks, tier cards stack on mobile
 - [x] ThreeSixtyMemberDetail: KPI grid stacks on mobile (grid-cols-1 sm:grid-cols-3), tabs wrap, discount table has overflow-x-auto
 - [x] Global: overflow-x: hidden + max-width: 100vw on html/body in index.css
+
+## 360° Method Funnel — Pro Tool Integration
+- [x] Update threeSixtyTiers.ts: Bronze $588/yr, Silver $948/yr, Gold $1,428/yr (monthly/quarterly also updated)
+- [ ] Add 9 STRIPE_PRICE_360_* env vars (requires Stripe product setup in dashboard)
+- [x] Add POST /api/stripe/webhook handler for checkout.session.completed (360 membership enrollment)
+- [x] Webhook: create customer record if not exists, create threeSixtyMemberships row, labor bank credit, schedule first visit, notifyOwner
+- [x] Add trpc.threeSixty.checkout.createCheckoutSession procedure (creates Stripe Checkout Session for a tier+cadence)
+- [x] Add CORS middleware to pro server for 360.handypioneers.com and client.handypioneers.com
+- [x] Build hp-360-funnel standalone static project (FunnelPage, CheckoutPage, ConfirmationPage)
+- [ ] Set domain 360.handypioneers.com on hp-360-funnel project
+- [ ] Add 9 STRIPE_PRICE_360_* env vars to pro project secrets (after Stripe product setup)

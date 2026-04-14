@@ -20,7 +20,9 @@ import {
   effectiveDiscountRate,
   TIER_DEFINITIONS,
   type MemberTier,
+  type BillingCadence,
 } from "../../shared/threeSixtyTiers";
+import Stripe from "stripe";
 
 // ─── MEMBERSHIPS ─────────────────────────────────────────────────────────────
 
@@ -475,12 +477,89 @@ const scansRouter = router({
     }),
 });
 
-// ─── COMBINED ROUTER ─────────────────────────────────────────────────────────
+// ─── CHECKOUT ────────────────────────────────────────────────────────────────
 
+/**
+ * Map of tier+cadence to Stripe Price IDs.
+ * These are set via environment variables after creating products in Stripe dashboard.
+ */
+function getStripePriceId(tier: MemberTier, cadence: BillingCadence): string {
+  const key = `STRIPE_PRICE_360_${tier.toUpperCase()}_${cadence.toUpperCase()}`;
+  const priceId = process.env[key];
+  if (!priceId) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: `Stripe price ID not configured for ${tier} ${cadence}. Set env var ${key}.`,
+    });
+  }
+  return priceId;
+}
+
+const checkoutRouter = router({
+  /**
+   * Creates a Stripe Checkout Session for a 360 membership subscription.
+   * Returns the Stripe-hosted checkout URL.
+   * The webhook (checkout.session.completed) handles DB record creation.
+   */
+  createSession: protectedProcedure
+    .input(
+      z.object({
+        tier: z.enum(["bronze", "silver", "gold"]),
+        cadence: z.enum(["monthly", "quarterly", "annual"]),
+        /** Customer name for prefill */
+        customerName: z.string().optional(),
+        /** Customer email for prefill */
+        customerEmail: z.string().email().optional(),
+        /** Internal HP customer ID to link after payment */
+        hpCustomerId: z.string().optional(),
+        /** Property address ID to associate with membership */
+        propertyAddressId: z.number().int().optional(),
+        /** Frontend origin for success/cancel redirect */
+        origin: z.string().url(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+        apiVersion: "2025-03-31.basil",
+      });
+
+      const priceId = getStripePriceId(input.tier, input.cadence);
+
+      const session = await stripe.checkout.sessions.create({
+        mode: "subscription",
+        line_items: [{ price: priceId, quantity: 1 }],
+        customer_email: input.customerEmail ?? ctx.user.email ?? undefined,
+        allow_promotion_codes: true,
+        success_url: `${input.origin}/360/confirmation?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${input.origin}/360/checkout?tier=${input.tier}&cadence=${input.cadence}&cancelled=1`,
+        metadata: {
+          tier: input.tier,
+          cadence: input.cadence,
+          hpCustomerId: input.hpCustomerId ?? "",
+          propertyAddressId: input.propertyAddressId?.toString() ?? "",
+          enrolledByUserId: ctx.user.id.toString(),
+          customerName: input.customerName ?? "",
+          customerEmail: input.customerEmail ?? "",
+        },
+        subscription_data: {
+          metadata: {
+            tier: input.tier,
+            cadence: input.cadence,
+            hpCustomerId: input.hpCustomerId ?? "",
+          },
+        },
+      });
+
+      return { url: session.url! };
+    }),
+});
+
+// ─── COMBINED ROUTER ─────────────────────────────────────────────────────────
 export const threeSixtyRouter = router({
   memberships: membershipRouter,
   visits: visitsRouter,
   checklist: checklistRouter,
   laborBank: laborBankRouter,
   scans: scansRouter,
+  checkout: checkoutRouter,
 });

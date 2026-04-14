@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express from "express";
+import cors from "cors";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
@@ -14,6 +15,7 @@ import { exchangeGmailCode, pollInboundEmails, sendOverdueReminderEmail } from "
 import { getFirstGmailToken } from "../db";
 import { addSSEClient, broadcastNewMessage } from "../sse";
 import { getPortalInvoiceByStripePaymentIntentId, updatePortalInvoicePaid, getPortalInvoiceByCheckoutSessionId, findPortalCustomerById, getOverdueInvoicesForReminder, markPortalInvoiceReminderSent, getSignOffsEligibleForReviewRequest, getSignOffsEligibleForReviewReminder, markReviewRequestSent, markReviewReminderSent } from "../portalDb";
+import { create360MembershipFromWebhook } from "../threeSixtyWebhook.ts";
 import { sendEmail } from "../gmail";
 import { notifyOwner } from "../_core/notification";
 import { randomUUID } from "crypto";
@@ -40,6 +42,17 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
+
+  // ── CORS: allow 360 funnel and portal to call the pro API ──
+  app.use(cors({
+    origin: [
+      "https://360.handypioneers.com",
+      "https://client.handypioneers.com",
+      "http://localhost:3001",
+      "http://localhost:5173",
+    ],
+    credentials: true,
+  }));
 
   // ── Stripe webhook: MUST be registered BEFORE express.json() ──
   app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async (req, res) => {
@@ -88,6 +101,18 @@ async function startServer() {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
         console.log(`[Webhook] Checkout session completed: ${session.id}`);
+        // ── 360 Method subscription enrollment ──────────────────────────────
+        if (session.mode === "subscription" && session.metadata?.tier) {
+          try {
+            await create360MembershipFromWebhook(session);
+            console.log(`[Webhook] 360 membership created for session ${session.id}`);
+          } catch (err360) {
+            console.error(`[Webhook] 360 membership creation failed:`, err360);
+          }
+          res.json({ received: true });
+          return;
+        }
+        // ── Portal invoice payment ───────────────────────────────────────────
         try {
           const inv = await getPortalInvoiceByCheckoutSessionId(session.id);
           if (inv) {

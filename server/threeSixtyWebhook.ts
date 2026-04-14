@@ -1,0 +1,188 @@
+/**
+ * 360° Method — Stripe Webhook Handler
+ * Called when a checkout.session.completed event fires for a 360 subscription.
+ *
+ * Responsibilities:
+ * 1. Create or find the portalCustomer record
+ * 2. Create the threeSixtyMemberships record
+ * 3. Add initial labor bank credit transaction
+ * 4. Schedule the first seasonal visit for the current season
+ * 5. Send a welcome email
+ * 6. Notify HP owner
+ */
+
+import Stripe from "stripe";
+import { getDb } from "./db";
+import {
+  threeSixtyMemberships,
+  threeSixtyLaborBankTransactions,
+  threeSixtyVisits,
+  portalCustomers,
+} from "../drizzle/schema";
+import { eq } from "drizzle-orm";
+import { TIER_DEFINITIONS, type MemberTier, type BillingCadence } from "../shared/threeSixtyTiers";
+import { sendEmail } from "./gmail";
+import { notifyOwner } from "./_core/notification";
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+
+function getCurrentSeason(): "spring" | "summer" | "fall" | "winter" {
+  const month = new Date().getMonth(); // 0-indexed
+  if (month >= 2 && month <= 4) return "spring";
+  if (month >= 5 && month <= 7) return "summer";
+  if (month >= 8 && month <= 10) return "fall";
+  return "winter";
+}
+
+/** Returns the renewal date in Unix ms based on billing cadence */
+function calcRenewalDate(cadence: BillingCadence): number {
+  const now = new Date();
+  if (cadence === "monthly") {
+    now.setMonth(now.getMonth() + 1);
+  } else if (cadence === "quarterly") {
+    now.setMonth(now.getMonth() + 3);
+  } else {
+    now.setFullYear(now.getFullYear() + 1);
+  }
+  return now.getTime();
+}
+
+// ─── MAIN HANDLER ────────────────────────────────────────────────────────────
+
+export async function create360MembershipFromWebhook(
+  session: Stripe.Checkout.Session
+): Promise<void> {
+  const db = await getDb();
+  const meta = session.metadata ?? {};
+
+  const tier = (meta.tier ?? "bronze") as MemberTier;
+  const cadence = (meta.cadence ?? "annual") as BillingCadence;
+  const hpCustomerId = meta.hpCustomerId || null;
+  const propertyAddressId = meta.propertyAddressId ? parseInt(meta.propertyAddressId) : null;
+  const customerEmail = meta.customerEmail || session.customer_email || "";
+  const customerName = meta.customerName || "New Member";
+
+  const tierDef = TIER_DEFINITIONS[tier];
+  const now = Date.now();
+
+  // ── 1. Find or create portalCustomer ──────────────────────────────────────
+  let portalCustomerId: number | null = null;
+  if (customerEmail) {
+    const [existing] = await db
+      .select()
+      .from(portalCustomers)
+      .where(eq(portalCustomers.email, customerEmail))
+      .limit(1);
+
+    if (existing) {
+      portalCustomerId = existing.id;
+      // Update stripeCustomerId if we have it
+      if (session.customer && !existing.stripeCustomerId) {
+        await db
+          .update(portalCustomers)
+          .set({ stripeCustomerId: session.customer as string })
+          .where(eq(portalCustomers.id, existing.id));
+      }
+    } else {
+      // Create new portal customer
+      const result = await db.insert(portalCustomers).values({
+        name: customerName,
+        email: customerEmail,
+        hpCustomerId: hpCustomerId ?? undefined,
+        stripeCustomerId: session.customer as string | undefined,
+      });
+      portalCustomerId = (result as any).insertId as number;
+    }
+  }
+
+  // ── 2. Create membership record ───────────────────────────────────────────
+  const membershipResult = await db.insert(threeSixtyMemberships).values({
+    customerId: portalCustomerId ?? 0, // 0 = unlinked, staff will link manually
+    propertyAddressId: propertyAddressId ?? undefined,
+    tier,
+    status: "active",
+    startDate: now,
+    renewalDate: calcRenewalDate(cadence),
+    laborBankBalance: tierDef.laborBankCreditCents,
+    stripeSubscriptionId: session.subscription as string | undefined,
+    stripeCustomerId: session.customer as string | undefined,
+    billingCadence: cadence,
+    annualScanCompleted: false,
+  });
+  const membershipId = (membershipResult as any).insertId as number;
+
+  // ── 3. Add initial labor bank credit ─────────────────────────────────────
+  if (tierDef.laborBankCreditCents > 0) {
+    await db.insert(threeSixtyLaborBankTransactions).values({
+      membershipId,
+      customerId: portalCustomerId ?? 0,
+      type: "credit",
+      amountCents: tierDef.laborBankCreditCents,
+      description: `Initial ${tier.charAt(0).toUpperCase() + tier.slice(1)} tier enrollment credit`,
+      createdAt: new Date(),
+    });
+  }
+
+  // ── 4. Schedule first seasonal visit ─────────────────────────────────────
+  const currentSeason = getCurrentSeason();
+  // Bronze only gets spring + fall; skip summer/winter for bronze
+  const shouldSchedule =
+    tier !== "bronze" || currentSeason === "spring" || currentSeason === "fall";
+
+  if (shouldSchedule) {
+    await db.insert(threeSixtyVisits).values({
+      membershipId,
+      customerId: portalCustomerId ?? 0,
+      season: currentSeason,
+      status: "scheduled",
+    });
+  }
+
+  // ── 5. Send welcome email ─────────────────────────────────────────────────
+  if (customerEmail) {
+    const laborBankDisplay =
+      tierDef.laborBankCreditCents > 0
+        ? `<p>Your <strong>$${tierDef.laborBankCreditCents / 100} labor bank credit</strong> is ready to use on your first call.</p>`
+        : "";
+
+    const priorityNote = tierDef.priorityScheduling
+      ? `<p>As a Gold member, you have <strong>priority scheduling</strong> — your calls go to the front of the queue.</p>`
+      : "";
+
+    const welcomeHtml = `<!DOCTYPE html><html><body style="font-family:Helvetica,Arial,sans-serif;background:#f4f5f7;padding:32px 16px;">
+<table width="600" style="max-width:600px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;">
+<tr><td style="background:linear-gradient(135deg,#0f1f3d,#1a3a6b);padding:32px 40px;text-align:center;">
+  <p style="color:#c8922a;font-size:28px;font-weight:900;margin:0;letter-spacing:-0.5px;">360°</p>
+  <p style="color:#fff;font-size:16px;font-weight:700;margin:4px 0 0;">Welcome to the 360° Method</p>
+  <p style="color:rgba(255,255,255,0.55);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;margin:6px 0 0;">Delivered by Handy Pioneers</p>
+</td></tr>
+<tr><td style="padding:36px 40px;color:#1a1a1a;font-size:15px;line-height:1.7;">
+  <p>Hi ${customerName.split(" ")[0]},</p>
+  <p>You're officially enrolled in the <strong>${tier.charAt(0).toUpperCase() + tier.slice(1)} tier</strong> of the 360° Method. Your home is now on a proactive maintenance plan — no more reactive emergencies.</p>
+  <p><strong>What happens next:</strong></p>
+  <ul style="padding-left:20px;color:#333;">
+    <li>Our team will reach out within 48 hours to schedule your <strong>Annual 360° Home Scan</strong></li>
+    <li>Your first seasonal visit (${currentSeason.charAt(0).toUpperCase() + currentSeason.slice(1)}) will be scheduled at the same time</li>
+    ${tierDef.laborBankCreditCents > 0 ? `<li>Your $${tierDef.laborBankCreditCents / 100} labor bank credit is active and ready to use</li>` : ""}
+  </ul>
+  ${laborBankDisplay}
+  ${priorityNote}
+  <p style="text-align:center;margin-top:28px;">
+    <a href="https://client.handypioneers.com" style="display:inline-block;background:#c8922a;color:#fff;font-weight:700;padding:14px 36px;border-radius:6px;text-decoration:none;font-size:15px;">Access Your Member Portal →</a>
+  </p>
+  <p style="font-size:13px;color:#888;text-align:center;margin-top:24px;">Questions? <a href="mailto:help@handypioneers.com" style="color:#c8922a;">help@handypioneers.com</a> | (360) 544-9858</p>
+</td></tr></table></body></html>`;
+
+    await sendEmail({
+      to: customerEmail,
+      subject: `Welcome to the 360° Method — ${tier.charAt(0).toUpperCase() + tier.slice(1)} Membership Confirmed`,
+      html: welcomeHtml,
+    }).catch((err) => console.error("[360 Webhook] Welcome email failed:", err));
+  }
+
+  // ── 6. Notify HP owner ────────────────────────────────────────────────────
+  await notifyOwner({
+    title: `🏠 New 360° Member — ${tier.charAt(0).toUpperCase() + tier.slice(1)}`,
+    content: `${customerName} (${customerEmail}) enrolled in the ${tier} tier (${cadence} billing). Membership ID: ${membershipId}. Schedule their Annual 360° Home Scan within 48 hours.`,
+  }).catch(() => null);
+}

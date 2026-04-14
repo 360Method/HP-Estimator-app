@@ -732,6 +732,10 @@ export const threeSixtyMemberships = mysqlTable("threeSixtyMemberships", {
   laborBankBalance: int("laborBankBalance").notNull().default(0),
   /** Stripe subscription ID for recurring billing */
   stripeSubscriptionId: varchar("stripeSubscriptionId", { length: 255 }),
+  /** Stripe customer ID — mirrors portalCustomers.stripeCustomerId */
+  stripeCustomerId: varchar("stripeCustomerId", { length: 64 }),
+  /** Billing cadence selected at enrollment */
+  billingCadence: mysqlEnum("billingCadence", ["monthly", "quarterly", "annual"]).notNull().default("annual"),
   /** Whether the annual 360 scan has been completed this cycle */
   annualScanCompleted: boolean("annualScanCompleted").notNull().default(false),
   /** Unix ms — date of last completed annual scan */

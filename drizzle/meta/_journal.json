@@ -162,6 +162,13 @@
       "when": 1776177176512,
       "tag": "0022_silly_eddie_brock",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "5",
+      "when": 1776182699634,
+      "tag": "0023_peaceful_shinobi_shaw",
+      "breakpoints": true
     }
   ]
 }

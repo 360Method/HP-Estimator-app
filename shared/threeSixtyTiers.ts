@@ -1,13 +1,16 @@
 /**
- * 360 Method — Membership Tier Definitions & Discount Calculator
+ * 360° Method — Membership Tier Definitions & Discount Calculator
+ * Delivered by Handy Pioneers
  *
- * Pricing is shown in three billing cadences so homeowners can relate to
- * their normal monthly/quarterly/annual bill cycle.
+ * Pricing uses clean round monthly equivalents when billed annually:
+ *   Bronze  → $588/yr  = $49/mo equivalent
+ *   Silver  → $948/yr  = $79/mo equivalent
+ *   Gold    → $1,428/yr = $119/mo equivalent
+ *
+ * Monthly and quarterly options carry a small premium that makes
+ * the annual rate feel like the obvious choice.
  *
  * Discount structure uses a step-ladder cap to protect margin on large jobs.
- * The percentage applies only up to the bracket ceiling; above that, a reduced
- * rate applies. This keeps "up to X% off" marketing honest while preventing
- * large-job margin erosion.
  */
 
 export type MemberTier = "bronze" | "silver" | "gold";
@@ -28,6 +31,8 @@ export interface TierPricing {
     quarterly: number;
     annual: number;
   };
+  /** Clean monthly equivalent when billed annually (for display) */
+  monthlyEquivalentAnnual: number;
 }
 
 export interface TierDefinition {
@@ -47,6 +52,16 @@ export interface TierDefinition {
   features: string[];
   /** Discount brackets: sorted ascending by ceiling */
   discountBrackets: DiscountBracket[];
+  /**
+   * Stripe Price IDs for each cadence.
+   * Set via environment / Stripe dashboard after creating products.
+   * Populated in shared/stripeProducts.ts — imported at runtime.
+   */
+  stripePriceIds: {
+    monthly: string;
+    quarterly: string;
+    annual: string;
+  };
 }
 
 export interface DiscountBracket {
@@ -81,6 +96,8 @@ function buildPricing(
       quarterly: fromMonthly - fromQuarterly,
       annual: fromMonthly - annual,
     },
+    // Clean round monthly equivalent when billed annually
+    monthlyEquivalentAnnual: Math.round(annual / 12),
   };
 }
 
@@ -92,26 +109,31 @@ export const TIER_DEFINITIONS: Record<MemberTier, TierDefinition> = {
     label: "Bronze",
     tagline: "Essential protection for the proactive homeowner",
     pricing: buildPricing(
-      49,    // $49/mo
-      139,   // $139/quarter  (saves $48/yr vs monthly)
-      499,   // $499/yr       (saves $89/yr vs monthly)
+      59,    // $59/mo
+      169,   // $169/quarter  (saves $48/yr vs monthly)
+      588,   // $588/yr = $49/mo equivalent (saves $120/yr vs monthly)
     ),
     seasonalVisits: 2,
     includesAnnualScan: true,
     laborBankCreditCents: 0,
     priorityScheduling: false,
     features: [
-      "Annual 360 Home Scan",
-      "2 seasonal visits (Spring & Fall)",
+      "Annual 360° Home Scan ($350 value)",
+      "2 seasonal visits — Spring & Fall",
       "5% off jobs up to $2,500",
       "3% off jobs $2,501–$10,000",
-      "No discount above $10,000",
+      "Documented property health report",
     ],
     discountBrackets: [
       { ceilingCents: 250000, rate: 0.05 },   // 5% on first $2,500
       { ceilingCents: 1000000, rate: 0.03 },  // 3% on $2,501–$10,000
       { ceilingCents: Infinity, rate: 0.00 }, // 0% above $10,000
     ],
+    stripePriceIds: {
+      monthly: process.env.STRIPE_PRICE_BRONZE_MONTHLY ?? "",
+      quarterly: process.env.STRIPE_PRICE_BRONZE_QUARTERLY ?? "",
+      annual: process.env.STRIPE_PRICE_BRONZE_ANNUAL ?? "",
+    },
   },
 
   silver: {
@@ -119,27 +141,33 @@ export const TIER_DEFINITIONS: Record<MemberTier, TierDefinition> = {
     label: "Silver",
     tagline: "Full-season coverage with a labor credit cushion",
     pricing: buildPricing(
-      79,    // $79/mo
-      219,   // $219/quarter  (saves $48/yr vs monthly)
-      799,   // $799/yr       (saves $149/yr vs monthly)
+      99,    // $99/mo
+      279,   // $279/quarter  (saves $48/yr vs monthly)
+      948,   // $948/yr = $79/mo equivalent (saves $240/yr vs monthly)
     ),
     seasonalVisits: 4,
     includesAnnualScan: true,
     laborBankCreditCents: 20000, // $200
     priorityScheduling: false,
     features: [
-      "Annual 360 Home Scan",
-      "4 seasonal visits (all seasons)",
+      "Annual 360° Home Scan ($350 value)",
+      "4 seasonal visits — all seasons",
       "$200 labor bank credit",
       "10% off jobs up to $2,500",
       "5% off jobs $2,501–$10,000",
       "2% off jobs above $10,000",
+      "Documented property health report",
     ],
     discountBrackets: [
       { ceilingCents: 250000, rate: 0.10 },   // 10% on first $2,500
       { ceilingCents: 1000000, rate: 0.05 },  // 5% on $2,501–$10,000
       { ceilingCents: Infinity, rate: 0.02 }, // 2% above $10,000
     ],
+    stripePriceIds: {
+      monthly: process.env.STRIPE_PRICE_SILVER_MONTHLY ?? "",
+      quarterly: process.env.STRIPE_PRICE_SILVER_QUARTERLY ?? "",
+      annual: process.env.STRIPE_PRICE_SILVER_ANNUAL ?? "",
+    },
   },
 
   gold: {
@@ -147,28 +175,34 @@ export const TIER_DEFINITIONS: Record<MemberTier, TierDefinition> = {
     label: "Gold",
     tagline: "Maximum coverage, priority service, and the biggest savings",
     pricing: buildPricing(
-      119,   // $119/mo
-      329,   // $329/quarter  (saves $99/yr vs monthly)
-      1199,  // $1,199/yr     (saves $229/yr vs monthly)
+      149,   // $149/mo
+      419,   // $419/quarter  (saves $48/yr vs monthly)
+      1428,  // $1,428/yr = $119/mo equivalent (saves $360/yr vs monthly)
     ),
     seasonalVisits: 4,
     includesAnnualScan: true,
     laborBankCreditCents: 50000, // $500
     priorityScheduling: true,
     features: [
-      "Annual 360 Home Scan",
-      "4 seasonal visits (all seasons)",
+      "Annual 360° Home Scan ($350 value)",
+      "4 seasonal visits — all seasons",
       "$500 labor bank credit",
       "Priority scheduling",
       "15% off jobs up to $2,500",
       "8% off jobs $2,501–$10,000",
       "3% off jobs above $10,000",
+      "Documented property health report",
     ],
     discountBrackets: [
       { ceilingCents: 250000, rate: 0.15 },   // 15% on first $2,500
       { ceilingCents: 1000000, rate: 0.08 },  // 8% on $2,501–$10,000
       { ceilingCents: Infinity, rate: 0.03 }, // 3% above $10,000
     ],
+    stripePriceIds: {
+      monthly: process.env.STRIPE_PRICE_GOLD_MONTHLY ?? "",
+      quarterly: process.env.STRIPE_PRICE_GOLD_QUARTERLY ?? "",
+      annual: process.env.STRIPE_PRICE_GOLD_ANNUAL ?? "",
+    },
   },
 };
 
@@ -259,3 +293,21 @@ export function headlineDiscountPct(tier: MemberTier): number {
 }
 
 export const ALL_TIERS: MemberTier[] = ["bronze", "silver", "gold"];
+
+/**
+ * Cadence labels for display
+ */
+export const CADENCE_LABELS: Record<BillingCadence, string> = {
+  monthly: "Monthly",
+  quarterly: "Quarterly",
+  annual: "Annual",
+};
+
+/**
+ * Cadence interval for Stripe subscription creation
+ */
+export const CADENCE_STRIPE_INTERVAL: Record<BillingCadence, { interval: string; interval_count: number }> = {
+  monthly: { interval: "month", interval_count: 1 },
+  quarterly: { interval: "month", interval_count: 3 },
+  annual: { interval: "year", interval_count: 1 },
+};
