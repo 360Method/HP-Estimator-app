@@ -714,3 +714,116 @@ export const portalDocuments = mysqlTable("portalDocuments", {
 });
 export type PortalDocument = typeof portalDocuments.$inferSelect;
 export type InsertPortalDocument = typeof portalDocuments.$inferInsert;
+
+// ─── 360 METHOD: MEMBERSHIPS ─────────────────────────────────────────────────
+export const threeSixtyMemberships = mysqlTable("threeSixtyMemberships", {
+  id: int("id").autoincrement().primaryKey(),
+  /** customers.id */
+  customerId: int("customerId").notNull(),
+  /** customerAddresses.id — the enrolled property */
+  propertyAddressId: int("propertyAddressId"),
+  tier: mysqlEnum("tier", ["bronze", "silver", "gold"]).notNull().default("bronze"),
+  status: mysqlEnum("status", ["active", "paused", "cancelled"]).notNull().default("active"),
+  /** Unix ms */
+  startDate: bigint("startDate", { mode: "number" }).notNull(),
+  /** Unix ms — next renewal date */
+  renewalDate: bigint("renewalDate", { mode: "number" }).notNull(),
+  /** Labor bank balance in cents */
+  laborBankBalance: int("laborBankBalance").notNull().default(0),
+  /** Stripe subscription ID for recurring billing */
+  stripeSubscriptionId: varchar("stripeSubscriptionId", { length: 255 }),
+  /** Whether the annual 360 scan has been completed this cycle */
+  annualScanCompleted: boolean("annualScanCompleted").notNull().default(false),
+  /** Unix ms — date of last completed annual scan */
+  annualScanDate: bigint("annualScanDate", { mode: "number" }),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type ThreeSixtyMembership = typeof threeSixtyMemberships.$inferSelect;
+export type InsertThreeSixtyMembership = typeof threeSixtyMemberships.$inferInsert;
+
+// ─── 360 METHOD: SEASONAL VISITS ─────────────────────────────────────────────
+export const threeSixtyVisits = mysqlTable("threeSixtyVisits", {
+  id: int("id").autoincrement().primaryKey(),
+  membershipId: int("membershipId").notNull(),
+  customerId: int("customerId").notNull(),
+  season: mysqlEnum("season", ["spring", "summer", "fall", "winter"]).notNull(),
+  /** Unix ms */
+  scheduledDate: bigint("scheduledDate", { mode: "number" }),
+  /** Unix ms */
+  completedDate: bigint("completedDate", { mode: "number" }),
+  status: mysqlEnum("status", ["scheduled", "completed", "skipped"]).notNull().default("scheduled"),
+  technicianNotes: text("technicianNotes"),
+  /** JSON snapshot of checklist completion state: { taskId: boolean } */
+  checklistSnapshot: text("checklistSnapshot"),
+  /** Labor bank deducted in cents for this visit */
+  laborBankUsed: int("laborBankUsed").notNull().default(0),
+  /** If visit generated an upsell estimate */
+  linkedOpportunityId: varchar("linkedOpportunityId", { length: 64 }),
+  /** Year this visit belongs to (for grouping) */
+  visitYear: int("visitYear").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type ThreeSixtyVisit = typeof threeSixtyVisits.$inferSelect;
+export type InsertThreeSixtyVisit = typeof threeSixtyVisits.$inferInsert;
+
+// ─── 360 METHOD: MASTER CHECKLIST LIBRARY ────────────────────────────────────
+export const threeSixtyChecklist = mysqlTable("threeSixtyChecklist", {
+  id: int("id").autoincrement().primaryKey(),
+  season: mysqlEnum("season", ["spring", "summer", "fall", "winter"]).notNull(),
+  /** inspect | service */
+  category: mysqlEnum("category", ["inspect", "service"]).notNull(),
+  /** e.g. "PNW" — for future regional expansion */
+  region: varchar("region", { length: 32 }).notNull().default("PNW"),
+  taskName: varchar("taskName", { length: 255 }).notNull(),
+  description: text("description"),
+  /** Estimated minutes to complete */
+  estimatedMinutes: int("estimatedMinutes").notNull().default(15),
+  /** Whether flagging this item should prompt an upsell estimate */
+  isUpsellTrigger: boolean("isUpsellTrigger").notNull().default(false),
+  sortOrder: int("sortOrder").notNull().default(0),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type ThreeSixtyChecklistItem = typeof threeSixtyChecklist.$inferSelect;
+export type InsertThreeSixtyChecklistItem = typeof threeSixtyChecklist.$inferInsert;
+
+// ─── 360 METHOD: LABOR BANK LEDGER ───────────────────────────────────────────
+export const threeSixtyLaborBankTransactions = mysqlTable("threeSixtyLaborBankTransactions", {
+  id: int("id").autoincrement().primaryKey(),
+  membershipId: int("membershipId").notNull(),
+  /** credit | debit | adjustment */
+  type: mysqlEnum("type", ["credit", "debit", "adjustment"]).notNull(),
+  /** Amount in cents — always positive; type determines direction */
+  amountCents: int("amountCents").notNull(),
+  description: varchar("description", { length: 512 }).notNull(),
+  linkedVisitId: int("linkedVisitId"),
+  linkedOpportunityId: varchar("linkedOpportunityId", { length: 64 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  /** User ID of the staff member who created this transaction */
+  createdBy: int("createdBy"),
+});
+export type ThreeSixtyLaborBankTransaction = typeof threeSixtyLaborBankTransactions.$inferSelect;
+export type InsertThreeSixtyLaborBankTransaction = typeof threeSixtyLaborBankTransactions.$inferInsert;
+
+// ─── 360 METHOD: ANNUAL HOME SCANS ───────────────────────────────────────────
+export const threeSixtyScans = mysqlTable("threeSixtyScans", {
+  id: int("id").autoincrement().primaryKey(),
+  membershipId: int("membershipId").notNull(),
+  customerId: int("customerId").notNull(),
+  /** Unix ms */
+  scanDate: bigint("scanDate", { mode: "number" }).notNull(),
+  /** JSON: { system: string, rating: 1-5, notes: string, photos: string[], priority: 'urgent'|'1yr'|'3yr'|'monitor' }[] */
+  systemRatings: text("systemRatings"),
+  /** S3 URL of generated PDF report */
+  reportUrl: text("reportUrl"),
+  reportFileKey: varchar("reportFileKey", { length: 512 }),
+  technicianNotes: text("technicianNotes"),
+  status: mysqlEnum("status", ["draft", "completed", "delivered"]).notNull().default("draft"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type ThreeSixtyScan = typeof threeSixtyScans.$inferSelect;
+export type InsertThreeSixtyScan = typeof threeSixtyScans.$inferInsert;

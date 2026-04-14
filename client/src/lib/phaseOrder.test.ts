@@ -10,8 +10,8 @@ describe('Construction phase order', () => {
   // Helper: get position (0-based) of a phase by its ID
   const pos = (id: number) => ALL_PHASES.findIndex(p => p.id === id);
 
-  it('has exactly 17 phases', () => {
-    expect(ALL_PHASES).toHaveLength(17);
+  it('has exactly 18 phases', () => {
+    expect(ALL_PHASES).toHaveLength(18);
   });
 
   it('Pre-Construction comes first', () => {
@@ -83,8 +83,12 @@ describe('Construction phase order', () => {
     expect(pos(12)).toBeLessThan(pos(16));
   });
 
-  it('Final Cleaning & Closeout is last', () => {
-    expect(pos(17)).toBe(ALL_PHASES.length - 1);
+  it('Final Cleaning & Closeout comes before Handyman & Maintenance', () => {
+    expect(pos(17)).toBeLessThan(pos(18));
+  });
+
+  it('Handyman & Maintenance is last', () => {
+    expect(pos(18)).toBe(ALL_PHASES.length - 1);
   });
 
   it('all phase IDs are unique', () => {

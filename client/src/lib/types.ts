@@ -258,7 +258,7 @@ export interface GlobalSettings {
   customTaxPct: number;
 }
 
-export type AppSection = 'customer' | 'opp-details' | 'sales' | 'calculator' | 'estimate' | 'present' | 'customers' | 'jobs' | 'job-details' | 'pipeline' | 'invoice' | 'dashboard' | 'schedule' | 'inbox' | 'reporting' | 'marketing' | 'requests';
+export type AppSection = 'customer' | 'opp-details' | 'sales' | 'calculator' | 'estimate' | 'present' | 'customers' | 'jobs' | 'job-details' | 'pipeline' | 'invoice' | 'dashboard' | 'schedule' | 'inbox' | 'reporting' | 'marketing' | 'requests' | 'three-sixty';
 
 // ── Schedule / Calendar Types ──────────────────────────────────
 

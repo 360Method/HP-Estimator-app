@@ -27,6 +27,7 @@ import MarketingPage from '@/pages/MarketingPage';
 import AdminLogin from '@/pages/AdminLogin';
 import AdminAccessDenied from '@/pages/AdminAccessDenied';
 import RequestsPage from '@/pages/RequestsPage';
+import ThreeSixtyPage from '@/pages/ThreeSixtyPage';
 import OpportunityDetailsTab from '@/components/sections/OpportunityDetailsTab';
 
 export default function Home() {
@@ -85,6 +86,8 @@ function AdminApp() {
         <MarketingPage />
       ) : state.activeSection === 'requests' ? (
         <RequestsPage />
+      ) : state.activeSection === 'three-sixty' ? (
+        <ThreeSixtyPage />
       ) : (
         <div className="container py-6 max-w-4xl">
           {state.activeSection === 'customer' && <CustomerSection />}

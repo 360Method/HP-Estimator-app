@@ -1393,6 +1393,69 @@ const phase17: PhaseGroup = {
   ],
 };
 
+// ─── PHASE 18: HANDYMAN & MAINTENANCE ───────────────────────
+// Portland Metro handyman rate: $85/hr (75th-percentile field time)
+// All items are labor-only unless noted; material is user-supplied or quoted separately
+const L_HANDY = 85; // Handyman / Maintenance Tech
+
+const phase18: PhaseGroup = {
+  id: 18, name: 'Handyman & Maintenance', icon: '🔧',
+  description: 'Small-scope residential repair and maintenance tasks. Ideal for 360 Method visits and labor bank draw-downs.',
+  items: [
+    laborItem('p18-caulk', 'Caulk & Seal (tub, shower, windows, doors)', 'Caulk & seal', 'lf', 0.12, L_HANDY,
+      'Remove old caulk and apply fresh silicone or paintable caulk at tub, shower, windows, and door frames.',
+      'Caulk and seal — {qty} lf'),
+    laborItem('p18-grout', 'Grout Touch-Up (small areas)', 'Grout touch-up', 'sqft', 0.25, L_HANDY,
+      'Remove damaged grout and regrout small tile areas. Includes cleaning and sealing.',
+      'Grout touch-up — {qty} sqft'),
+    laborItem('p18-drywall-patch', 'Drywall Patch (up to 6" hole)', 'Drywall patch', 'unit', 1.5, L_HANDY,
+      'Patch small drywall holes up to 6". Includes backing, compound, sand, texture match, and prime coat.',
+      'Drywall patch — {qty} patch(es)'),
+    laborItem('p18-door-adj', 'Door Adjustment / Rehang', 'Door adjustment', 'door', 1.0, L_HANDY,
+      'Plane, adjust hinges, and re-align strike plate on sticking or misaligned door.',
+      'Door adjustment — {qty} door(s)'),
+    laborItem('p18-lock', 'Lock / Deadbolt Install or Replace', 'Lock install', 'unit', 0.75, L_HANDY,
+      'Install or replace keyed entry lock or deadbolt. Hardware supplied by owner or quoted separately.',
+      'Lock/deadbolt install — {qty} unit(s)'),
+    laborItem('p18-cabinet-adj', 'Cabinet Door / Drawer Adjustment', 'Cabinet adjustment', 'unit', 0.4, L_HANDY,
+      'Adjust hinges, slides, and soft-close mechanisms on cabinet doors and drawers.',
+      'Cabinet adjustment — {qty} unit(s)'),
+    laborItem('p18-faucet-drip', 'Faucet Drip Repair', 'Faucet repair', 'unit', 1.25, L_HANDY,
+      'Diagnose and repair dripping faucet. Includes cartridge, seat/washer, or O-ring replacement.',
+      'Faucet drip repair — {qty} faucet(s)'),
+    laborItem('p18-toilet-run', 'Running Toilet Repair', 'Toilet repair', 'unit', 1.0, L_HANDY,
+      'Diagnose and repair running toilet. Includes flapper, fill valve, or flush valve replacement.',
+      'Running toilet repair — {qty} toilet(s)'),
+    laborItem('p18-gutter-clean', 'Gutter Cleaning & Flush', 'Gutter cleaning', 'lf', 0.04, L_HANDY,
+      'Remove debris from gutters and flush downspouts. Includes ground-level inspection.',
+      'Gutter cleaning — {qty} lf'),
+    laborItem('p18-weatherstrip', 'Weatherstripping (door or window)', 'Weatherstripping', 'lf', 0.15, L_HANDY,
+      'Remove old weatherstripping and install new foam, V-strip, or door sweep.',
+      'Weatherstripping — {qty} lf'),
+    laborItem('p18-outlet-cover', 'Outlet / Switch Cover Replace', 'Cover replace', 'unit', 0.2, L_HANDY,
+      'Replace outlet or switch cover plate. Decora or standard.',
+      'Outlet/switch cover — {qty} unit(s)'),
+    laborItem('p18-light-bulb', 'Bulb Replacement (high or hard access)', 'Bulb replacement', 'unit', 0.25, L_HANDY,
+      'Replace bulbs requiring ladder or special access. Includes disposal of old bulbs.',
+      'Bulb replacement — {qty} unit(s)'),
+    laborItem('p18-smoke-det', 'Smoke / CO Detector Install or Replace', 'Detector install', 'unit', 0.5, L_HANDY,
+      'Install or replace battery-operated or hardwired smoke or CO detector.',
+      'Smoke/CO detector — {qty} unit(s)'),
+    laborItem('p18-vent-clean', 'Dryer Vent / HVAC Filter Service', 'Vent service', 'unit', 1.0, L_HANDY,
+      'Clean dryer vent full length with brush kit and replace HVAC filter.',
+      'Vent/filter service — {qty} unit(s)'),
+    laborItem('p18-fence-repair', 'Fence Board / Post Repair', 'Fence repair', 'lf', 0.35, L_HANDY,
+      'Replace damaged fence boards or reset leaning posts. Material quoted separately.',
+      'Fence repair — {qty} lf'),
+    laborItem('p18-deck-board', 'Deck Board Replacement', 'Deck board', 'lf', 0.5, L_HANDY,
+      'Remove damaged deck boards and install new. Material quoted separately.',
+      'Deck board replacement — {qty} lf'),
+    laborItem('p18-misc-labor', 'Miscellaneous Handyman Labor', 'Misc labor', 'hr', 1.0, L_HANDY,
+      'Open-ended handyman labor for tasks not covered by specific line items.',
+      'Miscellaneous handyman labor — {qty} hrs'),
+  ],
+};
+
 // ─── EXPORT ALL PHASES ────────────────────────────────────────
 // Correct construction sequence:
 //  1  Pre-Construction       (permits, scheduling, procurement)
@@ -1430,7 +1493,9 @@ export const ALL_PHASES: PhaseGroup[] = [
   phase14,  // 15 Electrical Finish    (unchanged)
   phase16,  // 16 Appliances & Special (unchanged)
   phase17,  // 17 Final Cleaning       (unchanged)
+  phase18,  // 18 Handyman & Maintenance
 ];
+
 
 export const DEFAULTS = {
   markupPct: 0.40,

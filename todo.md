@@ -1332,3 +1332,30 @@
 - [x] Phase 13: bump plumbing fixture material rates
 - [x] Phase 14: bump electrical fixture material rates
 - [x] Phase 15: bump painting material rates
+
+## 360 Method — Full Implementation
+- [x] DB schema: threeSixtyMemberships table
+- [x] DB schema: threeSixtyVisits table
+- [x] DB schema: threeSixtyChecklist table
+- [x] DB schema: threeSixtyLaborBankTransactions table
+- [x] DB schema: threeSixtyScans table
+- [x] Run pnpm db:push for 360 Method tables
+- [x] shared/threeSixtyTiers.ts — tier definitions + step-ladder discount calculator
+- [x] server/seed-360-checklists.mjs — seed all 4 PNW seasonal checklists
+- [x] phases.ts Phase 18 — Handyman & Maintenance block (17 line items)
+- [x] server/routers/threeSixty.ts — all tRPC procedures
+- [x] Wire threeSixty router into main routers.ts
+- [x] ThreeSixtyPage (360 Dashboard) — tier cards + member list
+- [x] ThreeSixtyMemberList page
+- [x] ThreeSixtyMemberDetail page
+- [x] ThreeSixtyNewMembership page (monthly/quarterly/annual pricing)
+- [x] ThreeSixtyVisitDetail page (PNW seasonal checklist)
+- [ ] ThreeSixtyChecklists admin page (/360/checklists)
+- [x] Add 360 nav entry to MetricsBar
+- [x] Wire three-sixty section into Home.tsx routing
+- [ ] Estimator: member badge on customer header
+- [ ] Estimator: auto-apply step-ladder discount to estimate output
+- [ ] Vitest tests for threeSixty router
+- [x] Vitest tests for discount calculator (in threeSixtyTiers.ts)
+- [x] Tier pricing: monthly/quarterly/annual rates with savings callout
+- [x] UI: billing cadence toggle on enrollment form
