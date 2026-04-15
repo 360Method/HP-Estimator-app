@@ -121,10 +121,25 @@ export default function PipelinePage() {
     }
   };
 
+  const createOpportunityMutation = trpc.opportunities.create.useMutation({
+    onError: (err) => console.warn('[PipelinePage] DB opportunity create failed (local state preserved):', err.message),
+  });
   const handleAdd = (title: string, stage: OpportunityStage, value: number, notes: string, customerId?: string, customerDisplayName?: string) => {
     // If a customer was picked in the modal, switch to that customer first
     if (customerId) setActiveCustomer(customerId);
     addOpportunity({ area: activeTab, stage, title, value, notes, archived: false });
+    // Persist to DB if we have a customerId
+    if (customerId) {
+      createOpportunityMutation.mutate({
+        customerId,
+        area: activeTab,
+        stage,
+        title,
+        value,
+        notes,
+        archived: false,
+      });
+    }
   };
 
   const unreadQuery = trpc.booking.unreadCount.useQuery(undefined, { refetchInterval: 30_000 });

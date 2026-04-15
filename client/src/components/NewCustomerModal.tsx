@@ -15,6 +15,7 @@ import { Customer, CustomerType, LeadSource } from '@/lib/types';
 import { nanoid } from 'nanoid';
 import { toast } from 'sonner';
 import { useEstimator } from '@/contexts/EstimatorContext';
+import { trpc } from '@/lib/trpc';
 
 const LEAD_SOURCES: LeadSource[] = [
   'Google', 'Referral', 'Facebook', 'Instagram',
@@ -113,15 +114,20 @@ export default function NewCustomerModal({ onClose, onCreated }: Props) {
   const removeTag = (tag: string) =>
     setForm(f => ({ ...f, tags: f.tags.filter(t => t !== tag) }));
 
+  const createCustomerMutation = trpc.customers.create.useMutation({
+    onError: (err) => console.warn('[NewCustomerModal] DB create failed (local state preserved):', err.message),
+  });
+
   const handleSubmit = () => {
     if (!form.firstName && !form.displayName) {
       toast.error('Please enter at least a first name or display name');
       return;
     }
     const firstAddressId = nanoid();
+    const customerId = nanoid();
     const customer: Customer = {
       ...form,
-      id: nanoid(),
+      id: customerId,
       createdAt: new Date().toISOString(),
       lifetimeValue: 0,
       outstandingBalance: 0,
@@ -138,6 +144,32 @@ export default function NewCustomerModal({ onClose, onCreated }: Props) {
         lng: lastParsedLatLng.lng,
       }] : [],
     };
+    // Persist to DB (fire-and-forget; local state is source of truth for immediate UX)
+    createCustomerMutation.mutate({
+      displayName: customer.displayName || `${customer.firstName} ${customer.lastName}`.trim() || customer.email || 'New Customer',
+      firstName: customer.firstName || '',
+      lastName: customer.lastName || '',
+      company: customer.company || '',
+      email: customer.email || '',
+      mobilePhone: customer.mobilePhone || '',
+      homePhone: customer.homePhone || '',
+      workPhone: customer.workPhone || '',
+      street: customer.street || '',
+      unit: customer.unit || '',
+      city: customer.city || '',
+      state: customer.state || '',
+      zip: customer.zip || '',
+      customerType: (customer.customerType as any) || 'homeowner',
+      leadSource: customer.leadSource || '',
+      customerNotes: customer.customerNotes || '',
+      tags: customer.tags ?? [],
+      role: customer.role || '',
+      doNotService: customer.doNotService ?? false,
+      billsTo: customer.billsTo || '',
+      referredBy: customer.referredBy || '',
+      sendNotifications: customer.sendNotifications ?? true,
+      sendMarketingOptIn: customer.sendMarketingOptIn ?? false,
+    });
     onCreated(customer);
     toast.success(`Customer "${customer.displayName || customer.firstName}" created`);
   };

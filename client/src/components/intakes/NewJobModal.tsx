@@ -20,6 +20,12 @@ export default function NewJobModal({ onClose, prefill, onSaved }: { onClose: ()
   const createScheduleEventMutation = trpc.schedule.create.useMutation({
     onError: (err) => console.warn('[NewJobModal] Schedule DB write failed:', err.message),
   });
+  const createOpportunityMutation = trpc.opportunities.create.useMutation({
+    onError: (err) => console.warn('[NewJobModal] DB opportunity create failed (local state preserved):', err.message),
+  });
+  const createCustomerMutation = trpc.customers.create.useMutation({
+    onError: (err) => console.warn('[NewJobModal] DB customer create failed:', err.message),
+  });
   const [customer, setCustomer] = useState(prefill?.displayName ?? '');
   const [selectedCustomer, setSelectedCustomer] = useState<SelectedCustomer | null>(
     prefill ? { id: prefill.id ?? '', displayName: prefill.displayName ?? '', phone: prefill.phone ?? '', email: prefill.email ?? '', address: prefill.address ?? '', city: prefill.city ?? '', state: prefill.state ?? '', zip: prefill.zip ?? '' } : null
@@ -50,10 +56,12 @@ export default function NewJobModal({ onClose, prefill, onSaved }: { onClose: ()
     if (!customerId) {
       customerId = nanoid(8);
       addCustomer({ id: customerId, displayName: customer.trim(), firstName: '', lastName: '', company: '', mobilePhone: '', homePhone: '', workPhone: '', email: '', role: '', customerType: 'homeowner', doNotService: false, street: '', unit: '', city: '', state: 'WA', zip: '', addressNotes: '', customerNotes: '', billsTo: '', tags: [], leadSource: '', referredBy: '', sendNotifications: true, sendMarketingOptIn: false, createdAt: new Date().toISOString(), lifetimeValue: 0, outstandingBalance: 0 });
+      createCustomerMutation.mutate({ displayName: customer.trim(), firstName: '', lastName: '', email: '', mobilePhone: '', customerType: 'homeowner', tags: [] });
     }
     const totalValue = items.reduce((s, i) => s + i.qty * i.unitPrice, 0);
     const oppId = nanoid(8);
     const newJobTitle = oppTitle.trim() || `Job — ${customer.trim()}`;
+    const clientSnap = { client: customer.trim(), companyName: '', phone: selectedCustomer?.phone ?? '', email: selectedCustomer?.email ?? '', address: selectedCustomer?.address ?? '', city: selectedCustomer?.city ?? '', state: selectedCustomer?.state ?? '', zip: selectedCustomer?.zip ?? '', jobType: '', scope: '' };
     addOpportunity({
       id: oppId,
       area: 'job',
@@ -63,7 +71,18 @@ export default function NewJobModal({ onClose, prefill, onSaved }: { onClose: ()
       value: totalValue,
       notes,
       archived: false,
-      clientSnapshot: { client: customer.trim(), companyName: '', phone: selectedCustomer?.phone ?? '', email: selectedCustomer?.email ?? '', address: selectedCustomer?.address ?? '', city: selectedCustomer?.city ?? '', state: selectedCustomer?.state ?? '', zip: selectedCustomer?.zip ?? '', jobType: '', scope: '' },
+      clientSnapshot: clientSnap,
+    });
+    // Persist opportunity to DB
+    createOpportunityMutation.mutate({
+      customerId,
+      area: 'job',
+      stage: 'New Job',
+      title: newJobTitle,
+      value: totalValue,
+      notes,
+      archived: false,
+      clientSnapshot: JSON.stringify(clientSnap),
     });
     // Auto-create schedule event if dates were provided
     if (!anytime && fromDate) {

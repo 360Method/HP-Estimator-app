@@ -763,6 +763,9 @@ export default function CustomerSection() {
   const setBillingAddressMutation = trpc.customers.setBillingAddress.useMutation({
     onError: (err) => toast.error(`Failed to set billing: ${err.message}`),
   });
+  const createOpportunityMutation = trpc.opportunities.create.useMutation({
+    onError: (err) => console.warn('[CustomerSection] DB opportunity create failed (local state preserved):', err.message),
+  });
 
   // Wrapped address helpers that update both context and DB
   const handleAddAddress = (customerId: string, addr: Parameters<typeof addCustomerAddress>[1]) => {
@@ -1475,7 +1478,12 @@ export default function CustomerSection() {
         area={area}
         stages={areaStages}
         opportunities={areaOpps}
-        onAdd={(title, stage, value, notes) => addOpportunity({ area, stage, title, value, notes, archived: false })}
+        onAdd={(title, stage, value, notes) => {
+          addOpportunity({ area, stage, title, value, notes, archived: false });
+          if (activeCustomerId) {
+            createOpportunityMutation.mutate({ customerId: activeCustomerId, area, stage, title, value, notes, archived: false });
+          }
+        }}
         onUpdate={updateOpportunity}
         onRemove={removeOpportunity}
         onConvertToEstimate={area === 'lead' ? convertLeadToEstimate : undefined}

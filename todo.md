@@ -1448,7 +1448,7 @@
 - [x] Add portfolioAbandonedLeadRouter (capture) to threeSixty.ts
 - [x] Wire portfolioCheckout + portfolioAbandonedLead into combined threeSixtyRouter
 - [x] Push DB migration (pnpm db:push) — migration 0025 applied
-- [ ] Add 13 STRIPE_PRICE_PORTFOLIO_* env var secrets (pending user — must create products in Stripe dashboard first)
+- [x] Add 13 STRIPE_PRICE_PORTFOLIO_* env var secrets — done (all 30 price IDs injected from stripe_price_ids.json, Apr 15 2026)
 
 ## 360° Inspection & Report Integration — Sprint 1: Data Foundation
 
@@ -1539,3 +1539,15 @@
 - [x] Wire turnover price IDs into server/routers/turnover.ts or equivalent — done (env vars set)
 - [x] Run pnpm test to confirm no regressions — 194 tests pass
 - [x] Save checkpoint — fd5465bb
+
+## Launch Gap Fixes (Apr 15 2026)
+
+- [ ] Fix DB write-through: NewCustomerModal must call trpc.customers.create on submit
+- [ ] Fix DB write-through: SalesSection/LeadIntakeModal must call trpc.opportunities.create on new lead/estimate/job
+- [ ] Fix DB write-through: EstimateApprovedModal must call trpc.opportunities.create for new job opportunity
+- [ ] Fix DB write-through: addOpportunity context action must call trpc.opportunities.create
+- [ ] Fix DB write-through: updateOpportunity context action must call trpc.opportunities.update
+- [ ] Fix CSV parser: use proper quoted-field handling (commas inside quotes)
+- [ ] Add column-mapping step to CSV import dialog (map CSV headers to customer fields)
+- [ ] Add downloadable CSV template link in import dialog
+- [ ] Run pnpm test, save checkpoint

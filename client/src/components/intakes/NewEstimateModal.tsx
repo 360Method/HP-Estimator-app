@@ -10,6 +10,7 @@ import { Calendar, Edit3, Paperclip, Hash, Tag, Globe, User } from 'lucide-react
 import { toast } from 'sonner';
 import { nanoid } from 'nanoid';
 import { useEstimator } from '@/contexts/EstimatorContext';
+import { trpc } from '@/lib/trpc';
 import IntakeShell, {
   CustomerSearchBox, SidebarSection, PrivateNotesPanel, LineItemsPanel, LineItem, SelectedCustomer,
 } from './IntakeShell';
@@ -33,6 +34,13 @@ export default function NewEstimateModal({ onClose, prefill, onSaved }: { onClos
   const defaultTitle = prefill?.displayName ? `Estimate — ${prefill.displayName}` : 'New Estimate';
   const [oppTitle, setOppTitle] = useState(defaultTitle);
 
+  const createOpportunityMutation = trpc.opportunities.create.useMutation({
+    onError: (err) => console.warn('[NewEstimateModal] DB opportunity create failed (local state preserved):', err.message),
+  });
+  const createCustomerMutation = trpc.customers.create.useMutation({
+    onError: (err) => console.warn('[NewEstimateModal] DB customer create failed:', err.message),
+  });
+
   const handleCustomerConfirmed = (c: SelectedCustomer) => {
     setCustomer(c.displayName);
     setSelectedCustomer(c);
@@ -44,9 +52,11 @@ export default function NewEstimateModal({ onClose, prefill, onSaved }: { onClos
     if (!customerId) {
       customerId = nanoid(8);
       addCustomer({ id: customerId, displayName: customer.trim(), firstName: '', lastName: '', company: '', mobilePhone: '', homePhone: '', workPhone: '', email: '', role: '', customerType: 'homeowner', doNotService: false, street: '', unit: '', city: '', state: 'WA', zip: '', addressNotes: '', customerNotes: '', billsTo: '', tags: [], leadSource: '', referredBy: '', sendNotifications: true, sendMarketingOptIn: false, createdAt: new Date().toISOString(), lifetimeValue: 0, outstandingBalance: 0 });
+      createCustomerMutation.mutate({ displayName: customer.trim(), firstName: '', lastName: '', email: '', mobilePhone: '', customerType: 'homeowner', tags: [] });
     }
     const totalValue = items.reduce((s, i) => s + i.qty * i.unitPrice, 0);
     const oppId = nanoid(8);
+    const clientSnap = { client: customer.trim(), companyName: '', phone: selectedCustomer?.phone ?? '', email: selectedCustomer?.email ?? '', address: selectedCustomer?.address ?? '', city: selectedCustomer?.city ?? '', state: selectedCustomer?.state ?? '', zip: selectedCustomer?.zip ?? '', jobType: '', scope: '' };
     addOpportunity({
       id: oppId,
       area: 'estimate',
@@ -56,7 +66,17 @@ export default function NewEstimateModal({ onClose, prefill, onSaved }: { onClos
       value: totalValue,
       notes,
       archived: false,
-      clientSnapshot: { client: customer.trim(), companyName: '', phone: selectedCustomer?.phone ?? '', email: selectedCustomer?.email ?? '', address: selectedCustomer?.address ?? '', city: selectedCustomer?.city ?? '', state: selectedCustomer?.state ?? '', zip: selectedCustomer?.zip ?? '', jobType: '', scope: '' },
+      clientSnapshot: clientSnap,
+    });
+    createOpportunityMutation.mutate({
+      customerId,
+      area: 'estimate',
+      stage: 'Draft',
+      title: oppTitle.trim() || `Estimate — ${customer.trim()}`,
+      value: totalValue,
+      notes,
+      archived: false,
+      clientSnapshot: JSON.stringify(clientSnap),
     });
     setActiveCustomer(customerId);
     toast.success('Estimate created');
