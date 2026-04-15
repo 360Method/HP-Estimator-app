@@ -611,8 +611,69 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
                 <span>Dashboard</span>
               </span>
             </div>
+          ) : state.activeSection === 'schedule' ? (
+            /* ── Schedule nav ── */
+            <div className="flex items-center py-2 gap-2">
+              <span className="text-[11px] font-semibold text-primary flex items-center gap-1.5">
+                <span className="text-sm">📅</span>
+                <span>Schedule</span>
+              </span>
+            </div>
+          ) : state.activeSection === 'financials' ? (
+            /* ── Financials nav ── */
+            <div className="flex items-center py-2 gap-2">
+              <span className="text-[11px] font-semibold text-primary flex items-center gap-1.5">
+                <span className="text-sm">💰</span>
+                <span>Financials</span>
+              </span>
+            </div>
+          ) : state.activeSection === 'quickbooks' ? (
+            /* ── QuickBooks nav ── */
+            <div className="flex items-center py-2 gap-2">
+              <span className="text-[11px] font-semibold text-primary flex items-center gap-1.5">
+                <span className="text-sm">📖</span>
+                <span>QuickBooks</span>
+              </span>
+            </div>
+          ) : state.activeSection === 'marketing' ? (
+            /* ── Marketing nav ── */
+            <div className="flex items-center py-2 gap-2">
+              <span className="text-[11px] font-semibold text-primary flex items-center gap-1.5">
+                <span className="text-sm">📣</span>
+                <span>Marketing</span>
+              </span>
+            </div>
+          ) : state.activeSection === 'reporting' || state.activeSection === 'three-sixty' ? (
+            /* ── Reporting nav ── */
+            <div className="flex items-center py-2 gap-2">
+              <span className="text-[11px] font-semibold text-primary flex items-center gap-1.5">
+                <span className="text-sm">📊</span>
+                <span>Reports</span>
+              </span>
+            </div>
+          ) : state.activeSection === 'inbox' ? (
+            /* ── Inbox nav ── */
+            <div className="flex items-center py-2 gap-2">
+              <span className="text-[11px] font-semibold text-primary flex items-center gap-1.5">
+                <span className="text-sm">📥</span>
+                <span>Inbox</span>
+              </span>
+            </div>
+          ) : state.activeSection === 'requests' ? (
+            /* ── Requests nav ── */
+            <div className="flex items-center py-2 gap-2">
+              <span className="text-[11px] font-semibold text-primary flex items-center gap-1.5">
+                <span className="text-sm">📋</span>
+                <span>Requests</span>
+              </span>
+            </div>
+          ) : state.activeSection === 'customer' && !state.activeCustomerId ? (
+            /* ── Empty / no customer selected ── */
+            <div className="flex items-center py-2 gap-2">
+              <span className="text-[11px] text-muted-foreground">Select a customer to get started</span>
+            </div>
           ) : (
-            /* ── Profile-only nav ── */
+            /* ── Profile-only nav (inside a customer profile) ── */
             <div className="flex items-stretch">
               {/* Only show back button when we drilled in from the Customers list or search */}
               {(state.customerNavSource === 'list' || state.customerNavSource === 'search') && (
