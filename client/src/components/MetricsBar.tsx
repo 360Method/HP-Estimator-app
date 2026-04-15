@@ -459,7 +459,7 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
               );
             })}
             <button
-              onClick={() => { handleBackendNav('Settings'); setShowMobileNav(false); }}
+              onClick={() => { setOverlay('settings'); setShowMobileNav(false); }}
               className="flex flex-col items-center gap-1 px-2 py-2.5 rounded-xl text-[10px] font-semibold text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
             >
               <Settings className="w-5 h-5" />
