@@ -72,7 +72,7 @@ const BACKEND_NAV: { icon: React.ElementType; label: string; section: AppSection
   { icon: CalendarDays,    label: 'Schedule',   section: 'schedule' as AppSection },
   { icon: GitBranch,       label: 'Pipeline',   section: 'pipeline'  },
   { icon: Inbox,           label: 'Inbox',      section: 'inbox' as AppSection },
-  { icon: DollarSign,      label: 'Financials', section: null        },
+  { icon: DollarSign,      label: 'Financials', section: 'financials' as AppSection },
   { icon: BarChart2,       label: 'Reporting',  section: 'reporting' as AppSection },
   { icon: Megaphone,       label: 'Marketing',  section: 'marketing' as AppSection },
   { icon: RefreshCw,        label: '360 Method', section: 'three-sixty' as AppSection },
@@ -233,6 +233,7 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
     if (section === 'reporting') { setSection('reporting'); return; }
     if (section === 'marketing') { setSection('marketing'); return; }
     if (section === 'three-sixty') { setSection('three-sixty'); return; }
+    if (section === 'financials') { setSection('financials'); setShowMobileNav(false); return; }
     handleBackendNav(label);
   };
 

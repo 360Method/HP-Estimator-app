@@ -17,6 +17,7 @@ import { bookingRouter } from "./routers/booking";
 import { threeSixtyRouter } from "./routers/threeSixty";
 import { invoicesRouter } from "./routers/invoices";
 import { scheduleRouter } from "./routers/schedule";
+import { financialsRouter } from "./routers/financials";
 import {
   getAdminAllowlist,
   addAdminAllowlistEmail,
@@ -39,6 +40,7 @@ export const appRouter = router({
   threeSixty: threeSixtyRouter,
   invoices: invoicesRouter,
   schedule: scheduleRouter,
+  financials: financialsRouter,
 
   auth: router({
     /**

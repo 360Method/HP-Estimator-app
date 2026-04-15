@@ -28,6 +28,7 @@ import AdminLogin from '@/pages/AdminLogin';
 import AdminAccessDenied from '@/pages/AdminAccessDenied';
 import RequestsPage from '@/pages/RequestsPage';
 import ThreeSixtyPage from '@/pages/ThreeSixtyPage';
+import FinancialsPage from '@/pages/FinancialsPage';
 import OpportunityDetailsTab from '@/components/sections/OpportunityDetailsTab';
 
 export default function Home() {
@@ -88,6 +89,8 @@ function AdminApp() {
         <RequestsPage />
       ) : state.activeSection === 'three-sixty' ? (
         <ThreeSixtyPage />
+      ) : state.activeSection === 'financials' ? (
+        <FinancialsPage />
       ) : (
         <div className="container py-6 max-w-4xl">
           {state.activeSection === 'customer' && <CustomerSection />}
