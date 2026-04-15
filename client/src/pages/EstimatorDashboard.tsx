@@ -16,7 +16,7 @@ import {
   ArrowRight, Plus, Phone, Mail, MapPin,
   Clock, CheckCircle2, AlertCircle, Circle,
   ChevronRight, Activity, Zap, Target,
-  UserPlus, ClipboardList, Wrench, Receipt,
+  UserPlus, ClipboardList, Wrench, Receipt, Upload,
 } from 'lucide-react';
 import { Customer, Opportunity, Invoice } from '@/lib/types';
 import { trpc } from '@/lib/trpc';
