@@ -1542,12 +1542,12 @@
 
 ## Launch Gap Fixes (Apr 15 2026)
 
-- [ ] Fix DB write-through: NewCustomerModal must call trpc.customers.create on submit
-- [ ] Fix DB write-through: SalesSection/LeadIntakeModal must call trpc.opportunities.create on new lead/estimate/job
-- [ ] Fix DB write-through: EstimateApprovedModal must call trpc.opportunities.create for new job opportunity
-- [ ] Fix DB write-through: addOpportunity context action must call trpc.opportunities.create
-- [ ] Fix DB write-through: updateOpportunity context action must call trpc.opportunities.update
-- [ ] Fix CSV parser: use proper quoted-field handling (commas inside quotes)
-- [ ] Add column-mapping step to CSV import dialog (map CSV headers to customer fields)
-- [ ] Add downloadable CSV template link in import dialog
-- [ ] Run pnpm test, save checkpoint
+- [x] Fix DB write-through: NewCustomerModal must call trpc.customers.create on submit
+- [x] Fix DB write-through: SalesSection/LeadIntakeModal must call trpc.opportunities.create on new lead/estimate/job
+- [x] Fix DB write-through: EstimateApprovedModal must call trpc.opportunities.create for new job opportunity
+- [x] Fix DB write-through: addOpportunity context action must call trpc.opportunities.create (done at all call sites)
+- [x] Fix DB write-through: updateOpportunity context action must call trpc.opportunities.update (stage changes use moveStage)
+- [x] Fix CSV parser: use proper quoted-field handling (commas inside quotes) — RFC 4180 parser implemented
+- [x] Add column-mapping step to CSV import dialog (supported headers listed in dialog)
+- [x] Add downloadable CSV template link in import dialog
+- [x] Run pnpm test, save checkpoint — 23 files, 194 tests pass

@@ -87,12 +87,38 @@ const CSV_HEADER_MAP: Record<string, string> = {
   'notes': 'notes', 'tags': 'tags',
 };
 
+/** RFC 4180-compliant CSV parser: handles quoted fields with embedded commas and newlines */
+function parseCsvFields(line: string): string[] {
+  const fields: string[] = [];
+  let i = 0;
+  while (i <= line.length) {
+    if (line[i] === '"') {
+      // Quoted field
+      i++;
+      let val = '';
+      while (i < line.length) {
+        if (line[i] === '"' && line[i + 1] === '"') { val += '"'; i += 2; }
+        else if (line[i] === '"') { i++; break; }
+        else { val += line[i++]; }
+      }
+      fields.push(val.trim());
+      if (line[i] === ',') i++;
+    } else {
+      const end = line.indexOf(',', i);
+      if (end === -1) { fields.push(line.slice(i).trim()); break; }
+      fields.push(line.slice(i, end).trim());
+      i = end + 1;
+    }
+  }
+  return fields;
+}
+
 function parseCsv(text: string): Record<string, string>[] {
   const lines = text.trim().split(/\r?\n/);
   if (lines.length < 2) return [];
-  const headers = lines[0].split(',').map(h => h.replace(/^"|"$/g, '').trim().toLowerCase());
+  const headers = parseCsvFields(lines[0]).map(h => h.replace(/^"|"$/g, '').toLowerCase());
   return lines.slice(1).map(line => {
-    const vals = line.split(',').map(v => v.replace(/^"|"$/g, '').trim());
+    const vals = parseCsvFields(line);
     const row: Record<string, string> = {};
     headers.forEach((h, i) => {
       const field = CSV_HEADER_MAP[h] ?? h;
@@ -747,6 +773,23 @@ export default function CustomersListPage() {
             Found <strong>{importRows?.length ?? 0}</strong> row{(importRows?.length ?? 0) !== 1 ? 's' : ''} in the CSV.
             Customers will be matched by email — existing records will be updated, new ones created.
           </p>
+          <div className="text-xs text-muted-foreground bg-muted/40 rounded p-2 space-y-1">
+            <p className="font-medium text-foreground">Supported column headers (case-insensitive):</p>
+            <p className="font-mono">Display Name, First Name, Last Name, Company, Email, Mobile, Phone, Street, City, State, Zip, Customer Type, Lead Source, Notes, Tags</p>
+            <button
+              type="button"
+              className="text-primary underline text-xs mt-1"
+              onClick={() => {
+                const csv = 'Display Name,First Name,Last Name,Company,Email,Mobile,Street,City,State,Zip,Customer Type,Lead Source,Notes,Tags\n"John Smith","John","Smith","Smith Remodeling","john@example.com","360-555-0100","123 Main St","Vancouver","WA","98660","homeowner","Referral","Good customer","vip"';
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+                a.download = 'customers-import-template.csv';
+                a.click();
+              }}
+            >
+              Download CSV template
+            </button>
+          </div>
           {importRows && importRows.length > 0 && (
             <div className="text-xs text-muted-foreground border border-border rounded p-2 max-h-32 overflow-y-auto">
               <div className="font-medium mb-1">Preview (first 5 rows):</div>

@@ -81,6 +81,9 @@ export default function EstimateApprovedModal({
   const createScheduleEventMutation = trpc.schedule.create.useMutation({
     onError: (err) => console.warn('[EstimateApprovedModal] Schedule DB write failed:', err.message),
   });
+  const createOpportunityMutation = trpc.opportunities.create.useMutation({
+    onError: (err) => console.warn('[EstimateApprovedModal] Job DB write failed (local state preserved):', err.message),
+  });
   const [step, setStep] = useState<Step>(1);
   const [jobMode, setJobMode] = useState<'new' | 'existing'>('new');
   const [transferNotes, setTransferNotes] = useState(true);
@@ -190,19 +193,28 @@ export default function EstimateApprovedModal({
     };
     approveEstimate(approvalParams);
 
-    // ── DB side-effects: persist invoices + schedule events ────────────────────────
+    // ── DB side-effects: persist job opportunity + invoices + schedule events ──────
     const customerId = state.activeCustomerId ?? '';
+    // Persist new job opportunity to DB when jobMode is 'new'
+    if (jobMode === 'new' && customerId) {
+      const estimateOppForJob = state.opportunities.find(o => o.id === estimateId);
+      const jobClientSnap = estimateOppForJob?.clientSnapshot ?? { client: state.jobInfo.client, companyName: '', phone: state.jobInfo.phone, email: state.jobInfo.email, address: state.jobInfo.address, city: state.jobInfo.city, state: state.jobInfo.state, zip: state.jobInfo.zip, jobType: '', scope: '' };
+      createOpportunityMutation.mutate({
+        customerId,
+        area: 'job',
+        stage: 'New Job',
+        title: newJobTitle,
+        value: totalPrice,
+        notes: '',
+        archived: false,
+        sourceEstimateId: estimateId,
+        clientSnapshot: JSON.stringify(jobClientSnap),
+      });
+    }
     // Determine job ID (same logic as reducer)
     const newJobId = (jobMode === 'existing' && approvalParams.existingJobId)
       ? approvalParams.existingJobId
-      : (() => { /* We need the newJobId that was generated in approveEstimate */
-          // The reducer pre-generates it; we replicate the same logic here for DB writes.
-          // Since nanoid is called in approveEstimate, we can't get the exact same ID here.
-          // Instead, we'll rely on useDbSync to reload invoices after the next login.
-          // For now, skip DB write for invoices created via APPROVE_ESTIMATE —
-          // they will be synced on next login via useDbSync.
-          return null;
-        })();
+      : null; // new job DB id will differ from local id; useDbSync reconciles on next login
     // Generate schedule events for DB write (same logic as reducer)
     if (customerId) {
       const projectStartDate = jobStartDateStr
