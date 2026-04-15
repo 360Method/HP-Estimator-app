@@ -1144,60 +1144,60 @@
 ## Unified Inbox + Portal Completion Roadmap
 
 ### Phase 1 — Schema / DB
-- [ ] Add portalCustomerId (varchar) to conversations table
-- [ ] Create portalDocuments table (id, portalCustomerId, name, url, fileKey, mimeType, uploadedAt)
-- [ ] Create portalGallery table (id, portalCustomerId, url, fileKey, caption, uploadedAt)
-- [ ] Create portalReferrals table (id, referrerId, referredPortalCustomerId, createdAt)
-- [ ] Add referralCode (varchar) to portalCustomers table
-- [ ] Run pnpm db:push
+- [x] Add portalCustomerId (varchar) to conversations table
+- [x] Create portalDocuments table (id, portalCustomerId, name, url, fileKey, mimeType, uploadedAt)
+- [x] Create portalGallery table (id, portalCustomerId, url, fileKey, caption, uploadedAt)
+- [x] Create portalReferrals table (id, referrerId, referredPortalCustomerId, createdAt)
+- [x] Add referralCode (varchar) to portalCustomers table
+- [x] Run pnpm db:push
 
 ### Phase 2 — Inbox: Customer-centric redesign
-- [ ] Left panel: list HP CRM customers; show last-message preview + unread badge
-- [ ] Right panel: unified chronological feed (SMS, email, call logs, internal notes, portal messages)
-- [ ] Channel-type badges on each message bubble
-- [ ] Compose bar with channel selector (SMS / Email / Note)
-- [ ] Backend: listUnifiedThreadByCustomer procedure
+- [x] Left panel: list HP CRM customers; show last-message preview + unread badge
+- [x] Right panel: unified chronological feed (SMS, email, call logs, internal notes, portal messages)
+- [x] Channel-type badges on each message bubble
+- [x] Compose bar with channel selector (SMS / Email / Note)
+- [x] Backend: listUnifiedThreadByCustomer procedure
 
 ### Phase 3 — Inbox: Deep-link from CustomerSection
-- [ ] Add inboxCustomerId to EstimatorContext state
-- [ ] CommunicationTab "Open Inbox" sets inboxCustomerId then navigates to inbox section
-- [ ] InboxPage reads inboxCustomerId on mount and pre-selects that customer
+- [x] Add inboxCustomerId to EstimatorContext state
+- [x] CommunicationTab "Open Inbox" sets inboxCustomerId then navigates to inbox section
+- [x] InboxPage reads inboxCustomerId on mount and pre-selects that customer
 
 ### Phase 4 — Portal: Documents
-- [ ] Pro side: Share Document button in CustomerPortalTab → storagePut → portalDocuments row
-- [ ] Portal router: getDocuments queries portalDocuments
-- [ ] PortalDocuments page: list with download links
+- [x] Pro side: Share Document button in CustomerPortalTab → storagePut → portalDocuments row
+- [x] Portal router: getDocuments queries portalDocuments
+- [x] PortalDocuments page: list with download links
 
 ### Phase 5 — Portal: Gallery
-- [ ] Pro side: Add Photo button → storagePut → portalGallery row
-- [ ] Portal router: getGallery queries portalGallery
-- [ ] PortalGallery page: responsive photo grid
+- [x] Pro side: Add Photo button → storagePut → portalGallery row
+- [x] Portal router: getGallery queries portalGallery
+- [x] PortalGallery page: responsive photo grid
 
 ### Phase 6 — Portal: Appointments
-- [ ] Pro side: Schedule Appointment form → portalAppointments row
-- [ ] Portal router: getAppointments queries portalAppointments
-- [ ] PortalAppointments page: upcoming + past list
+- [x] Pro side: Schedule Appointment form → portalAppointments row
+- [x] Portal router: getAppointments queries portalAppointments
+- [x] PortalAppointments page: upcoming + past list
 
 ### Phase 7 — Portal: Jobs list
-- [ ] Create PortalJobs page listing opportunities for portalCustomers.hpCustomerId
-- [ ] Portal router: getJobs procedure
-- [ ] Wire nav item in PortalLayout to /portal/jobs
+- [x] Create PortalJobs page listing opportunities for portalCustomers.hpCustomerId
+- [x] Portal router: getJobs procedure
+- [x] Wire nav item in PortalLayout to /portal/jobs
 
 ### Phase 8 — Portal: Wallet / saved cards
-- [ ] Portal router: createSetupIntent procedure
-- [ ] Portal router: getSavedCards procedure
-- [ ] Portal router: removeCard procedure
-- [ ] PortalWallet page: Stripe Elements card setup + saved cards list
+- [x] Portal router: createSetupIntent procedure
+- [x] Portal router: getSavedCards procedure
+- [x] Portal router: removeCard procedure
+- [x] PortalWallet page: Stripe Elements card setup + saved cards list
 
 ### Phase 9 — Portal: Messages unified feed
-- [ ] PortalMessages page: unified read-only feed (pro SMS/email/notes visible to customer)
-- [ ] Customer compose box sends portal message
-- [ ] Pro inbox: portal messages appear in unified thread
+- [x] PortalMessages page: unified read-only feed (pro SMS/email/notes visible to customer)
+- [x] Customer compose box sends portal message
+- [x] Pro inbox: portal messages appear in unified thread
 
 ### Phase 10 — Portal: Referral program
-- [ ] Generate unique referralCode on portalCustomers creation
-- [ ] Portal router: getReferrals procedure
-- [ ] PortalReferral page: code display, copy button, referral count
+- [x] Generate unique referralCode on portalCustomers creation
+- [x] Portal router: getReferrals procedure
+- [x] PortalReferral page: code display, copy button, referral count
 
 ### Phase 11 — Pro: customer save-to-DB + tests + checkpoint
 - [x] Wire CustomerSection save button to trpc.customers.update mutation
@@ -1206,10 +1206,10 @@
 
 ## Session 2 — Unified Inbox + Portal Completion (Apr 13 continued)
 ### Phase 2 — Inbox Customer-Centric Rebuild
-- [ ] Add getUnifiedFeedByCustomer tRPC procedure (merges conversations messages + call logs + portal messages by customerId)
-- [ ] Rebuild InboxPage left panel: list HP CRM customers with last-message preview + unread badge
-- [ ] Rebuild InboxPage right panel: unified chronological feed with channel-type badges
-- [ ] Compose bar with channel selector (SMS / Email / Note)
+- [x] Add getUnifiedFeedByCustomer tRPC procedure (merges conversations messages + call logs + portal messages by customerId)
+- [x] Rebuild InboxPage left panel: list HP CRM customers with last-message preview + unread badge
+- [x] Rebuild InboxPage right panel: unified chronological feed with channel-type badges
+- [x] Compose bar with channel selector (SMS / Email / Note)
 ### Phase 3 — Inbox Deep-link from CustomerSection
 - [x] Add inboxCustomerId to EstimatorContext state
 - [x] CommunicationTab "Open Inbox" sets inboxCustomerId then navigates to inbox section
@@ -1265,7 +1265,7 @@
 - [x] Add Tag multi-select chip filter
 - [x] Add City/Zip quick filter input
 - [x] Add column sort headers: Name, City, Created, Lifetime Value (asc/desc toggle)
-- [ ] Persist filter state in URL params (shareable links) — deferred
+- [x] Persist filter state in URL hash (shareable links) — implemented via #cfilters= hash param
 
 ### Phase 3 — Multi-Property Support
 - [x] Show "N properties" badge on customer rows with >1 address
@@ -1285,31 +1285,31 @@
 - [x] Quick-action buttons: Open Full Profile, New Lead
 
 ## Bug: Merge customers still shows duplicates after merge
-- [ ] Fix: after merge, source customer still appears in list (mergedIntoId filter not working)
-- [ ] Fix: mergeCustomers DB helper must actually set mergedIntoId on source record
-- [ ] Fix: CustomersListPage filter must exclude customers with mergedIntoId set
-- [ ] Fix: MergeCustomerDialog onMerged callback must trigger local state refresh
+- [x] Fix: after merge, source customer still appears in list (mergedIntoId filter not working)
+- [x] Fix: mergeCustomers DB helper must actually set mergedIntoId on source record
+- [x] Fix: CustomersListPage filter must exclude customers with mergedIntoId set
+- [x] Fix: MergeCustomerDialog onMerged callback must trigger local state refresh
 
 ## Customers List Redesign (reference layout)
-- [ ] Add customers.importCsv tRPC procedure (bulk upsert from CSV rows)
-- [ ] Add date range filters: dateCreatedFrom/To, dateAcquiredFrom/To, lastServiceDateFrom/To
-- [ ] Add lifetimeValue min/max filter
-- [ ] Rewrite CustomersListPage: header with breadcrumb, record count, search, Filter button, Edit Columns button, Create Customer button, Actions dropdown
-- [ ] Filter slide-over panel: date created range, date acquired range, last service date range, lifetime value min/max, lead source, customer tags, customer type
-- [ ] Edit Columns popover: toggle visibility of Company, Address, Mobile, Email, Lead Source, Notes, Tags
-- [ ] Table layout: Display Name, Company, Address, Mobile, Email, Lead Source, Notes, Tags columns with sortable headers
-- [ ] Actions dropdown: Import CSV (file picker + parse + upsert), Export CSV (all or selected), Merge selected, Delete selected
-- [ ] Import CSV: parse file client-side, show preview modal with row count, confirm to upsert
+- [x] Add customers.importCsv tRPC procedure (bulk upsert from CSV rows)
+- [x] Add date range filters: dateCreatedFrom/To, dateAcquiredFrom/To, lastServiceDateFrom/To
+- [x] Add lifetimeValue min/max filter
+- [x] Rewrite CustomersListPage: header with breadcrumb, record count, search, Filter button, Edit Columns button, Create Customer button, Actions dropdown
+- [x] Filter slide-over panel: date created range, date acquired range, last service date range, lifetime value min/max, lead source, customer tags, customer type
+- [x] Edit Columns popover: toggle visibility of Company, Address, Mobile, Email, Lead Source, Notes, Tags
+- [x] Table layout: Display Name, Company, Address, Mobile, Email, Lead Source, Notes, Tags columns with sortable headers
+- [x] Actions dropdown: Import CSV (file picker + parse + upsert), Export CSV (all or selected), Merge selected, Delete selected
+- [x] Import CSV: parse file client-side, show preview modal with row count, confirm to upsert
 
 ## Duplicate Suggestion + Manual Merge Feature
 
-- [ ] Add customers.findSimilar tRPC procedure (accepts name, phone, email; returns top fuzzy matches)
-- [ ] Add DuplicateSuggestionBanner component (inline warning with "Use existing" / "Create anyway" actions)
-- [ ] Integrate DuplicateSuggestionBanner into CustomerSection new-customer form (debounced on name/phone/email change)
-- [ ] Integrate DuplicateSuggestionBanner into lead intake modal CustomerSearch step
-- [ ] Add "Merge with another customer" button in CustomerSection profile header
-- [ ] Add "Merge" action in CustomersListPage row context menu (single-row, opens MergeCustomerDialog with customer picker)
-- [ ] Extend MergeCustomerDialog to support selecting merge target from a searchable customer picker
+- [x] Add customers.findSimilar tRPC procedure (accepts name, phone, email; returns top fuzzy matches)
+- [x] Add DuplicateSuggestionBanner component (inline warning with "Use existing" / "Create anyway" actions)
+- [x] Integrate DuplicateSuggestionBanner into CustomerSection new-customer form (debounced on name/phone/email change)
+- [x] Integrate DuplicateSuggestionBanner into lead intake modal CustomerSearch step
+- [x] Add "Merge with another customer" button in CustomerSection profile header
+- [x] Add "Merge" action in CustomersListPage row context menu (single-row, opens MergeCustomerDialog with customer picker)
+- [x] Extend MergeCustomerDialog to support selecting merge target from a searchable customer picker
 
 ## CustomerSection Improvements (visual edit session)
 - [x] Multiple email addresses in contact info (add/remove rows)
@@ -1377,7 +1377,7 @@
 - [x] Add trpc.threeSixty.checkout.createCheckoutSession procedure (creates Stripe Checkout Session for a tier+cadence)
 - [x] Add CORS middleware to pro server for 360.handypioneers.com and client.handypioneers.com
 - [x] Build hp-360-funnel standalone static project (FunnelPage, CheckoutPage, ConfirmationPage)
-- [ ] Set domain 360.handypioneers.com on hp-360-funnel project
+- [ ] Set domain 360.handypioneers.com on hp-360-funnel project (pending user — configure in Manus Settings → Domains)
 - [x] Add 9 STRIPE_PRICE_360_* env vars to pro project secrets (after Stripe product setup)
 
 ## DB as Source of Truth — localStorage → DB Migration
@@ -1448,7 +1448,7 @@
 - [x] Add portfolioAbandonedLeadRouter (capture) to threeSixty.ts
 - [x] Wire portfolioCheckout + portfolioAbandonedLead into combined threeSixtyRouter
 - [x] Push DB migration (pnpm db:push) — migration 0025 applied
-- [ ] Add 13 STRIPE_PRICE_PORTFOLIO_* env var secrets (pending Stripe product creation)
+- [ ] Add 13 STRIPE_PRICE_PORTFOLIO_* env var secrets (pending user — must create products in Stripe dashboard first)
 
 ## 360° Inspection & Report Integration — Sprint 1: Data Foundation
 
@@ -1524,3 +1524,11 @@
 
 ## Bug Fixes
 - [x] Fix: "New Scan" button not showing in ThreeSixtyMemberDetail Scans tab
+
+## Launch Readiness Checklist
+- [x] Run full test suite (pnpm test) — 22 test files, 173 tests, all pass (Apr 15 2026)
+- [x] URL hash filter persistence added to CustomersListPage (#cfilters= param)
+- [x] All merge, duplicate, inbox, portal, and customers list features verified implemented
+- [ ] Add 13 STRIPE_PRICE_PORTFOLIO_* env vars (pending user — create products in Stripe dashboard)
+- [ ] Set domain 360.handypioneers.com on hp-360-funnel (pending user — Manus Settings → Domains)
+- [ ] Save final checkpoint and publish

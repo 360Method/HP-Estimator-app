@@ -5,7 +5,7 @@
 // Filter slide-over | Edit Columns | Actions (Import/Export/Merge/Delete)
 // ============================================================
 
-import { useState, useMemo, useRef, useCallback } from 'react';
+import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { Customer } from '@/lib/types';
 import { trpc } from '@/lib/trpc';
@@ -121,21 +121,51 @@ export default function CustomersListPage() {
   );
   const [showColPicker, setShowColPicker] = useState(false);
 
-  // ── Filter state ──────────────────────────────────────────────────────────
-  const [searchQuery, setSearchQuery] = useState('');
+  // ── Filter state (with URL hash persistence for shareable links) ────────
+  function readHashFilters() {
+    try {
+      const hash = window.location.hash;
+      if (!hash.startsWith('#cfilters=')) return null;
+      return JSON.parse(decodeURIComponent(hash.slice('#cfilters='.length)));
+    } catch { return null; }
+  }
+  const _h = readHashFilters();
+  const [searchQuery, setSearchQuery] = useState(_h?.q ?? '');
   const [showFilters, setShowFilters] = useState(false);
-  const [filterType, setFilterType] = useState('');
-  const [filterLeadSource, setFilterLeadSource] = useState('');
-  const [filterTags, setFilterTags] = useState<string[]>([]);
-  const [filterCity, setFilterCity] = useState('');
-  const [filterDateCreatedFrom, setFilterDateCreatedFrom] = useState('');
-  const [filterDateCreatedTo, setFilterDateCreatedTo] = useState('');
-  const [filterLifetimeMin, setFilterLifetimeMin] = useState('');
-  const [filterLifetimeMax, setFilterLifetimeMax] = useState('');
+  const [filterType, setFilterType] = useState(_h?.type ?? '');
+  const [filterLeadSource, setFilterLeadSource] = useState(_h?.ls ?? '');
+  const [filterTags, setFilterTags] = useState<string[]>(_h?.tags ?? []);
+  const [filterCity, setFilterCity] = useState(_h?.city ?? '');
+  const [filterDateCreatedFrom, setFilterDateCreatedFrom] = useState(_h?.dcFrom ?? '');
+  const [filterDateCreatedTo, setFilterDateCreatedTo] = useState(_h?.dcTo ?? '');
+  const [filterLifetimeMin, setFilterLifetimeMin] = useState(_h?.lvMin ?? '');
+  const [filterLifetimeMax, setFilterLifetimeMax] = useState(_h?.lvMax ?? '');
 
   // ── Sort state ────────────────────────────────────────────────────────────
-  const [sortBy, setSortBy] = useState<SortField>('displayName');
-  const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [sortBy, setSortBy] = useState<SortField>(_h?.sortBy ?? 'displayName');
+  const [sortDir, setSortDir] = useState<SortDir>(_h?.sortDir ?? 'asc');
+
+  // Persist filters to URL hash for shareable links
+  useEffect(() => {
+    const params: Record<string, unknown> = {};
+    if (searchQuery) params.q = searchQuery;
+    if (filterType) params.type = filterType;
+    if (filterLeadSource) params.ls = filterLeadSource;
+    if (filterTags.length) params.tags = filterTags;
+    if (filterCity) params.city = filterCity;
+    if (filterDateCreatedFrom) params.dcFrom = filterDateCreatedFrom;
+    if (filterDateCreatedTo) params.dcTo = filterDateCreatedTo;
+    if (filterLifetimeMin) params.lvMin = filterLifetimeMin;
+    if (filterLifetimeMax) params.lvMax = filterLifetimeMax;
+    if (sortBy !== 'displayName') params.sortBy = sortBy;
+    if (sortDir !== 'asc') params.sortDir = sortDir;
+    const newHash = Object.keys(params).length
+      ? '#cfilters=' + encodeURIComponent(JSON.stringify(params))
+      : '';
+    if (window.location.hash !== newHash) {
+      history.replaceState(null, '', window.location.pathname + window.location.search + newHash);
+    }
+  }, [searchQuery, filterType, filterLeadSource, filterTags, filterCity, filterDateCreatedFrom, filterDateCreatedTo, filterLifetimeMin, filterLifetimeMax, sortBy, sortDir]);
 
   // ── Selection / modal state ───────────────────────────────────────────────
   const [selected, setSelected] = useState<Set<string>>(new Set());
