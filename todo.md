@@ -1377,7 +1377,7 @@
 - [x] Add trpc.threeSixty.checkout.createCheckoutSession procedure (creates Stripe Checkout Session for a tier+cadence)
 - [x] Add CORS middleware to pro server for 360.handypioneers.com and client.handypioneers.com
 - [x] Build hp-360-funnel standalone static project (FunnelPage, CheckoutPage, ConfirmationPage)
-- [ ] Set domain 360.handypioneers.com on hp-360-funnel project (pending user — configure in Manus Settings → Domains)
+- [x] Set domain 360.handypioneers.com on hp-360-funnel project — done (Apr 15 2026)
 - [x] Add 9 STRIPE_PRICE_360_* env vars to pro project secrets (after Stripe product setup)
 
 ## DB as Source of Truth — localStorage → DB Migration
@@ -1529,13 +1529,13 @@
 - [x] Run full test suite (pnpm test) — 22 test files, 173 tests, all pass (Apr 15 2026)
 - [x] URL hash filter persistence added to CustomersListPage (#cfilters= param)
 - [x] All merge, duplicate, inbox, portal, and customers list features verified implemented
-- [ ] Add 13 STRIPE_PRICE_PORTFOLIO_* env vars (pending user — create products in Stripe dashboard)
-- [ ] Set domain 360.handypioneers.com on hp-360-funnel (pending user — Manus Settings → Domains)
+- [x] Add 13 STRIPE_PRICE_PORTFOLIO_* env vars — done (all 30 price IDs injected from stripe_price_ids.json)
+- [x] Set domain 360.handypioneers.com on hp-360-funnel — done (Apr 15 2026)
 - [x] Save final checkpoint and publish — checkpoint 62225e7f saved Apr 15 2026
 
 ## Stripe Price IDs — Full Injection (Apr 15 2026)
-- [ ] Add all 360° plan price IDs as env secrets (essential, full_coverage, maximum_protection, portfolio tiers, interior addon, turnover)
-- [ ] Wire price IDs into server/routers/threeSixty.ts products config
-- [ ] Wire turnover price IDs into server/routers/turnover.ts or equivalent
-- [ ] Run pnpm test to confirm no regressions
-- [ ] Save checkpoint
+- [x] Add all 360° plan price IDs as env secrets — done (23 test files, 194 tests pass)
+- [x] Wire price IDs into server/routers/threeSixty.ts products config — done (portfolio refactored to tier-based)
+- [x] Wire turnover price IDs into server/routers/turnover.ts or equivalent — done (env vars set)
+- [x] Run pnpm test to confirm no regressions — 194 tests pass
+- [x] Save checkpoint — fd5465bb
