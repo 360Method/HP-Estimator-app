@@ -110,7 +110,11 @@ interface ImportResult {
   total: number;
 }
 
-export default function DataMigrationPage() {
+interface DataMigrationPageProps {
+  embedded?: boolean;
+}
+
+export default function DataMigrationPage({ embedded = false }: DataMigrationPageProps = {}) {
   const [step, setStep] = useState<Step>(1);
 
   // ── Step 1: Customers ──────────────────────────────────────────────────────
