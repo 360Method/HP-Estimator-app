@@ -30,13 +30,14 @@ import {
   Activity, Send, CheckCircle2, XCircle, Clock, PhoneCall, Wallet,
   ExternalLink, Edit3, Save, X, AlertCircle, TrendingUp, Archive,
   RefreshCw, FolderOpen, Download, Wrench, Trophy, FileUp, Camera, CalendarPlus,
-  GitMerge, Search,
+  GitMerge, Search, Receipt,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import PipelineBoard from '@/components/PipelineBoard';
 import AddressAutocomplete, { ParsedAddress } from '@/components/AddressAutocomplete';
 import AddressMapPreview from '@/components/AddressMapPreview';
 import InvoiceSection from '@/components/sections/InvoiceSection';
+import CustomerExpensesTab from '@/components/CustomerExpensesTab';
 import VoiceCallPanel from '@/components/VoiceCallPanel';
 import ManualMergeFlow from '@/components/ManualMergeFlow';
 import DuplicateSuggestionBanner from '@/components/DuplicateSuggestionBanner';
@@ -55,6 +56,7 @@ const CUSTOMER_TABS: { key: CustomerProfileTab; label: string; icon: React.React
   { key: 'estimates', label: 'Estimates', icon: <FileText size={13} /> },
   { key: 'jobs', label: 'Jobs', icon: <Briefcase size={13} /> },
   { key: 'invoices', label: 'Invoices', icon: <Wallet size={13} /> },
+  { key: 'expenses', label: 'Expenses', icon: <Receipt size={13} /> },
   { key: 'communication', label: 'Communication', icon: <MessageSquare size={13} /> },
   { key: 'attachments', label: 'Attachments', icon: <Paperclip size={13} /> },
   { key: 'notes', label: 'Notes', icon: <Edit3 size={13} /> },
@@ -621,7 +623,7 @@ export default function CustomerSection() {
   const displayName = customerFullName || jobInfo.client || 'New Customer';
   const areaMap: Record<CustomerProfileTab, PipelineArea | null> = {
     profile: null, leads: 'lead', estimates: 'estimate', jobs: 'job',
-    invoices: null, communication: null, attachments: null, notes: null, portal: null,
+    invoices: null, expenses: null, communication: null, attachments: null, notes: null, portal: null,
   };
 
   const handleTabClick = (tab: CustomerProfileTab) => {
@@ -1679,6 +1681,14 @@ export default function CustomerSection() {
         {activeCustomerTab === 'profile' && ProfileTab()}
         {(activeCustomerTab === 'leads' || activeCustomerTab === 'estimates' || activeCustomerTab === 'jobs') && PipelineTab()}
         {activeCustomerTab === 'invoices' && <InvoiceSection />}
+        {activeCustomerTab === 'expenses' && (
+          <CustomerExpensesTab
+            customerId={activeCustomerId ?? ''}
+            opportunityOptions={opportunities
+              .filter(o => o.area === 'job' && !o.archived)
+              .map(o => ({ id: o.id, title: o.title || o.coNumber || o.id }))}
+          />
+        )}
         {activeCustomerTab === 'communication' && (
           <CommunicationTab
             customerId={activeCustomerId ?? ''}

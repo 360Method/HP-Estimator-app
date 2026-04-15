@@ -226,7 +226,7 @@ export interface ChangeOrder {
   rejectedReason?: string;
 }
 
-export type CustomerProfileTab = 'profile' | 'leads' | 'estimates' | 'jobs' | 'invoices' | 'communication' | 'attachments' | 'notes' | 'portal';
+export type CustomerProfileTab = 'profile' | 'leads' | 'estimates' | 'jobs' | 'invoices' | 'expenses' | 'communication' | 'attachments' | 'notes' | 'portal';
 
 export interface JobInfo {
   client: string;
@@ -258,7 +258,7 @@ export interface GlobalSettings {
   customTaxPct: number;
 }
 
-export type AppSection = 'customer' | 'opp-details' | 'sales' | 'calculator' | 'estimate' | 'present' | 'customers' | 'jobs' | 'job-details' | 'pipeline' | 'invoice' | 'dashboard' | 'schedule' | 'inbox' | 'reporting' | 'marketing' | 'requests' | 'three-sixty' | 'financials';
+export type AppSection = 'customer' | 'opp-details' | 'sales' | 'calculator' | 'estimate' | 'present' | 'customers' | 'jobs' | 'job-details' | 'pipeline' | 'invoice' | 'dashboard' | 'schedule' | 'inbox' | 'reporting' | 'marketing' | 'requests' | 'three-sixty' | 'financials' | 'quickbooks';
 
 // ── Schedule / Calendar Types ──────────────────────────────────
 

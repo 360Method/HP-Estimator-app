@@ -496,6 +496,8 @@ export const customers = mysqlTable("customers", {
   onlineRequestId: int("onlineRequestId"),
   /** If this customer was merged into another, store the surviving customer id (soft-delete) */
   mergedIntoId: varchar("mergedIntoId", { length: 64 }),
+  // QuickBooks sync
+  qbCustomerId: varchar("qbCustomerId", { length: 64 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -961,6 +963,9 @@ export const invoices = mysqlTable("invoices", {
   completionSignatureUrl: text("completionSignatureUrl"),
   completionSignedBy: varchar("completionSignedBy", { length: 255 }),
   completionSignedAt: varchar("completionSignedAt", { length: 32 }),
+  // QuickBooks sync
+  qbEntityId: varchar("qbEntityId", { length: 64 }),
+  qbSyncedAt: varchar("qbSyncedAt", { length: 32 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -1031,3 +1036,49 @@ export const scheduleEvents = mysqlTable("scheduleEvents", {
 });
 export type DbScheduleEvent = typeof scheduleEvents.$inferSelect;
 export type InsertDbScheduleEvent = typeof scheduleEvents.$inferInsert;
+
+// ─── EXPENSES ─────────────────────────────────────────────────────────────────
+// Job-level and general business expenses for P&L tracking.
+export const expenses = mysqlTable("expenses", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  /** Owner user ID */
+  userId: int("userId").notNull(),
+  /** Link to job/estimate opportunity (optional) */
+  opportunityId: varchar("opportunityId", { length: 64 }),
+  /** Link to customer (optional) */
+  customerId: varchar("customerId", { length: 64 }),
+  vendor: varchar("vendor", { length: 255 }),
+  /** Amount in cents */
+  amount: int("amount").notNull().default(0),
+  /** materials | labor | subcontractor | equipment | fuel | permits | other */
+  category: varchar("category", { length: 32 }).notNull().default("other"),
+  description: text("description"),
+  /** S3 URL for receipt photo/PDF */
+  receiptUrl: text("receiptUrl"),
+  /** ISO date string YYYY-MM-DD */
+  date: varchar("date", { length: 16 }).notNull(),
+  // QuickBooks sync
+  qbEntityId: varchar("qbEntityId", { length: 64 }),
+  qbSyncedAt: varchar("qbSyncedAt", { length: 32 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbExpense = typeof expenses.$inferSelect;
+export type InsertDbExpense = typeof expenses.$inferInsert;
+
+// ─── QUICKBOOKS TOKENS ────────────────────────────────────────────────────────
+// Stores OAuth 2.0 tokens for QuickBooks Online per user.
+export const qbTokens = mysqlTable("qbTokens", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull().unique(),
+  accessToken: text("accessToken").notNull(),
+  refreshToken: text("refreshToken").notNull(),
+  /** QuickBooks company/realm ID */
+  realmId: varchar("realmId", { length: 64 }).notNull(),
+  /** ISO datetime when access token expires */
+  expiresAt: varchar("expiresAt", { length: 32 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbQbToken = typeof qbTokens.$inferSelect;
+export type InsertDbQbToken = typeof qbTokens.$inferInsert;

@@ -3,7 +3,6 @@
  * Verifies that the new DB tables and helpers are wired correctly.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { db } from './_core/index';
 import {
   createInvoice,
   getInvoiceById,

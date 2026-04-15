@@ -1,8 +1,8 @@
 /**
- * FinancialsPage — revenue overview, outstanding invoices, top customers, recent payments.
+ * FinancialsPage — revenue overview, P&L, outstanding invoices, top customers, recent payments.
  * All amounts from DB are in cents; divide by 100 for display.
  */
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,12 +10,28 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   DollarSign, TrendingUp, AlertCircle, CheckCircle2,
-  Clock, Users, ArrowUpRight, CreditCard, BarChart3,
+  Clock, Users, CreditCard, BarChart3, TrendingDown,
+  Download, Mail, MessageSquare, ChevronDown, Receipt,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer,
+  ResponsiveContainer, LineChart, Line,
 } from "recharts";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { toast } from "sonner";
+import jsPDF from "jspdf";
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 
@@ -39,6 +55,41 @@ const STATUS_BADGE: Record<string, { label: string; variant: "default" | "second
   pending_signoff: { label: "Signoff",  variant: "outline" },
   paid:            { label: "Paid",     variant: "default" },
   void:            { label: "Void",     variant: "secondary" },
+};
+
+/** Returns Tailwind classes for aging badge based on days overdue */
+function agingClass(daysOverdue: number): string {
+  if (daysOverdue <= 0) return "bg-emerald-100 text-emerald-800 border-emerald-200";
+  if (daysOverdue <= 30) return "bg-yellow-100 text-yellow-800 border-yellow-200";
+  if (daysOverdue <= 60) return "bg-orange-100 text-orange-800 border-orange-200";
+  return "bg-red-100 text-red-800 border-red-200";
+}
+
+function agingLabel(daysOverdue: number): string {
+  if (daysOverdue <= 0) return "Current";
+  if (daysOverdue <= 30) return `${daysOverdue}d`;
+  if (daysOverdue <= 60) return `${daysOverdue}d`;
+  return `${daysOverdue}d`;
+}
+
+const EXPENSE_COLORS: Record<string, string> = {
+  materials:     "#3b82f6",
+  labor:         "#8b5cf6",
+  subcontractor: "#6366f1",
+  equipment:     "#f97316",
+  fuel:          "#f59e0b",
+  permits:       "#14b8a6",
+  other:         "#6b7280",
+};
+
+const EXPENSE_LABELS: Record<string, string> = {
+  materials:     "Materials",
+  labor:         "Labor",
+  subcontractor: "Subcontractor",
+  equipment:     "Equipment",
+  fuel:          "Fuel/Travel",
+  permits:       "Permits",
+  other:         "Other",
 };
 
 // ─── KPI CARD ─────────────────────────────────────────────────────────────────
@@ -86,15 +137,108 @@ function ChartTooltip({ active, payload, label }: any) {
   );
 }
 
+// ─── SEND REMINDER DIALOG ────────────────────────────────────────────────────
+
+function SendReminderDialog({
+  invoiceId,
+  invoiceNumber,
+  customerName,
+  onClose,
+}: {
+  invoiceId: string;
+  invoiceNumber: string;
+  customerName: string;
+  onClose: () => void;
+}) {
+  const [channels, setChannels] = useState<string[]>(["email"]);
+  const sendMutation = trpc.financials.sendReminder.useMutation({
+    onSuccess: (data) => {
+      const ok = data.results.filter(r => r.success).map(r => r.channel).join(", ");
+      const fail = data.results.filter(r => !r.success);
+      if (ok) toast.success(`Reminder sent via ${ok}`);
+      if (fail.length) toast.error(`Failed: ${fail.map(r => `${r.channel}: ${r.error}`).join("; ")}`);
+      onClose();
+    },
+    onError: (e) => {
+      toast.error(e.message);
+    },
+  });
+
+  const toggle = (ch: string) => {
+    setChannels(prev =>
+      prev.includes(ch) ? prev.filter(c => c !== ch) : [...prev, ch]
+    );
+  };
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Mail className="w-4 h-4 text-blue-600" />
+            Send Payment Reminder
+          </DialogTitle>
+        </DialogHeader>
+        <div className="py-2 space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Send a reminder to <strong>{customerName}</strong> for invoice{" "}
+            <strong>{invoiceNumber}</strong>.
+          </p>
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Send via</p>
+            {["email", "sms"].map(ch => (
+              <label key={ch} className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={channels.includes(ch)}
+                  onChange={() => toggle(ch)}
+                  className="rounded"
+                />
+                <span className="text-sm capitalize flex items-center gap-1.5">
+                  {ch === "email" ? <Mail className="w-3.5 h-3.5" /> : <MessageSquare className="w-3.5 h-3.5" />}
+                  {ch === "email" ? "Email" : "SMS"}
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+          <Button
+            size="sm"
+            disabled={channels.length === 0 || sendMutation.isPending}
+            onClick={() =>
+              sendMutation.mutate({
+                invoiceId,
+                channels: channels as ("email" | "sms")[],
+                origin: window.location.origin,
+              })
+            }
+          >
+            {sendMutation.isPending ? "Sending…" : "Send Reminder"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── MAIN PAGE ────────────────────────────────────────────────────────────────
 
 export default function FinancialsPage() {
   const [chartMonths, setChartMonths] = useState(12);
+  const [reminderInvoice, setReminderInvoice] = useState<{
+    id: string; invoiceNumber: string; customerName: string;
+  } | null>(null);
 
   const { data: summary, isLoading: summaryLoading } = trpc.financials.getSummary.useQuery();
   const { data: revenueData, isLoading: revenueLoading } = trpc.financials.getRevenueByMonth.useQuery(
     { months: chartMonths }
   );
+  const { data: pnlData, isLoading: pnlLoading } = trpc.financials.getPnLByMonth.useQuery(
+    { months: chartMonths }
+  );
+  const { data: expenseSummary } = trpc.financials.getExpenseSummary.useQuery({});
   const { data: outstanding, isLoading: outstandingLoading } = trpc.financials.getOutstandingInvoices.useQuery(
     { limit: 50 }
   );
@@ -104,6 +248,14 @@ export default function FinancialsPage() {
   const { data: recentPayments, isLoading: paymentsLoading } = trpc.financials.getRecentPayments.useQuery(
     { limit: 20 }
   );
+  const { data: csvData } = trpc.financials.exportCsv.useQuery(
+    { months: chartMonths },
+    { enabled: false }
+  );
+  const exportCsvQuery = trpc.financials.exportCsv.useQuery(
+    { months: chartMonths },
+    { enabled: false }
+  );
 
   // Chart data: convert cents → dollars for recharts display
   const chartData = (revenueData ?? []).map((r) => ({
@@ -112,26 +264,192 @@ export default function FinancialsPage() {
     Collected: r.collected / 100,
   }));
 
+  const pnlChartData = (pnlData ?? []).map((r) => ({
+    label: r.label,
+    Revenue: r.revenue / 100,
+    Expenses: r.expenseTotal / 100,
+    "Gross Profit": r.grossProfit / 100,
+  }));
+
   const collectionRate =
     summary && summary.totalInvoiced > 0
       ? Math.round((summary.totalCollected / summary.totalInvoiced) * 100)
       : 0;
+
+  // P&L totals from pnlData
+  const totalRevenue = (pnlData ?? []).reduce((s, r) => s + r.revenue, 0);
+  const totalExpenses = (pnlData ?? []).reduce((s, r) => s + r.expenseTotal, 0);
+  const totalGrossProfit = totalRevenue - totalExpenses;
+  const grossMargin = totalRevenue > 0 ? Math.round((totalGrossProfit / totalRevenue) * 100) : 0;
+
+  // Aging buckets
+  const aging = {
+    current: (outstanding ?? []).filter(i => i.daysOverdue <= 0).length,
+    d30: (outstanding ?? []).filter(i => i.daysOverdue > 0 && i.daysOverdue <= 30).length,
+    d60: (outstanding ?? []).filter(i => i.daysOverdue > 30 && i.daysOverdue <= 60).length,
+    d90: (outstanding ?? []).filter(i => i.daysOverdue > 60).length,
+  };
+
+  const handleExportCsv = useCallback(async () => {
+    const result = await exportCsvQuery.refetch();
+    const csv = result.data;
+    if (!csv) { toast.error("No data to export"); return; }
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `hp-financials-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("CSV exported");
+  }, [exportCsvQuery]);
+
+  const handleExportPdf = useCallback(() => {
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    const pageW = doc.internal.pageSize.getWidth();
+    let y = 20;
+
+    // Header
+    doc.setFontSize(18);
+    doc.setFont("helvetica", "bold");
+    doc.text("Handy Pioneers — Financial Summary", 20, y);
+    y += 8;
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(100);
+    doc.text(`Generated: ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`, 20, y);
+    doc.text(`Period: Last ${chartMonths} months`, pageW - 20, y, { align: "right" });
+    y += 10;
+
+    // KPI row
+    doc.setTextColor(0);
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.text("P&L Summary", 20, y);
+    y += 6;
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    const kpis = [
+      ["Total Revenue (Collected)", fmtShort(totalRevenue)],
+      ["Total Expenses", fmtShort(totalExpenses)],
+      ["Gross Profit", fmtShort(totalGrossProfit)],
+      ["Gross Margin", `${grossMargin}%`],
+    ];
+    for (const [k, v] of kpis) {
+      doc.text(k, 20, y);
+      doc.text(v, pageW - 20, y, { align: "right" });
+      y += 6;
+    }
+    y += 4;
+
+    // Monthly P&L table
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.text("Monthly P&L", 20, y);
+    y += 6;
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.text("Month", 20, y);
+    doc.text("Revenue", 70, y, { align: "right" });
+    doc.text("Expenses", 110, y, { align: "right" });
+    doc.text("Gross Profit", 155, y, { align: "right" });
+    doc.text("Margin", pageW - 20, y, { align: "right" });
+    y += 1;
+    doc.line(20, y, pageW - 20, y);
+    y += 4;
+    doc.setFont("helvetica", "normal");
+    for (const r of pnlData ?? []) {
+      const margin = r.revenue > 0 ? Math.round((r.grossProfit / r.revenue) * 100) : 0;
+      doc.text(r.label, 20, y);
+      doc.text(fmtShort(r.revenue), 70, y, { align: "right" });
+      doc.text(fmtShort(r.expenseTotal), 110, y, { align: "right" });
+      doc.text(fmtShort(r.grossProfit), 155, y, { align: "right" });
+      doc.text(`${margin}%`, pageW - 20, y, { align: "right" });
+      y += 5;
+      if (y > 270) { doc.addPage(); y = 20; }
+    }
+    y += 4;
+
+    // Expense breakdown
+    if (expenseSummary && expenseSummary.total > 0) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.text("Expense Breakdown by Category", 20, y);
+      y += 6;
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      for (const [cat, amt] of Object.entries(expenseSummary.byCategory)) {
+        const pct = Math.round((amt / expenseSummary.total) * 100);
+        doc.text(EXPENSE_LABELS[cat] ?? cat, 20, y);
+        doc.text(`${fmtShort(amt)} (${pct}%)`, pageW - 20, y, { align: "right" });
+        y += 5;
+      }
+      y += 4;
+    }
+
+    // Outstanding invoices
+    if ((outstanding ?? []).length > 0) {
+      if (y > 220) { doc.addPage(); y = 20; }
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.text("Outstanding Invoices", 20, y);
+      y += 6;
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "bold");
+      doc.text("Invoice #", 20, y);
+      doc.text("Customer", 60, y);
+      doc.text("Balance", 130, y, { align: "right" });
+      doc.text("Days Overdue", pageW - 20, y, { align: "right" });
+      y += 1;
+      doc.line(20, y, pageW - 20, y);
+      y += 4;
+      doc.setFont("helvetica", "normal");
+      for (const inv of outstanding ?? []) {
+        doc.text(inv.invoiceNumber ?? "", 20, y);
+        doc.text(inv.customerName.slice(0, 30), 60, y);
+        doc.text(fmtShort(inv.balance), 130, y, { align: "right" });
+        doc.text(inv.daysOverdue > 0 ? `${inv.daysOverdue}d` : "Current", pageW - 20, y, { align: "right" });
+        y += 5;
+        if (y > 270) { doc.addPage(); y = 20; }
+      }
+    }
+
+    doc.save(`hp-financials-${new Date().toISOString().slice(0, 10)}.pdf`);
+    toast.success("PDF exported");
+  }, [pnlData, expenseSummary, outstanding, totalRevenue, totalExpenses, totalGrossProfit, grossMargin, chartMonths]);
 
   return (
     <div className="min-h-screen bg-background">
       <div className="container py-6 max-w-7xl">
 
         {/* ── PAGE HEADER ───────────────────────────────────────── */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2">
               <DollarSign className="w-6 h-6 text-emerald-600" />
               Financials
             </h1>
             <p className="text-sm text-muted-foreground mt-0.5">
-              Revenue, invoices, payments, and collection metrics
+              Revenue, P&amp;L, invoices, payments, and collection metrics
             </p>
           </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-1.5">
+                <Download className="w-3.5 h-3.5" />
+                Export
+                <ChevronDown className="w-3 h-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleExportCsv}>
+                Export CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportPdf}>
+                Export PDF
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
 
         {/* ── KPI CARDS ─────────────────────────────────────────── */}
@@ -174,6 +492,63 @@ export default function FinancialsPage() {
           )}
         </div>
 
+        {/* ── P&L KPI CARDS ─────────────────────────────────────── */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          {pnlLoading ? (
+            Array.from({ length: 4 }).map((_, i) => (
+              <Card key={i}><CardContent className="pt-5 pb-4"><Skeleton className="h-16 w-full" /></CardContent></Card>
+            ))
+          ) : (
+            <>
+              <KpiCard
+                label="Revenue (Collected)"
+                value={fmtShort(totalRevenue)}
+                sub={`Last ${chartMonths} months`}
+                icon={TrendingUp}
+                color="bg-emerald-600"
+              />
+              <KpiCard
+                label="Total Expenses"
+                value={fmtShort(totalExpenses)}
+                sub={`${Object.keys(expenseSummary?.byCategory ?? {}).length} categories`}
+                icon={Receipt}
+                color="bg-orange-500"
+              />
+              <KpiCard
+                label="Gross Profit"
+                value={fmtShort(totalGrossProfit)}
+                sub={totalGrossProfit >= 0 ? "Positive margin" : "Negative margin"}
+                icon={totalGrossProfit >= 0 ? TrendingUp : TrendingDown}
+                color={totalGrossProfit >= 0 ? "bg-teal-500" : "bg-red-500"}
+              />
+              <KpiCard
+                label="Gross Margin"
+                value={`${grossMargin}%`}
+                sub={grossMargin >= 30 ? "Above 30% floor ✓" : "Below 30% floor ⚠"}
+                icon={BarChart3}
+                color={grossMargin >= 30 ? "bg-emerald-500" : "bg-red-500"}
+              />
+            </>
+          )}
+        </div>
+
+        {/* ── INVOICE AGING SUMMARY ─────────────────────────────── */}
+        {(outstanding ?? []).length > 0 && (
+          <div className="grid grid-cols-4 gap-3 mb-6">
+            {[
+              { label: "Current", count: aging.current, cls: "bg-emerald-50 border-emerald-200 text-emerald-800" },
+              { label: "1–30 days", count: aging.d30, cls: "bg-yellow-50 border-yellow-200 text-yellow-800" },
+              { label: "31–60 days", count: aging.d60, cls: "bg-orange-50 border-orange-200 text-orange-800" },
+              { label: "60+ days", count: aging.d90, cls: "bg-red-50 border-red-200 text-red-800" },
+            ].map(b => (
+              <div key={b.label} className={`rounded-lg border px-4 py-3 text-center ${b.cls}`}>
+                <p className="text-2xl font-bold">{b.count}</p>
+                <p className="text-xs font-medium mt-0.5">{b.label}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* ── REVENUE CHART ─────────────────────────────────────── */}
         <Card className="mb-6">
           <CardHeader className="pb-2">
@@ -205,11 +580,7 @@ export default function FinancialsPage() {
                 <BarChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                   <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-                  <YAxis
-                    tick={{ fontSize: 11 }}
-                    tickFormatter={(v) => fmtShort(v * 100)}
-                    width={56}
-                  />
+                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => fmtShort(v * 100)} width={56} />
                   <Tooltip content={<ChartTooltip />} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
                   <Bar dataKey="Invoiced" fill="#3b82f6" radius={[3, 3, 0, 0]} />
@@ -220,6 +591,74 @@ export default function FinancialsPage() {
           </CardContent>
         </Card>
 
+        {/* ── P&L CHART ─────────────────────────────────────────── */}
+        <Card className="mb-6">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Profit &amp; Loss</CardTitle>
+            <CardDescription>Revenue vs. expenses and gross profit by month</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {pnlLoading ? (
+              <Skeleton className="h-56 w-full" />
+            ) : (
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={pnlChartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => fmtShort(v * 100)} width={56} />
+                  <Tooltip content={<ChartTooltip />} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Bar dataKey="Revenue" fill="#10b981" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="Expenses" fill="#f97316" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="Gross Profit" fill="#6366f1" radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* ── EXPENSE BREAKDOWN ─────────────────────────────────── */}
+        {expenseSummary && expenseSummary.total > 0 && (
+          <Card className="mb-6">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-1.5">
+                <Receipt className="w-4 h-4 text-orange-600" />
+                Expense Breakdown
+              </CardTitle>
+              <CardDescription>All-time expenses by category</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {Object.entries(expenseSummary.byCategory)
+                  .sort(([, a], [, b]) => b - a)
+                  .map(([cat, amt]) => {
+                    const pct = Math.round((amt / expenseSummary.total) * 100);
+                    return (
+                      <div key={cat} className="flex items-center gap-3">
+                        <div className="w-24 shrink-0 text-xs font-medium text-muted-foreground">
+                          {EXPENSE_LABELS[cat] ?? cat}
+                        </div>
+                        <div className="flex-1 bg-muted rounded-full h-2 overflow-hidden">
+                          <div
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${pct}%`,
+                              backgroundColor: EXPENSE_COLORS[cat] ?? "#6b7280",
+                            }}
+                          />
+                        </div>
+                        <div className="w-20 text-right text-xs font-semibold shrink-0">
+                          {fmtShort(amt)}
+                          <span className="text-muted-foreground font-normal ml-1">({pct}%)</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
 
           {/* ── OUTSTANDING INVOICES ──────────────────────────────── */}
@@ -227,7 +666,7 @@ export default function FinancialsPage() {
             <Card className="h-full">
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Outstanding Invoices</CardTitle>
-                <CardDescription>Unpaid invoices with remaining balance</CardDescription>
+                <CardDescription>Unpaid invoices with aging badges — click bell to send reminder</CardDescription>
               </CardHeader>
               <CardContent>
                 {outstandingLoading ? (
@@ -249,27 +688,41 @@ export default function FinancialsPage() {
                           <th className="text-left pb-2 font-medium">Invoice</th>
                           <th className="text-left pb-2 font-medium">Customer</th>
                           <th className="text-right pb-2 font-medium">Balance</th>
-                          <th className="text-right pb-2 font-medium">Due</th>
+                          <th className="text-center pb-2 font-medium">Age</th>
                           <th className="text-right pb-2 font-medium">Status</th>
+                          <th className="text-right pb-2 font-medium">Action</th>
                         </tr>
                       </thead>
                       <tbody>
                         {outstanding.map((inv) => (
                           <tr key={inv.id} className="border-b last:border-0 hover:bg-muted/40 transition-colors">
                             <td className="py-2 font-mono text-xs">{inv.invoiceNumber}</td>
-                            <td className="py-2 max-w-[140px] truncate">{inv.customerName}</td>
+                            <td className="py-2 max-w-[120px] truncate">{inv.customerName}</td>
                             <td className="py-2 text-right font-semibold">{fmt(inv.balance)}</td>
-                            <td className="py-2 text-right text-xs">
-                              {inv.daysOverdue > 0 ? (
-                                <span className="text-red-600 font-medium">{inv.daysOverdue}d overdue</span>
-                              ) : (
-                                <span className="text-muted-foreground">{inv.dueDate}</span>
-                              )}
+                            <td className="py-2 text-center">
+                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold border ${agingClass(inv.daysOverdue)}`}>
+                                {agingLabel(inv.daysOverdue)}
+                              </span>
                             </td>
                             <td className="py-2 text-right">
                               <Badge variant={STATUS_BADGE[inv.status]?.variant ?? "outline"} className="text-[10px]">
                                 {STATUS_BADGE[inv.status]?.label ?? inv.status}
                               </Badge>
+                            </td>
+                            <td className="py-2 text-right">
+                              {inv.daysOverdue > 0 && (
+                                <button
+                                  onClick={() => setReminderInvoice({
+                                    id: inv.id,
+                                    invoiceNumber: inv.invoiceNumber ?? inv.id,
+                                    customerName: inv.customerName,
+                                  })}
+                                  className="text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors"
+                                  title="Send payment reminder"
+                                >
+                                  Remind
+                                </button>
+                              )}
                             </td>
                           </tr>
                         ))}
@@ -367,6 +820,16 @@ export default function FinancialsPage() {
         </Card>
 
       </div>
+
+      {/* ── SEND REMINDER DIALOG ──────────────────────────────────── */}
+      {reminderInvoice && (
+        <SendReminderDialog
+          invoiceId={reminderInvoice.id}
+          invoiceNumber={reminderInvoice.invoiceNumber}
+          customerName={reminderInvoice.customerName}
+          onClose={() => setReminderInvoice(null)}
+        />
+      )}
     </div>
   );
 }

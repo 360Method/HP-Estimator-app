@@ -18,6 +18,8 @@ import { threeSixtyRouter } from "./routers/threeSixty";
 import { invoicesRouter } from "./routers/invoices";
 import { scheduleRouter } from "./routers/schedule";
 import { financialsRouter } from "./routers/financials";
+import { expensesRouter } from "./routers/expenses";
+import { quickbooksRouter } from "./routers/quickbooks";
 import {
   getAdminAllowlist,
   addAdminAllowlistEmail,
@@ -41,6 +43,8 @@ export const appRouter = router({
   invoices: invoicesRouter,
   schedule: scheduleRouter,
   financials: financialsRouter,
+  expenses: expensesRouter,
+  quickbooks: quickbooksRouter,
 
   auth: router({
     /**

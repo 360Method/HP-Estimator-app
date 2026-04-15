@@ -40,7 +40,7 @@ import SettingsPage from '@/pages/settings/SettingsPage';
 import {
   Search, LayoutDashboard, Users, Inbox, GitBranch,
   DollarSign, BarChart2, Megaphone, Settings,
-  ChevronDown, ArrowLeft, Plus, Menu, X, Briefcase, CalendarDays, RefreshCw,
+  ChevronDown, ArrowLeft, Plus, Menu, X, Briefcase, CalendarDays, RefreshCw, BookOpen,
 } from 'lucide-react';
 
 const HP_LOGO = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg';
@@ -76,6 +76,7 @@ const BACKEND_NAV: { icon: React.ElementType; label: string; section: AppSection
   { icon: BarChart2,       label: 'Reporting',  section: 'reporting' as AppSection },
   { icon: Megaphone,       label: 'Marketing',  section: 'marketing' as AppSection },
   { icon: RefreshCw,        label: '360 Method', section: 'three-sixty' as AppSection },
+  { icon: BookOpen,          label: 'QuickBooks',  section: 'quickbooks' as AppSection },
 ];
 
 export default function MetricsBar({ totals }: MetricsBarProps) {
@@ -234,6 +235,7 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
     if (section === 'marketing') { setSection('marketing'); return; }
     if (section === 'three-sixty') { setSection('three-sixty'); return; }
     if (section === 'financials') { setSection('financials'); setShowMobileNav(false); return; }
+    if (section === 'quickbooks') { setSection('quickbooks'); setShowMobileNav(false); return; }
     handleBackendNav(label);
   };
 

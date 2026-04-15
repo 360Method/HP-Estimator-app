@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, like, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, like, lte, or, sql, sum } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   adminAllowlist,
@@ -32,6 +32,12 @@ import {
   opportunities,
   scheduleEvents,
   users,
+  expenses,
+  qbTokens,
+  DbExpense,
+  InsertDbExpense,
+  DbQbToken,
+  InsertDbQbToken,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -974,4 +980,111 @@ export async function deleteScheduleEventsByOpportunity(opportunityId: string): 
   const db = await getDb();
   if (!db) return;
   await db.delete(scheduleEvents).where(eq(scheduleEvents.opportunityId, opportunityId));
+}
+
+// ─── EXPENSE HELPERS ──────────────────────────────────────────────────────────
+
+export async function listExpenses(opts: {
+  userId?: number;
+  opportunityId?: string;
+  customerId?: string;
+  category?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<DbExpense[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = [];
+  if (opts.userId !== undefined) conditions.push(eq(expenses.userId, opts.userId));
+  if (opts.opportunityId) conditions.push(eq(expenses.opportunityId, opts.opportunityId));
+  if (opts.customerId) conditions.push(eq(expenses.customerId, opts.customerId));
+  if (opts.category) conditions.push(eq(expenses.category, opts.category));
+  if (opts.dateFrom) conditions.push(gte(expenses.date, opts.dateFrom));
+  if (opts.dateTo) conditions.push(lte(expenses.date, opts.dateTo));
+  return db
+    .select()
+    .from(expenses)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(desc(expenses.date))
+    .limit(opts.limit ?? 200)
+    .offset(opts.offset ?? 0);
+}
+
+export async function getExpenseById(id: string): Promise<DbExpense | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(expenses).where(eq(expenses.id, id)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function createExpense(data: InsertDbExpense): Promise<DbExpense> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+  await db.insert(expenses).values(data);
+  return (await getExpenseById(data.id as string))!;
+}
+
+export async function updateExpense(id: string, data: Partial<InsertDbExpense>): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(expenses).set(data).where(eq(expenses.id, id));
+}
+
+export async function deleteExpense(id: string): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(expenses).where(eq(expenses.id, id));
+}
+
+export async function sumExpenses(opts: {
+  userId?: number;
+  opportunityId?: string;
+  customerId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const conditions = [];
+  if (opts.userId !== undefined) conditions.push(eq(expenses.userId, opts.userId));
+  if (opts.opportunityId) conditions.push(eq(expenses.opportunityId, opts.opportunityId));
+  if (opts.customerId) conditions.push(eq(expenses.customerId, opts.customerId));
+  if (opts.dateFrom) conditions.push(gte(expenses.date, opts.dateFrom));
+  if (opts.dateTo) conditions.push(lte(expenses.date, opts.dateTo));
+  const rows = await db
+    .select({ total: sum(expenses.amount) })
+    .from(expenses)
+    .where(conditions.length > 0 ? and(...conditions) : undefined);
+  return Number(rows[0]?.total ?? 0);
+}
+
+// ─── QB TOKEN HELPERS ─────────────────────────────────────────────────────────
+
+export async function getQbToken(userId: number): Promise<DbQbToken | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(qbTokens).where(eq(qbTokens.userId, userId)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function upsertQbToken(data: InsertDbQbToken): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(qbTokens).values(data).onDuplicateKeyUpdate({
+    set: {
+      accessToken: data.accessToken,
+      refreshToken: data.refreshToken,
+      realmId: data.realmId,
+      expiresAt: data.expiresAt,
+      updatedAt: new Date(),
+    },
+  });
+}
+
+export async function deleteQbToken(userId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(qbTokens).where(eq(qbTokens.userId, userId));
 }
