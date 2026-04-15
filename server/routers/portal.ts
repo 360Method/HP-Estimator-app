@@ -1497,6 +1497,48 @@ export const portalRouter = router({
   getDocumentsPortal: portalProcedure.query(async ({ ctx }) => {
     return getPortalDocumentsByCustomer(ctx.portalCustomer.id);
   }),
+
+  // ── 360° INSPECTION REPORTS ────────────────────────────────────────────────
+  /** List all 360° inspection reports sent to this customer */
+  getReports: portalProcedure.query(async ({ ctx }) => {
+    const { getDb } = await import('../db');
+    const { portalReports } = await import('../../drizzle/schema');
+    const { eq, desc } = await import('drizzle-orm');
+    const db = await getDb();
+    const reports = await db
+      .select()
+      .from(portalReports)
+      .where(eq(portalReports.portalCustomerId, ctx.portalCustomer.id))
+      .orderBy(desc(portalReports.sentAt));
+    return reports.map(r => ({
+      ...r,
+      reportData: r.reportJson ? JSON.parse(r.reportJson) : null,
+    }));
+  }),
+
+  /** Get a single 360° inspection report */
+  getReport: portalProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ ctx, input }) => {
+      const { getDb } = await import('../db');
+      const { portalReports } = await import('../../drizzle/schema');
+      const { and, eq } = await import('drizzle-orm');
+      const db = await getDb();
+      const [report] = await db
+        .select()
+        .from(portalReports)
+        .where(
+          and(
+            eq(portalReports.id, input.id),
+            eq(portalReports.portalCustomerId, ctx.portalCustomer.id)
+          )
+        );
+      if (!report) throw new TRPCError({ code: 'NOT_FOUND' });
+      return {
+        ...report,
+        reportData: report.reportJson ? JSON.parse(report.reportJson) : null,
+      };
+    }),
 });
 // ─── EMAIL TEMPLATES ──────────────────────────────────────────────────────────
 // HP brand palette: forest green #1a2e1a / #2d4a2d, warm gold #c8922a

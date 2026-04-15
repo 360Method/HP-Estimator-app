@@ -1449,3 +1449,67 @@
 - [x] Wire portfolioCheckout + portfolioAbandonedLead into combined threeSixtyRouter
 - [x] Push DB migration (pnpm db:push) — migration 0025 applied
 - [ ] Add 13 STRIPE_PRICE_PORTFOLIO_* env var secrets (pending Stripe product creation)
+
+## 360° Inspection & Report Integration — Sprint 1: Data Foundation
+
+- [x] Add `threeSixtyPropertySystems` table to drizzle/schema.ts
+- [x] Add columns to `threeSixtyScans`: healthScore, inspectionItemsJson, recommendationsJson, summary, sentToPortalAt, pdfUrl, pdfFileKey
+- [x] Add columns to `threeSixtyChecklist`: systemType, cascadeRiskBase, defaultCostLow, defaultCostHigh
+- [x] Run pnpm db:push
+- [x] Add propertySystems.list tRPC procedure
+- [x] Add propertySystems.upsert tRPC procedure
+- [x] Add propertySystems.delete tRPC procedure
+- [x] Add scans.getDetail tRPC procedure (returns structured items + recommendations)
+- [x] Add scans.updateSummary tRPC procedure
+- [x] Add scans.computeHealthScore tRPC procedure (weighted formula)
+- [x] Write Vitest tests for all new procedures
+
+## 360° Inspection & Report Integration — Sprint 2: Baseline Wizard
+
+- [x] Build ThreeSixtyBaselineWizard.tsx — 8-system guided form (HVAC, Roof, Plumbing, Electrical, Foundation, Exterior, Interior, Appliances)
+- [x] Each step: brand/model, install year, condition selector, notes, last service date, lifespan, replacement cost, photo upload
+- [x] Add "Document Property Systems" button to ThreeSixtyMemberDetail.tsx
+- [x] Add "Property Systems" tab to ThreeSixtyMemberDetail.tsx showing baseline cards with condition badges
+- [x] Wire to propertySystems.upsert and propertySystems.list
+
+## 360° Inspection & Report Integration — Sprint 3: Inspection Flow Upgrade
+
+- [x] Upgrade ThreeSixtyVisitDetail.tsx: replace binary checkbox with 4-condition selector (Good/Monitor/Repair Needed/Urgent)
+- [x] Add per-item notes field (expandable)
+- [x] Add per-item photo upload (S3 via storagePut)
+- [x] Update visits.complete mutation: write structured inspectionItemsJson to linked scan, compute cascade risk scores
+- [x] Update threeSixtyChecklist seed data with systemType and cascadeRiskBase values for all 7 sections
+- [x] Add live completion % bar to visit detail header
+- [x] Auto-flag upsell on any item rated Repair Needed or Urgent
+
+## 360° Inspection & Report Integration — Sprint 4: Report Builder
+
+- [x] Build ThreeSixtyScanDetail.tsx — health score display, editable summary, priority repair list, findings table
+- [x] Health score badge: color-coded band (Healthy/Fair/Needs Attention/Critical)
+- [x] Priority repair list: sorted by cascade risk score, condition badge, cost range, "Create Estimate" button per row
+- [x] Findings section: grouped by checklist section, condition badges
+- [x] Add scans.createEstimateFromFinding tRPC procedure — pre-fills HP estimator from recommendation
+- [x] Wire "Create Estimate" button: opens estimator pre-filled with finding title + cost range + linked scanId
+- [x] Add health score card to ThreeSixtyMemberDetail.tsx top KPI row
+- [x] Add "View Report" button to each scan card in member detail Scans tab
+- [x] Add health score trend sparkline to member detail when 2+ scans exist
+
+## 360° Inspection & Report Integration — Sprint 5: PDF + Portal Delivery
+
+- [x] Add portalReports table to drizzle/schema.ts (id, portalCustomerId, scanId, membershipId, healthScore, reportJson, sentAt, pdfUrl, createdAt)
+- [x] Run pnpm db:push for portalReports
+- [x] Add scans.generatePdf tRPC procedure: build Markdown report, convert via manus-md-to-pdf, upload to S3
+- [x] Add scans.sendToPortal tRPC procedure: write to portalReports, send notification email to customer
+- [x] Build /portal/reports page: list of delivered reports with health score badge
+- [x] Build /portal/reports/:id page: read-only report view (health score, priority repairs, findings, "Request Service" CTA)
+- [x] Register portal report routes in App.tsx
+- [x] Add "Reports" nav item to PortalLayout sidebar
+- [x] Wire "Request Service" CTA to portal.sendMessage or booking wizard
+
+## 360° Inspection & Report Integration — Sprint 6: Polish + Integration
+
+- [x] Mobile-first responsive pass on all new 360° pages (min 44px tap targets)
+- [ ] Add "360° Report" badge to CustomerSection profile header when delivered report exists for customer
+- [ ] Add 360° health score to customer quick-view slide-over (CustomersListPage)
+- [x] Full Vitest coverage pass for all Sprint 3–5 procedures (20 tests passing)
+- [x] Save checkpoint and verify all tests pass

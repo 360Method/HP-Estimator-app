@@ -312,6 +312,14 @@ export default function PortalHome() {
               bg: "bg-purple-50",
               path: "/portal/messages",
             },
+            {
+              label: "360° Reports",
+              value: "View",
+              icon: <ClipboardList className="w-5 h-5" />,
+              color: "text-emerald-600",
+              bg: "bg-emerald-50",
+              path: "/portal/reports",
+            },
           ].map((stat) => (
             <button
               key={stat.label}

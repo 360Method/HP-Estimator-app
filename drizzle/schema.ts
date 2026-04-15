@@ -1,6 +1,8 @@
 import {
   bigint,
   boolean,
+  date,
+  decimal,
   double,
   int,
   mysqlEnum,
@@ -799,6 +801,15 @@ export const threeSixtyChecklist = mysqlTable("threeSixtyChecklist", {
   sortOrder: int("sortOrder").notNull().default(0),
   active: boolean("active").notNull().default(true),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
+  // ── 360 Inspection additions ──────────────────────────────────────────────
+  /** Which home system this item belongs to (for cascade risk scoring) */
+  systemType: varchar("systemType", { length: 64 }),
+  /** Base cascade risk score 1-10 for this item type */
+  cascadeRiskBase: int("cascadeRiskBase").default(3),
+  /** Default estimated repair cost low (USD) */
+  defaultCostLow: decimal("defaultCostLow", { precision: 10, scale: 2 }),
+  /** Default estimated repair cost high (USD) */
+  defaultCostHigh: decimal("defaultCostHigh", { precision: 10, scale: 2 }),
 });
 export type ThreeSixtyChecklistItem = typeof threeSixtyChecklist.$inferSelect;
 export type InsertThreeSixtyChecklistItem = typeof threeSixtyChecklist.$inferInsert;
@@ -837,12 +848,79 @@ export const threeSixtyScans = mysqlTable("threeSixtyScans", {
   status: mysqlEnum("status", ["draft", "completed", "delivered"]).notNull().default("draft"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  // ── 360 Inspection additions ──────────────────────────────────────────────
+  /** Computed property health score 0-100 */
+  healthScore: int("healthScore"),
+  /** JSON array of structured inspection findings */
+  inspectionItemsJson: text("inspectionItemsJson"),
+  /** JSON array of prioritized repair recommendations */
+  recommendationsJson: text("recommendationsJson"),
+  /** Editable executive summary narrative */
+  summary: text("summary"),
+  /** Unix ms — when report was sent to client portal */
+  sentToPortalAt: bigint("sentToPortalAt", { mode: "number" }),
+  /** S3 URL of generated PDF report (replaces reportUrl for new scans) */
+  pdfUrl: text("pdfUrl"),
+  pdfFileKey: varchar("pdfFileKey", { length: 512 }),
+  /** visitId that produced this scan's findings (for visit-linked scans) */
+  linkedVisitId: int("linkedVisitId"),
 });
 export type ThreeSixtyScan = typeof threeSixtyScans.$inferSelect;
 export type InsertThreeSixtyScan = typeof threeSixtyScans.$inferInsert;
 
+// ─── 360 METHOD: PROPERTY SYSTEM BASELINES ───────────────────────────────────
+export const threeSixtyPropertySystems = mysqlTable("threeSixtyPropertySystems", {
+  id: int("id").autoincrement().primaryKey(),
+  membershipId: int("membershipId").notNull(),
+  customerId: int("customerId").notNull(),
+  /** hvac | roof | plumbing | electrical | foundation | exterior_siding | interior | appliances */
+  systemType: mysqlEnum("systemType", [
+    "hvac",
+    "roof",
+    "plumbing",
+    "electrical",
+    "foundation",
+    "exterior_siding",
+    "interior",
+    "appliances",
+  ]).notNull(),
+  brandModel: varchar("brandModel", { length: 255 }),
+  installYear: int("installYear"),
+  /** good | fair | poor | critical */
+  condition: mysqlEnum("condition", ["good", "fair", "poor", "critical"]).notNull().default("good"),
+  conditionNotes: text("conditionNotes"),
+  lastServiceDate: date("lastServiceDate"),
+  nextServiceDate: date("nextServiceDate"),
+  estimatedLifespanYears: int("estimatedLifespanYears"),
+  replacementCostEstimate: decimal("replacementCostEstimate", { precision: 10, scale: 2 }),
+  /** JSON array of S3 photo URLs */
+  photoUrls: text("photoUrls"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type ThreeSixtyPropertySystem = typeof threeSixtyPropertySystems.$inferSelect;
+export type InsertThreeSixtyPropertySystem = typeof threeSixtyPropertySystems.$inferInsert;
+
+// ─── PORTAL REPORTS ──────────────────────────────────────────────────────────
+export const portalReports = mysqlTable("portalReports", {
+  id: int("id").autoincrement().primaryKey(),
+  portalCustomerId: int("portalCustomerId").notNull(),
+  scanId: int("scanId").notNull(),
+  membershipId: int("membershipId").notNull(),
+  hpCustomerId: int("hpCustomerId").notNull(),
+  healthScore: int("healthScore"),
+  /** Full report JSON snapshot at time of delivery */
+  reportJson: text("reportJson").notNull(),
+  pdfUrl: text("pdfUrl"),
+  /** Unix ms */
+  sentAt: bigint("sentAt", { mode: "number" }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type PortalReport = typeof portalReports.$inferSelect;
+export type InsertPortalReport = typeof portalReports.$inferInsert;
+
 // ═══════════════════════════════════════════════════════════════════════════════
-// PRO-SIDE INVOICES  (source of truth — replaces localStorage)
+// PRO-SIDE INVOICES  (source of truth — replaces localStorage))
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ─── INVOICES ────────────────────────────────────────────────────────────────

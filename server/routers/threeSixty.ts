@@ -13,7 +13,11 @@ import {
   threeSixtyChecklist,
   threeSixtyLaborBankTransactions,
   threeSixtyScans,
+  threeSixtyPropertySystems,
+  portalReports,
+  portalCustomers,
 } from "../../drizzle/schema";
+import { storagePut } from "../storage";
 import { eq, and, desc, asc } from "drizzle-orm";
 import {
   calcMemberDiscount,
@@ -206,19 +210,45 @@ const visitsRouter = router({
       return { id: (result as any).insertId as number };
     }),
 
-  complete: protectedProcedure
+    complete: protectedProcedure
     .input(
       z.object({
         id: z.number(),
         technicianNotes: z.string().optional(),
-        checklistSnapshot: z.string().optional(), // JSON string
+        checklistSnapshot: z.string().optional(), // legacy JSON string (binary checked/upsell)
         laborBankUsed: z.number().default(0),
         linkedOpportunityId: z.string().optional(),
+        // New structured inspection items (Sprint 3+)
+        inspectionItems: z
+          .array(
+            z.object({
+              section: z.string(),
+              itemName: z.string(),
+              condition: z.enum(["good", "monitor", "repair_needed", "urgent", "na"]),
+              notes: z.string().optional(),
+              photoUrls: z.array(z.string()).optional(),
+              estimatedCostLow: z.number().optional(),
+              estimatedCostHigh: z.number().optional(),
+              systemType: z.string().optional(),
+            })
+          )
+          .optional(),
       })
     )
     .mutation(async ({ input }) => {
       const db = await getDb();
-      const { id, laborBankUsed, ...updates } = input;
+      const { id, laborBankUsed, inspectionItems, ...updates } = input;
+
+      // Enrich inspection items with cascade risk scores
+      const enrichedItems: InspectionItem[] = (inspectionItems ?? []).map((item) => {
+        const risk = computeCascadeRisk(item.systemType, item.condition);
+        return {
+          ...item,
+          cascadeRiskScore: risk,
+          priority: conditionToPriority(item.condition),
+          photoUrls: item.photoUrls ?? [],
+        };
+      });
 
       await db
         .update(threeSixtyVisits)
@@ -227,8 +257,91 @@ const visitsRouter = router({
           status: "completed",
           completedDate: Date.now(),
           laborBankUsed,
+          // Keep legacy snapshot for backward compat
+          checklistSnapshot: updates.checklistSnapshot,
         })
         .where(eq(threeSixtyVisits.id, id));
+
+      // If structured items provided, upsert into the current-year scan
+      if (enrichedItems.length > 0) {
+        const [visit] = await db
+          .select()
+          .from(threeSixtyVisits)
+          .where(eq(threeSixtyVisits.id, id));
+        if (visit) {
+          // Find or create the annual scan for this membership/year
+          const [existingScan] = await db
+            .select()
+            .from(threeSixtyScans)
+            .where(
+              and(
+                eq(threeSixtyScans.membershipId, visit.membershipId),
+                eq(threeSixtyScans.linkedVisitId, id)
+              )
+            );
+
+          const itemsJson = JSON.stringify(enrichedItems);
+          const systems = await db
+            .select()
+            .from(threeSixtyPropertySystems)
+            .where(eq(threeSixtyPropertySystems.membershipId, visit.membershipId));
+          const healthScore = computeHealthScoreFromData(enrichedItems, systems);
+
+          const actionable = enrichedItems.filter(
+            (i) => i.condition === "urgent" || i.condition === "repair_needed" || i.condition === "monitor"
+          );
+          const recommendations: Recommendation[] = actionable
+            .map((i) => ({
+              priority:
+                i.priority === "critical"
+                  ? ("Critical" as const)
+                  : i.priority === "high"
+                  ? ("High" as const)
+                  : i.priority === "medium"
+                  ? ("Medium" as const)
+                  : ("Low" as const),
+              section: i.section,
+              item: i.itemName,
+              estimatedCostLow: i.estimatedCostLow,
+              estimatedCostHigh: i.estimatedCostHigh,
+              cascadeRiskScore: i.cascadeRiskScore,
+              notes: i.notes,
+              systemType: i.systemType,
+            }))
+            .sort((a, b) => b.cascadeRiskScore - a.cascadeRiskScore);
+
+          if (existingScan) {
+            await db
+              .update(threeSixtyScans)
+              .set({
+                inspectionItemsJson: itemsJson,
+                recommendationsJson: JSON.stringify(recommendations),
+                healthScore,
+                status: "completed",
+                technicianNotes: input.technicianNotes,
+              })
+              .where(eq(threeSixtyScans.id, existingScan.id));
+          } else {
+            await db.insert(threeSixtyScans).values({
+              membershipId: visit.membershipId,
+              customerId: visit.customerId,
+              scanDate: Date.now(),
+              inspectionItemsJson: itemsJson,
+              recommendationsJson: JSON.stringify(recommendations),
+              healthScore,
+              status: "completed",
+              technicianNotes: input.technicianNotes,
+              linkedVisitId: id,
+            });
+          }
+
+          // Mark membership annual scan done
+          await db
+            .update(threeSixtyMemberships)
+            .set({ annualScanCompleted: true, annualScanDate: Date.now() })
+            .where(eq(threeSixtyMemberships.id, visit.membershipId));
+        }
+      }
 
       // Deduct from labor bank if used
       if (laborBankUsed > 0) {
@@ -236,15 +349,12 @@ const visitsRouter = router({
           .select()
           .from(threeSixtyVisits)
           .where(eq(threeSixtyVisits.id, id));
-
         if (visit) {
-          // Use raw decrement
           await db.execute(
             `UPDATE threeSixtyMemberships 
              SET laborBankBalance = GREATEST(0, laborBankBalance - ${laborBankUsed})
              WHERE id = ${visit.membershipId}`
           );
-
           await db.insert(threeSixtyLaborBankTransactions).values({
             membershipId: visit.membershipId,
             type: "debit",
@@ -254,10 +364,8 @@ const visitsRouter = router({
           });
         }
       }
-
-      return { success: true };
+       return { success: true };
     }),
-
   skip: protectedProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
@@ -398,8 +506,85 @@ const laborBankRouter = router({
     }),
 });
 
-// ─── SCANS ────────────────────────────────────────────────────────────────────
+// ─── CASCADE RISK SCORING ─────────────────────────────────────────────────────
+const SYSTEM_BASE_RISK: Record<string, number> = {
+  foundation: 9,
+  roof: 8,
+  plumbing: 7,
+  electrical: 6,
+  hvac: 5,
+  exterior_siding: 4,
+  interior: 3,
+  appliances: 3,
+};
+const CONDITION_MULTIPLIER: Record<string, number> = {
+  urgent: 2.0,
+  repair_needed: 1.5,
+  monitor: 0.5,
+  good: 0,
+  na: 0,
+};
 
+export interface InspectionItem {
+  section: string;
+  itemName: string;
+  condition: "good" | "monitor" | "repair_needed" | "urgent" | "na";
+  notes?: string;
+  photoUrls?: string[];
+  estimatedCostLow?: number;
+  estimatedCostHigh?: number;
+  cascadeRiskScore: number;
+  priority: "low" | "medium" | "high" | "critical";
+  systemType?: string;
+}
+
+export interface Recommendation {
+  priority: "Low" | "Medium" | "High" | "Critical";
+  section: string;
+  item: string;
+  estimatedCostLow?: number;
+  estimatedCostHigh?: number;
+  cascadeRiskScore: number;
+  notes?: string;
+  systemType?: string;
+}
+
+function computeCascadeRisk(systemType: string | undefined, condition: string): number {
+  const base = SYSTEM_BASE_RISK[systemType ?? "interior"] ?? 3;
+  const mult = CONDITION_MULTIPLIER[condition] ?? 0;
+  return Math.min(10, Math.round(base * mult * 10) / 10);
+}
+
+function conditionToPriority(condition: string): "low" | "medium" | "high" | "critical" {
+  if (condition === "urgent") return "critical";
+  if (condition === "repair_needed") return "high";
+  if (condition === "monitor") return "medium";
+  return "low";
+}
+
+function computeHealthScoreFromData(
+  items: InspectionItem[],
+  systems: { condition: string }[]
+): number {
+  const conditionScore: Record<string, number> = { good: 100, fair: 70, poor: 40, critical: 10 };
+  const sysScore =
+    systems.length > 0
+      ? systems.reduce((s, sys) => s + (conditionScore[sys.condition] ?? 50), 0) / systems.length
+      : 70;
+  const actionable = items.filter((i) => i.condition !== "na");
+  const passCount = actionable.filter(
+    (i) => i.condition === "good" || i.condition === "monitor"
+  ).length;
+  const itemScore = actionable.length > 0 ? (passCount / actionable.length) * 100 : 80;
+  const urgentCount = items.filter((i) => i.condition === "urgent").length;
+  const repairCount = items.filter((i) => i.condition === "repair_needed").length;
+  const penalty = Math.min(40, urgentCount * 10 + repairCount * 5);
+  const penaltyScore = 100 - penalty;
+  const raw = sysScore * 0.35 + itemScore * 0.35 + penaltyScore * 0.2 + 100 * 0.1;
+  return Math.max(0, Math.min(100, Math.round(raw)));
+}
+
+// ─── SCANS ────────────────────────────────────────────────────────────────────
 const scansRouter = router({
   list: protectedProcedure
     .input(z.object({ membershipId: z.number() }))
@@ -424,6 +609,28 @@ const scansRouter = router({
       return scan;
     }),
 
+  getDetail: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      const [scan] = await db
+        .select()
+        .from(threeSixtyScans)
+        .where(eq(threeSixtyScans.id, input.id));
+      if (!scan) throw new TRPCError({ code: "NOT_FOUND" });
+      const items: InspectionItem[] = scan.inspectionItemsJson
+        ? JSON.parse(scan.inspectionItemsJson)
+        : [];
+      const recommendations: Recommendation[] = scan.recommendationsJson
+        ? JSON.parse(scan.recommendationsJson)
+        : [];
+      const systems = await db
+        .select()
+        .from(threeSixtyPropertySystems)
+        .where(eq(threeSixtyPropertySystems.membershipId, scan.membershipId));
+      return { ...scan, items, recommendations, systems };
+    }),
+
   create: protectedProcedure
     .input(
       z.object({
@@ -446,7 +653,7 @@ const scansRouter = router({
     .input(
       z.object({
         id: z.number(),
-        systemRatings: z.string().optional(), // JSON
+        systemRatings: z.string().optional(),
         technicianNotes: z.string().optional(),
         status: z.enum(["draft", "completed", "delivered"]).optional(),
         reportUrl: z.string().optional(),
@@ -456,8 +663,6 @@ const scansRouter = router({
     .mutation(async ({ input }) => {
       const { id, ...updates } = input;
       const db = await getDb();
-
-      // If completing, mark membership scan as done
       if (updates.status === "completed" || updates.status === "delivered") {
         const [scan] = await db
           .select()
@@ -470,12 +675,245 @@ const scansRouter = router({
             .where(eq(threeSixtyMemberships.id, scan.membershipId));
         }
       }
-
       await db
         .update(threeSixtyScans)
         .set(updates)
         .where(eq(threeSixtyScans.id, id));
       return { success: true };
+    }),
+
+  updateSummary: protectedProcedure
+    .input(z.object({ id: z.number(), summary: z.string() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      await db
+        .update(threeSixtyScans)
+        .set({ summary: input.summary })
+        .where(eq(threeSixtyScans.id, input.id));
+      return { success: true };
+    }),
+
+  computeHealthScore: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      const [scan] = await db
+        .select()
+        .from(threeSixtyScans)
+        .where(eq(threeSixtyScans.id, input.id));
+      if (!scan) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const items: InspectionItem[] = scan.inspectionItemsJson
+        ? JSON.parse(scan.inspectionItemsJson)
+        : [];
+      const systems = await db
+        .select()
+        .from(threeSixtyPropertySystems)
+        .where(eq(threeSixtyPropertySystems.membershipId, scan.membershipId));
+
+      const actionable = items.filter(
+        (i) => i.condition === "urgent" || i.condition === "repair_needed" || i.condition === "monitor"
+      );
+      const recommendations: Recommendation[] = actionable
+        .map((i) => ({
+          priority:
+            i.priority === "critical"
+              ? ("Critical" as const)
+              : i.priority === "high"
+              ? ("High" as const)
+              : i.priority === "medium"
+              ? ("Medium" as const)
+              : ("Low" as const),
+          section: i.section,
+          item: i.itemName,
+          estimatedCostLow: i.estimatedCostLow,
+          estimatedCostHigh: i.estimatedCostHigh,
+          cascadeRiskScore: i.cascadeRiskScore,
+          notes: i.notes,
+          systemType: i.systemType,
+        }))
+        .sort((a, b) => b.cascadeRiskScore - a.cascadeRiskScore);
+
+      const healthScore = computeHealthScoreFromData(items, systems);
+
+      await db
+        .update(threeSixtyScans)
+        .set({
+          healthScore,
+          recommendationsJson: JSON.stringify(recommendations),
+          status: "completed",
+        })
+        .where(eq(threeSixtyScans.id, input.id));
+
+      await db
+        .update(threeSixtyMemberships)
+        .set({ annualScanCompleted: true, annualScanDate: Date.now() })
+        .where(eq(threeSixtyMemberships.id, scan.membershipId));
+
+      return { healthScore, recommendations };
+    }),
+
+  createEstimateFromFinding: protectedProcedure
+    .input(
+      z.object({
+        scanId: z.number(),
+        item: z.string(),
+        section: z.string(),
+        estimatedCostLow: z.number().optional(),
+        estimatedCostHigh: z.number().optional(),
+        notes: z.string().optional(),
+        customerId: z.number(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      return {
+        prefill: {
+          title: input.item,
+          description: `360° Inspection Finding — ${input.section}\n\n${input.notes ?? ""}`.trim(),
+          estimatedCostLow: input.estimatedCostLow,
+          estimatedCostHigh: input.estimatedCostHigh,
+          linkedScanId: input.scanId,
+          customerId: input.customerId,
+        },
+      };
+    }),
+
+  sendToPortal: protectedProcedure
+    .input(z.object({ scanId: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      const [scan] = await db
+        .select()
+        .from(threeSixtyScans)
+        .where(eq(threeSixtyScans.id, input.scanId));
+      if (!scan) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const [portalCustomer] = await db
+        .select()
+        .from(portalCustomers)
+        .where(eq(portalCustomers.hpCustomerId, scan.customerId));
+      if (!portalCustomer) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Customer does not have a portal account. Invite them first.",
+        });
+      }
+
+      const reportJson = JSON.stringify({
+        healthScore: scan.healthScore,
+        summary: scan.summary,
+        items: scan.inspectionItemsJson ? JSON.parse(scan.inspectionItemsJson) : [],
+        recommendations: scan.recommendationsJson ? JSON.parse(scan.recommendationsJson) : [],
+        scanDate: scan.scanDate,
+        pdfUrl: scan.pdfUrl,
+      });
+
+      const now = Date.now();
+      const [result] = await db.insert(portalReports).values({
+        portalCustomerId: portalCustomer.id,
+        scanId: scan.id,
+        membershipId: scan.membershipId,
+        hpCustomerId: scan.customerId,
+        healthScore: scan.healthScore,
+        reportJson,
+        pdfUrl: scan.pdfUrl ?? undefined,
+        sentAt: now,
+      });
+
+      await db
+        .update(threeSixtyScans)
+        .set({ sentToPortalAt: now, status: "delivered" })
+        .where(eq(threeSixtyScans.id, input.scanId));
+
+      return { portalReportId: (result as any).insertId as number };
+    }),
+});
+
+// ─── PROPERTY SYSTEMS ─────────────────────────────────────────────────────────
+const propertySystemsRouter = router({
+  list: protectedProcedure
+    .input(z.object({ membershipId: z.number() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      return await db
+        .select()
+        .from(threeSixtyPropertySystems)
+        .where(eq(threeSixtyPropertySystems.membershipId, input.membershipId))
+        .orderBy(asc(threeSixtyPropertySystems.systemType));
+    }),
+
+  upsert: protectedProcedure
+    .input(
+      z.object({
+        id: z.number().optional(),
+        membershipId: z.number(),
+        customerId: z.number(),
+        systemType: z.enum([
+          "hvac",
+          "roof",
+          "plumbing",
+          "electrical",
+          "foundation",
+          "exterior_siding",
+          "interior",
+          "appliances",
+        ]),
+        brandModel: z.string().optional(),
+        installYear: z.number().optional(),
+        condition: z.enum(["good", "fair", "poor", "critical"]).default("good"),
+        conditionNotes: z.string().optional(),
+        lastServiceDate: z.string().optional(),
+        nextServiceDate: z.string().optional(),
+        estimatedLifespanYears: z.number().optional(),
+        replacementCostEstimate: z.string().optional(),
+        photoUrls: z.array(z.string()).optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      const { id, photoUrls, ...values } = input;
+      const payload = {
+        ...values,
+        photoUrls: photoUrls ? JSON.stringify(photoUrls) : undefined,
+      };
+      if (id) {
+        await db
+          .update(threeSixtyPropertySystems)
+          .set(payload)
+          .where(eq(threeSixtyPropertySystems.id, id));
+        return { id };
+      } else {
+        const [result] = await db.insert(threeSixtyPropertySystems).values(payload);
+        return { id: (result as any).insertId as number };
+      }
+    }),
+
+  delete: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      await db
+        .delete(threeSixtyPropertySystems)
+        .where(eq(threeSixtyPropertySystems.id, input.id));
+      return { success: true };
+    }),
+
+  uploadPhoto: protectedProcedure
+    .input(
+      z.object({
+        membershipId: z.number(),
+        systemType: z.string(),
+        dataUrl: z.string(),
+        fileName: z.string(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const base64 = input.dataUrl.replace(/^data:[^;]+;base64,/, "");
+      const buffer = Buffer.from(base64, "base64");
+      const ext = input.fileName.split(".").pop() ?? "jpg";
+      const key = `360-systems/${input.membershipId}/${input.systemType}-${Date.now()}.${ext}`;
+      const { url } = await storagePut(key, buffer, `image/${ext}`);
+      return { url, key };
     }),
 });
 
@@ -810,6 +1248,7 @@ export const threeSixtyRouter = router({
   checklist: checklistRouter,
   laborBank: laborBankRouter,
   scans: scansRouter,
+  propertySystems: propertySystemsRouter,
   checkout: checkoutRouter,
   abandonedLead: abandonedLeadRouter,
   portfolioCheckout: portfolioCheckoutRouter,

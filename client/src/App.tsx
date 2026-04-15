@@ -30,6 +30,8 @@ import PortalJobDetail from "./pages/portal/PortalJobDetail";
 import PortalJobComplete from "./pages/portal/PortalJobComplete";
 import PortalChangeOrderDetail from "./pages/portal/PortalChangeOrderDetail";
 import PortalJobs from "./pages/portal/PortalJobs";
+import PortalReports from "./pages/portal/PortalReports";
+import PortalReportDetail from "./pages/portal/PortalReportDetail";
 
 // Domains that should serve only the customer portal (no admin app)
 const PORTAL_HOSTNAMES = ["client.handypioneers.com"];
@@ -78,6 +80,8 @@ function Router() {
       <Route path="/portal/messages" component={PortalMessages} />
       <Route path="/portal/jobs" component={PortalJobs} />
       <Route path="/portal/request" component={PortalRequest} />
+      <Route path="/portal/reports/:id" component={PortalReportDetail} />
+      <Route path="/portal/reports" component={PortalReports} />
 
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />

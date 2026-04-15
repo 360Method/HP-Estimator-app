@@ -14,6 +14,8 @@ import { ArrowLeft, CalendarCheck, Wallet, ClipboardList, Plus, CheckCircle2, Cl
 import { formatDollars, TIER_DEFINITIONS, type MemberTier } from '../../../shared/threeSixtyTiers';
 import { toast } from 'sonner';
 import ThreeSixtyVisitDetail from './ThreeSixtyVisitDetail';
+import ThreeSixtyBaselineWizard from './ThreeSixtyBaselineWizard';
+import ThreeSixtyScanDetail from './ThreeSixtyScanDetail';
 
 const SEASON_LABELS: Record<string, string> = {
   spring: '🌸 Spring',
@@ -36,12 +38,15 @@ interface Props {
 export default function ThreeSixtyMemberDetail({ membershipId, onBack }: Props) {
   
   const [selectedVisitId, setSelectedVisitId] = useState<number | null>(null);
+  const [showBaselineWizard, setShowBaselineWizard] = useState(false);
+  const [selectedScanId, setSelectedScanId] = useState<number | null>(null);
   const utils = trpc.useUtils();
 
   const { data: membership, isLoading } = trpc.threeSixty.memberships.get.useQuery({ id: membershipId });
   const { data: visits } = trpc.threeSixty.visits.list.useQuery({ membershipId });
   const { data: ledger } = trpc.threeSixty.laborBank.getLedger.useQuery({ membershipId });
   const { data: scans } = trpc.threeSixty.scans.list.useQuery({ membershipId });
+  const { data: propertySystems } = trpc.threeSixty.propertySystems.list.useQuery({ membershipId });
 
   const scheduleVisit = trpc.threeSixty.visits.schedule.useMutation({
     onSuccess: () => {
@@ -56,6 +61,27 @@ export default function ThreeSixtyMemberDetail({ membershipId, onBack }: Props) 
       toast('Visit marked as skipped');
     },
   });
+
+  if (selectedScanId !== null) {
+    return (
+      <ThreeSixtyScanDetail
+        scanId={selectedScanId}
+        membershipId={membershipId}
+        onBack={() => setSelectedScanId(null)}
+      />
+    );
+  }
+
+  if (showBaselineWizard) {
+    return (
+      <ThreeSixtyBaselineWizard
+        membershipId={membershipId}
+        customerId={membership?.customerId ?? 0}
+        onBack={() => setShowBaselineWizard(false)}
+        onComplete={() => setShowBaselineWizard(false)}
+      />
+    );
+  }
 
   if (selectedVisitId !== null) {
     return (
@@ -145,6 +171,7 @@ export default function ThreeSixtyMemberDetail({ membershipId, onBack }: Props) 
       <Tabs defaultValue="visits">
         <TabsList className="mb-4 flex flex-wrap h-auto gap-1">
           <TabsTrigger value="visits" className="text-xs">Visits</TabsTrigger>
+          <TabsTrigger value="property-systems" className="text-xs">Property Systems</TabsTrigger>
           <TabsTrigger value="labor-bank" className="text-xs">Labor Bank</TabsTrigger>
           <TabsTrigger value="scans" className="text-xs">Scans</TabsTrigger>
           <TabsTrigger value="discounts" className="text-xs">Discounts</TabsTrigger>
@@ -271,6 +298,69 @@ export default function ThreeSixtyMemberDetail({ membershipId, onBack }: Props) 
           )}
         </TabsContent>
 
+        {/* ── PROPERTY SYSTEMS ────────────────────────────────────── */}
+        <TabsContent value="property-systems">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold">Property System Baselines</h3>
+            <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => setShowBaselineWizard(true)}>
+              <Plus className="w-3.5 h-3.5 mr-1" />
+              {(propertySystems ?? []).length > 0 ? 'Update' : 'Document'}
+            </Button>
+          </div>
+          {(propertySystems ?? []).length === 0 ? (
+            <div className="text-center py-10">
+              <ClipboardList className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground mb-3">No property systems documented yet.</p>
+              <Button size="sm" onClick={() => setShowBaselineWizard(true)}>Start Baseline Wizard</Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {(propertySystems ?? []).map(sys => {
+                const condColors: Record<string, string> = {
+                  good: 'bg-emerald-50 border-emerald-200',
+                  fair: 'bg-yellow-50 border-yellow-200',
+                  poor: 'bg-orange-50 border-orange-200',
+                  critical: 'bg-red-50 border-red-200',
+                };
+                const condBadge: Record<string, string> = {
+                  good: 'bg-emerald-100 text-emerald-800',
+                  fair: 'bg-yellow-100 text-yellow-800',
+                  poor: 'bg-orange-100 text-orange-800',
+                  critical: 'bg-red-100 text-red-800',
+                };
+                const sysLabels: Record<string, string> = {
+                  hvac: 'HVAC', roof: 'Roof', plumbing: 'Plumbing', electrical: 'Electrical',
+                  foundation: 'Foundation', exterior_siding: 'Exterior & Siding',
+                  interior: 'Interior', appliances: 'Appliances',
+                };
+                const photos: string[] = sys.photoUrls ? JSON.parse(sys.photoUrls) : [];
+                return (
+                  <Card key={sys.id} className={`border ${condColors[sys.condition] ?? ''}`}>
+                    <CardContent className="p-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-semibold">{sysLabels[sys.systemType] ?? sys.systemType}</span>
+                        <Badge className={`text-[10px] capitalize ${condBadge[sys.condition]}`}>{sys.condition}</Badge>
+                      </div>
+                      {sys.brandModel && <p className="text-xs text-muted-foreground">{sys.brandModel}</p>}
+                      {sys.installYear && <p className="text-xs text-muted-foreground">Installed {sys.installYear}</p>}
+                      {sys.conditionNotes && (
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{sys.conditionNotes}</p>
+                      )}
+                      {photos.length > 0 && (
+                        <div className="flex gap-1 mt-2">
+                          {photos.slice(0, 3).map((url) => (
+                            <img key={url} src={url} alt="" className="w-10 h-10 rounded object-cover border" />
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </TabsContent>
+
         {/* ── SCANS ───────────────────────────────────────────────── */}
         <TabsContent value="scans">
           <div className="flex items-center justify-between mb-3">
@@ -281,13 +371,24 @@ export default function ThreeSixtyMemberDetail({ membershipId, onBack }: Props) 
           ) : (
             <div className="space-y-2">
               {(scans ?? []).map(scan => (
-                <Card key={scan.id} className="border shadow-sm">
+                <Card
+                  key={scan.id}
+                  className="border shadow-sm cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => setSelectedScanId(scan.id)}
+                >
                   <CardContent className="py-3 px-4 flex items-center gap-3">
                     <ClipboardList className="w-4 h-4 text-muted-foreground shrink-0" />
                     <div className="flex-1">
                       <div className="text-sm font-medium">
                         Scan #{scan.id} — {new Date(scan.scanDate).toLocaleDateString()}
                       </div>
+                      {scan.healthScore != null && (
+                        <div className="text-xs font-semibold mt-0.5" style={{
+                          color: scan.healthScore >= 75 ? '#059669' : scan.healthScore >= 50 ? '#d97706' : '#dc2626'
+                        }}>
+                          Health Score: {scan.healthScore}/100
+                        </div>
+                      )}
                       {scan.technicianNotes && (
                         <div className="text-xs text-muted-foreground truncate">{scan.technicianNotes}</div>
                       )}
