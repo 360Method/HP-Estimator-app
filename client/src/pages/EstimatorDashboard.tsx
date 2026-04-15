@@ -182,6 +182,9 @@ function SectionHeader({ title, sub, action, onAction }: { title: string; sub?: 
 export default function EstimatorDashboard() {
   const { state, setSection, setActiveCustomer, setActiveOpportunity } = useEstimator();
   const [revenueRange] = useState<'6m' | '12m'>('6m');
+  const [onboardingDismissed, setOnboardingDismissed] = useState(() => {
+    try { return localStorage.getItem('hp_onboarding_dismissed') === '1'; } catch { return false; }
+  });
 
   // ── DB-backed revenue stats (portal payments) ───────────────
   const { data: revenueStats } = trpc.portal.getRevenueStats.useQuery(undefined, {
@@ -339,8 +342,45 @@ export default function EstimatorDashboard() {
 
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
+  const showOnboardingBanner = !onboardingDismissed && state.customers.length === 0;
+
   return (
     <div className="min-h-screen bg-background">
+
+      {/* ── Onboarding banner (shown when no customers exist) ── */}
+      {showOnboardingBanner && (
+        <div className="bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-800 px-4 py-3">
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center shrink-0">
+                <Users className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-amber-900 dark:text-amber-100">Welcome! Import your existing clients and job history to get started.</p>
+                <p className="text-xs text-amber-700 dark:text-amber-300">Supports HouseCall Pro exports, Google Contacts, and generic CSV files.</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <a
+                href="/onboarding"
+                className="inline-flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium px-3 py-1.5 rounded-md transition-colors"
+              >
+                <Upload className="w-3.5 h-3.5" /> Import Data
+              </a>
+              <button
+                type="button"
+                onClick={() => {
+                  try { localStorage.setItem('hp_onboarding_dismissed', '1'); } catch {}
+                  setOnboardingDismissed(true);
+                }}
+                className="text-xs text-amber-700 dark:text-amber-300 hover:text-amber-900 dark:hover:text-amber-100 underline"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Hero header ──────────────────────────────────────── */}
       <div className="bg-gradient-to-r from-[oklch(0.32_0.14_255)] to-[oklch(0.42_0.14_255)] text-white px-6 py-6">

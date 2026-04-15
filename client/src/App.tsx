@@ -8,6 +8,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { EstimatorProvider } from "./contexts/EstimatorContext";
 import { PortalProvider } from "./contexts/PortalContext";
 import Home from "./pages/Home";
+import DataMigrationPage from "./pages/DataMigrationPage";
 
 // Booking wizard (public)
 import BookingWizard from "./pages/book/BookingWizard";
@@ -82,6 +83,9 @@ function Router() {
       <Route path="/portal/request" component={PortalRequest} />
       <Route path="/portal/reports/:id" component={PortalReportDetail} />
       <Route path="/portal/reports" component={PortalReports} />
+
+      {/* Data migration onboarding wizard */}
+      <Route path="/onboarding" component={DataMigrationPage} />
 
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />

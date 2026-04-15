@@ -125,6 +125,89 @@ export const opportunitiesRouter = router({
     }),
 
   /**
+   * Bulk import jobs/leads/estimates from CSV rows.
+   * Matches existing records by customerId+title+area — updates if found, creates if not.
+   * Supports HouseCall Pro and generic export formats.
+   */
+  importCsv: protectedProcedure
+    .input(z.object({
+      rows: z.array(z.object({
+        customerId: z.string().optional(),
+        customerName: z.string().optional(), // fallback: match customer by name
+        area: z.enum(["lead", "estimate", "job"]).default("job"),
+        stage: z.string().optional(),
+        title: z.string().optional(),
+        value: z.number().optional(),       // in dollars (will be converted to cents)
+        jobNumber: z.string().optional(),
+        notes: z.string().optional(),
+        scheduledDate: z.string().optional(),
+        scheduledEndDate: z.string().optional(),
+        wonAt: z.string().optional(),
+        archived: z.boolean().optional(),
+      })).max(2000),
+    }))
+    .mutation(async ({ input }) => {
+      const { listCustomers, createOpportunity, listOpportunities, updateOpportunity } = await import("../db");
+      // Build customer lookup map (name → id) for rows without customerId
+      const allCustomers = await listCustomers(undefined, 2000, 0);
+      const customerByName = new Map<string, string>();
+      for (const c of allCustomers) {
+        if (c.displayName) customerByName.set(c.displayName.toLowerCase().trim(), c.id);
+        if (c.firstName && c.lastName) customerByName.set(`${c.firstName} ${c.lastName}`.toLowerCase().trim(), c.id);
+      }
+      let created = 0;
+      let updated = 0;
+      let skipped = 0;
+      for (const row of input.rows) {
+        // Resolve customerId
+        let customerId = row.customerId;
+        if (!customerId && row.customerName) {
+          customerId = customerByName.get(row.customerName.toLowerCase().trim());
+        }
+        if (!customerId) { skipped++; continue; }
+        const area = row.area ?? "job";
+        const stage = row.stage ?? (area === "job" ? "Active Job" : area === "estimate" ? "Estimate Sent" : "New Lead");
+        const title = row.title ?? (row.jobNumber ? `Job #${row.jobNumber}` : `Imported ${area}`);
+        const valueCents = row.value != null ? Math.round(row.value * 100) : 0;
+        // Check for existing record by jobNumber or title+customerId+area
+        const existing = await listOpportunities(area, customerId, undefined, 500);
+        const match = existing.find(o =>
+          (row.jobNumber && o.jobNumber === row.jobNumber) ||
+          o.title.toLowerCase() === title.toLowerCase()
+        );
+        if (match) {
+          await updateOpportunity(match.id, {
+            stage,
+            value: valueCents,
+            notes: row.notes ?? match.notes ?? undefined,
+            scheduledDate: row.scheduledDate ?? match.scheduledDate ?? undefined,
+            scheduledEndDate: row.scheduledEndDate ?? match.scheduledEndDate ?? undefined,
+            wonAt: row.wonAt ?? match.wonAt ?? undefined,
+            archived: row.archived ?? match.archived,
+          });
+          updated++;
+        } else {
+          await createOpportunity({
+            id: (await import("nanoid")).nanoid(),
+            customerId,
+            area,
+            stage,
+            title,
+            value: valueCents,
+            jobNumber: row.jobNumber,
+            notes: row.notes,
+            scheduledDate: row.scheduledDate,
+            scheduledEndDate: row.scheduledEndDate,
+            wonAt: row.wonAt,
+            archived: row.archived ?? false,
+          });
+          created++;
+        }
+      }
+      return { created, updated, skipped, total: input.rows.length };
+    }),
+
+  /**
    * Quick-send an SMS from the lead panel.
    * Finds or creates an inbox conversation for the contact, then sends via Twilio.
    */

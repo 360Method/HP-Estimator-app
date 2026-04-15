@@ -1551,3 +1551,14 @@
 - [x] Add column-mapping step to CSV import dialog (supported headers listed in dialog)
 - [x] Add downloadable CSV template link in import dialog
 - [x] Run pnpm test, save checkpoint — 23 files, 194 tests pass
+
+## Jobs CSV Import + Data Migration Onboarding (Apr 15 2026)
+
+- [ ] Add opportunities.importCsv tRPC procedure (bulk upsert jobs/leads/estimates from CSV rows)
+- [ ] HouseCall Pro column mapping: Job #, Customer, Status, Description, Scheduled, Completed, Total, etc.
+- [ ] Add jobs import UI to CustomersListPage or a dedicated ImportPage (Actions → Import Jobs)
+- [ ] Add downloadable jobs CSV template
+- [ ] Build DataMigrationPage (/onboarding) — multi-step wizard: Step 1 import customers, Step 2 import jobs, Step 3 verify counts
+- [ ] Show onboarding banner on Dashboard for users with 0 customers (first-login detection)
+- [ ] Wire /onboarding route in App.tsx
+- [ ] Run tests, save checkpoint
