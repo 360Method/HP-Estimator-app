@@ -29,8 +29,9 @@ import {
   CheckCircle2, Circle, Upload, X, RefreshCw, Pencil,
   Save, ChevronUp, GitBranch, History,
   FileCheck, ArrowRight, Zap, Star,
-  Flag, ListChecks, Send as SendIcon,
+  Flag, ListChecks, Send as SendIcon, Receipt,
 } from 'lucide-react';
+import CustomerExpensesTab from '@/components/CustomerExpensesTab';
 import { toast } from 'sonner';
 import { nanoid } from 'nanoid';
 import AddressMapPreview from '@/components/AddressMapPreview';
@@ -1962,6 +1963,18 @@ export default function JobDetailsSection() {
         />
       </Section>
 
+      {/* ── Job Expenses ── */}
+      <Section
+        icon={<Receipt size={13} />}
+        title="Job Expenses"
+        defaultOpen={false}
+      >
+        <CustomerExpensesTab
+          customerId={activeCustomerId ?? ''}
+          opportunityId={activeOpp?.id}
+          opportunityOptions={activeOpp ? [{ id: activeOpp.id, title: activeOpp.title || 'This Job' }] : []}
+        />
+      </Section>
       {/* ── Modals ── */}
       <CreateChangeOrderModal
         open={showCOModal}
