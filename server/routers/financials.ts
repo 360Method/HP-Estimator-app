@@ -289,24 +289,31 @@ export const financialsRouter = router({
     }))
     .query(async ({ ctx, input }) => {
       const db = await getDb();
-      if (!db) return { total: 0, byCategory: {} as Record<string, number> };
+      if (!db) return {
+        total: 0,
+        byCategory: {} as Record<string, number>,
+        byScope: { job: 0, business: 0 },
+      };
 
       const conditions = [eq(expenses.userId, ctx.user.id)];
       if (input.dateFrom) conditions.push(gte(expenses.date, input.dateFrom));
       if (input.dateTo) conditions.push(lte(expenses.date, input.dateTo));
 
       const rows = await db
-        .select({ category: expenses.category, amount: expenses.amount })
+        .select({ category: expenses.category, amount: expenses.amount, scope: expenses.scope })
         .from(expenses)
         .where(and(...conditions));
 
       const byCategory: Record<string, number> = {};
+      const byScope: Record<string, number> = { job: 0, business: 0 };
       let total = 0;
       for (const r of rows) {
         byCategory[r.category] = (byCategory[r.category] ?? 0) + r.amount;
+        const s = r.scope ?? 'job';
+        byScope[s] = (byScope[s] ?? 0) + r.amount;
         total += r.amount;
       }
-      return { total, byCategory };
+      return { total, byCategory, byScope };
     }),
 
   /**

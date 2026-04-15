@@ -1615,3 +1615,15 @@
 - [x] Add QB sync procedures (syncInvoice, syncExpense, bulkSync)
 - [x] Add QB connection status page (QuickBooksPage, nav item in MetricsBar)
 - [x] Run tests (208/208 passing), save checkpoint
+
+## Expense Unification — Job + Business Expenses (Apr 15 2026)
+
+- [x] Add `scope` column to expenses table: 'job' | 'business' (default 'job' when opportunityId set, else 'business')
+- [x] Run pnpm db:push for scope column
+- [x] Update expenses router: list/create/summary accept scope filter; create auto-sets scope based on opportunityId presence
+- [x] Build BusinessExpensesPanel component: full ledger (all expenses, filterable by scope/category/date), Add Expense form for business-level expenses
+- [x] Add Business Expenses section to FinancialsPage with full ledger + Add Expense button
+- [x] Update FinancialsPage P&L KPI cards to show job expenses vs business expenses breakdown (5-card grid)
+- [x] Update getExpenseSummary to return byScope (job vs business totals) alongside byCategory
+- [x] CustomerExpensesTab: job expenses auto-scoped via opportunityId; business expenses added from Financials page
+- [x] Run tests (208/208), save checkpoint
