@@ -18,7 +18,7 @@ import {
   portalCustomers,
 } from "../../drizzle/schema";
 import { storagePut } from "../storage";
-import { eq, and, desc, asc } from "drizzle-orm";
+import { eq, and, desc, asc, inArray } from "drizzle-orm";
 import {
   calcMemberDiscount,
   effectiveDiscountRate,
@@ -54,7 +54,7 @@ const membershipRouter = router({
     }),
 
   getByCustomer: protectedProcedure
-    .input(z.object({ customerId: z.number() }))
+    .input(z.object({ customerId: z.string() }))
     .query(async ({ input }) => {
       const db = await getDb();
       return await db
@@ -67,7 +67,7 @@ const membershipRouter = router({
   create: protectedProcedure
     .input(
       z.object({
-        customerId: z.number(),
+        customerId: z.string(),
         propertyAddressId: z.number().optional(),
         tier: z.enum(["bronze", "silver", "gold"]),
         startDate: z.number(), // Unix ms
@@ -151,7 +151,7 @@ const visitsRouter = router({
     .input(
       z.object({
         membershipId: z.number().optional(),
-        customerId: z.number().optional(),
+        customerId: z.string().optional(),
         season: z.enum(["spring", "summer", "fall", "winter"]).optional(),
         status: z.enum(["scheduled", "completed", "skipped"]).optional(),
       })
@@ -191,7 +191,7 @@ const visitsRouter = router({
     .input(
       z.object({
         membershipId: z.number(),
-        customerId: z.number(),
+        customerId: z.string(),
         season: z.enum(["spring", "summer", "fall", "winter"]),
         scheduledDate: z.number().optional(),
         visitYear: z.number(),
@@ -635,7 +635,7 @@ const scansRouter = router({
     .input(
       z.object({
         membershipId: z.number(),
-        customerId: z.number(),
+        customerId: z.string(),
         scanDate: z.number(),
         technicianNotes: z.string().optional(),
       })
@@ -762,7 +762,7 @@ const scansRouter = router({
         estimatedCostLow: z.number().optional(),
         estimatedCostHigh: z.number().optional(),
         notes: z.string().optional(),
-        customerId: z.number(),
+        customerId: z.string(),
       })
     )
     .mutation(async ({ input }) => {
@@ -847,7 +847,7 @@ const propertySystemsRouter = router({
       z.object({
         id: z.number().optional(),
         membershipId: z.number(),
-        customerId: z.number(),
+        customerId: z.string(),
         systemType: z.enum([
           "hvac",
           "roof",
@@ -914,6 +914,54 @@ const propertySystemsRouter = router({
       const key = `360-systems/${input.membershipId}/${input.systemType}-${Date.now()}.${ext}`;
       const { url } = await storagePut(key, buffer, `image/${ext}`);
       return { url, key };
+    }),
+});
+
+// ─── SCANS: getLatestByCustomer (for CustomerSection badge) ──────────────────
+const scansLatestRouter = router({
+  getLatestByCustomer: protectedProcedure
+    .input(z.object({ customerId: z.string() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      const [scan] = await db
+        .select()
+        .from(threeSixtyScans)
+        .where(eq(threeSixtyScans.customerId, input.customerId))
+        .orderBy(desc(threeSixtyScans.scanDate))
+        .limit(1);
+      if (!scan) return null;
+      return {
+        id: scan.id,
+        healthScore: scan.healthScore,
+        scanDate: scan.scanDate,
+        sentToPortalAt: scan.sentToPortalAt,
+        summary: scan.summary,
+      };
+    }),
+
+  /** Batch fetch latest health score for a list of customer IDs (used by CustomersListPage) */
+  getHealthScoresByCustomerIds: protectedProcedure
+    .input(z.object({ customerIds: z.array(z.string()) }))
+    .query(async ({ input }) => {
+      if (!input.customerIds.length) return {};
+      const db = await getDb();
+      const allScans = await db
+        .select({
+          customerId: threeSixtyScans.customerId,
+          healthScore: threeSixtyScans.healthScore,
+          scanDate: threeSixtyScans.scanDate,
+        })
+        .from(threeSixtyScans)
+        .where(inArray(threeSixtyScans.customerId, input.customerIds))
+        .orderBy(desc(threeSixtyScans.scanDate));
+      // Reduce to latest per customer
+      const result: Record<number, { healthScore: number | null; scanDate: number | null }> = {};
+      for (const s of allScans) {
+        if (s.customerId !== null && !(s.customerId in result)) {
+          result[s.customerId] = { healthScore: s.healthScore, scanDate: s.scanDate };
+        }
+      }
+      return result;
     }),
 });
 
@@ -1248,6 +1296,7 @@ export const threeSixtyRouter = router({
   checklist: checklistRouter,
   laborBank: laborBankRouter,
   scans: scansRouter,
+  scansLatest: scansLatestRouter,
   propertySystems: propertySystemsRouter,
   checkout: checkoutRouter,
   abandonedLead: abandonedLeadRouter,

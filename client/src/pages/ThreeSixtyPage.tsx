@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
-import { RefreshCw, Plus, Users, CalendarCheck, Wallet, Star, CheckCircle2, Shield, Crown } from 'lucide-react';
+import { RefreshCw, Plus, Users, CalendarCheck, Wallet, Star, CheckCircle2, Shield, Crown, ClipboardList } from 'lucide-react';
 import {
   TIER_DEFINITIONS,
   ALL_TIERS,
@@ -21,6 +21,7 @@ import {
 } from '../../../shared/threeSixtyTiers';
 import ThreeSixtyMemberList from './ThreeSixtyMemberList';
 import ThreeSixtyNewMembership from './ThreeSixtyNewMembership';
+import ThreeSixtyChecklists from './ThreeSixtyChecklists';
 
 const TIER_COLORS: Record<MemberTier, { badge: string; ring: string; icon: string; bg: string }> = {
   bronze: {
@@ -63,7 +64,7 @@ const CADENCE_PERIOD: Record<BillingCadence, string> = {
 
 export default function ThreeSixtyPage() {
   const [cadence, setCadence] = useState<BillingCadence>('monthly');
-  const [view, setView] = useState<'overview' | 'members' | 'new'>('overview');
+  const [view, setView] = useState<'overview' | 'members' | 'new' | 'checklists'>('overview');
 
   const { data: memberships, isLoading } = trpc.threeSixty.memberships.list.useQuery();
 
@@ -76,6 +77,10 @@ export default function ThreeSixtyPage() {
 
   if (view === 'new') {
     return <ThreeSixtyNewMembership onBack={() => setView('overview')} />;
+  }
+
+  if (view === 'checklists') {
+    return <ThreeSixtyChecklists onBack={() => setView('overview')} />;
   }
 
   return (
@@ -91,11 +96,17 @@ export default function ThreeSixtyPage() {
             <p className="text-sm text-muted-foreground truncate">Proactive home maintenance memberships — PNW</p>
           </div>
         </div>
-        <Button onClick={() => setView('new')} className="gap-2 shrink-0">
-          <Plus className="w-4 h-4" />
-          <span className="hidden xs:inline">New Membership</span>
-          <span className="xs:hidden">New</span>
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button variant="outline" onClick={() => setView('checklists')} className="gap-2">
+            <ClipboardList className="w-4 h-4" />
+            <span className="hidden sm:inline">Checklists</span>
+          </Button>
+          <Button onClick={() => setView('new')} className="gap-2">
+            <Plus className="w-4 h-4" />
+            <span className="hidden xs:inline">New Membership</span>
+            <span className="xs:hidden">New</span>
+          </Button>
+        </div>
       </div>
 
       {/* KPI strip */}

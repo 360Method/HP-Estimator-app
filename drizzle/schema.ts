@@ -721,8 +721,8 @@ export type InsertPortalDocument = typeof portalDocuments.$inferInsert;
 // ─── 360 METHOD: MEMBERSHIPS ─────────────────────────────────────────────────
 export const threeSixtyMemberships = mysqlTable("threeSixtyMemberships", {
   id: int("id").autoincrement().primaryKey(),
-  /** customers.id */
-  customerId: int("customerId").notNull(),
+  /** customers.id (varchar nanoid) */
+  customerId: varchar("customerId", { length: 64 }).notNull(),
   /** customerAddresses.id — the enrolled property */
   propertyAddressId: int("propertyAddressId"),
   tier: mysqlEnum("tier", ["bronze", "silver", "gold"]).notNull().default("bronze"),
@@ -762,7 +762,7 @@ export type InsertThreeSixtyMembership = typeof threeSixtyMemberships.$inferInse
 export const threeSixtyVisits = mysqlTable("threeSixtyVisits", {
   id: int("id").autoincrement().primaryKey(),
   membershipId: int("membershipId").notNull(),
-  customerId: int("customerId").notNull(),
+  customerId: varchar("customerId", { length: 64 }).notNull(),
   season: mysqlEnum("season", ["spring", "summer", "fall", "winter"]).notNull(),
   /** Unix ms */
   scheduledDate: bigint("scheduledDate", { mode: "number" }),
@@ -836,7 +836,7 @@ export type InsertThreeSixtyLaborBankTransaction = typeof threeSixtyLaborBankTra
 export const threeSixtyScans = mysqlTable("threeSixtyScans", {
   id: int("id").autoincrement().primaryKey(),
   membershipId: int("membershipId").notNull(),
-  customerId: int("customerId").notNull(),
+  customerId: varchar("customerId", { length: 64 }).notNull(),
   /** Unix ms */
   scanDate: bigint("scanDate", { mode: "number" }).notNull(),
   /** JSON: { system: string, rating: 1-5, notes: string, photos: string[], priority: 'urgent'|'1yr'|'3yr'|'monitor' }[] */
@@ -872,7 +872,7 @@ export type InsertThreeSixtyScan = typeof threeSixtyScans.$inferInsert;
 export const threeSixtyPropertySystems = mysqlTable("threeSixtyPropertySystems", {
   id: int("id").autoincrement().primaryKey(),
   membershipId: int("membershipId").notNull(),
-  customerId: int("customerId").notNull(),
+  customerId: varchar("customerId", { length: 64 }).notNull(),
   /** hvac | roof | plumbing | electrical | foundation | exterior_siding | interior | appliances */
   systemType: mysqlEnum("systemType", [
     "hvac",

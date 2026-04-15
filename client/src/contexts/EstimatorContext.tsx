@@ -1574,11 +1574,13 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
       return { ...state, customRoles: state.customRoles.filter(r => r.id !== action.id) };
 
     case 'MERGE_DB_CUSTOMERS': {
+      // Filter out soft-deleted (merged) records before processing
+      const activePayload = action.payload.filter(c => !(c as any).mergedIntoId);
       // Build a map of DB customers for O(1) lookup
-      const dbMap = new Map(action.payload.map(c => [c.id, c]));
+      const dbMap = new Map(activePayload.map(c => [c.id, c]));
       const localIds = new Set(state.customers.map(c => c.id));
       // New customers not yet in local state
-      const newCustomers = action.payload.filter(c => !localIds.has(c.id));
+      const newCustomers = activePayload.filter(c => !localIds.has(c.id));
       // For existing customers: merge opportunities from DB (update stage/wonAt/portalApprovedAt
       // for any opportunity whose DB updatedAt is newer than local updatedAt)
       const updatedCustomers = state.customers.map(c => {
@@ -1602,8 +1604,15 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
         });
         return { ...c, opportunities: mergedOpps };
       });
-      if (newCustomers.length === 0 && updatedCustomers === state.customers) return state;
-      return { ...state, customers: [...newCustomers, ...updatedCustomers] };
+      // Also remove any local customers that were merged (mergedIntoId now set in DB)
+      const mergedIds = new Set(
+        action.payload.filter(c => (c as any).mergedIntoId).map(c => c.id)
+      );
+      const filteredUpdated = mergedIds.size > 0
+        ? updatedCustomers.filter(c => !mergedIds.has(c.id))
+        : updatedCustomers;
+      if (newCustomers.length === 0 && filteredUpdated === state.customers) return state;
+      return { ...state, customers: [...newCustomers, ...filteredUpdated] };
     }
 
     case 'MERGE_DB_INVOICES': {

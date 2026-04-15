@@ -76,7 +76,7 @@ export default function ThreeSixtyMemberDetail({ membershipId, onBack }: Props) 
     return (
       <ThreeSixtyBaselineWizard
         membershipId={membershipId}
-        customerId={membership?.customerId ?? 0}
+        customerId={membership?.customerId ?? ""}
         onBack={() => setShowBaselineWizard(false)}
         onComplete={() => setShowBaselineWizard(false)}
       />

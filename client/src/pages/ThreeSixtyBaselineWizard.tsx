@@ -83,7 +83,7 @@ const CONDITION_COLORS: Record<string, string> = {
 
 interface Props {
   membershipId: number;
-  customerId: number;
+  customerId: string;
   onBack: () => void;
   onComplete: () => void;
 }

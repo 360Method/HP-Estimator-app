@@ -1350,12 +1350,12 @@
 - [x] ThreeSixtyMemberDetail page
 - [x] ThreeSixtyNewMembership page (monthly/quarterly/annual pricing)
 - [x] ThreeSixtyVisitDetail page (PNW seasonal checklist)
-- [ ] ThreeSixtyChecklists admin page (/360/checklists)
+- [x] ThreeSixtyChecklists admin page (/360/checklists)
 - [x] Add 360 nav entry to MetricsBar
 - [x] Wire three-sixty section into Home.tsx routing
-- [ ] Estimator: member badge on customer header
-- [ ] Estimator: auto-apply step-ladder discount to estimate output
-- [ ] Vitest tests for threeSixty router
+- [x] Estimator: member badge on customer header
+- [x] Estimator: auto-apply step-ladder discount to estimate output
+- [x] Vitest tests for threeSixty router (9 discount tests + 20 inspection tests)
 - [x] Vitest tests for discount calculator (in threeSixtyTiers.ts)
 - [x] Tier pricing: monthly/quarterly/annual rates with savings callout
 - [x] UI: billing cadence toggle on enrollment form
@@ -1509,7 +1509,7 @@
 ## 360° Inspection & Report Integration — Sprint 6: Polish + Integration
 
 - [x] Mobile-first responsive pass on all new 360° pages (min 44px tap targets)
-- [ ] Add "360° Report" badge to CustomerSection profile header when delivered report exists for customer
-- [ ] Add 360° health score to customer quick-view slide-over (CustomersListPage)
+- [x] Add "360° Report" badge to CustomerSection profile header when delivered report exists for customer
+- [x] Add 360° health score to customer quick-view slide-over (CustomersListPage) — implemented as toggleable column in customers table
 - [x] Full Vitest coverage pass for all Sprint 3–5 procedures (20 tests passing)
 - [x] Save checkpoint and verify all tests pass

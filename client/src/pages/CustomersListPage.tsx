@@ -61,15 +61,16 @@ const LEAD_SOURCES = ['Google', 'Referral', 'Facebook', 'Instagram', 'Nextdoor',
 type SortField = 'displayName' | 'company' | 'city' | 'createdAt' | 'lifetimeValue';
 type SortDir = 'asc' | 'desc';
 
-type ColKey = 'company' | 'address' | 'mobile' | 'email' | 'leadSource' | 'notes' | 'tags';
+type ColKey = 'company' | 'address' | 'mobile' | 'email' | 'leadSource' | 'notes' | 'tags' | 'healthScore';
 const ALL_COLUMNS: { key: ColKey; label: string }[] = [
-  { key: 'company',    label: 'Company' },
-  { key: 'address',   label: 'Address' },
-  { key: 'mobile',    label: 'Mobile' },
-  { key: 'email',     label: 'Email' },
+  { key: 'company',     label: 'Company' },
+  { key: 'address',    label: 'Address' },
+  { key: 'mobile',     label: 'Mobile' },
+  { key: 'email',      label: 'Email' },
   { key: 'leadSource', label: 'Lead Source' },
-  { key: 'notes',     label: 'Notes' },
-  { key: 'tags',      label: 'Tags' },
+  { key: 'notes',      label: 'Notes' },
+  { key: 'tags',       label: 'Tags' },
+  { key: 'healthScore', label: '360° Health' },
 ];
 
 // CSV column header → Customer field mapping
@@ -140,6 +141,7 @@ export default function CustomersListPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [showModal, setShowModal] = useState(false);
   const [mergeTarget, setMergeTarget] = useState<{ a: Customer; b: Customer } | null>(null);
+  const [singleMergeCustomer, setSingleMergeCustomer] = useState<Customer | null>(null);
   const [showTagPopover, setShowTagPopover] = useState(false);
   const [tagInput, setTagInput] = useState('');
 
@@ -200,6 +202,13 @@ export default function CustomersListPage() {
     });
     return Array.from(set).sort();
   }, [customers]);
+
+  // ── 360° health scores (batch fetch for all customers) ──
+  const customerIds = useMemo(() => customers.filter(c => !(c as any).mergedIntoId).map(c => c.id), [customers]);
+  const { data: healthScores } = trpc.threeSixty.scansLatest.getHealthScoresByCustomerIds.useQuery(
+    { customerIds },
+    { enabled: visibleCols.has('healthScore') && customerIds.length > 0 }
+  );
 
   const hasActiveFilters = !!(filterType || filterLeadSource || filterTags.length || filterCity || filterDateCreatedFrom || filterDateCreatedTo || filterLifetimeMin || filterLifetimeMax);
 
@@ -513,6 +522,9 @@ export default function CustomersListPage() {
                 {visibleCols.has('tags') && (
                   <th className="py-2 text-left font-medium text-muted-foreground whitespace-nowrap">Tags</th>
                 )}
+                {visibleCols.has('healthScore') && (
+                  <th className="py-2 pr-4 text-left font-medium text-muted-foreground whitespace-nowrap">360° Health</th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -531,7 +543,7 @@ export default function CustomersListPage() {
                   return (
                     <tr
                       key={c.id}
-                      className={`border-b border-border/50 hover:bg-muted/30 transition-colors cursor-pointer ${isSelected ? 'bg-primary/5' : ''}`}
+                      className={`border-b border-border/50 hover:bg-muted/30 transition-colors cursor-pointer group ${isSelected ? 'bg-primary/5' : ''}`}
                       onClick={() => setActiveCustomer(c.id, 'list')}
                     >
                       <td className="py-2.5 pr-2" onClick={e => { e.stopPropagation(); toggleSelect(c.id); }}>
@@ -571,6 +583,33 @@ export default function CustomersListPage() {
                           </div>
                         </td>
                       )}
+                      {visibleCols.has('healthScore') && (() => {
+                        const hs = healthScores?.[c.id];
+                        if (!hs || hs.healthScore === null) return <td key="hs" className="py-2.5 pr-4 text-muted-foreground">—</td>;
+                        const score = hs.healthScore ?? 0;
+                        const bg = score >= 75 ? '#f0fdf4' : score >= 50 ? '#fffbeb' : '#fef2f2';
+                        const border = score >= 75 ? '#bbf7d0' : score >= 50 ? '#fde68a' : '#fecaca';
+                        const color = score >= 75 ? '#166534' : score >= 50 ? '#92400e' : '#991b1b';
+                        return (
+                          <td key="hs" className="py-2.5 pr-4">
+                            <span
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold border"
+                              style={{ background: bg, borderColor: border, color }}
+                            >
+                              ★ {score}/100
+                            </span>
+                          </td>
+                        );
+                      })()}
+                      <td className="py-2.5 w-8" onClick={e => e.stopPropagation()}>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); setSingleMergeCustomer(c); }}
+                          className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover:opacity-100"
+                          title="Merge with another customer"
+                        >
+                          <GitMerge className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
                     </tr>
                   );
                 })
@@ -695,7 +734,7 @@ export default function CustomersListPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Merge dialog ── */}
+      {/* ── Bulk merge dialog ── */}
       {mergeTarget && (
         <MergeCustomerDialog
           open={!!mergeTarget}
@@ -706,6 +745,19 @@ export default function CustomersListPage() {
             removeCustomer(sourceId);
             setSelected(new Set());
             setMergeTarget(null);
+          }}
+        />
+      )}
+
+      {/* ── Single-row merge dialog (customer picker) ── */}
+      {singleMergeCustomer && (
+        <MergeCustomerDialog
+          open={!!singleMergeCustomer}
+          onOpenChange={v => { if (!v) setSingleMergeCustomer(null); }}
+          customerA={singleMergeCustomer}
+          onMerged={(sourceId) => {
+            removeCustomer(sourceId);
+            setSingleMergeCustomer(null);
           }}
         />
       )}

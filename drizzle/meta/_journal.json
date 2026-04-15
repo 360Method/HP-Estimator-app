@@ -190,6 +190,13 @@
       "when": 1776216728078,
       "tag": "0026_mixed_nick_fury",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "5",
+      "when": 1776219546199,
+      "tag": "0027_curvy_blackheart",
+      "breakpoints": true
     }
   ]
 }

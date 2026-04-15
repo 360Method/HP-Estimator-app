@@ -10,9 +10,11 @@ import AIEstimateChat from '@/components/AIEstimateChat';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { calcPhase, calcLineItem, calcCustomItem, calcTotals, fmtDollar, fmtDollarCents, getMarginFlag, getMarginLabel } from '@/lib/calc';
 import { LineItem, CustomLineItem, Tier, UNIT_LABELS, UnitType } from '@/lib/types';
-import { ChevronDown, AlertTriangle, CheckCircle2, XCircle, Sparkles, Plus, Trash2, Loader2, Ruler } from 'lucide-react';
+import { ChevronDown, AlertTriangle, CheckCircle2, XCircle, Sparkles, Plus, Trash2, Loader2, Ruler, Star } from 'lucide-react';
 import { toast } from 'sonner';
 import { ALL_PHASES } from '@/lib/phases';
+import { trpc } from '@/lib/trpc';
+import { calcMemberDiscount, type MemberTier } from '../../../../shared/threeSixtyTiers';
 
 const FORGE_API_URL = import.meta.env.VITE_FRONTEND_FORGE_API_URL as string;
 const FORGE_API_KEY = import.meta.env.VITE_FRONTEND_FORGE_API_KEY as string;
@@ -1154,6 +1156,13 @@ export default function CalculatorSection() {
   const { state, updateOpportunity } = useEstimator();
   const [activePhaseId, setActivePhaseId] = useState<number>(ALL_PHASES[0].id);
 
+  // 360° member discount — look up active customer's membership
+  const { data: membershipData } = trpc.threeSixty.memberships.getByCustomer.useQuery(
+    { customerId: state.activeCustomerId! },
+    { enabled: !!state.activeCustomerId }
+  );
+  const activeMembership = membershipData?.find((m: { status: string }) => m.status === 'active');
+
   // Phase results keyed by phase ID
   const phaseResults = useMemo(() => {
     const map = new Map<number, { hasData: boolean; price: number }>();
@@ -1171,6 +1180,15 @@ export default function CalculatorSection() {
     const allCustomResults = state.customItems.map(ci => calcCustomItem(ci, state.global));
     return calcTotals(allPhaseResults, allCustomResults);
   }, [state.phases, state.customItems, state.global]);
+
+  // 360° step-ladder member discount (in cents)
+  const memberDiscountCents = useMemo(() => {
+    if (!activeMembership) return 0;
+    const priceCents = Math.round(grandTotals.price * 100);
+    return calcMemberDiscount(activeMembership.tier as MemberTier, priceCents);
+  }, [activeMembership, grandTotals.price]);
+  const memberDiscountDollars = memberDiscountCents / 100;
+  const discountedPrice = grandTotals.price - memberDiscountDollars;
 
   // Sync calculated price back to the active opportunity
   useEffect(() => {
@@ -1239,8 +1257,24 @@ export default function CalculatorSection() {
               </div>
             </div>
             <div className="text-right">
+              {activeMembership && memberDiscountCents > 0 && (
+                <div className="flex items-center justify-end gap-1.5 mb-1">
+                  <Star className="w-3 h-3 text-yellow-500 fill-yellow-400" />
+                  <span className="text-[10px] font-semibold text-yellow-700">
+                    {(activeMembership.tier as string).charAt(0).toUpperCase() + (activeMembership.tier as string).slice(1)} Member Discount
+                  </span>
+                  <span className="text-[10px] font-mono font-bold text-emerald-600">-{fmtDollar(memberDiscountDollars)}</span>
+                </div>
+              )}
               <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Customer Price</div>
-              <div className="text-2xl font-bold font-mono text-primary leading-tight">{fmtDollar(grandTotals.price)}</div>
+              {activeMembership && memberDiscountCents > 0 ? (
+                <div className="flex items-baseline gap-2 justify-end">
+                  <div className="text-sm line-through text-slate-400 font-mono">{fmtDollar(grandTotals.price)}</div>
+                  <div className="text-2xl font-bold font-mono text-emerald-600 leading-tight">{fmtDollar(discountedPrice)}</div>
+                </div>
+              ) : (
+                <div className="text-2xl font-bold font-mono text-primary leading-tight">{fmtDollar(grandTotals.price)}</div>
+              )}
             </div>
           </div>
         </div>

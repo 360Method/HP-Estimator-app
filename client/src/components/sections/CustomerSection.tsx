@@ -642,6 +642,12 @@ export default function CustomerSection() {
     setCustomerProfile({ tags: customerProfile.tags.filter(t => t !== tag) });
   };
 
+  // ── 360° latest scan (for health score badge in header) ──
+  const { data: latestScan } = trpc.threeSixty.scansLatest.getLatestByCustomer.useQuery(
+    { customerId: activeCustomerId! },
+    { enabled: !!activeCustomerId }
+  );
+
   // isSilentSaveRef: true = auto-save (no toast), false = manual save (shows toast)
   const isSilentSaveRef = useRef(false);
   const syncToDbMutation = trpc.customers.update.useMutation({
@@ -1525,6 +1531,21 @@ export default function CustomerSection() {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <h1 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">{displayName}</h1>
             <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              {/* 360° Health Score badge */}
+              {latestScan && latestScan.healthScore !== null && (
+                <div
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border"
+                  style={{
+                    background: (latestScan.healthScore ?? 0) >= 75 ? '#f0fdf4' : (latestScan.healthScore ?? 0) >= 50 ? '#fffbeb' : '#fef2f2',
+                    borderColor: (latestScan.healthScore ?? 0) >= 75 ? '#bbf7d0' : (latestScan.healthScore ?? 0) >= 50 ? '#fde68a' : '#fecaca',
+                    color: (latestScan.healthScore ?? 0) >= 75 ? '#166534' : (latestScan.healthScore ?? 0) >= 50 ? '#92400e' : '#991b1b',
+                  }}
+                  title={`360° Home Health — Last scan: ${latestScan.scanDate ? new Date(latestScan.scanDate).toLocaleDateString() : 'N/A'}`}
+                >
+                  <Star size={12} />
+                  <span>360° {latestScan.healthScore}/100</span>
+                </div>
+              )}
               {/* Lifetime value badge */}
               {customerProfile.lifetimeValue > 0 && (
                 <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg text-xs font-semibold text-emerald-800">
