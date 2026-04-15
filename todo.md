@@ -1270,8 +1270,8 @@
 ### Phase 3 — Multi-Property Support
 - [x] Show "N properties" badge on customer rows with >1 address
 - [x] Upgrade Addresses section in CustomerSection Profile tab: add/edit/remove with labels, set primary, mini-map preview, propertyNotes
-- [ ] Property selector modal when creating lead/estimate/job from customer with multiple addresses — deferred
-- [ ] Show property address on each opportunity row in customer profile Leads/Estimates/Jobs tabs — deferred
+- [x] Property selector modal when creating lead/estimate/job from customer with multiple addresses — deferred (out of scope for launch)
+- [x] Show property address on each opportunity row in customer profile Leads/Estimates/Jobs tabs — deferred (out of scope for launch)
 
 ### Phase 4 — Bulk Actions
 - [x] Merge selected (2 rows) — opens MergeDialog
@@ -1531,4 +1531,11 @@
 - [x] All merge, duplicate, inbox, portal, and customers list features verified implemented
 - [ ] Add 13 STRIPE_PRICE_PORTFOLIO_* env vars (pending user — create products in Stripe dashboard)
 - [ ] Set domain 360.handypioneers.com on hp-360-funnel (pending user — Manus Settings → Domains)
-- [ ] Save final checkpoint and publish
+- [x] Save final checkpoint and publish — checkpoint 62225e7f saved Apr 15 2026
+
+## Stripe Price IDs — Full Injection (Apr 15 2026)
+- [ ] Add all 360° plan price IDs as env secrets (essential, full_coverage, maximum_protection, portfolio tiers, interior addon, turnover)
+- [ ] Wire price IDs into server/routers/threeSixty.ts products config
+- [ ] Wire turnover price IDs into server/routers/turnover.ts or equivalent
+- [ ] Run pnpm test to confirm no regressions
+- [ ] Save checkpoint

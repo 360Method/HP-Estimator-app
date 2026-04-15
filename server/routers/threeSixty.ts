@@ -1120,39 +1120,40 @@ const abandonedLeadRouter = router({
 
 // ─── PORTFOLIO PLAN PRICING HELPERS ─────────────────────────────────────────
 
-type PortfolioPropertyType = "sfh" | "duplex" | "triplex" | "fourplex";
+// Portfolio tiers match the Stripe products created:
+// exterior_shield = Exterior-only coverage (1 price per property)
+// full_coverage   = Full Coverage (exterior + interior systems)
+// max             = Maximum Protection (all systems + priority)
+type PortfolioTier = "exterior_shield" | "full_coverage" | "max";
 
-const PORTFOLIO_PRICE_IDS: Record<PortfolioPropertyType, Record<BillingCadence, string>> = {
-  sfh: {
-    monthly:   process.env.STRIPE_PRICE_PORTFOLIO_SFH_MONTHLY!,
-    quarterly: process.env.STRIPE_PRICE_PORTFOLIO_SFH_QUARTERLY!,
-    annual:    process.env.STRIPE_PRICE_PORTFOLIO_SFH_ANNUAL!,
+const PORTFOLIO_PRICE_IDS: Record<PortfolioTier, Record<BillingCadence, string>> = {
+  exterior_shield: {
+    monthly:   process.env.STRIPE_PRICE_PORTFOLIO_EXTERIOR_MONTHLY!,
+    quarterly: process.env.STRIPE_PRICE_PORTFOLIO_EXTERIOR_QUARTERLY!,
+    annual:    process.env.STRIPE_PRICE_PORTFOLIO_EXTERIOR_ANNUAL!,
   },
-  duplex: {
-    monthly:   process.env.STRIPE_PRICE_PORTFOLIO_DUPLEX_MONTHLY!,
-    quarterly: process.env.STRIPE_PRICE_PORTFOLIO_DUPLEX_QUARTERLY!,
-    annual:    process.env.STRIPE_PRICE_PORTFOLIO_DUPLEX_ANNUAL!,
+  full_coverage: {
+    monthly:   process.env.STRIPE_PRICE_PORTFOLIO_FULL_MONTHLY!,
+    quarterly: process.env.STRIPE_PRICE_PORTFOLIO_FULL_QUARTERLY!,
+    annual:    process.env.STRIPE_PRICE_PORTFOLIO_FULL_ANNUAL!,
   },
-  triplex: {
-    monthly:   process.env.STRIPE_PRICE_PORTFOLIO_TRIPLEX_MONTHLY!,
-    quarterly: process.env.STRIPE_PRICE_PORTFOLIO_TRIPLEX_QUARTERLY!,
-    annual:    process.env.STRIPE_PRICE_PORTFOLIO_TRIPLEX_ANNUAL!,
-  },
-  fourplex: {
-    monthly:   process.env.STRIPE_PRICE_PORTFOLIO_FOURPLEX_MONTHLY!,
-    quarterly: process.env.STRIPE_PRICE_PORTFOLIO_FOURPLEX_QUARTERLY!,
-    annual:    process.env.STRIPE_PRICE_PORTFOLIO_FOURPLEX_ANNUAL!,
+  max: {
+    monthly:   process.env.STRIPE_PRICE_PORTFOLIO_MAX_MONTHLY!,
+    quarterly: process.env.STRIPE_PRICE_PORTFOLIO_MAX_QUARTERLY!,
+    annual:    process.env.STRIPE_PRICE_PORTFOLIO_MAX_ANNUAL!,
   },
 };
 
-const PORTFOLIO_INTERIOR_ADDON_PRICE_ID = process.env.STRIPE_PRICE_PORTFOLIO_INTERIOR_ADDON_ANNUAL!;
+// Interior add-on: billed per door, annual only
+const PORTFOLIO_INTERIOR_ADDON_PRICE_ID = process.env.STRIPE_PRICE_INTERIOR_ADDON_ANNUAL_PER_DOOR!;
 
 const portfolioPropertySchema = z.object({
   id: z.string(),
-  type: z.enum(["sfh", "duplex", "triplex", "fourplex"]),
+  tier: z.enum(["exterior_shield", "full_coverage", "max"]),
   label: z.string().optional(),
   address: z.string().optional(),
   interiorAddon: z.boolean().default(false),
+  interiorDoors: z.number().int().min(0).default(0),
 });
 
 // ─── PORTFOLIO CHECKOUT ───────────────────────────────────────────────────────
@@ -1179,14 +1180,17 @@ const portfolioCheckoutRouter = router({
       });
       const { cadence, properties, origin } = input;
       const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = properties.map((prop) => ({
-        price: PORTFOLIO_PRICE_IDS[prop.type][cadence],
+        price: PORTFOLIO_PRICE_IDS[prop.tier][cadence],
         quantity: 1,
       }));
-      const interiorDoors = properties.filter((p) => p.interiorAddon).length;
-      if (interiorDoors > 0) {
+      // Interior add-on: sum of interiorDoors across all properties that opted in
+      const totalInteriorDoors = properties
+        .filter((p) => p.interiorAddon)
+        .reduce((sum, p) => sum + (p.interiorDoors || 1), 0);
+      if (totalInteriorDoors > 0) {
         lineItems.push({
           price: PORTFOLIO_INTERIOR_ADDON_PRICE_ID,
-          quantity: interiorDoors,
+          quantity: totalInteriorDoors,
         });
       }
       const session = await stripe.checkout.sessions.create({
@@ -1207,7 +1211,7 @@ const portfolioCheckoutRouter = router({
           billingState: input.billingState ?? "",
           billingZip: input.billingZip ?? "",
           properties: JSON.stringify(properties),
-          interiorAddonDoors: interiorDoors.toString(),
+          interiorAddonDoors: totalInteriorDoors.toString(),
         },
         subscription_data: {
           metadata: {
@@ -1265,7 +1269,7 @@ const portfolioAbandonedLeadRouter = router({
           });
         }
         const propSummary = properties
-          .map((p) => `${p.label || p.address || p.type}${p.interiorAddon ? " +interior" : ""}`)
+          .map((p) => `${p.label || p.address || p.tier}${p.interiorAddon ? " +interior" : ""}`)
           .join(", ");
         await createOpportunity({
           id: nanoid(),
