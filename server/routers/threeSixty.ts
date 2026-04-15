@@ -23,6 +23,8 @@ import {
   type BillingCadence,
 } from "../../shared/threeSixtyTiers";
 import Stripe from "stripe";
+import { nanoid } from "nanoid";
+import { findCustomerByEmail, createCustomer, createOpportunity } from "../db";
 
 // ─── MEMBERSHIPS ─────────────────────────────────────────────────────────────
 
@@ -566,6 +568,241 @@ const checkoutRouter = router({
     }),
 });
 
+// ─── ABANDONED LEAD CAPTURE ──────────────────────────────────────────────────
+
+const abandonedLeadRouter = router({
+  capture: publicProcedure
+    .input(
+      z.object({
+        tier: z.enum(["bronze", "silver", "gold"]),
+        cadence: z.enum(["monthly", "quarterly", "annual"]),
+        customerName: z.string().min(1),
+        customerEmail: z.string().email(),
+        customerPhone: z.string().optional(),
+        serviceAddress: z.string().optional(),
+        serviceCity: z.string().optional(),
+        serviceState: z.string().optional(),
+        serviceZip: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const { tier, cadence, customerName, customerEmail, customerPhone } = input;
+      try {
+        let customer = await findCustomerByEmail(customerEmail);
+        if (!customer) {
+          const nameParts = customerName.trim().split(" ");
+          const firstName = nameParts[0] ?? "";
+          const lastName = nameParts.slice(1).join(" ") || "";
+          customer = await createCustomer({
+            id: nanoid(),
+            firstName,
+            lastName,
+            displayName: customerName.trim(),
+            email: customerEmail.toLowerCase().trim(),
+            mobilePhone: customerPhone || "",
+            street: input.serviceAddress || "",
+            city: input.serviceCity || "",
+            state: input.serviceState || "",
+            zip: input.serviceZip || "",
+            customerType: "homeowner",
+            leadSource: "360 Funnel",
+            customerNotes: `Initiated 360° checkout (${tier} ${cadence}). Did not complete payment.`,
+            sendNotifications: true,
+            tags: "[]",
+          });
+        }
+        await createOpportunity({
+          id: nanoid(),
+          customerId: customer.id,
+          area: "lead",
+          stage: "Cart Abandoned",
+          title: `360° ${tier.charAt(0).toUpperCase() + tier.slice(1)} Plan (${cadence}) — Abandoned`,
+          notes: [
+            `Tier: ${tier} | Cadence: ${cadence}`,
+            `Contact: ${customerName} <${customerEmail}>${customerPhone ? ` | ${customerPhone}` : ""}`,
+            `Source: 360° Funnel — cart abandonment capture`,
+          ].join("\n"),
+          archived: false,
+        });
+        return { captured: true };
+      } catch (err) {
+        console.error("[360 Abandoned Lead] capture failed:", err);
+        return { captured: false };
+      }
+    }),
+});
+
+// ─── PORTFOLIO PLAN PRICING HELPERS ─────────────────────────────────────────
+
+type PortfolioPropertyType = "sfh" | "duplex" | "triplex" | "fourplex";
+
+const PORTFOLIO_PRICE_IDS: Record<PortfolioPropertyType, Record<BillingCadence, string>> = {
+  sfh: {
+    monthly:   process.env.STRIPE_PRICE_PORTFOLIO_SFH_MONTHLY!,
+    quarterly: process.env.STRIPE_PRICE_PORTFOLIO_SFH_QUARTERLY!,
+    annual:    process.env.STRIPE_PRICE_PORTFOLIO_SFH_ANNUAL!,
+  },
+  duplex: {
+    monthly:   process.env.STRIPE_PRICE_PORTFOLIO_DUPLEX_MONTHLY!,
+    quarterly: process.env.STRIPE_PRICE_PORTFOLIO_DUPLEX_QUARTERLY!,
+    annual:    process.env.STRIPE_PRICE_PORTFOLIO_DUPLEX_ANNUAL!,
+  },
+  triplex: {
+    monthly:   process.env.STRIPE_PRICE_PORTFOLIO_TRIPLEX_MONTHLY!,
+    quarterly: process.env.STRIPE_PRICE_PORTFOLIO_TRIPLEX_QUARTERLY!,
+    annual:    process.env.STRIPE_PRICE_PORTFOLIO_TRIPLEX_ANNUAL!,
+  },
+  fourplex: {
+    monthly:   process.env.STRIPE_PRICE_PORTFOLIO_FOURPLEX_MONTHLY!,
+    quarterly: process.env.STRIPE_PRICE_PORTFOLIO_FOURPLEX_QUARTERLY!,
+    annual:    process.env.STRIPE_PRICE_PORTFOLIO_FOURPLEX_ANNUAL!,
+  },
+};
+
+const PORTFOLIO_INTERIOR_ADDON_PRICE_ID = process.env.STRIPE_PRICE_PORTFOLIO_INTERIOR_ADDON_ANNUAL!;
+
+const portfolioPropertySchema = z.object({
+  id: z.string(),
+  type: z.enum(["sfh", "duplex", "triplex", "fourplex"]),
+  label: z.string().optional(),
+  address: z.string().optional(),
+  interiorAddon: z.boolean().default(false),
+});
+
+// ─── PORTFOLIO CHECKOUT ───────────────────────────────────────────────────────
+
+const portfolioCheckoutRouter = router({
+  createSession: publicProcedure
+    .input(
+      z.object({
+        cadence: z.enum(["monthly", "quarterly", "annual"]),
+        properties: z.array(portfolioPropertySchema).min(1).max(20),
+        customerName: z.string().min(1),
+        customerEmail: z.string().email(),
+        customerPhone: z.string().optional(),
+        billingAddress: z.string().optional(),
+        billingCity: z.string().optional(),
+        billingState: z.string().optional(),
+        billingZip: z.string().optional(),
+        origin: z.string().url(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+        apiVersion: "2025-03-31.basil",
+      });
+      const { cadence, properties, origin } = input;
+      const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = properties.map((prop) => ({
+        price: PORTFOLIO_PRICE_IDS[prop.type][cadence],
+        quantity: 1,
+      }));
+      const interiorDoors = properties.filter((p) => p.interiorAddon).length;
+      if (interiorDoors > 0) {
+        lineItems.push({
+          price: PORTFOLIO_INTERIOR_ADDON_PRICE_ID,
+          quantity: interiorDoors,
+        });
+      }
+      const session = await stripe.checkout.sessions.create({
+        mode: "subscription",
+        line_items: lineItems,
+        customer_email: input.customerEmail,
+        allow_promotion_codes: true,
+        success_url: `${origin}/confirmation?session_id={CHECKOUT_SESSION_ID}&plan=portfolio`,
+        cancel_url: `${origin}/multifamily?cancelled=1`,
+        metadata: {
+          planType: "portfolio",
+          cadence,
+          customerName: input.customerName,
+          customerEmail: input.customerEmail,
+          customerPhone: input.customerPhone ?? "",
+          billingAddress: input.billingAddress ?? "",
+          billingCity: input.billingCity ?? "",
+          billingState: input.billingState ?? "",
+          billingZip: input.billingZip ?? "",
+          properties: JSON.stringify(properties),
+          interiorAddonDoors: interiorDoors.toString(),
+        },
+        subscription_data: {
+          metadata: {
+            planType: "portfolio",
+            cadence,
+            customerEmail: input.customerEmail,
+          },
+        },
+      });
+      return { url: session.url! };
+    }),
+});
+
+// ─── PORTFOLIO CART ABANDONMENT ───────────────────────────────────────────────
+
+const portfolioAbandonedLeadRouter = router({
+  capture: publicProcedure
+    .input(
+      z.object({
+        cadence: z.enum(["monthly", "quarterly", "annual"]),
+        properties: z.array(portfolioPropertySchema).min(1),
+        customerName: z.string().min(1),
+        customerEmail: z.string().email(),
+        customerPhone: z.string().optional(),
+        billingAddress: z.string().optional(),
+        billingCity: z.string().optional(),
+        billingState: z.string().optional(),
+        billingZip: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const { cadence, properties, customerName, customerEmail, customerPhone } = input;
+      try {
+        let customer = await findCustomerByEmail(customerEmail);
+        if (!customer) {
+          const nameParts = customerName.trim().split(" ");
+          const firstName = nameParts[0] ?? "";
+          const lastName = nameParts.slice(1).join(" ") || "";
+          customer = await createCustomer({
+            id: nanoid(),
+            firstName,
+            lastName,
+            displayName: customerName.trim(),
+            email: customerEmail.toLowerCase().trim(),
+            mobilePhone: customerPhone || "",
+            street: input.billingAddress || "",
+            city: input.billingCity || "",
+            state: input.billingState || "",
+            zip: input.billingZip || "",
+            customerType: "homeowner",
+            leadSource: "360 Portfolio Funnel",
+            customerNotes: `Initiated 360° Portfolio checkout (${cadence}). Did not complete payment. Portfolio: ${properties.length} properties.`,
+            sendNotifications: true,
+            tags: "[]",
+          });
+        }
+        const propSummary = properties
+          .map((p) => `${p.label || p.address || p.type}${p.interiorAddon ? " +interior" : ""}`)
+          .join(", ");
+        await createOpportunity({
+          id: nanoid(),
+          customerId: customer.id,
+          area: "lead",
+          stage: "Cart Abandoned",
+          title: `360° Portfolio Plan (${cadence}) — ${properties.length} propert${properties.length === 1 ? "y" : "ies"} — Abandoned`,
+          notes: [
+            `Cadence: ${cadence} | Properties: ${properties.length}`,
+            `Portfolio: ${propSummary}`,
+            `Contact: ${customerName} <${customerEmail}>${customerPhone ? ` | ${customerPhone}` : ""}`,
+            `Source: 360° Portfolio Funnel — cart abandonment capture`,
+          ].join("\n"),
+          archived: false,
+        });
+        return { captured: true };
+      } catch (err) {
+        console.error("[360 Portfolio Abandoned Lead] capture failed:", err);
+        return { captured: false };
+      }
+    }),
+});
+
 // ─── COMBINED ROUTER ─────────────────────────────────────────────────────────
 export const threeSixtyRouter = router({
   memberships: membershipRouter,
@@ -574,4 +811,7 @@ export const threeSixtyRouter = router({
   laborBank: laborBankRouter,
   scans: scansRouter,
   checkout: checkoutRouter,
+  abandonedLead: abandonedLeadRouter,
+  portfolioCheckout: portfolioCheckoutRouter,
+  portfolioAbandonedLead: portfolioAbandonedLeadRouter,
 });

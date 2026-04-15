@@ -742,6 +742,14 @@ export const threeSixtyMemberships = mysqlTable("threeSixtyMemberships", {
   /** Unix ms — date of last completed annual scan */
   annualScanDate: bigint("annualScanDate", { mode: "number" }),
   notes: text("notes"),
+  /** 'single' for homeowner plan, 'portfolio' for landlord multi-property plan */
+  planType: mysqlEnum("planType", ["single", "portfolio"]).notNull().default("single"),
+  /** JSON array of portfolio properties — only populated when planType='portfolio' */
+  portfolioProperties: text("portfolioProperties"),
+  /** Total number of interior add-on doors enrolled */
+  interiorAddonDoors: int("interiorAddonDoors").notNull().default(0),
+  /** Stripe subscription quantity (portfolio unit multiplier) */
+  stripeQuantity: int("stripeQuantity").notNull().default(1),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

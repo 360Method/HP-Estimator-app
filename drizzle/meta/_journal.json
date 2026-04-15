@@ -176,6 +176,13 @@
       "when": 1776186286386,
       "tag": "0024_clear_bastion",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "5",
+      "when": 1776210637517,
+      "tag": "0025_violet_daimon_hellstrom",
+      "breakpoints": true
     }
   ]
 }

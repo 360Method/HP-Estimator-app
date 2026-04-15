@@ -1441,3 +1441,11 @@
 
 ## MetricsBar Back Button Fix
 - [x] Back button in profile-nav should only show when user navigated into customer from Customers list (not on default landing state)
+
+## Patch: 360° Portfolio Plan
+- [x] Add planType/portfolioProperties/interiorAddonDoors/stripeQuantity columns to threeSixtyMemberships schema
+- [x] Add portfolioCheckoutRouter (createSession) to threeSixty.ts
+- [x] Add portfolioAbandonedLeadRouter (capture) to threeSixty.ts
+- [x] Wire portfolioCheckout + portfolioAbandonedLead into combined threeSixtyRouter
+- [x] Push DB migration (pnpm db:push) — migration 0025 applied
+- [ ] Add 13 STRIPE_PRICE_PORTFOLIO_* env var secrets (pending Stripe product creation)
