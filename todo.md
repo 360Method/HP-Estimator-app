@@ -1521,3 +1521,6 @@
 - [x] On 360° signup: update customerNotes to append membership info (tier, cadence, membership ID)
 - [x] On 360° signup: set leadSource to "360 Funnel" if currently blank
 - [x] On 360° signup: link hpCustomerId back to threeSixtyMemberships.hpCustomerId (already done for new, fix for existing)
+
+## Bug Fixes
+- [x] Fix: "New Scan" button not showing in ThreeSixtyMemberDetail Scans tab

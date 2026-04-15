@@ -48,6 +48,23 @@ export default function ThreeSixtyMemberDetail({ membershipId, onBack }: Props) 
   const { data: scans } = trpc.threeSixty.scans.list.useQuery({ membershipId });
   const { data: propertySystems } = trpc.threeSixty.propertySystems.list.useQuery({ membershipId });
 
+  const createScan = trpc.threeSixty.scans.create.useMutation({
+    onSuccess: (data) => {
+      utils.threeSixty.scans.list.invalidate({ membershipId });
+      setSelectedScanId(data.id);
+    },
+    onError: (err) => toast.error(`Failed to create scan: ${err.message}`),
+  });
+
+  const handleNewScan = () => {
+    if (!membership) return;
+    createScan.mutate({
+      membershipId,
+      customerId: membership.customerId,
+      scanDate: Date.now(),
+    });
+  };
+
   const scheduleVisit = trpc.threeSixty.visits.schedule.useMutation({
     onSuccess: () => {
       utils.threeSixty.visits.list.invalidate({ membershipId });
@@ -365,9 +382,25 @@ export default function ThreeSixtyMemberDetail({ membershipId, onBack }: Props) 
         <TabsContent value="scans">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold">Annual 360 Home Scans</h3>
+            <Button
+              size="sm"
+              onClick={handleNewScan}
+              disabled={createScan.isPending}
+            >
+              <Plus className="w-3.5 h-3.5 mr-1" />
+              {createScan.isPending ? 'Creating…' : 'New Scan'}
+            </Button>
           </div>
           {(scans ?? []).length === 0 ? (
-            <div className="text-sm text-muted-foreground py-8 text-center">No scans recorded yet.</div>
+            <div className="text-sm text-muted-foreground py-8 text-center">
+              <ClipboardList className="w-8 h-8 mx-auto mb-2 opacity-30" />
+              No scans recorded yet.
+              <div className="mt-3">
+                <Button size="sm" variant="outline" onClick={handleNewScan} disabled={createScan.isPending}>
+                  <Plus className="w-3.5 h-3.5 mr-1" /> Start First Scan
+                </Button>
+              </div>
+            </div>
           ) : (
             <div className="space-y-2">
               {(scans ?? []).map(scan => (
