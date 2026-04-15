@@ -1513,3 +1513,11 @@
 - [x] Add 360° health score to customer quick-view slide-over (CustomersListPage) — implemented as toggleable column in customers table
 - [x] Full Vitest coverage pass for all Sprint 3–5 procedures (20 tests passing)
 - [x] Save checkpoint and verify all tests pass
+
+## 360° Webhook — CRM Customer Profile Update on Signup
+- [x] On 360° signup: update existing CRM customer phone if blank
+- [x] On 360° signup: update existing CRM customer address fields (street/city/state/zip) if blank
+- [x] On 360° signup: add "360° Member" + tier tag (e.g. "360° Bronze") to customer tags
+- [x] On 360° signup: update customerNotes to append membership info (tier, cadence, membership ID)
+- [x] On 360° signup: set leadSource to "360 Funnel" if currently blank
+- [x] On 360° signup: link hpCustomerId back to threeSixtyMemberships.hpCustomerId (already done for new, fix for existing)

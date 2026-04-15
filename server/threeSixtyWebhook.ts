@@ -204,6 +204,33 @@ export async function create360MembershipFromWebhook(
       const existingCrm = await findCustomerByEmail(customerEmail);
       if (existingCrm) {
         crmCustomerId = existingCrm.id;
+        // ── Update existing CRM customer profile with 360° signup data ──
+        try {
+          const tierTag = `360° ${tier.charAt(0).toUpperCase() + tier.slice(1)}`;
+          const memberTag = "360° Member";
+          const existingTags: string[] = existingCrm.tags
+            ? JSON.parse(existingCrm.tags as unknown as string)
+            : [];
+          const newTags = Array.from(new Set([...existingTags, memberTag, tierTag]));
+          const appendNote = `\n[360° Enrollment] ${tier.charAt(0).toUpperCase() + tier.slice(1)} tier (${cadence}) — Membership ID: ${membershipId} — ${new Date().toLocaleDateString()}`;
+          await updateCustomer(existingCrm.id, {
+            // Fill phone if blank
+            ...(customerPhone && !existingCrm.mobilePhone ? { mobilePhone: customerPhone } : {}),
+            // Fill address fields if blank
+            ...(serviceAddress && !existingCrm.street ? { street: serviceAddress } : {}),
+            ...(serviceCity && !existingCrm.city ? { city: serviceCity } : {}),
+            ...(serviceState && !existingCrm.state ? { state: serviceState } : {}),
+            ...(serviceZip && !existingCrm.zip ? { zip: serviceZip } : {}),
+            // Always update tags and notes
+            tags: JSON.stringify(newTags),
+            customerNotes: ((existingCrm.customerNotes ?? "") + appendNote).trim(),
+            // Set leadSource if blank
+            ...(!existingCrm.leadSource ? { leadSource: "360 Funnel" } : {}),
+          });
+          console.log(`[360 Webhook] Updated CRM customer ${existingCrm.id} with 360° membership data`);
+        } catch (updateErr) {
+          console.error("[360 Webhook] Failed to update existing CRM customer profile:", updateErr);
+        }
       } else {
         const nameParts = customerName.trim().split(" ");
         const firstName = nameParts[0] ?? "";
@@ -222,9 +249,9 @@ export async function create360MembershipFromWebhook(
           zip: serviceZip,
           customerType: "homeowner",
           leadSource: "360 Funnel",
-          customerNotes: `Enrolled via 360° Method funnel — ${tier} tier (${cadence})`,
+          customerNotes: `Enrolled via 360° Method funnel — ${tier} tier (${cadence}) — Membership ID: ${membershipId}`,
           sendNotifications: true,
-          tags: "[]",
+          tags: JSON.stringify(["360° Member", `360° ${tier.charAt(0).toUpperCase() + tier.slice(1)}`]),
         });
         crmCustomerId = newCrm.id;
       }
