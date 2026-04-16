@@ -52,6 +52,8 @@ const OpportunityInput = z.object({
   sowDocument: z.string().optional(),
   sowGeneratedAt: z.string().optional(),
   onlineRequestId: z.number().optional(),
+  propertyId: z.string().optional(),
+  membershipId: z.number().optional(),
 });
 
 export const opportunitiesRouter = router({

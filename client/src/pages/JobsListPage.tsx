@@ -14,7 +14,7 @@ import { useEstimator } from '@/contexts/EstimatorContext';
 import { Opportunity, Customer, JobStage, JOB_STAGES } from '@/lib/types';
 import {
   Search, Filter, Briefcase, ChevronDown, Plus,
-  ArrowUpDown, CheckCircle2, Clock, AlertCircle,
+  ArrowUpDown, CheckCircle2, Clock, AlertCircle, RefreshCw, MapPin,
 } from 'lucide-react';
 
 // ── Stage badge color map (mirrors CustomerSection) ──────────
@@ -78,6 +78,7 @@ export default function JobsListPage() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [stageFilter, setStageFilter] = useState<string>('All Stages');
+  const [only360, setOnly360] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [sortField, setSortField] = useState<SortField>('created');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
@@ -125,6 +126,7 @@ export default function JobsListPage() {
     return allJobs.filter(row => {
       if (!showArchived && row.opp.archived) return false;
       if (stageFilter !== 'All Stages' && row.opp.stage !== stageFilter) return false;
+      if (only360 && !(row.opp as any).membershipId) return false;
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
         const matchesCustomer = row.customerName.toLowerCase().includes(q);
@@ -267,6 +269,18 @@ export default function JobsListPage() {
             <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           </div>
 
+          {/* 360° filter toggle */}
+          <label className="flex items-center gap-1.5 text-sm text-muted-foreground cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={only360}
+              onChange={e => setOnly360(e.target.checked)}
+              className="accent-primary"
+            />
+            <RefreshCw size={12} className="text-emerald-600" />
+            360° only
+          </label>
+
           {/* Show archived toggle */}
           <label className="flex items-center gap-1.5 text-sm text-muted-foreground cursor-pointer select-none">
             <input
@@ -375,7 +389,34 @@ export default function JobsListPage() {
 
                     {/* Job Title */}
                     <td className="px-4 py-3 hidden sm:table-cell">
-                      <div className="text-foreground font-medium">{row.opp.title}</div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-foreground font-medium">{row.opp.title}</span>
+                        {(row.opp as any).membershipId && (
+                          <span
+                            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-full text-[9px] font-bold cursor-pointer hover:bg-emerald-100 transition-colors"
+                            title="360° Membership job — click to view membership"
+                            onClick={e => {
+                              e.stopPropagation();
+                              if (row.customer) {
+                                setActiveCustomer(row.customer.id);
+                                setTimeout(() => {
+                                  const el = document.querySelector('[data-tab="membership360"]') as HTMLElement | null;
+                                  el?.click();
+                                }, 150);
+                              }
+                            }}
+                          >
+                            <RefreshCw size={8} />
+                            360° Member
+                          </span>
+                        )}
+                      </div>
+                      {(row.opp as any).propertyId && (
+                        <div className="flex items-center gap-0.5 text-[10px] text-muted-foreground mt-0.5">
+                          <MapPin size={9} />
+                          <span>{row.opp.clientSnapshot?.address || `Property #${(row.opp as any).propertyId}`}</span>
+                        </div>
+                      )}
                       {row.opp.archived && (
                         <span className="text-[10px] text-muted-foreground">(archived)</span>
                       )}

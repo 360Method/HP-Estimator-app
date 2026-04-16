@@ -1136,7 +1136,25 @@ export const portalRouter = router({
         getMilestonesByJob(input.hpOpportunityId),
         getUpdatesByJob(input.hpOpportunityId),
       ]);
-      return { milestones, updates };
+      // Also fetch membershipId from the linked opportunity so the portal can show the 360° banner
+      let membershipId: number | null = null;
+      let membershipTier: string | null = null;
+      try {
+        const { getOpportunityById } = await import('../db');
+        const opp = await getOpportunityById(input.hpOpportunityId);
+        if (opp && (opp as any).membershipId) {
+          membershipId = (opp as any).membershipId;
+          const { getDb } = await import('../db');
+          const { threeSixtyMemberships } = await import('../../drizzle/schema');
+          const { eq } = await import('drizzle-orm');
+          const db = await getDb();
+          if (db && membershipId) {
+            const [mem] = await db.select({ tier: threeSixtyMemberships.tier }).from(threeSixtyMemberships).where(eq(threeSixtyMemberships.id, membershipId)).limit(1);
+            membershipTier = mem?.tier ?? null;
+          }
+        }
+      } catch {}
+      return { milestones, updates, membershipId, membershipTier };
     }),
 
   // ─── JOB SIGN-OFF: CUSTOMER PROCEDURES ───────────────────────────────────

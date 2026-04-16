@@ -29,6 +29,9 @@ import {
   Clock,
   CreditCard,
   Briefcase,
+  RefreshCw,
+  Wrench,
+  Star,
 } from "lucide-react";
 
 function fmtMoney(cents: number) {
@@ -235,6 +238,11 @@ export default function PortalHome() {
   const appointments = data?.appointments ?? [];
   const unreadMessages = data?.unreadMessages ?? 0;
 
+  // 360° membership
+  const { data: membershipData } = trpc.portal.getMembership360.useQuery(undefined, {
+    refetchOnWindowFocus: false,
+  });
+
   const pendingEstimates = estimates.filter((e) => e.status === "sent" || e.status === "viewed");
   const openInvoices = invoices.filter((i) => i.status !== "paid");
   const overdueInvoices = openInvoices.filter(
@@ -276,6 +284,54 @@ export default function PortalHome() {
             </p>
           )}
         </div>
+
+        {/* 360° Membership card — shown only if enrolled */}
+        {membershipData && (
+          <div
+            className="rounded-xl p-5 border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-emerald-600 flex items-center justify-center shrink-0">
+                  <RefreshCw className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <p className="text-xs text-emerald-700 font-semibold uppercase tracking-wide">360° Home Membership</p>
+                  <p className="text-base font-bold text-gray-900 capitalize">{membershipData.membership.tier} Plan</p>
+                </div>
+              </div>
+              <button
+                onClick={() => navigate('/portal/360-membership')}
+                className="text-xs text-emerald-700 underline underline-offset-2 hover:text-emerald-900 shrink-0 mt-1"
+              >
+                View details →
+              </button>
+            </div>
+            <div className="mt-4 grid grid-cols-3 gap-3">
+              <div className="bg-white rounded-lg border border-emerald-100 px-3 py-2 text-center">
+                <p className="text-lg font-bold text-emerald-700">${(membershipData.laborBankBalance / 100).toFixed(0)}</p>
+                <p className="text-[10px] text-gray-500">Labor Bank</p>
+              </div>
+              <div className="bg-white rounded-lg border border-emerald-100 px-3 py-2 text-center">
+                <p className="text-lg font-bold text-gray-900">{membershipData.workOrders.filter((w: any) => w.status !== 'completed').length}</p>
+                <p className="text-[10px] text-gray-500">Upcoming Visits</p>
+              </div>
+              <div className="bg-white rounded-lg border border-emerald-100 px-3 py-2 text-center">
+                <p className="text-lg font-bold text-amber-600">{membershipData.linkedEstimates.filter((e: any) => e.status === 'sent' || e.status === 'viewed').length}</p>
+                <p className="text-[10px] text-gray-500">Repair Estimates</p>
+              </div>
+            </div>
+            {membershipData.linkedEstimates.filter((e: any) => e.status === 'sent' || e.status === 'viewed').length > 0 && (
+              <button
+                onClick={() => navigate('/portal/360-membership')}
+                className="mt-3 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs font-semibold hover:bg-amber-100 transition-colors"
+              >
+                <Wrench className="w-3.5 h-3.5" />
+                Review flagged repair estimates
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Quick stats row */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

@@ -6,7 +6,7 @@
 // ============================================================
 
 import { useState } from 'react';
-import { Calendar, Edit3, Paperclip, Hash, Tag, Globe, User } from 'lucide-react';
+import { Calendar, Edit3, Paperclip, Hash, Tag, Globe, User, MapPin, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { nanoid } from 'nanoid';
 import { useEstimator } from '@/contexts/EstimatorContext';
@@ -43,10 +43,31 @@ export default function NewJobModal({ onClose, prefill, onSaved }: { onClose: ()
   const trackingNumber = `J-${String(seqNum).padStart(3, '0')}`;
   const defaultTitle = prefill?.displayName ? `Job — ${prefill.displayName}` : 'New Job';
   const [oppTitle, setOppTitle] = useState(defaultTitle);
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(prefill?.propertyId ?? null);
+  const [selectedMembershipId, setSelectedMembershipId] = useState<number | null>(prefill?.membershipId ?? null);
+
+  // Fetch properties for the selected customer
+  const { data: customerProperties = [] } = trpc.properties.listByCustomer.useQuery(
+    { customerId: selectedCustomer?.id ?? '' },
+    { enabled: !!selectedCustomer?.id }
+  );
 
   const handleCustomerConfirmed = (c: SelectedCustomer) => {
     setCustomer(c.displayName);
     setSelectedCustomer(c);
+    // Reset property selection when customer changes
+    setSelectedPropertyId(null);
+    setSelectedMembershipId(null);
+  };
+
+  const handlePropertyChange = (propId: string) => {
+    setSelectedPropertyId(propId || null);
+    if (propId) {
+      const prop = (customerProperties as any[]).find((p: any) => String(p.id) === propId);
+      setSelectedMembershipId(prop?.membershipId ?? null);
+    } else {
+      setSelectedMembershipId(null);
+    }
   };
 
   const handleSave = () => {
@@ -83,6 +104,8 @@ export default function NewJobModal({ onClose, prefill, onSaved }: { onClose: ()
       notes,
       archived: false,
       clientSnapshot: JSON.stringify(clientSnap),
+      propertyId: selectedPropertyId ?? undefined,
+      membershipId: selectedMembershipId ?? undefined,
     });
     // Auto-create schedule event if dates were provided
     if (!anytime && fromDate) {
@@ -129,6 +152,35 @@ export default function NewJobModal({ onClose, prefill, onSaved }: { onClose: ()
   const leftPanel = (
     <>
       <CustomerSearchBox value={customer} onChange={setCustomer} onSelect={setSelectedCustomer} />
+
+      {/* Property selector — shown when a customer is selected */}
+      {selectedCustomer?.id && customerProperties.length > 0 && (
+        <div className="p-4 border-b border-slate-100">
+          <div className="flex items-center gap-2 mb-2">
+            <MapPin size={13} className="text-slate-400" />
+            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Property</span>
+          </div>
+          <select
+            value={selectedPropertyId ?? ''}
+            onChange={e => handlePropertyChange(e.target.value)}
+            className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-primary/30"
+          >
+            <option value="">No specific property</option>
+            {(customerProperties as any[]).map((p: any) => (
+              <option key={p.id} value={String(p.id)}>
+                {p.label} — {p.street || p.city || `Property #${p.id}`}
+                {p.membershipId ? ' ★ 360°' : ''}
+              </option>
+            ))}
+          </select>
+          {selectedMembershipId && (
+            <div className="flex items-center gap-1 mt-1.5 text-[10px] text-emerald-700">
+              <RefreshCw size={9} />
+              <span>360° Membership will be linked to this job</span>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Schedule */}
       <div className="p-4 border-b border-slate-100">

@@ -2,7 +2,7 @@ import { useRoute, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import PortalLayout from "@/components/PortalLayout";
 import { Button } from "@/components/ui/button";
-import { Loader2, CheckCircle2, Circle, Clock, Flag, ChevronLeft, Briefcase, ClipboardCheck } from "lucide-react";
+import { Loader2, CheckCircle2, Circle, Clock, Flag, ChevronLeft, Briefcase, ClipboardCheck, RefreshCw } from "lucide-react";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 function fmtDate(ts: number | Date | string | null | undefined) {
@@ -34,6 +34,8 @@ export default function PortalJobDetail() {
 
   const milestones = data?.milestones ?? [];
   const updates = data?.updates ?? [];
+  const membershipId = data?.membershipId ?? null;
+  const membershipTier = data?.membershipTier ?? null;
 
   // Compute overall progress
   const total = milestones.length;
@@ -70,6 +72,23 @@ export default function PortalJobDetail() {
             <p className="text-xs text-gray-400 mt-0.5">Track your project milestones and updates</p>
           </div>
         </div>
+
+        {/* 360° Membership banner */}
+        {membershipId && (
+          <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 mb-4">
+            <RefreshCw className="w-4 h-4 text-emerald-600 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-emerald-800">360° Membership Job</p>
+              <p className="text-xs text-emerald-700 mt-0.5 capitalize">{membershipTier ?? 'Member'} Plan — This job is part of your home membership.</p>
+            </div>
+            <button
+              onClick={() => navigate('/portal/360-membership')}
+              className="text-xs text-emerald-700 underline underline-offset-2 hover:text-emerald-900 shrink-0"
+            >
+              View membership →
+            </button>
+          </div>
+        )}
 
         {isLoading && (
           <div className="flex justify-center py-20">
