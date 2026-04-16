@@ -54,8 +54,8 @@ const LEAD_SOURCES: LeadSource[] = [
 
 const CUSTOMER_TABS: { key: CustomerProfileTab; label: string; icon: React.ReactNode }[] = [
   { key: 'profile', label: 'Profile', icon: <User size={13} /> },
-  { key: 'membership360', label: '360°', icon: <RefreshCw size={13} /> },
   { key: 'properties', label: 'Properties', icon: <Building2 size={13} /> },
+  { key: 'membership360', label: '360°', icon: <RefreshCw size={13} /> },
   { key: 'leads', label: 'Leads', icon: <Star size={13} /> },
   { key: 'estimates', label: 'Estimates', icon: <FileText size={13} /> },
   { key: 'jobs', label: 'Jobs', icon: <Briefcase size={13} /> },
