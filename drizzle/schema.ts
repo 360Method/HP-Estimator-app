@@ -754,6 +754,12 @@ export const threeSixtyMemberships = mysqlTable("threeSixtyMemberships", {
   interiorAddonDoors: int("interiorAddonDoors").notNull().default(0),
   /** Stripe subscription quantity (portfolio unit multiplier) */
   stripeQuantity: int("stripeQuantity").notNull().default(1),
+  /** Unix ms — when the deferred labor bank credit should be released (monthly full_coverage/max only) */
+  scheduledCreditAt: bigint("scheduledCreditAt", { mode: "number" }),
+  /** Cents — amount of the deferred credit to release at scheduledCreditAt */
+  scheduledCreditCents: int("scheduledCreditCents").notNull().default(0),
+  /** HP CRM customer ID (nanoid string) — links to customers table */
+  hpCustomerId: varchar("hpCustomerId", { length: 64 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

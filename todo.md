@@ -1615,3 +1615,15 @@
 - [x] Add QB sync procedures (syncInvoice, syncExpense, bulkSync)
 - [x] Add QB connection status page (QuickBooksPage, nav item in MetricsBar)
 - [x] Run tests (208/208 passing), save checkpoint
+
+## 360° Method Backend Integration Spec (Apr 16 2026)
+- [x] Tier alias mapping: accept exterior_shield/full_coverage/max as bronze/silver/gold in checkout.createSession and abandonedLead.capture
+- [x] Fix portfolio success_url to /360/confirmation?session_id=... (not /confirmation)
+- [x] Deferred labor bank credit: monthly silver/gold -> scheduledCreditAt = now+90d, scheduledCreditCents stored, initial balance = 0
+- [x] Add scheduledCreditAt and scheduledCreditCents columns to threeSixtyMemberships schema + db:push
+- [x] Change webhook CRM opportunity from lead (New Lead) to job (Scheduled) with title "Annual 360 Home Scan"
+- [x] Add create360PortfolioMembershipsFromWebhook handler (portfolio planType branch in webhook)
+- [x] Add portfolio webhook branch to checkout.session.completed in index.ts
+- [x] Add releaseDeferredLaborBankCredits() export for scheduled cron
+- [x] Add portal.autoLoginFromStripeSession tRPC procedure (lookup by Stripe session email, create portal session cookie)
+- [x] Run tests (208/208), save checkpoint

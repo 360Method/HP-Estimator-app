@@ -211,6 +211,34 @@
       "when": 1776282553665,
       "tag": "0029_wonderful_millenium_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "5",
+      "when": 1776287147688,
+      "tag": "0030_organic_johnny_blaze",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "5",
+      "when": 1776311730832,
+      "tag": "0031_absent_captain_america",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "5",
+      "when": 1776312129640,
+      "tag": "0032_thick_deathbird",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "5",
+      "when": 1776312181969,
+      "tag": "0033_fat_typhoid_mary",
+      "breakpoints": true
     }
   ]
 }

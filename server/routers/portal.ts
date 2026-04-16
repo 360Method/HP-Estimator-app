@@ -1539,6 +1539,79 @@ export const portalRouter = router({
         reportData: report.reportJson ? JSON.parse(report.reportJson) : null,
       };
     }),
+
+  /**
+   * Auto-login from Stripe Checkout session_id.
+   * Called on /portal/home?session_id=xxx after 360° enrollment.
+   * Looks up the portalCustomer by the Stripe customer on the session,
+   * creates a portal session cookie, and returns the customer.
+   */
+  autoLoginFromStripeSession: portalPublicProcedure
+    .input(z.object({ sessionId: z.string() }))
+    .mutation(async ({ input, ctx }) => {
+      const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2025-03-31.basil" });
+      let stripeSession: Stripe.Checkout.Session;
+      try {
+        stripeSession = await stripe.checkout.sessions.retrieve(input.sessionId, {
+          expand: ["customer"],
+        });
+      } catch {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid session ID" });
+      }
+
+      if (stripeSession.status !== "complete") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Session not completed" });
+      }
+
+      const customerEmail =
+        stripeSession.customer_email ??
+        (stripeSession.customer as Stripe.Customer | null)?.email ??
+        stripeSession.metadata?.customerEmail ??
+        null;
+
+      if (!customerEmail) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "No email on Stripe session" });
+      }
+
+      // Find or create portal customer by email
+      let portalCustomer = await findPortalCustomerByEmail(customerEmail);
+      if (!portalCustomer) {
+        // Create a minimal portal customer — the webhook may not have run yet
+        const customerName =
+          stripeSession.metadata?.customerName ??
+          (stripeSession.customer as Stripe.Customer | null)?.name ??
+          customerEmail.split("@")[0];
+        portalCustomer = await upsertPortalCustomer({
+          name: customerName,
+          email: customerEmail,
+          phone: stripeSession.metadata?.customerPhone ?? undefined,
+          stripeCustomerId: typeof stripeSession.customer === "string"
+            ? stripeSession.customer
+            : (stripeSession.customer as Stripe.Customer | null)?.id ?? undefined,
+        });
+      }
+
+      // Create portal session cookie
+      const sessionToken = randomBytes(32).toString("hex");
+      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      await createPortalSession({
+        customerId: portalCustomer.id,
+        sessionToken,
+        expiresAt,
+      });
+      const res = ctx.res as any;
+      if (res?.cookie) {
+        res.cookie("hp_portal_session", sessionToken, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          expires: expiresAt,
+          path: "/",
+        });
+      }
+
+      return { customer: portalCustomer };
+    }),
 });
 // ─── EMAIL TEMPLATES ──────────────────────────────────────────────────────────
 // HP brand palette: forest green #1a2e1a / #2d4a2d, warm gold #c8922a

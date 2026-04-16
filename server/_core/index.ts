@@ -15,7 +15,7 @@ import { exchangeGmailCode, pollInboundEmails, sendOverdueReminderEmail } from "
 import { getFirstGmailToken, listOpportunities, updateOpportunity } from "../db";
 import { addSSEClient, broadcastNewMessage } from "../sse";
 import { getPortalInvoiceByStripePaymentIntentId, updatePortalInvoicePaid, getPortalInvoiceByCheckoutSessionId, findPortalCustomerById, getOverdueInvoicesForReminder, markPortalInvoiceReminderSent, getSignOffsEligibleForReviewRequest, getSignOffsEligibleForReviewReminder, markReviewRequestSent, markReviewReminderSent } from "../portalDb";
-import { create360MembershipFromWebhook } from "../threeSixtyWebhook.ts";
+import { create360MembershipFromWebhook, create360PortfolioMembershipsFromWebhook } from "../threeSixtyWebhook.ts";
 import { sendEmail } from "../gmail";
 import { notifyOwner } from "../_core/notification";
 import { randomUUID } from "crypto";
@@ -102,6 +102,17 @@ async function startServer() {
         const session = event.data.object as Stripe.Checkout.Session;
         console.log(`[Webhook] Checkout session completed: ${session.id}`);
         // ── 360 Method subscription enrollment ──────────────────────────────
+        if (session.mode === "subscription" && session.metadata?.planType === "portfolio") {
+          // Portfolio multi-property enrollment
+          try {
+            await create360PortfolioMembershipsFromWebhook(session);
+            console.log(`[Webhook] 360 portfolio membership created for session ${session.id}`);
+          } catch (errPortfolio) {
+            console.error(`[Webhook] 360 portfolio membership creation failed:`, errPortfolio);
+          }
+          res.json({ received: true });
+          return;
+        }
         if (session.mode === "subscription" && session.metadata?.tier) {
           try {
             await create360MembershipFromWebhook(session);

@@ -1,0 +1,1 @@
+ALTER TABLE `expenses` ADD `scope` varchar(16) DEFAULT 'job' NOT NULL;

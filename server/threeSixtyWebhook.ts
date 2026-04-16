@@ -19,13 +19,14 @@ import {
   threeSixtyVisits,
   portalCustomers,
 } from "../drizzle/schema";
-import { eq } from "drizzle-orm";
+import { eq, isNotNull, lte, gt, and } from "drizzle-orm";
 import { TIER_DEFINITIONS, type MemberTier, type BillingCadence } from "../shared/threeSixtyTiers";
 import { sendEmail } from "./gmail";
 import { notifyOwner } from "./_core/notification";
 import {
   findCustomerByEmail,
   createCustomer,
+  updateCustomer,
   createOpportunity,
   listOpportunities,
   updateOpportunity,
@@ -113,6 +114,12 @@ export async function create360MembershipFromWebhook(
   }
 
   // ── 2. Create membership record ───────────────────────────────────────────
+  // Deferred labor bank: monthly silver/gold credit loads after 90 days
+  const deferCredit = cadence === "monthly" && (tier === "silver" || tier === "gold");
+  const scheduledCreditAt = deferCredit ? now + 90 * 24 * 60 * 60 * 1000 : null;
+  const scheduledCreditCents = deferCredit ? tierDef.laborBankCreditCents : 0;
+  const initialBalance = deferCredit ? 0 : tierDef.laborBankCreditCents;
+
   const membershipResult = await db.insert(threeSixtyMemberships).values({
     customerId: portalCustomerId ?? 0, // 0 = unlinked, staff will link manually
     propertyAddressId: propertyAddressId ?? undefined,
@@ -120,16 +127,18 @@ export async function create360MembershipFromWebhook(
     status: "active",
     startDate: now,
     renewalDate: calcRenewalDate(cadence),
-    laborBankBalance: tierDef.laborBankCreditCents,
+    laborBankBalance: initialBalance,
     stripeSubscriptionId: session.subscription as string | undefined,
     stripeCustomerId: session.customer as string | undefined,
     billingCadence: cadence,
     annualScanCompleted: false,
+    scheduledCreditAt: scheduledCreditAt ?? undefined,
+    scheduledCreditCents,
   });
   const membershipId = (membershipResult as any).insertId as number;
 
-  // ── 3. Add initial labor bank credit ─────────────────────────────────────
-  if (tierDef.laborBankCreditCents > 0) {
+  // ── 3. Add initial labor bank credit (immediate; deferred for monthly silver/gold) ─
+  if (tierDef.laborBankCreditCents > 0 && !deferCredit) {
     await db.insert(threeSixtyLaborBankTransactions).values({
       membershipId,
       customerId: portalCustomerId ?? 0,
@@ -138,6 +147,8 @@ export async function create360MembershipFromWebhook(
       description: `Initial ${tier.charAt(0).toUpperCase() + tier.slice(1)} tier enrollment credit`,
       createdAt: new Date(),
     });
+  } else if (deferCredit) {
+    console.log(`[360 Webhook] Labor bank credit deferred 90 days for membership ${membershipId} (monthly ${tier})`);
   }
 
   // ── 4. Schedule first seasonal visit ─────────────────────────────────────
@@ -283,17 +294,23 @@ export async function create360MembershipFromWebhook(
           console.error("[360 Webhook] Failed to archive Cart Abandoned leads:", err);
         }
       }
-      // Open a lead opportunity tagged as 360-funnel
+      // Create a scheduled job for the Annual 360° Home Scan
       if (crmCustomerId) {
         await createOpportunity({
           id: nanoid(),
           customerId: String(crmCustomerId),
-          area: "lead",
-          stage: "New Lead",
-          title: `360° Membership — ${tier.charAt(0).toUpperCase() + tier.slice(1)} (${cadence})`,
-          notes: `Enrolled via 360° funnel. Stripe subscription: ${session.subscription ?? "n/a"}. Membership ID: ${membershipId}.\nService address: ${serviceAddress}, ${serviceCity}, ${serviceState} ${serviceZip}`,
+          area: "job",
+          stage: "Scheduled",
+          title: `Annual 360° Home Scan — ${tier.charAt(0).toUpperCase() + tier.slice(1)} Member`,
+          notes: [
+            `Auto-created on 360° enrollment.`,
+            `Tier: ${tier} | Cadence: ${cadence} | Membership ID: ${membershipId}`,
+            `Stripe subscription: ${session.subscription ?? "n/a"}`,
+            `Service address: ${serviceAddress}, ${serviceCity}, ${serviceState} ${serviceZip}`,
+            `ACTION: Schedule Annual 360° Home Scan within 48 hours.`,
+          ].join("\n"),
           archived: false,
-        }).catch((err: Error) => console.error("[360 Webhook] createOpportunity failed:", err));
+        }).catch((err: Error) => console.error("[360 Webhook] createOpportunity (job) failed:", err));
       }
     }
   } catch (err) {
@@ -305,4 +322,182 @@ export async function create360MembershipFromWebhook(
     title: `🏠 New 360° Member — ${tier.charAt(0).toUpperCase() + tier.slice(1)}`,
     content: `${customerName} (${customerEmail}) enrolled in the ${tier} tier (${cadence} billing). Membership ID: ${membershipId}. Schedule their Annual 360° Home Scan within 48 hours.`,
   }).catch(() => null);
+}
+
+
+// PORTFOLIO WEBHOOK HANDLER
+// create360PortfolioMembershipsFromWebhook — handles planType=portfolio Stripe sessions
+
+export async function create360PortfolioMembershipsFromWebhook(
+  session: Stripe.Checkout.Session
+): Promise<void> {
+  const db = await getDb();
+  const meta = session.metadata ?? {};
+  const cadence = (meta.cadence ?? "annual") as BillingCadence;
+  const customerEmail = meta.customerEmail || session.customer_email || "";
+  const customerName = meta.customerName || "Portfolio Member";
+  const customerPhone = meta.customerPhone || "";
+  const interiorAddonDoors = parseInt(meta.interiorAddonDoors ?? "0") || 0;
+  let properties: Array<{ address: string; city: string; state: string; zip: string; tier: string; units: number; interiorAddon: boolean; interiorDoors: number }> = [];
+  try { properties = JSON.parse(meta.properties ?? "[]"); } catch { /* ignore */ }
+  const now = Date.now();
+
+  // Find or create portalCustomer
+  let portalCustomerId: number | null = null;
+  if (customerEmail) {
+    const [existing] = await db.select().from(portalCustomers).where(eq(portalCustomers.email, customerEmail)).limit(1);
+    if (existing) {
+      portalCustomerId = existing.id;
+      if (session.customer && !existing.stripeCustomerId) {
+        await db.update(portalCustomers).set({ stripeCustomerId: session.customer as string }).where(eq(portalCustomers.id, existing.id));
+      }
+    } else {
+      const result = await db.insert(portalCustomers).values({
+        name: customerName,
+        email: customerEmail,
+        phone: customerPhone || undefined,
+        stripeCustomerId: session.customer as string | undefined,
+      });
+      portalCustomerId = (result as any).insertId as number;
+    }
+  }
+
+  // Create portfolio membership record
+  const membershipResult = await db.insert(threeSixtyMemberships).values({
+    customerId: portalCustomerId ?? 0,
+    tier: "bronze",
+    status: "active",
+    startDate: now,
+    renewalDate: calcRenewalDate(cadence),
+    laborBankBalance: 0,
+    stripeSubscriptionId: session.subscription as string | undefined,
+    stripeCustomerId: session.customer as string | undefined,
+    billingCadence: cadence,
+    annualScanCompleted: false,
+    scheduledCreditAt: undefined,
+    scheduledCreditCents: 0,
+  });
+  const membershipId = (membershipResult as any).insertId as number;
+
+  // CRM customer
+  let crmCustomerId: number | null = null;
+  try {
+    if (customerEmail) {
+      const existingCrm = await findCustomerByEmail(customerEmail);
+      if (existingCrm) {
+        crmCustomerId = existingCrm.id;
+        const existingTags: string[] = existingCrm.tags ? JSON.parse(existingCrm.tags as unknown as string) : [];
+        const newTags = Array.from(new Set([...existingTags, "360 Portfolio", "360 Member"]));
+        await updateCustomer(existingCrm.id, {
+          tags: JSON.stringify(newTags),
+          customerNotes: ((existingCrm.customerNotes ?? "") + `\n[360 Portfolio] ${properties.length} properties (${cadence}) — Membership ID: ${membershipId} — ${new Date().toLocaleDateString()}`).trim(),
+        });
+      } else {
+        const nameParts = customerName.trim().split(" ");
+        const newCrm = await createCustomer({
+          id: nanoid(),
+          firstName: nameParts[0] ?? "",
+          lastName: nameParts.slice(1).join(" ") || "",
+          displayName: customerName.trim(),
+          email: customerEmail.toLowerCase().trim(),
+          mobilePhone: customerPhone || "",
+          customerType: "landlord",
+          leadSource: "360 Portfolio Funnel",
+          customerNotes: `Enrolled via 360 Portfolio funnel — ${properties.length} properties (${cadence}) — Membership ID: ${membershipId}`,
+          sendNotifications: true,
+          tags: JSON.stringify(["360 Portfolio", "360 Member"]),
+        });
+        crmCustomerId = newCrm.id;
+      }
+      if (crmCustomerId) {
+        await db.update(threeSixtyMemberships).set({ hpCustomerId: crmCustomerId.toString() }).where(eq(threeSixtyMemberships.id, membershipId));
+        // Archive any cart abandoned leads
+        const abandoned = await listOpportunities("lead", String(crmCustomerId), false);
+        await Promise.all(
+          abandoned
+            .filter(o => o.stage === "Cart Abandoned")
+            .map(o => updateOpportunity(o.id, {
+              archived: true,
+              notes: (o.notes ? o.notes + "\n" : "") + `[Auto-archived] Portfolio checkout completed. Membership ID: ${membershipId}.`,
+            }))
+        );
+        // Create scheduled job for Portfolio Scan
+        await createOpportunity({
+          id: nanoid(),
+          customerId: String(crmCustomerId),
+          area: "job",
+          stage: "Scheduled",
+          title: `Annual 360 Portfolio Scan — ${properties.length} Properties`,
+          notes: [
+            `Auto-created on 360 Portfolio enrollment.`,
+            `Properties: ${properties.length} | Cadence: ${cadence} | Membership ID: ${membershipId}`,
+            `Stripe: ${session.subscription ?? "n/a"}`,
+            `ACTION: Schedule within 48 hours.`,
+          ].join("\n"),
+          archived: false,
+        }).catch((err: Error) => console.error("[360 Portfolio Webhook] createOpportunity failed:", err));
+      }
+    }
+  } catch (err) {
+    console.error("[360 Portfolio Webhook] CRM failed:", err);
+  }
+
+  // Welcome email
+  if (customerEmail) {
+    const html = `<!DOCTYPE html><html><body style="font-family:Helvetica,Arial,sans-serif;background:#f4f5f7;padding:32px 16px;"><table width="600" style="max-width:600px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;"><tr><td style="background:linear-gradient(135deg,#0f1f3d,#1a3a6b);padding:32px 40px;text-align:center;"><p style="color:#c8922a;font-size:28px;font-weight:900;margin:0;">360</p><p style="color:#fff;font-size:16px;font-weight:700;margin:4px 0 0;">Portfolio Plan Confirmed</p></td></tr><tr><td style="padding:36px 40px;color:#1a1a1a;font-size:15px;line-height:1.7;"><p>Hi ${customerName.split(" ")[0]},</p><p>Your <strong>${properties.length}-property portfolio</strong> is enrolled in the 360 Method. Our team will reach out within 48 hours to schedule your first Annual 360 Portfolio Scan.</p><p style="text-align:center;margin-top:28px;"><a href="https://client.handypioneers.com" style="display:inline-block;background:#c8922a;color:#fff;font-weight:700;padding:14px 36px;border-radius:6px;text-decoration:none;">Access Your Member Portal</a></p></td></tr></table></body></html>`;
+    await sendEmail({
+      to: customerEmail,
+      subject: `360 Portfolio Plan Confirmed — ${properties.length} Properties`,
+      html,
+    }).catch(err => console.error("[360 Portfolio Webhook] Email failed:", err));
+  }
+
+  await notifyOwner({
+    title: `New 360 Portfolio — ${properties.length} Properties`,
+    content: `${customerName} (${customerEmail}) enrolled ${properties.length} properties (${cadence}). Membership ID: ${membershipId}. Schedule Portfolio Scan within 48 hours.`,
+  }).catch(() => null);
+}
+
+// DEFERRED CREDIT RELEASE
+// Call this from a scheduled job (e.g., daily cron) to release labor bank credits
+// that were deferred 90 days for monthly silver/gold members.
+
+export async function releaseDeferredLaborBankCredits(): Promise<number> {
+  const db = await getDb();
+  const now = Date.now();
+  const due = await db
+    .select()
+    .from(threeSixtyMemberships)
+    .where(
+      and(
+        isNotNull(threeSixtyMemberships.scheduledCreditAt),
+        lte(threeSixtyMemberships.scheduledCreditAt, now),
+        gt(threeSixtyMemberships.scheduledCreditCents, 0)
+      )
+    );
+  let credited = 0;
+  for (const row of due) {
+    try {
+      await db.insert(threeSixtyLaborBankTransactions).values({
+        membershipId: row.id,
+        customerId: row.customerId,
+        type: "credit",
+        amountCents: row.scheduledCreditCents!,
+        description: `Deferred 90-day labor bank credit — ${row.tier} monthly plan`,
+        createdAt: new Date(),
+      });
+      await db.update(threeSixtyMemberships)
+        .set({
+          laborBankBalance: (row.laborBankBalance ?? 0) + row.scheduledCreditCents!,
+          scheduledCreditCents: 0,
+          scheduledCreditAt: undefined,
+        })
+        .where(eq(threeSixtyMemberships.id, row.id));
+      console.log(`[360 Deferred Credit] Released ${row.scheduledCreditCents} cents for membership ${row.id}`);
+      credited++;
+    } catch (err) {
+      console.error(`[360 Deferred Credit] Failed for membership ${row.id}:`, err);
+    }
+  }
+  return credited;
 }
