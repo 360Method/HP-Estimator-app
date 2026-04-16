@@ -1624,6 +1624,7 @@ export const portalRouter = router({
       threeSixtyLaborBankTransactions,
       threeSixtyWorkOrders,
       portalReports,
+      portalEstimates,
     } = await import('../../drizzle/schema');
     const { eq, desc, and } = await import('drizzle-orm');
     const db = await getDb();
@@ -1657,6 +1658,13 @@ export const portalRouter = router({
       .where(eq(portalReports.portalCustomerId, ctx.portalCustomer.id))
       .orderBy(desc(portalReports.sentAt))
       .limit(5);
+    // Fetch portal estimates linked to this membership (flagged repair stubs)
+    const linkedEstimates = await db
+      .select()
+      .from(portalEstimates)
+      .where(eq(portalEstimates.customerId, ctx.portalCustomer.id))
+      .orderBy(desc(portalEstimates.createdAt))
+      .limit(20);
     return {
       membership,
       laborBankBalance: membership.laborBankBalance ?? 0,
@@ -1666,6 +1674,7 @@ export const portalRouter = router({
         ...r,
         reportData: r.reportJson ? JSON.parse(r.reportJson) : null,
       })),
+      linkedEstimates,
     };
   }),
 });

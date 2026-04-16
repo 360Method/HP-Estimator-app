@@ -14,6 +14,8 @@ import {
   getWorkOrder,
   listWorkOrders,
   updateWorkOrder,
+  createOpportunity,
+  updateOpportunity,
   getDb,
 } from "../db";
 import {
@@ -326,7 +328,7 @@ export const workOrdersRouter = router({
         // Link report to work order
         await updateWorkOrder(input.id, { portalReportId });
 
-        // Create portal estimate stubs for flagged items
+        // Create portal estimate stubs + internal CRM estimates for flagged items
         let estimateCount = 0;
         for (const item of flaggedItems) {
           try {
@@ -334,7 +336,8 @@ export const workOrdersRouter = router({
             const totalAmount = item.estimatedCostHigh
               ? Math.round((item.estimatedCostLow ?? 0 + item.estimatedCostHigh) / 2)
               : (item.estimatedCostLow ?? 0);
-            await db.insert(portalEstimates).values({
+            // Portal estimate stub
+            const [portalEstResult] = await db.insert(portalEstimates).values({
               customerId: portalCustomerId,
               estimateNumber,
               title: `${item.item} — ${item.section}`,
@@ -354,9 +357,24 @@ export const workOrdersRouter = router({
               ]),
               scopeOfWork: `360° Inspection Finding — ${item.section}\n\n${item.notes ?? ""}`.trim(),
             });
+            // Internal CRM estimate — stamped with membershipId + propertyId
+            const crmOppId = `360-${nanoid(10)}`;
+            await createOpportunity({
+              id: crmOppId,
+              customerId: wo.customerId,
+              area: "estimate",
+              stage: "Draft",
+              title: `360° Flagged Repair — ${item.item} (${item.section})`,
+              value: totalAmount,
+              membershipId: wo.membershipId,
+              propertyId: membership.propertyAddressId ? String(membership.propertyAddressId) : null,
+              notes: `Auto-created from 360° work order #${wo.id}.\n\nSection: ${item.section}\nItem: ${item.item}\nCondition: ${item.condition}\n${item.notes ? `Notes: ${item.notes}` : ""}`.trim(),
+            });
+            // Write back hpOpportunityId to work order (last created wins)
+            await updateWorkOrder(input.id, { hpOpportunityId: crmOppId });
             estimateCount++;
           } catch (err) {
-            console.error("[WorkOrders] Failed to create portal estimate stub:", err);
+            console.error("[WorkOrders] Failed to create estimate stub:", err);
           }
         }
 

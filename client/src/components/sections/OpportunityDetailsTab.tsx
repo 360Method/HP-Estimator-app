@@ -13,7 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import {
   User, Phone, Mail, MapPin, FileText, Briefcase,
-  Star, ChevronRight, Lock, ExternalLink, Calendar, DollarSign, ArrowLeft, ArrowRight, Pencil, Check, X,
+  Star, ChevronRight, Lock, ExternalLink, Calendar, DollarSign, ArrowLeft, ArrowRight, Pencil, Check, X, RefreshCw,
 } from 'lucide-react';
 import type { Opportunity } from '@/lib/types';
 import LeadNurturingPanel from '@/components/sections/LeadNurturingPanel';
@@ -110,7 +110,7 @@ function LineageNode({ opp, isCurrent, isReadOnly, onClick }: LineageNodeProps) 
 // ── Main component ────────────────────────────────────────────
 
 export default function OpportunityDetailsTab() {
-  const { state, setActiveOpportunity, setSection, navigateToTopLevel, convertLeadToEstimate, updateOpportunity } = useEstimator();
+  const { state, setActiveOpportunity, setSection, navigateToTopLevel, convertLeadToEstimate, updateOpportunity, setCustomerTab } = useEstimator();
   // MUST be before any early return (Rules of Hooks)
   const [showConvertModal, setShowConvertModal] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
@@ -217,6 +217,30 @@ export default function OpportunityDetailsTab() {
           <ArrowLeft className="w-3.5 h-3.5" />
           <span>Back to <span className="font-medium text-foreground">{backLabel}</span></span>
         </button>
+      )}
+
+      {/* 360° Membership banner */}
+      {activeOpp.membershipId && (
+        <div className="flex items-center gap-3 rounded-lg border border-emerald-300 bg-emerald-50 dark:bg-emerald-950/30 dark:border-emerald-700 px-4 py-3">
+          <RefreshCw className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
+              360° Membership Job
+            </p>
+            <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-0.5">
+              This {activeOpp.area} was created from a 360° membership inspection. View the full membership in the customer’s 360° tab.
+            </p>
+          </div>
+          <button
+            className="text-xs text-emerald-700 underline underline-offset-2 hover:text-emerald-900 shrink-0"
+            onClick={() => {
+              setSection('customer');
+              setCustomerTab('membership360');
+            }}
+          >
+            View Membership
+          </button>
+        </div>
       )}
 
       {/* Approved / locked banner */}

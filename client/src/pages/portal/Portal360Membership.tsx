@@ -243,7 +243,7 @@ export default function Portal360Membership() {
     );
   }
 
-  const { membership, laborBankBalance, ledger, workOrders, reports } = data;
+  const { membership, laborBankBalance, ledger, workOrders, reports, linkedEstimates } = data;
   const tier = TIER_LABELS[membership.tier ?? "bronze"] ?? TIER_LABELS.bronze;
 
   // Separate upcoming vs completed work orders
@@ -387,6 +387,58 @@ export default function Portal360Membership() {
                   wo={wo}
                   onViewReport={(id) => navigate(`/portal/reports/${id}`)}
                 />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Linked Estimates & Repairs */}
+        {linkedEstimates && linkedEstimates.length > 0 && (
+          <div className="mb-5">
+            <h2 className="text-sm font-semibold mb-3 flex items-center gap-1.5">
+              <DollarSign className="w-4 h-4 text-[#c8922a]" /> Repair Estimates
+              <span className="text-xs text-muted-foreground font-normal">— from your inspection reports</span>
+            </h2>
+            <div className="space-y-2">
+              {linkedEstimates.map((est) => (
+                <div
+                  key={est.id}
+                  className="flex items-center gap-3 p-3 rounded-xl border bg-white hover:shadow-sm transition-shadow"
+                >
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center bg-amber-50 border border-amber-200">
+                    <Wrench className="w-4 h-4 text-amber-700" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-gray-900 truncate">{est.title}</p>
+                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                        est.status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
+                        est.status === 'sent' ? 'bg-blue-100 text-blue-700' :
+                        'bg-gray-100 text-gray-600'
+                      }`}>
+                        {est.status === 'approved' ? 'Approved' : est.status === 'sent' ? 'Awaiting Review' : est.status}
+                      </span>
+                      {est.totalAmount != null && (
+                        <span className="text-xs text-muted-foreground">
+                          Est. {fmtMoney(est.totalAmount)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant={est.status === 'approved' ? 'outline' : 'default'}
+                    className={`text-xs shrink-0 gap-1 ${
+                      est.status !== 'approved'
+                        ? 'bg-[#1a2e1a] hover:bg-[#2d4a2d] text-white'
+                        : ''
+                    }`}
+                    onClick={() => navigate(`/portal/estimates/${est.id}`)}
+                  >
+                    {est.status === 'approved' ? 'View' : 'Review & Approve'}
+                    <ChevronRight className="w-3 h-3" />
+                  </Button>
+                </div>
               ))}
             </div>
           </div>
