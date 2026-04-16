@@ -30,8 +30,9 @@ import {
   Activity, Send, CheckCircle2, XCircle, Clock, PhoneCall, Wallet,
   ExternalLink, Edit3, Save, X, AlertCircle, TrendingUp, Archive,
   RefreshCw, FolderOpen, Download, Wrench, Trophy, FileUp, Camera, CalendarPlus,
-  GitMerge, Search, Receipt,
+  GitMerge, Search, Receipt, ShieldCheck,
 } from 'lucide-react';
+import PropertySelectorGrid from '@/components/PropertySelectorGrid';
 import { Badge } from '@/components/ui/badge';
 import PipelineBoard from '@/components/PipelineBoard';
 import AddressAutocomplete, { ParsedAddress } from '@/components/AddressAutocomplete';
@@ -52,6 +53,7 @@ const LEAD_SOURCES: LeadSource[] = [
 
 const CUSTOMER_TABS: { key: CustomerProfileTab; label: string; icon: React.ReactNode }[] = [
   { key: 'profile', label: 'Profile', icon: <User size={13} /> },
+  { key: 'properties', label: 'Properties', icon: <Building2 size={13} /> },
   { key: 'leads', label: 'Leads', icon: <Star size={13} /> },
   { key: 'estimates', label: 'Estimates', icon: <FileText size={13} /> },
   { key: 'jobs', label: 'Jobs', icon: <Briefcase size={13} /> },
@@ -622,7 +624,7 @@ export default function CustomerSection() {
     : '';
   const displayName = customerFullName || jobInfo.client || 'New Customer';
   const areaMap: Record<CustomerProfileTab, PipelineArea | null> = {
-    profile: null, leads: 'lead', estimates: 'estimate', jobs: 'job',
+    profile: null, properties: null, leads: 'lead', estimates: 'estimate', jobs: 'job',
     invoices: null, expenses: null, communication: null, attachments: null, notes: null, portal: null,
   };
 
@@ -1679,6 +1681,33 @@ export default function CustomerSection() {
       {/* ── Tab Content ── */}
       <div className="max-w-6xl mx-auto px-4 py-6">
         {activeCustomerTab === 'profile' && ProfileTab()}
+        {activeCustomerTab === 'properties' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-semibold">Properties</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Each property can have its own 360° membership, jobs, invoices, and expenses.
+                </p>
+              </div>
+            </div>
+            <PropertySelectorGrid
+              customerId={activeCustomerId ?? ''}
+              activePropertyId={null}
+              onSelectProperty={(prop) => {
+                toast.success(`Viewing ${prop.label} — ${prop.street || prop.city || 'property'}`);
+              }}
+              customerAddress={{
+                street: activeCustomer?.street ?? (jobInfo as any).street ?? '',
+                unit: activeCustomer?.unit ?? (jobInfo as any).unit ?? '',
+                city: activeCustomer?.city ?? jobInfo.city ?? '',
+                state: activeCustomer?.state ?? jobInfo.state ?? '',
+                zip: activeCustomer?.zip ?? jobInfo.zip ?? '',
+                addressNotes: activeCustomer?.addressNotes,
+              }}
+            />
+          </div>
+        )}
         {(activeCustomerTab === 'leads' || activeCustomerTab === 'estimates' || activeCustomerTab === 'jobs') && PipelineTab()}
         {activeCustomerTab === 'invoices' && <InvoiceSection />}
         {activeCustomerTab === 'expenses' && (

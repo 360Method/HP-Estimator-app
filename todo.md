@@ -1627,3 +1627,66 @@
 - [x] Add releaseDeferredLaborBankCredits() export for scheduled cron
 - [x] Add portal.autoLoginFromStripeSession tRPC procedure (lookup by Stripe session email, create portal session cookie)
 - [x] Run tests (208/208), save checkpoint
+
+## Customer → Property → Services Revamp (Approved Apr 16 2026)
+
+### Phase 1 — Schema
+- [x] Add `properties` table: id, customerId (FK), label, street, unit, city, state, zip, addressNotes, propertyNotes, lat, lng, isPrimary, isBilling, createdAt
+- [x] Add `membershipId` (nullable FK → threeSixtyMemberships) to `properties` table
+- [x] Add `propertyId` (nullable FK → properties) to `opportunities` table
+- [x] Add `propertyIdSource` varchar (null | 'manual' | 'auto-migrated') to `opportunities` table
+- [x] Add `propertyId` (nullable FK → properties) to `expenses` table
+- [x] Run pnpm db:push
+
+### Phase 2 — Backend
+- [x] Add `properties` tRPC router: listByCustomer, get, create, update, delete, setPrimary
+- [x] Add `properties.getHealthScore` procedure: returns { score: 'green'|'yellow'|'red', reasons: string[] } based on daysSinceLastVisit, openJobCount, annualScanCompleted
+- [x] Add `properties.enrollMembership` procedure: creates threeSixtyMembership linked to propertyId, updates properties.membershipId
+- [x] Add `properties.cancelMembership` procedure: sets membership status=cancelled, clears properties.membershipId
+- [x] Add `properties.upgradeMembership` / `downgradeMembership` procedures
+- [x] Update `opportunities.create` to accept propertyId
+- [x] Update `opportunities.list` to accept propertyId filter
+- [x] Register propertiesRouter in routers.ts
+- [x] Write vitest tests for propertiesRouter (listByCustomer, healthScore, enrollMembership)
+
+### Phase 3 — Client Types & Auto-Migration
+- [x] Add `Property` interface to types.ts: mirrors schema + computed fields (membershipStatus, healthScore, openJobCount, outstandingBalance)
+- [x] Add `properties?: Property[]` and `activePropertyId?: string` to `Customer` interface
+- [x] Add `propertyId?: string` and `propertyIdSource?: string` to `Opportunity` interface
+- [x] Add `SET_ACTIVE_PROPERTY` reducer action to EstimatorContext
+- [x] Add `activePropertyId` to EstimatorState
+- [x] Add auto-migration logic: on SET_ACTIVE_CUSTOMER, if customer has no properties[], promote flat address fields to a synthetic Property object and call properties.create silently
+- [x] Filter opportunities by activePropertyId when set (leads, estimates, jobs tabs)
+
+### Phase 4 — PropertyCard + PropertySelectorGrid UI
+- [x] Build `PropertyCard` component: address label, street/city/state, membership badge (none/Bronze/Silver/Gold with tier color), health dot (green/yellow/red), open jobs count, outstanding balance, quick-action buttons (+ Lead, + Estimate, Enroll / Manage 360°)
+- [x] Build `PropertySelectorGrid` component: grid of PropertyCards, "Add Property" button, shown when customer has 2+ properties
+- [x] Single-property auto-skip: when customer has exactly 1 property, skip grid and go straight to work view; show "Home — 123 Main St" breadcrumb pill
+- [x] "Add Property" dialog: label, address fields, property notes, isPrimary toggle
+
+### Phase 5 — CustomerSection Integration
+- [x] Replace Profile tab address section with PropertySelectorGrid (or single-property auto-skip)
+- [x] Add property breadcrumb pill to the second nav row when a property is active (between customer name and tab row)
+- [x] Filter Leads/Estimates/Jobs pipeline tabs by activePropertyId when set
+- [x] "Back to all properties" link when a property is selected and customer has 2+ properties
+- [x] Pre-fill propertyId on all new opportunity creation modals when a property is active
+- [x] Pre-fill property address on new estimate/job intake forms from activePropertyId
+
+### Phase 6 — 360° Membership Panel (inside PropertyCard)
+- [x] Build `MembershipPanel` slide-out/drawer: shows tier badge, labor bank balance, billing cadence, next renewal date, seasonal visits list, annual scan status
+- [x] "Enroll in 360°" flow: tier selector (Bronze/Silver/Gold), cadence selector, confirm → calls properties.enrollMembership → creates Stripe checkout or records manual enrollment
+- [x] "Upgrade / Downgrade" flow: tier selector, confirm → calls upgradeMembership
+- [x] "Cancel Membership" flow: confirm dialog → calls cancelMembership
+- [x] Labor bank transaction history in MembershipPanel (credits, debits, balance)
+- [x] Seasonal visits list in MembershipPanel (status: scheduled/completed/missed)
+
+### Phase 7 — Global Members Roster (ThreeSixtyPage rename)
+- [x] Rename nav icon label from "360°" to "Members" in MetricsBar
+- [x] Rebuild ThreeSixtyPage as read-only global roster: table of all active memberships with columns: Customer, Property, Tier, Cadence, Renewal Date, Labor Bank, Health Score, Last Visit
+- [x] Add filters: tier, status (active/cancelled/paused), renewal this month
+- [x] Add "View Customer" deep-link from each row → opens customer profile at that property
+- [x] Remove the "New Membership" from ThreeSixtyPage (enrollment now lives in PropertyCard); kept Checklists link
+
+### Phase 8 — Tests + Checkpoint
+- [x] Run full test suite (208/208 passing)
+- [x] Save checkpoint

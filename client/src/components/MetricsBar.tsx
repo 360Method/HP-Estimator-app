@@ -75,7 +75,7 @@ const BACKEND_NAV: { icon: React.ElementType; label: string; section: AppSection
   { icon: DollarSign,      label: 'Financials', section: 'financials' as AppSection },
   { icon: BarChart2,       label: 'Reporting',  section: 'reporting' as AppSection },
   { icon: Megaphone,       label: 'Marketing',  section: 'marketing' as AppSection },
-  { icon: RefreshCw,        label: '360 Method', section: 'three-sixty' as AppSection },
+  { icon: RefreshCw,        label: 'Members',    section: 'three-sixty' as AppSection },
   { icon: BookOpen,          label: 'QuickBooks',  section: 'quickbooks' as AppSection },
 ];
 

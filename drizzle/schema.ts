@@ -504,6 +504,35 @@ export const customers = mysqlTable("customers", {
 export type DbCustomer = typeof customers.$inferSelect;
 export type InsertDbCustomer = typeof customers.$inferInsert;
 
+// ─── PROPERTIES ─────────────────────────────────────────────────────────────
+// First-class property records. Each customer can have one or many properties.
+// The primary property mirrors the customer's flat street/city/state/zip fields.
+// membershipId links to an active threeSixtyMembership for this property.
+export const properties = mysqlTable("properties", {
+  id: varchar("id", { length: 64 }).primaryKey(), // nanoid
+  customerId: varchar("customerId", { length: 64 }).notNull(),
+  label: varchar("label", { length: 64 }).notNull().default("Home"),
+  street: varchar("street", { length: 255 }).notNull().default(""),
+  unit: varchar("unit", { length: 64 }).notNull().default(""),
+  city: varchar("city", { length: 128 }).notNull().default(""),
+  state: varchar("state", { length: 64 }).notNull().default(""),
+  zip: varchar("zip", { length: 10 }).notNull().default(""),
+  isPrimary: boolean("isPrimary").default(false).notNull(),
+  isBilling: boolean("isBilling").default(false).notNull(),
+  propertyNotes: text("propertyNotes"),
+  addressNotes: text("addressNotes"),
+  lat: text("lat"),
+  lng: text("lng"),
+  /** FK to threeSixtyMemberships — null means no active membership */
+  membershipId: int("membershipId"),
+  /** Source of this record: manual | auto-migrated (from flat address fields) */
+  source: varchar("source", { length: 32 }).default("manual"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbProperty = typeof properties.$inferSelect;
+export type InsertDbProperty = typeof properties.$inferInsert;
+
 // ─── CUSTOMER ADDRESSES ───────────────────────────────────────────────────────
 // Additional service addresses for a customer (beyond the primary flat fields).
 export const customerAddresses = mysqlTable("customerAddresses", {
@@ -571,6 +600,10 @@ export const opportunities = mysqlTable("opportunities", {
   // Source tracking
   /** If created from an online request */
   onlineRequestId: int("onlineRequestId"),
+  /** Property this opportunity is linked to (null = not yet linked) */
+  propertyId: varchar("propertyId", { length: 64 }),
+  /** How propertyId was set: 'manual' | 'auto-migrated' | null */
+  propertyIdSource: varchar("propertyIdSource", { length: 32 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

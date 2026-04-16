@@ -226,7 +226,7 @@ export interface ChangeOrder {
   rejectedReason?: string;
 }
 
-export type CustomerProfileTab = 'profile' | 'leads' | 'estimates' | 'jobs' | 'invoices' | 'expenses' | 'communication' | 'attachments' | 'notes' | 'portal';
+export type CustomerProfileTab = 'profile' | 'properties' | 'leads' | 'estimates' | 'jobs' | 'invoices' | 'expenses' | 'communication' | 'attachments' | 'notes' | 'portal';
 
 export interface JobInfo {
   client: string;
@@ -366,6 +366,46 @@ export interface InvoiceLineItem {
 // ── Customer Record (multi-customer list) ─────────────────
 export type CustomerType = 'homeowner' | 'business';
 
+// ─── Property (first-class entity, replaces flat CustomerAddress) ─────────────
+export interface PropertyHealthScore {
+  color: 'green' | 'yellow' | 'red';
+  score: number; // 0-100
+  reasons: string[];
+}
+
+export interface Property {
+  id: string;
+  customerId: string;
+  label: string;           // 'Home', 'Rental', 'Office', etc.
+  street: string;
+  unit: string;
+  city: string;
+  state: string;
+  zip: string;
+  isPrimary: boolean;
+  isBilling: boolean;
+  propertyNotes?: string | null;
+  addressNotes?: string | null;
+  lat?: string | null;
+  lng?: string | null;
+  membershipId?: number | null;
+  source: 'manual' | 'auto-migrated';
+  createdAt: string;
+  updatedAt: string;
+  // Enriched fields populated by trpc.properties.listByCustomer
+  membership?: {
+    id: number;
+    tier: 'bronze' | 'silver' | 'gold';
+    status: 'active' | 'paused' | 'cancelled';
+    laborBankBalance: number;
+    renewalDate: number;
+    billingCadence: 'monthly' | 'quarterly' | 'annual';
+    annualScanCompleted: boolean;
+  } | null;
+  openJobCount?: number;
+  healthScore?: PropertyHealthScore;
+}
+
 export interface CustomerAddress {
   id: string;
   label: string;          // e.g. 'Home', 'Rental Property', 'Office'
@@ -406,6 +446,10 @@ export interface Customer {
   addressNotes: string;
   // Multi-address list (primary address mirrors street/city/state/zip)
   addresses?: CustomerAddress[];
+  // First-class property records (Customer -> Property -> Services)
+  properties?: Property[];
+  /** Which property is currently active in the customer profile view */
+  activePropertyId?: string | null;
   // Notes
   customerNotes: string;
   billsTo: string;            // billing contact name
@@ -633,6 +677,9 @@ export interface Opportunity {
   leadAttachments?: JobAttachment[];
   // If this lead was created from an online booking request, link to it
   onlineRequestId?: number;
+  // Property this opportunity is linked to
+  propertyId?: string | null;
+  propertyIdSource?: 'manual' | 'auto-migrated' | null;
   // Change orders (only on job opportunities)
   changeOrders?: ChangeOrder[];
   // If this estimate is a change order, link back to the parent job
