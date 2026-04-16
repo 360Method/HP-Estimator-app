@@ -27,6 +27,7 @@ import {
   FolderOpen,
   Home,
   Briefcase,
+  Star,
 } from "lucide-react";
 
 const HP_LOGO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg";
@@ -46,6 +47,8 @@ const mainNav: NavItem[] = [
   { label: "Documents", path: "/portal/documents", icon: <FolderOpen className="w-4 h-4" /> },
   { label: "Gallery", path: "/portal/gallery", icon: <Images className="w-4 h-4" /> },
   { label: "Jobs", path: "/portal/jobs", icon: <Briefcase className="w-4 h-4" /> },
+  { label: "360° Reports", path: "/portal/reports", icon: <ClipboardList className="w-4 h-4" /> },
+  { label: "360° Membership", path: "/portal/360-membership", icon: <Star className="w-4 h-4" /> },
 ];
 
 const accountNav: NavItem[] = [

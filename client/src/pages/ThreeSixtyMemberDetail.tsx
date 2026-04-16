@@ -4,18 +4,20 @@
  */
 
 import { useState } from 'react';
+import { useLocation } from 'wouter';
 import { trpc } from '@/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
-import { ArrowLeft, CalendarCheck, Wallet, ClipboardList, Plus, CheckCircle2, Clock, SkipForward } from 'lucide-react';
+import { ArrowLeft, CalendarCheck, Wallet, ClipboardList, Plus, CheckCircle2, Clock, SkipForward, Wrench, CalendarClock, AlertTriangle } from 'lucide-react';
 import { formatDollars, TIER_DEFINITIONS, type MemberTier } from '../../../shared/threeSixtyTiers';
 import { toast } from 'sonner';
 import ThreeSixtyVisitDetail from './ThreeSixtyVisitDetail';
 import ThreeSixtyBaselineWizard from './ThreeSixtyBaselineWizard';
 import ThreeSixtyScanDetail from './ThreeSixtyScanDetail';
+
 
 const SEASON_LABELS: Record<string, string> = {
   spring: '🌸 Spring',
@@ -40,6 +42,7 @@ export default function ThreeSixtyMemberDetail({ membershipId, onBack }: Props) 
   const [selectedVisitId, setSelectedVisitId] = useState<number | null>(null);
   const [showBaselineWizard, setShowBaselineWizard] = useState(false);
   const [selectedScanId, setSelectedScanId] = useState<number | null>(null);
+  const [, navigate] = useLocation();
   const utils = trpc.useUtils();
 
   const { data: membership, isLoading } = trpc.threeSixty.memberships.get.useQuery({ id: membershipId });
@@ -47,6 +50,7 @@ export default function ThreeSixtyMemberDetail({ membershipId, onBack }: Props) 
   const { data: ledger } = trpc.threeSixty.laborBank.getLedger.useQuery({ membershipId });
   const { data: scans } = trpc.threeSixty.scans.list.useQuery({ membershipId });
   const { data: propertySystems } = trpc.threeSixty.propertySystems.list.useQuery({ membershipId });
+  const { data: workOrders } = trpc.workOrders.list.useQuery({ membershipId });
 
   const createScan = trpc.threeSixty.scans.create.useMutation({
     onSuccess: (data) => {
@@ -187,12 +191,97 @@ export default function ThreeSixtyMemberDetail({ membershipId, onBack }: Props) 
 
       <Tabs defaultValue="visits">
         <TabsList className="mb-4 flex flex-wrap h-auto gap-1">
+          <TabsTrigger value="work-orders" className="text-xs">
+            <Wrench className="w-3 h-3 mr-1" />Work Orders
+            {(workOrders ?? []).filter(wo => wo.status === 'open' || wo.status === 'scheduled').length > 0 && (
+              <span className="ml-1 bg-amber-100 text-amber-700 rounded-full px-1.5 text-[10px]">
+                {(workOrders ?? []).filter(wo => wo.status === 'open' || wo.status === 'scheduled').length}
+              </span>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="visits" className="text-xs">Visits</TabsTrigger>
           <TabsTrigger value="property-systems" className="text-xs">Property Systems</TabsTrigger>
           <TabsTrigger value="labor-bank" className="text-xs">Labor Bank</TabsTrigger>
           <TabsTrigger value="scans" className="text-xs">Scans</TabsTrigger>
           <TabsTrigger value="discounts" className="text-xs">Discounts</TabsTrigger>
         </TabsList>
+
+        {/* ── WORK ORDERS ─────────────────────────────────────────── */}
+        <TabsContent value="work-orders">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold">Work Orders</h3>
+            <p className="text-xs text-muted-foreground">Auto-created on enrollment & after each visit</p>
+          </div>
+          {(workOrders ?? []).length === 0 ? (
+            <div className="text-center py-10">
+              <Wrench className="w-8 h-8 text-muted-foreground mx-auto mb-2 opacity-30" />
+              <p className="text-sm text-muted-foreground">No work orders yet.</p>
+              <p className="text-xs text-muted-foreground mt-1">A baseline scan work order is created automatically on enrollment.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {(workOrders ?? []).map(wo => {
+                const WO_TYPE_LABELS: Record<string, string> = {
+                  baseline_scan: '🏠 Baseline Scan',
+                  spring: '🌸 Spring Visit',
+                  summer: '☀️ Summer Visit',
+                  fall: '🍂 Fall Visit',
+                  winter: '❄️ Winter Visit',
+                };
+                const WO_STATUS_COLORS: Record<string, string> = {
+                  open: 'bg-gray-100 text-gray-700',
+                  scheduled: 'bg-blue-100 text-blue-800',
+                  in_progress: 'bg-amber-100 text-amber-800',
+                  completed: 'bg-emerald-100 text-emerald-800',
+                  skipped: 'bg-gray-100 text-gray-500',
+                };
+                const isActionable = wo.status === 'open' || wo.status === 'scheduled' || wo.status === 'in_progress';
+                return (
+                  <Card
+                    key={wo.id}
+                    className={`border shadow-sm cursor-pointer hover:shadow-md transition-shadow ${
+                      isActionable ? 'border-amber-200 bg-amber-50/30' : ''
+                    }`}
+                    onClick={() => navigate(`/360/work-orders/${wo.id}`)}
+                  >
+                    <CardContent className="py-3 px-4 flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-muted">
+                        <Wrench className="w-4 h-4 text-muted-foreground" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-medium">{WO_TYPE_LABELS[wo.type] ?? wo.type}</span>
+                          <span className="text-xs text-muted-foreground">{wo.visitYear}</span>
+                        </div>
+                        {wo.scheduledDate && (
+                          <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                            <CalendarClock className="w-3 h-3" />
+                            {new Date(wo.scheduledDate).toLocaleDateString()}
+                          </div>
+                        )}
+                        {wo.healthScore != null && (
+                          <div className="text-xs font-semibold mt-0.5" style={{
+                            color: wo.healthScore >= 75 ? '#059669' : wo.healthScore >= 50 ? '#d97706' : '#dc2626'
+                          }}>
+                            Health Score: {wo.healthScore}/100
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <Badge className={`text-[10px] ${WO_STATUS_COLORS[wo.status] ?? ''}`}>{wo.status}</Badge>
+                        {isActionable && (
+                          <span className="text-[10px] text-amber-600 font-medium flex items-center gap-0.5">
+                            <AlertTriangle className="w-2.5 h-2.5" /> Action needed
+                          </span>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </TabsContent>
 
         {/* ── VISITS ──────────────────────────────────────────────── */}
         <TabsContent value="visits">

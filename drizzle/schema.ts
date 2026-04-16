@@ -1121,3 +1121,44 @@ export const qbTokens = mysqlTable("qbTokens", {
 });
 export type DbQbToken = typeof qbTokens.$inferSelect;
 export type InsertDbQbToken = typeof qbTokens.$inferInsert;
+
+// ─── 360° WORK ORDERS ─────────────────────────────────────────────────────────
+// Central record for every 360° service event (baseline scan + seasonal visits).
+// Created automatically on enrollment and after baseline completion.
+export const threeSixtyWorkOrders = mysqlTable("threeSixtyWorkOrders", {
+  id: int("id").autoincrement().primaryKey(),
+  membershipId: int("membershipId").notNull(),
+  /** CRM customer ID (nanoid string) */
+  customerId: varchar("customerId", { length: 64 }).notNull(),
+  /** baseline_scan | spring | summer | fall | winter */
+  type: varchar("type", { length: 32 }).notNull(),
+  /** open | scheduled | in_progress | completed | skipped */
+  status: varchar("status", { length: 32 }).notNull().default("open"),
+  /** Year this work order belongs to (e.g. 2026) */
+  visitYear: int("visitYear").notNull(),
+  /** Unix ms of scheduled appointment */
+  scheduledDate: bigint("scheduledDate", { mode: "number" }),
+  /** Unix ms of completion */
+  completedDate: bigint("completedDate", { mode: "number" }),
+  /** JSON string[] of technician names/IDs */
+  assignedTo: text("assignedTo"),
+  technicianNotes: text("technicianNotes"),
+  /** JSON array of structured inspection items with photos */
+  inspectionItemsJson: text("inspectionItemsJson"),
+  /** Labor bank draw in cents */
+  laborBankUsed: int("laborBankUsed").notNull().default(0),
+  /** FK to portalReports.id once report is sent */
+  portalReportId: int("portalReportId"),
+  /** FK to scheduleEvents.id */
+  scheduleEventId: varchar("scheduleEventId", { length: 64 }),
+  /** FK to threeSixtyVisits.id (legacy link) */
+  visitId: int("visitId"),
+  /** 0-100 home health score set on completion */
+  healthScore: int("healthScore"),
+  /** Reason for skipping (if status=skipped) */
+  skipReason: varchar("skipReason", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbThreeSixtyWorkOrder = typeof threeSixtyWorkOrders.$inferSelect;
+export type InsertDbThreeSixtyWorkOrder = typeof threeSixtyWorkOrders.$inferInsert;

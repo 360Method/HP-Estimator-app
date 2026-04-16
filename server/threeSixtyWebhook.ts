@@ -17,6 +17,7 @@ import {
   threeSixtyMemberships,
   threeSixtyLaborBankTransactions,
   threeSixtyVisits,
+  threeSixtyWorkOrders,
   portalCustomers,
 } from "../drizzle/schema";
 import { eq, isNotNull, lte, gt, and } from "drizzle-orm";
@@ -318,10 +319,25 @@ export async function create360MembershipFromWebhook(
     console.error("[360 Webhook] CRM customer/opportunity creation failed:", err);
   }
 
-  // ── 7. Notify HP owner ────────────────────────────────────────────────────
+  // ── 7. Auto-create baseline work order ──────────────────────────────────────
+  try {
+    const crmCustomerId = String(portalCustomerId ?? '');
+    const currentYear = new Date().getFullYear();
+    await db.insert(threeSixtyWorkOrders).values({
+      membershipId,
+      customerId: crmCustomerId,
+      type: 'baseline_scan',
+      status: 'open',
+      visitYear: currentYear,
+    });
+  } catch (err) {
+    console.error('[360 Webhook] Failed to create baseline work order:', err);
+  }
+
+  // ── 8. Notify HP owner ────────────────────────────────────────────────────
   await notifyOwner({
     title: `🏠 New 360° Member — ${tier.charAt(0).toUpperCase() + tier.slice(1)}`,
-    content: `${customerName} (${customerEmail}) enrolled in the ${tier} tier (${cadence} billing). Membership ID: ${membershipId}. Schedule their Annual 360° Home Scan within 48 hours.`,
+    content: `${customerName} (${customerEmail}) enrolled in the ${tier} tier (${cadence} billing). Membership ID: ${membershipId}. A baseline work order has been created — schedule within 48 hours.`,
   }).catch(() => null);
 }
 

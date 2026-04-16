@@ -1615,6 +1615,59 @@ export const portalRouter = router({
 
       return { customer: portalCustomer };
     }),
+  // ── 360° MEMBERSHIP DASHBOARD ─────────────────────────────────────────────
+  /** Returns the 360° membership for the logged-in portal customer, with labor bank and upcoming work orders */
+  getMembership360: portalProcedure.query(async ({ ctx }) => {
+    const { getDb } = await import('../db');
+    const {
+      threeSixtyMemberships,
+      threeSixtyLaborBankTransactions,
+      threeSixtyWorkOrders,
+      portalReports,
+    } = await import('../../drizzle/schema');
+    const { eq, desc, and } = await import('drizzle-orm');
+    const db = await getDb();
+    if (!db) return null;
+    // Find membership by stripeCustomerId
+    const stripeCustomerId = ctx.portalCustomer.stripeCustomerId;
+    if (!stripeCustomerId) return null;
+    const [membership] = await db
+      .select()
+      .from(threeSixtyMemberships)
+      .where(eq(threeSixtyMemberships.stripeCustomerId, stripeCustomerId))
+      .limit(1);
+    if (!membership) return null;
+    // Fetch labor bank ledger (last 10 transactions)
+    const ledger = await db
+      .select()
+      .from(threeSixtyLaborBankTransactions)
+      .where(eq(threeSixtyLaborBankTransactions.membershipId, membership.id))
+      .orderBy(desc(threeSixtyLaborBankTransactions.createdAt))
+      .limit(10);
+    // Fetch work orders (all, ordered by scheduledDate desc)
+    const workOrders = await db
+      .select()
+      .from(threeSixtyWorkOrders)
+      .where(eq(threeSixtyWorkOrders.membershipId, membership.id))
+      .orderBy(desc(threeSixtyWorkOrders.createdAt));
+    // Fetch reports (last 5)
+    const reports = await db
+      .select()
+      .from(portalReports)
+      .where(eq(portalReports.portalCustomerId, ctx.portalCustomer.id))
+      .orderBy(desc(portalReports.sentAt))
+      .limit(5);
+    return {
+      membership,
+      laborBankBalance: membership.laborBankBalance ?? 0,
+      ledger,
+      workOrders,
+      reports: reports.map(r => ({
+        ...r,
+        reportData: r.reportJson ? JSON.parse(r.reportJson) : null,
+      })),
+    };
+  }),
 });
 // ─── EMAIL TEMPLATES ──────────────────────────────────────────────────────────
 // HP brand palette: forest green #1a2e1a / #2d4a2d, warm gold #c8922a

@@ -1,0 +1,21 @@
+CREATE TABLE `threeSixtyWorkOrders` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`membershipId` int NOT NULL,
+	`customerId` varchar(64) NOT NULL,
+	`type` varchar(32) NOT NULL,
+	`status` varchar(32) NOT NULL DEFAULT 'open',
+	`visitYear` int NOT NULL,
+	`scheduledDate` bigint,
+	`completedDate` bigint,
+	`assignedTo` text,
+	`technicianNotes` text,
+	`inspectionItemsJson` text,
+	`laborBankUsed` int NOT NULL DEFAULT 0,
+	`portalReportId` int,
+	`scheduleEventId` varchar(64),
+	`visitId` int,
+	`skipReason` varchar(255),
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+	CONSTRAINT `threeSixtyWorkOrders_id` PRIMARY KEY(`id`)
+);

@@ -15,6 +15,7 @@ import { customersRouter } from "./routers/customers";
 import { opportunitiesRouter } from "./routers/opportunities";
 import { bookingRouter } from "./routers/booking";
 import { threeSixtyRouter } from "./routers/threeSixty";
+import { workOrdersRouter } from "./routers/workOrders";
 import { invoicesRouter } from "./routers/invoices";
 import { scheduleRouter } from "./routers/schedule";
 import { financialsRouter } from "./routers/financials";
@@ -41,6 +42,7 @@ export const appRouter = router({
   opportunities: opportunitiesRouter,
   booking: bookingRouter,
   threeSixty: threeSixtyRouter,
+  workOrders: workOrdersRouter,
   invoices: invoicesRouter,
   schedule: scheduleRouter,
   financials: financialsRouter,

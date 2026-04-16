@@ -38,6 +38,9 @@ import {
   InsertDbExpense,
   DbQbToken,
   InsertDbQbToken,
+  threeSixtyWorkOrders,
+  DbThreeSixtyWorkOrder,
+  InsertDbThreeSixtyWorkOrder,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -1087,4 +1090,58 @@ export async function deleteQbToken(userId: number): Promise<void> {
   const db = await getDb();
   if (!db) return;
   await db.delete(qbTokens).where(eq(qbTokens.userId, userId));
+}
+
+// ─── 360° WORK ORDER HELPERS ──────────────────────────────────────────────────
+
+export async function createWorkOrder(
+  data: Omit<InsertDbThreeSixtyWorkOrder, 'id' | 'createdAt' | 'updatedAt'>,
+): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [result] = await db.insert(threeSixtyWorkOrders).values(data);
+  return (result as any).insertId as number;
+}
+
+export async function getWorkOrder(id: number): Promise<DbThreeSixtyWorkOrder | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(threeSixtyWorkOrders).where(eq(threeSixtyWorkOrders.id, id)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function listWorkOrders(membershipId: number): Promise<DbThreeSixtyWorkOrder[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(threeSixtyWorkOrders)
+    .where(eq(threeSixtyWorkOrders.membershipId, membershipId))
+    .orderBy(asc(threeSixtyWorkOrders.visitYear), asc(threeSixtyWorkOrders.type));
+}
+
+export async function updateWorkOrder(
+  id: number,
+  data: Partial<Omit<InsertDbThreeSixtyWorkOrder, 'id' | 'createdAt'>>,
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(threeSixtyWorkOrders).set(data).where(eq(threeSixtyWorkOrders.id, id));
+}
+
+export async function listDueWorkOrderReminders(): Promise<DbThreeSixtyWorkOrder[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const now = Date.now();
+  const in48h = now + 48 * 60 * 60 * 1000;
+  return db
+    .select()
+    .from(threeSixtyWorkOrders)
+    .where(
+      and(
+        eq(threeSixtyWorkOrders.status, 'scheduled'),
+        gte(threeSixtyWorkOrders.scheduledDate as any, now),
+        lte(threeSixtyWorkOrders.scheduledDate as any, in48h),
+      ),
+    );
 }
