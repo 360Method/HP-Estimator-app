@@ -398,9 +398,14 @@ export interface Property {
     tier: 'bronze' | 'silver' | 'gold';
     status: 'active' | 'paused' | 'cancelled';
     laborBankBalance: number;
-    renewalDate: number;
+    renewalDate: number | null;
+    startDate: number;
     billingCadence: 'monthly' | 'quarterly' | 'annual';
     annualScanCompleted: boolean;
+    notes?: string | null;
+    stripeSubscriptionId?: string | null;
+    stripeCustomerId?: string | null;
+    planType?: 'homeowner' | 'portfolio' | null;
   } | null;
   openJobCount?: number;
   healthScore?: PropertyHealthScore;

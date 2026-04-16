@@ -16,6 +16,8 @@ import {
 } from "../../drizzle/schema";
 import { eq, and, desc, count, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
+import Stripe from "stripe";
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? "", { apiVersion: "2025-02-24.acacia" });
 
 // ─── Input schemas ────────────────────────────────────────────────────────────
 
@@ -568,5 +570,109 @@ export const propertiesRouter = router({
         .where(eq(properties.id, id))
         .limit(1);
       return created!;
+    }),
+
+  /** Adjust (add or deduct) labor bank balance for a membership */
+  adjustLaborBank: protectedProcedure
+    .input(
+      z.object({
+        propertyId: z.string(),
+        /** Positive = credit, negative = deduct. In dollars (converted to cents internally). */
+        amountDollars: z.number(),
+        reason: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
+      const [prop] = await db.select().from(properties).where(eq(properties.id, input.propertyId)).limit(1);
+      if (!prop?.membershipId) throw new TRPCError({ code: 'NOT_FOUND', message: 'No active membership.' });
+      const deltaCents = Math.round(input.amountDollars * 100);
+      await db.update(threeSixtyMemberships)
+        .set({ laborBankBalance: sql`laborBankBalance + ${deltaCents}` })
+        .where(eq(threeSixtyMemberships.id, prop.membershipId));
+      const [updated] = await db.select({ laborBankBalance: threeSixtyMemberships.laborBankBalance })
+        .from(threeSixtyMemberships).where(eq(threeSixtyMemberships.id, prop.membershipId)).limit(1);
+      return { newBalanceCents: updated?.laborBankBalance ?? 0 };
+    }),
+
+  /** Update internal notes on a membership */
+  updateMembershipNotes: protectedProcedure
+    .input(z.object({ propertyId: z.string(), notes: z.string() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
+      const [prop] = await db.select().from(properties).where(eq(properties.id, input.propertyId)).limit(1);
+      if (!prop?.membershipId) throw new TRPCError({ code: 'NOT_FOUND', message: 'No active membership.' });
+      await db.update(threeSixtyMemberships).set({ notes: input.notes }).where(eq(threeSixtyMemberships.id, prop.membershipId));
+      return { success: true };
+    }),
+
+  /** Pause an active membership */
+  pauseMembership: protectedProcedure
+    .input(z.object({ propertyId: z.string(), reason: z.string().optional() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
+      const [prop] = await db.select().from(properties).where(eq(properties.id, input.propertyId)).limit(1);
+      if (!prop?.membershipId) throw new TRPCError({ code: 'NOT_FOUND', message: 'No active membership.' });
+      await db.update(threeSixtyMemberships)
+        .set({ status: 'paused', notes: input.reason ? `Paused: ${input.reason}` : 'Paused by staff' })
+        .where(eq(threeSixtyMemberships.id, prop.membershipId));
+      return { success: true };
+    }),
+
+  /** Resume a paused membership */
+  resumeMembership: protectedProcedure
+    .input(z.object({ propertyId: z.string() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
+      const [prop] = await db.select().from(properties).where(eq(properties.id, input.propertyId)).limit(1);
+      if (!prop?.membershipId) throw new TRPCError({ code: 'NOT_FOUND', message: 'No active membership.' });
+      await db.update(threeSixtyMemberships)
+        .set({ status: 'active' })
+        .where(eq(threeSixtyMemberships.id, prop.membershipId));
+      return { success: true };
+    }),
+
+  /** Fetch Stripe subscription status and recent invoices for a membership */
+  getMembershipStripeStatus: protectedProcedure
+    .input(z.object({ propertyId: z.string() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
+      const [prop] = await db.select().from(properties).where(eq(properties.id, input.propertyId)).limit(1);
+      if (!prop?.membershipId) return { subscription: null, invoices: [] };
+      const [mem] = await db.select()
+        .from(threeSixtyMemberships).where(eq(threeSixtyMemberships.id, prop.membershipId)).limit(1);
+      if (!mem?.stripeSubscriptionId) return { subscription: null, invoices: [] };
+      try {
+        const sub = await stripe.subscriptions.retrieve(mem.stripeSubscriptionId);
+        const invList = await stripe.invoices.list({ subscription: mem.stripeSubscriptionId, limit: 5 });
+        return {
+          subscription: {
+            id: sub.id,
+            status: sub.status,
+            currentPeriodEnd: (sub as any).current_period_end as number,
+            cancelAtPeriodEnd: sub.cancel_at_period_end,
+            amount: sub.items.data[0]?.price?.unit_amount ?? null,
+            currency: sub.items.data[0]?.price?.currency ?? 'usd',
+            interval: sub.items.data[0]?.price?.recurring?.interval ?? null,
+          },
+          invoices: invList.data.map((inv) => ({
+            id: inv.id,
+            number: inv.number,
+            status: inv.status,
+            amount: inv.amount_paid,
+            currency: inv.currency,
+            created: inv.created,
+            hostedUrl: inv.hosted_invoice_url,
+            pdfUrl: inv.invoice_pdf,
+          })),
+        };
+      } catch {
+        return { subscription: null, invoices: [] };
+      }
     }),
 });
