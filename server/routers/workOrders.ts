@@ -27,6 +27,7 @@ import {
   portalEstimates,
   opportunities,
   properties,
+  users,
 } from "../../drizzle/schema";
 import { eq, desc, and } from "drizzle-orm";
 import { sendEmail } from "../gmail";
@@ -513,6 +514,15 @@ export const workOrdersRouter = router({
         completedDate: Date.now(),
       });
       return { success: true };
+    }),
+
+  /** List all staff users for tech assignment dropdown */
+  listStaff: protectedProcedure
+    .query(async () => {
+      const db = await getDb();
+      if (!db) return [];
+      const staff = await db.select({ id: users.id, name: users.name, openId: users.openId }).from(users);
+      return staff;
     }),
 
   /** Update assigned techs and notes without changing status */

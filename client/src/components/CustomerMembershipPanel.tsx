@@ -6,7 +6,7 @@
  * The standalone Members nav tab is now a read-only roster that deep-links here.
  */
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { trpc } from '@/lib/trpc';
 import { Badge } from '@/components/ui/badge';
@@ -117,6 +117,10 @@ function MembershipFullDetail({ membershipId, membership }: { membershipId: numb
   const [selectedVisitId, setSelectedVisitId] = useState<number | null>(null);
   const [showBaselineWizard, setShowBaselineWizard] = useState(false);
   const [selectedScanId, setSelectedScanId] = useState<number | null>(null);
+  const [scheduleModalWoId, setScheduleModalWoId] = useState<number | null>(null);
+  const [scheduleDate, setScheduleDate] = useState('');
+  const [scheduleTime, setScheduleTime] = useState('09:00');
+  const [scheduleAssigned, setScheduleAssigned] = useState<string[]>([]);
 
   const { data: visits } = trpc.threeSixty.visits.list.useQuery({ membershipId });
   const { data: ledger } = trpc.threeSixty.laborBank.getLedger.useQuery({ membershipId });
@@ -138,6 +142,20 @@ function MembershipFullDetail({ membershipId, membership }: { membershipId: numb
       utils.threeSixty.visits.list.invalidate({ membershipId });
       toast('Visit scheduled');
     },
+  });
+
+  const { data: staffList } = trpc.workOrders.listStaff.useQuery();
+
+  const scheduleWO = trpc.workOrders.schedule.useMutation({
+    onSuccess: () => {
+      utils.workOrders.list.invalidate({ membershipId });
+      setScheduleModalWoId(null);
+      setScheduleDate('');
+      setScheduleTime('09:00');
+      setScheduleAssigned([]);
+      toast.success('Visit scheduled — a linked job has been added to the Jobs tab and Calendar.');
+    },
+    onError: (err) => toast.error(`Failed to schedule: ${err.message}`),
   });
 
   const skipVisit = trpc.threeSixty.visits.skip.useMutation({
@@ -304,6 +322,75 @@ function MembershipFullDetail({ membershipId, membership }: { membershipId: numb
               <h3 className="text-sm font-semibold">Work Orders</h3>
               <p className="text-xs text-muted-foreground">Auto-created on enrollment & after each visit</p>
             </div>
+            {/* Schedule Visit Modal */}
+            {scheduleModalWoId !== null && (() => {
+              const wo = (workOrders ?? []).find(w => w.id === scheduleModalWoId);
+              if (!wo) return null;
+              return (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setScheduleModalWoId(null)}>
+                  <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
+                    <h3 className="text-base font-semibold mb-4">Schedule Visit</h3>
+                    <p className="text-xs text-muted-foreground mb-4">{WO_TYPE_LABEL[wo.type] ?? wo.type} &mdash; {wo.visitYear}</p>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-xs font-medium block mb-1">Date</label>
+                        <input
+                          type="date"
+                          className="w-full border rounded-lg px-3 py-2 text-sm"
+                          value={scheduleDate}
+                          min={new Date().toISOString().slice(0,10)}
+                          onChange={e => setScheduleDate(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium block mb-1">Time</label>
+                        <input
+                          type="time"
+                          className="w-full border rounded-lg px-3 py-2 text-sm"
+                          value={scheduleTime}
+                          onChange={e => setScheduleTime(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-medium block mb-1">Assign Tech (optional)</label>
+                        <div className="space-y-1 max-h-32 overflow-y-auto border rounded-lg p-2">
+                          {(staffList ?? []).length === 0 ? (
+                            <p className="text-xs text-muted-foreground">No staff found</p>
+                          ) : (staffList ?? []).map(s => (
+                            <label key={s.id} className="flex items-center gap-2 text-xs cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={scheduleAssigned.includes(s.name ?? s.openId)}
+                                onChange={e => {
+                                  const val = s.name ?? s.openId;
+                                  setScheduleAssigned(prev => e.target.checked ? [...prev, val] : prev.filter(x => x !== val));
+                                }}
+                              />
+                              {s.name ?? s.openId}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 mt-5">
+                      <Button variant="outline" className="flex-1" onClick={() => setScheduleModalWoId(null)}>Cancel</Button>
+                      <Button
+                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                        disabled={!scheduleDate || scheduleWO.isPending}
+                        onClick={() => {
+                          if (!scheduleDate) return;
+                          const dt = new Date(`${scheduleDate}T${scheduleTime}`);
+                          scheduleWO.mutate({ id: scheduleModalWoId!, scheduledDate: dt.getTime(), assignedTo: scheduleAssigned.length > 0 ? scheduleAssigned : undefined });
+                        }}
+                      >
+                        {scheduleWO.isPending ? 'Scheduling…' : 'Confirm'}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             {(workOrders ?? []).length === 0 ? (
               <div className="text-center py-10">
                 <Wrench className="w-8 h-8 text-muted-foreground mx-auto mb-2 opacity-30" />
@@ -350,6 +437,17 @@ function MembershipFullDetail({ membershipId, membership }: { membershipId: numb
                             <span className="text-[10px] text-amber-600 font-medium flex items-center gap-0.5">
                               <AlertTriangle className="w-2.5 h-2.5" /> Action needed
                             </span>
+                          )}
+                          {(wo.status === 'open' || wo.status === 'scheduled') && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-[10px] h-6 px-2 border-blue-300 text-blue-700 hover:bg-blue-50"
+                              onClick={e => { e.stopPropagation(); setScheduleModalWoId(wo.id); setScheduleDate(wo.scheduledDate ? new Date(wo.scheduledDate).toISOString().slice(0,10) : ''); }}
+                            >
+                              <CalendarClock className="w-2.5 h-2.5 mr-1" />
+                              {wo.scheduledDate ? 'Reschedule' : 'Schedule'}
+                            </Button>
                           )}
                         </div>
                       </CardContent>

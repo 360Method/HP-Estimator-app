@@ -1647,52 +1647,58 @@ export const portalRouter = router({
     const { eq, desc, and } = await import('drizzle-orm');
     const db = await getDb();
     if (!db) return null;
-    // Find membership by stripeCustomerId
+    // Find all memberships for this portal customer by stripeCustomerId
     const stripeCustomerId = ctx.portalCustomer.stripeCustomerId;
     if (!stripeCustomerId) return null;
-    const [membership] = await db
+    const { inArray } = await import('drizzle-orm');
+    const allMemberships = await db
       .select()
       .from(threeSixtyMemberships)
       .where(eq(threeSixtyMemberships.stripeCustomerId, stripeCustomerId))
-      .limit(1);
-    if (!membership) return null;
-    // Fetch labor bank ledger (last 10 transactions)
-    const ledger = await db
-      .select()
-      .from(threeSixtyLaborBankTransactions)
-      .where(eq(threeSixtyLaborBankTransactions.membershipId, membership.id))
-      .orderBy(desc(threeSixtyLaborBankTransactions.createdAt))
-      .limit(10);
-    // Fetch work orders (all, ordered by scheduledDate desc)
-    const workOrders = await db
-      .select()
-      .from(threeSixtyWorkOrders)
-      .where(eq(threeSixtyWorkOrders.membershipId, membership.id))
-      .orderBy(desc(threeSixtyWorkOrders.createdAt));
-    // Fetch reports (last 5)
+      .orderBy(threeSixtyMemberships.createdAt);
+    if (allMemberships.length === 0) return null;
+    // For each membership, fetch work orders and labor bank
+    const membershipDetails = await Promise.all(allMemberships.map(async (membership) => {
+      const ledger = await db
+        .select()
+        .from(threeSixtyLaborBankTransactions)
+        .where(eq(threeSixtyLaborBankTransactions.membershipId, membership.id))
+        .orderBy(desc(threeSixtyLaborBankTransactions.createdAt))
+        .limit(10);
+      const workOrders = await db
+        .select()
+        .from(threeSixtyWorkOrders)
+        .where(eq(threeSixtyWorkOrders.membershipId, membership.id))
+        .orderBy(desc(threeSixtyWorkOrders.createdAt));
+      return { membership, laborBankBalance: membership.laborBankBalance ?? 0, ledger, workOrders };
+    }));
+    // Fetch reports (last 5) — shared across all memberships for this customer
     const reports = await db
       .select()
       .from(portalReports)
       .where(eq(portalReports.portalCustomerId, ctx.portalCustomer.id))
       .orderBy(desc(portalReports.sentAt))
       .limit(5);
-    // Fetch portal estimates linked to this membership (flagged repair stubs)
+    // Fetch portal estimates linked to this customer
     const linkedEstimates = await db
       .select()
       .from(portalEstimates)
       .where(eq(portalEstimates.customerId, ctx.portalCustomer.id))
       .orderBy(desc(portalEstimates.createdAt))
       .limit(20);
+    // Return first membership as primary (backward compat) + full list for switcher
+    const primary = membershipDetails[0];
     return {
-      membership,
-      laborBankBalance: membership.laborBankBalance ?? 0,
-      ledger,
-      workOrders,
+      membership: primary.membership,
+      laborBankBalance: primary.laborBankBalance,
+      ledger: primary.ledger,
+      workOrders: primary.workOrders,
       reports: reports.map(r => ({
         ...r,
         reportData: r.reportJson ? JSON.parse(r.reportJson) : null,
       })),
       linkedEstimates,
+      allMemberships: membershipDetails,
     };
   }),
 });

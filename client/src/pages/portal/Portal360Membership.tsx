@@ -212,6 +212,7 @@ function RecRow({ rec, onRequest }: {
 export default function Portal360Membership() {
   const [, navigate] = useLocation();
   const { data, isLoading } = trpc.portal.getMembership360.useQuery();
+  const [selectedIdx, setSelectedIdx] = useState(0);
 
   if (isLoading) {
     return (
@@ -243,7 +244,12 @@ export default function Portal360Membership() {
     );
   }
 
-  const { membership, laborBankBalance, ledger, workOrders, reports, linkedEstimates } = data;
+  // Multi-property: use allMemberships if present, else wrap single membership
+  const allMemberships = data.allMemberships ?? [{ membership: data.membership, laborBankBalance: data.laborBankBalance, ledger: data.ledger, workOrders: data.workOrders }];
+  const safeIdx = Math.min(selectedIdx, allMemberships.length - 1);
+  const active = allMemberships[safeIdx];
+  const { membership, laborBankBalance, ledger, workOrders } = active;
+  const { reports, linkedEstimates } = data;
   const tier = TIER_LABELS[membership.tier ?? "bronze"] ?? TIER_LABELS.bronze;
 
   // Separate upcoming vs completed work orders
@@ -278,6 +284,32 @@ export default function Portal360Membership() {
             {tier.label} Member
           </span>
         </div>
+
+        {/* Property switcher — only shown when customer has multiple memberships */}
+        {allMemberships.length > 1 && (
+          <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-1">
+            <span className="text-xs text-muted-foreground shrink-0">Property:</span>
+            {allMemberships.map((m, i) => {
+              const t = TIER_LABELS[m.membership.tier ?? 'bronze'] ?? TIER_LABELS.bronze;
+              const addr = (m.membership as any).propertyAddress || `Property ${i + 1}`;
+              return (
+                <button
+                  key={m.membership.id}
+                  onClick={() => setSelectedIdx(i)}
+                  className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-all ${
+                    i === safeIdx
+                      ? `${t.bg} ${t.color} border-current`
+                      : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                  }`}
+                >
+                  <Home className="w-3 h-3" />
+                  <span className="max-w-[140px] truncate">{addr}</span>
+                  <span className={`text-[10px] ${t.color}`}>{t.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* Membership summary row */}
         <div className="grid grid-cols-3 gap-3 mb-5">

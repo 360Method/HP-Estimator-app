@@ -597,6 +597,7 @@ export default function SchedulePage() {
   const [filterAssignee, setFilterAssignee] = useState('');
   const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'completed'>('all');
   const [showFilters, setShowFilters] = useState(false);
+  const [filter360Only, setFilter360Only] = useState(false);
 
   // Deep-link: pre-apply job filter from state.scheduleFilterJobId on mount
   useEffect(() => {
@@ -721,8 +722,18 @@ export default function SchedulePage() {
     if (filterOpportunityId) {
       events = events.filter(e => e.opportunityId === filterOpportunityId);
     }
+    if (filter360Only) {
+      // 360° visits are jobs whose linked opportunity has a membershipId set
+      const membershipJobIds = new Set<string>();
+      state.customers.forEach(customer => {
+        (customer.opportunities || []).forEach(opp => {
+          if ((opp as any).membershipId) membershipJobIds.add(opp.id);
+        });
+      });
+      events = events.filter(e => e.opportunityId && membershipJobIds.has(e.opportunityId));
+    }
     return events;
-  }, [state.scheduleEvents, state.customers, filterTypes, filterCustomerId, filterOpportunityId, filterAssignee, filterStatus]);
+  }, [state.scheduleEvents, state.customers, filterTypes, filterCustomerId, filterOpportunityId, filterAssignee, filterStatus, filter360Only]);
 
   const getEventsForDay = useCallback((day: Date) => {
     return allEvents.filter(e => isSameDay(new Date(e.start), day));
@@ -914,7 +925,7 @@ export default function SchedulePage() {
     });
   }
 
-  const activeFilterCount = filterTypes.size + (filterCustomerId ? 1 : 0) + (filterOpportunityId ? 1 : 0) + (filterAssignee ? 1 : 0) + (filterStatus !== 'all' ? 1 : 0);
+  const activeFilterCount = filterTypes.size + (filterCustomerId ? 1 : 0) + (filterOpportunityId ? 1 : 0) + (filterAssignee ? 1 : 0) + (filterStatus !== 'all' ? 1 : 0) + (filter360Only ? 1 : 0);
 
   // ── Render ────────────────────────────────────────────────
   const weekStart = startOfWeek(currentDate);
@@ -1031,9 +1042,22 @@ export default function SchedulePage() {
             <option value="pending">Pending</option>
             <option value="completed">Completed</option>
           </select>
+          {/* 360° only toggle */}
+          <button
+            onClick={() => setFilter360Only(f => !f)}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium transition-all ${
+              filter360Only
+                ? 'bg-violet-100 border-violet-400 text-violet-700'
+                : 'border-gray-200 text-gray-500 hover:border-gray-300'
+            }`}
+          >
+            <RefreshCw className="w-3 h-3" />
+            360° Only
+          </button>
+
           {activeFilterCount > 0 && (
             <button
-              onClick={() => { setFilterTypes(new Set()); setFilterCustomerId(''); setFilterOpportunityId(null); setFilterAssignee(''); setFilterStatus('all'); }}
+              onClick={() => { setFilterTypes(new Set()); setFilterCustomerId(''); setFilterOpportunityId(null); setFilterAssignee(''); setFilterStatus('all'); setFilter360Only(false); }}
               className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 transition-colors"
             >
               <X className="w-3 h-3" /> Clear all
