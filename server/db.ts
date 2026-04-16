@@ -614,7 +614,7 @@ function addressSimilar(a: DbCustomer, b: DbCustomer): boolean {
   const ca = (a.city ?? '').toLowerCase().trim(), cb = (b.city ?? '').toLowerCase().trim();
   if (!sa || !sb) return false;
   const streetMatch = sa === sb || levenshtein(sa, sb, 3) <= 3;
-  const locMatch = (za && zb && za === zb) || (ca && cb && ca === cb);
+  const locMatch = !!(za && zb && za === zb) || !!(ca && cb && ca === cb);
   return streetMatch && locMatch;
 }
 
@@ -635,7 +635,7 @@ export async function detectDuplicates(): Promise<DuplicateGroup[]> {
   const groups: DuplicateGroup[] = [];
 
   function pairKey(a: string, b: string) { return [a, b].sort().join('|'); }
-  function addGroup(reason: string, cs: DbCustomer[]) {
+  function addGroup(reason: DuplicateGroup['reason'], cs: DbCustomer[]) {
     const key = pairKey(cs[0].id, cs[1].id);
     if (pairedIds.has(key)) return;
     pairedIds.add(key);

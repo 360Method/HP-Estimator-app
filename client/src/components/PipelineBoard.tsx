@@ -330,7 +330,7 @@ function KanbanCard({
 function KanbanColumn({
   stage, opps, area, stages, onUpdate, onRemove,
   onConvertToEstimate, onConvertToJob, onArchive, onOpen,
-  customerName,
+  customerName, pendingCOMap,
 }: {
   stage: string;
   opps: Opportunity[];
@@ -343,6 +343,7 @@ function KanbanColumn({
   onArchive?: (id: string, value: number) => void;
   onOpen?: (id: string) => void;
   customerName?: string;
+  pendingCOMap?: Record<string, number>;
 }) {
   // Register this column as a droppable target using the stage name as id
   const { setNodeRef, isOver } = useDroppable({ id: stage });
@@ -383,7 +384,7 @@ function KanbanColumn({
               onArchive={onArchive}
               onOpen={onOpen}
               customerName={customerName}
-              pendingCoCount={opp.hpOpportunityId ? (pendingCOMap?.[opp.hpOpportunityId] ?? 0) : 0}
+              pendingCoCount={(opp as any).hpOpportunityId ? (pendingCOMap?.[(opp as any).hpOpportunityId] ?? 0) : 0}
             />
           ))}
         </SortableContext>
@@ -415,6 +416,7 @@ function TableRow({
   onArchive?: (id: string, value: number) => void;
   onOpen?: (id: string) => void;
   customerName?: string;
+  pendingCOMap?: Record<string, number>;
 }) {
   const [showConvertToEstimateModal, setShowConvertToEstimateModal] = useState(false);
   const [showConvertToJobModal, setShowConvertToJobModal] = useState(false);
@@ -1067,6 +1069,7 @@ export default function PipelineBoard({
                   onArchive={onArchive}
                   onOpen={onOpen}
                   customerName={customerName}
+                  pendingCOMap={pendingCOMap as Record<string, number> | undefined}
                 />
               ))}
             </div>
@@ -1136,6 +1139,7 @@ export default function PipelineBoard({
                   onArchive={onArchive}
                   onOpen={onOpen}
                   customerName={customerName}
+                  pendingCOMap={pendingCOMap as Record<string, number> | undefined}
                 />
               ))}
             </tbody>

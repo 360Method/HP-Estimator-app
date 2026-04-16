@@ -37,7 +37,7 @@ export default function DuplicatesPanel({ onMerged }: Props) {
     staleTime: 60_000,
   });
 
-  const groups = (data ?? []) as DuplicateGroup[];
+  const groups = (data ?? []) as unknown as DuplicateGroup[];
   if (groups.length === 0) return null;
 
   const totalDups = groups.reduce((acc, g) => acc + g.customers.length - 1, 0);

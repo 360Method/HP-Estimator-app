@@ -63,7 +63,7 @@ export default function ReportingPage() {
       archived: o.archived ?? false,
       wonAt: o.wonAt ? new Date(o.wonAt).toISOString() : null,
       sentAt: o.sentAt ? new Date(o.sentAt).toISOString() : null,
-      customerId: o.customerId ?? null,
+      customerId: (o as any).customerId ?? null,
       customerName: o.clientSnapshot?.client ?? null,
     }));
 
@@ -110,7 +110,7 @@ export default function ReportingPage() {
       archived: o.archived ?? false,
       wonAt: o.wonAt ? new Date(o.wonAt).toISOString() : null,
       sentAt: o.sentAt ? new Date(o.sentAt).toISOString() : null,
-      customerId: o.customerId ?? null,
+      customerId: (o as any).customerId ?? null,
       customerName: o.clientSnapshot?.client ?? null,
     }));
     const allInvoices = [...invoices, ...customers.flatMap(c => c.invoices ?? [])];

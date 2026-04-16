@@ -798,10 +798,10 @@ function CustomerInvoiceViewModal({
           {customer && (
             <div className="bg-muted/30 rounded-lg p-3">
               <div className="text-xs font-semibold text-muted-foreground uppercase mb-1">Bill To</div>
-              <div className="font-medium text-sm">{customer.name}</div>
-              {customer.address && <div className="text-xs text-muted-foreground">{customer.address}</div>}
+              <div className="font-medium text-sm">{customer.displayName || `${customer.firstName} ${customer.lastName ?? ''}`.trim()}</div>
+              {customer.addresses?.[0]?.street && <div className="text-xs text-muted-foreground">{customer.addresses[0].street}{customer.addresses[0].city ? `, ${customer.addresses[0].city}` : ''}</div>}
               {customer.email && <div className="text-xs text-muted-foreground">{customer.email}</div>}
-              {customer.phone && <div className="text-xs text-muted-foreground">{customer.phone}</div>}
+              {customer.mobilePhone && <div className="text-xs text-muted-foreground">{customer.mobilePhone}</div>}
             </div>
           )}
 

@@ -936,7 +936,7 @@ export default function PresentSection() {
       {showSendDialog && (
         <SendEstimateDialog
           estimateNumber={seqLabel}
-          customerName={activeCustomer?.name || jobInfo.client || 'Customer'}
+          customerName={activeCustomer?.displayName || jobInfo.client || 'Customer'}
           jobTitle={jobInfo.scope || jobInfo.jobNumber || 'Project Estimate'}
           totalPrice={totals.totalPrice}
           depositLabel={depositLabel}

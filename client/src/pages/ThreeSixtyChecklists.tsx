@@ -79,16 +79,16 @@ export default function ThreeSixtyChecklists({ onBack }: Props) {
   const [edits, setEdits] = useState<Record<number, EditState>>({});
   const [saving, setSaving] = useState<Set<number>>(new Set());
 
-  const { data: items = [], isLoading } = trpc.threeSixty.checklists.getAll.useQuery({ region: 'PNW' });
+  const { data: items = [], isLoading } = trpc.threeSixty.checklist.getAll.useQuery({ region: 'PNW' });
 
-  const updateMutation = trpc.threeSixty.checklists.update.useMutation({
-    onSuccess: (_, vars) => {
+  const updateMutation = trpc.threeSixty.checklist.update.useMutation({
+    onSuccess: (_: unknown, vars: { id: number }) => {
       setSaving(prev => { const n = new Set(prev); n.delete(vars.id); return n; });
       setEdits(prev => { const n = { ...prev }; delete n[vars.id]; return n; });
-      utils.threeSixty.checklists.getAll.invalidate();
+      utils.threeSixty.checklist.getAll.invalidate();
       toast.success('Checklist item updated.');
     },
-    onError: (err, vars) => {
+    onError: (err: { message: string }, vars: { id: number }) => {
       setSaving(prev => { const n = new Set(prev); n.delete(vars.id); return n; });
       toast.error(err.message);
     },
@@ -277,7 +277,7 @@ export default function ThreeSixtyChecklists({ onBack }: Props) {
                                     <Input
                                       type="number"
                                       min={0}
-                                      value={getEdit(item.id, 'defaultCostLow', item.defaultCostLow ?? 0) as number}
+                                      value={Number(getEdit(item.id, 'defaultCostLow', Number(item.defaultCostLow ?? 0)))}
                                       onChange={e => setEdit(item.id, 'defaultCostLow', parseFloat(e.target.value) || 0)}
                                       className="h-7 text-xs pl-5 border-transparent hover:border-input focus:border-input bg-transparent"
                                     />
@@ -291,7 +291,7 @@ export default function ThreeSixtyChecklists({ onBack }: Props) {
                                     <Input
                                       type="number"
                                       min={0}
-                                      value={getEdit(item.id, 'defaultCostHigh', item.defaultCostHigh ?? 0) as number}
+                                      value={Number(getEdit(item.id, 'defaultCostHigh', Number(item.defaultCostHigh ?? 0)))}
                                       onChange={e => setEdit(item.id, 'defaultCostHigh', parseFloat(e.target.value) || 0)}
                                       className="h-7 text-xs pl-5 border-transparent hover:border-input focus:border-input bg-transparent"
                                     />

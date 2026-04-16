@@ -62,6 +62,7 @@ export async function create360MembershipFromWebhook(
   session: Stripe.Checkout.Session
 ): Promise<void> {
   const db = await getDb();
+  if (!db) throw new Error('Database unavailable');
   const meta = session.metadata ?? {};
 
   const tier = (meta.tier ?? "bronze") as MemberTier;
@@ -121,7 +122,7 @@ export async function create360MembershipFromWebhook(
   const initialBalance = deferCredit ? 0 : tierDef.laborBankCreditCents;
 
   const membershipResult = await db.insert(threeSixtyMemberships).values({
-    customerId: portalCustomerId ?? 0, // 0 = unlinked, staff will link manually
+    customerId: String(portalCustomerId ?? ''), // CRM customer ID (string nanoid) — linked later
     propertyAddressId: propertyAddressId ?? undefined,
     tier,
     status: "active",
@@ -141,7 +142,6 @@ export async function create360MembershipFromWebhook(
   if (tierDef.laborBankCreditCents > 0 && !deferCredit) {
     await db.insert(threeSixtyLaborBankTransactions).values({
       membershipId,
-      customerId: portalCustomerId ?? 0,
       type: "credit",
       amountCents: tierDef.laborBankCreditCents,
       description: `Initial ${tier.charAt(0).toUpperCase() + tier.slice(1)} tier enrollment credit`,
@@ -160,9 +160,10 @@ export async function create360MembershipFromWebhook(
   if (shouldSchedule) {
     await db.insert(threeSixtyVisits).values({
       membershipId,
-      customerId: portalCustomerId ?? 0,
+      customerId: String(portalCustomerId ?? ''),
       season: currentSeason,
       status: "scheduled",
+      visitYear: new Date().getFullYear(),
     });
   }
 
@@ -209,7 +210,7 @@ export async function create360MembershipFromWebhook(
   }
 
   // ── 6. Create/match CRM customer + open lead opportunity in pro app ────────
-  let crmCustomerId: number | null = null;
+  let crmCustomerId: string | null = null;
   try {
     if (customerEmail) {
       const existingCrm = await findCustomerByEmail(customerEmail);
@@ -332,6 +333,7 @@ export async function create360PortfolioMembershipsFromWebhook(
   session: Stripe.Checkout.Session
 ): Promise<void> {
   const db = await getDb();
+  if (!db) throw new Error('Database unavailable');
   const meta = session.metadata ?? {};
   const cadence = (meta.cadence ?? "annual") as BillingCadence;
   const customerEmail = meta.customerEmail || session.customer_email || "";
@@ -364,7 +366,7 @@ export async function create360PortfolioMembershipsFromWebhook(
 
   // Create portfolio membership record
   const membershipResult = await db.insert(threeSixtyMemberships).values({
-    customerId: portalCustomerId ?? 0,
+    customerId: String(portalCustomerId ?? ''),
     tier: "bronze",
     status: "active",
     startDate: now,
@@ -380,7 +382,7 @@ export async function create360PortfolioMembershipsFromWebhook(
   const membershipId = (membershipResult as any).insertId as number;
 
   // CRM customer
-  let crmCustomerId: number | null = null;
+  let crmCustomerId: string | null = null;
   try {
     if (customerEmail) {
       const existingCrm = await findCustomerByEmail(customerEmail);
@@ -464,6 +466,7 @@ export async function create360PortfolioMembershipsFromWebhook(
 
 export async function releaseDeferredLaborBankCredits(): Promise<number> {
   const db = await getDb();
+  if (!db) throw new Error('Database unavailable');
   const now = Date.now();
   const due = await db
     .select()
@@ -480,7 +483,6 @@ export async function releaseDeferredLaborBankCredits(): Promise<number> {
     try {
       await db.insert(threeSixtyLaborBankTransactions).values({
         membershipId: row.id,
-        customerId: row.customerId,
         type: "credit",
         amountCents: row.scheduledCreditCents!,
         description: `Deferred 90-day labor bank credit — ${row.tier} monthly plan`,

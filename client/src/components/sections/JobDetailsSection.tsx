@@ -917,6 +917,8 @@ export default function JobDetailsSection() {
     setLightboxIndex(index);
   };
   const closeLightbox = () => setLightboxImages([]);
+  // Single-image lightbox
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
 
   // Job complete modal
   const [showCompleteModal, setShowCompleteModal] = useState(false);
@@ -1438,7 +1440,7 @@ export default function JobDetailsSection() {
               {snap2.phases.filter(p => p.items.some(i => i.enabled && i.qty > 0)).map(phase => {
                 const phaseTotal = phase.items.reduce((sum, item) => {
                   if (!item.enabled || item.qty === 0) return sum;
-                  return sum + (item.totalPrice ?? 0);
+                  return sum + ((item as any).totalPrice ?? 0);
                 }, 0);
                 if (phaseTotal === 0) return null;
                 return (

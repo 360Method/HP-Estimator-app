@@ -343,7 +343,7 @@ export const financialsRouter = router({
           firstName: customers.firstName,
           lastName: customers.lastName,
           email: customers.email,
-          phone: customers.phone,
+          phone: customers.mobilePhone,
         })
         .from(customers)
         .where(eq(customers.id, inv.customerId))

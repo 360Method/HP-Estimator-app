@@ -300,15 +300,15 @@ export default function CustomersListPage() {
       const to = new Date(filterDateCreatedTo).getTime();
       list = list.filter(c => c.createdAt && new Date(c.createdAt).getTime() <= to);
     }
-    if (filterLifetimeMin) list = list.filter(c => parseFloat(c.lifetimeValue ?? '0') >= parseFloat(filterLifetimeMin));
-    if (filterLifetimeMax) list = list.filter(c => parseFloat(c.lifetimeValue ?? '0') <= parseFloat(filterLifetimeMax));
+    if (filterLifetimeMin) list = list.filter(c => (c.lifetimeValue ?? 0) >= parseFloat(filterLifetimeMin));
+    if (filterLifetimeMax) list = list.filter(c => (c.lifetimeValue ?? 0) <= parseFloat(filterLifetimeMax));
 
     list = [...list].sort((a, b) => {
       let av = '', bv = '';
       if (sortBy === 'displayName') { av = (a.displayName || `${a.firstName} ${a.lastName}`).toLowerCase(); bv = (b.displayName || `${b.firstName} ${b.lastName}`).toLowerCase(); }
       else if (sortBy === 'company') { av = (a.company ?? '').toLowerCase(); bv = (b.company ?? '').toLowerCase(); }
       else if (sortBy === 'city') { av = (a.city ?? '').toLowerCase(); bv = (b.city ?? '').toLowerCase(); }
-      else if (sortBy === 'lifetimeValue') { return sortDir === 'asc' ? parseFloat(a.lifetimeValue ?? '0') - parseFloat(b.lifetimeValue ?? '0') : parseFloat(b.lifetimeValue ?? '0') - parseFloat(a.lifetimeValue ?? '0'); }
+      else if (sortBy === 'lifetimeValue') { return sortDir === 'asc' ? ((a.lifetimeValue ?? 0) - (b.lifetimeValue ?? 0)) : ((b.lifetimeValue ?? 0) - (a.lifetimeValue ?? 0)); }
       else if (sortBy === 'createdAt') { return sortDir === 'asc' ? new Date(a.createdAt ?? 0).getTime() - new Date(b.createdAt ?? 0).getTime() : new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime(); }
       return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
     });
@@ -627,7 +627,7 @@ export default function CustomersListPage() {
                         <td className="py-2.5 pr-4 text-muted-foreground">{c.leadSource || '—'}</td>
                       )}
                       {visibleCols.has('notes') && (
-                        <td className="py-2.5 pr-4 text-muted-foreground max-w-[160px] truncate">{c.notes || '—'}</td>
+                        <td className="py-2.5 pr-4 text-muted-foreground max-w-[160px] truncate">{c.customerNotes || '—'}</td>
                       )}
                       {visibleCols.has('tags') && (
                         <td className="py-2.5">
@@ -640,7 +640,7 @@ export default function CustomersListPage() {
                         </td>
                       )}
                       {visibleCols.has('healthScore') && (() => {
-                        const hs = healthScores?.[c.id];
+                        const hs = healthScores?.[c.id as any];
                         if (!hs || hs.healthScore === null) return <td key="hs" className="py-2.5 pr-4 text-muted-foreground">—</td>;
                         const score = hs.healthScore ?? 0;
                         const bg = score >= 75 ? '#f0fdf4' : score >= 50 ? '#fffbeb' : '#fef2f2';

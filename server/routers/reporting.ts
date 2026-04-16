@@ -3,6 +3,7 @@
 // The snapshot tables are NOT the source of truth — they exist solely for reporting.
 
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { protectedProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
 import {
@@ -54,10 +55,13 @@ export const reportingRouter = router({
       })
     )
     .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
       // Upsert opportunities in batches
       if (input.opportunities.length > 0) {
         for (const opp of input.opportunities) {
-          await (await getDb())
+          await db
             .insert(snapshotOpportunities)
             .values({
               id: opp.id,
@@ -90,7 +94,7 @@ export const reportingRouter = router({
       // Upsert invoices in batches
       if (input.invoices.length > 0) {
         for (const inv of input.invoices) {
-          await (await getDb())
+          await db
             .insert(snapshotInvoices)
             .values({
               id: inv.id,
@@ -126,6 +130,9 @@ export const reportingRouter = router({
    * All monetary values are in cents.
    */
   getMetrics: protectedProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
     const now = new Date();
 
     // Monthly revenue — last 12 months
@@ -134,12 +141,12 @@ export const reportingRouter = router({
     twelveMonthsAgo.setDate(1);
     twelveMonthsAgo.setHours(0, 0, 0, 0);
 
-    const allInvoices = await (await getDb())
+    const allInvoices = await db
       .select()
       .from(snapshotInvoices)
       .where(gte(snapshotInvoices.createdAt, twelveMonthsAgo));
 
-    const allOpportunities = await (await getDb())
+    const allOpportunities = await db
       .select()
       .from(snapshotOpportunities);
 

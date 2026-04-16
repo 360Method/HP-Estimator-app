@@ -21,7 +21,7 @@ import { useEstimator } from '@/contexts/EstimatorContext';
 import {
   JOB_TYPES, LEAD_STAGES, ESTIMATE_STAGES, JOB_STAGES,
   PipelineArea, OpportunityStage, LeadStage, EstimateStage, JobStage,
-  CustomerProfileTab, LeadSource, LeadNote, JobAttachment,
+  CustomerProfileTab, LeadSource, LeadNote, JobAttachment, Opportunity,
 } from '@/lib/types';
 import {
   User, MapPin, Phone, Mail, Calendar, Briefcase, Hash, Building2,
@@ -232,13 +232,7 @@ function OpportunityCard({
   opp, stages, area, onUpdate, onRemove,
   onConvertToEstimate, onConvertToJob, onArchive, onOpen,
 }: {
-  opp: {
-    id: string; title: string; stage: OpportunityStage; value: number;
-    notes: string; createdAt: string; archived: boolean;
-    sourceLeadId?: string; sourceEstimateId?: string;
-    convertedToEstimateAt?: string; convertedToJobAt?: string;
-    clientSnapshot?: { name?: string; phone?: string; email?: string; address?: string; city?: string; state?: string; zip?: string; };
-  };
+  opp: Opportunity;
   stages: OpportunityStage[];
   area: PipelineArea;
   onUpdate: (id: string, payload: Partial<{ stage: OpportunityStage; title: string; value: number; notes: string }>) => void;
@@ -395,7 +389,7 @@ function OpportunityCard({
       )}
       {showConvertToJobModal && onConvertToJob && (
         <ConvertToJobModal
-          estimate={opp}
+          estimate={opp as any}
           onConfirm={(title, value) => {
             onConvertToJob(opp.id, title, value);
             setShowConvertToJobModal(false);
@@ -608,7 +602,7 @@ export default function CustomerSection() {
   // Multi-address state
   const [addingAddress, setAddingAddress] = useState(false);
   const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
-  const [addrForm, setAddrForm] = useState({ label: 'Home', street: '', unit: '', city: 'Vancouver', state: 'WA', zip: '', lat: undefined as number | undefined, lng: undefined as number | undefined });
+  const [addrForm, setAddrForm] = useState({ label: 'Home', street: '', unit: '', city: 'Vancouver', state: 'WA', zip: '', lat: undefined as number | undefined, lng: undefined as number | undefined, propertyNotes: '' });
   const [addrLatLng, setAddrLatLng] = useState<{ lat?: number; lng?: number }>({}); // for map preview in form
   // Merge dialog state
   const [showMergeDialog, setShowMergeDialog] = useState(false);
@@ -1721,9 +1715,9 @@ export default function CustomerSection() {
         {activeCustomerTab === 'communication' && (
           <CommunicationTab
             customerId={activeCustomerId ?? ''}
-            customerPhone={activeCustomer?.phone ?? jobInfo.phone}
+            customerPhone={activeCustomer?.mobilePhone ?? jobInfo.phone}
             customerEmail={activeCustomer?.email ?? jobInfo.email}
-            customerName={activeCustomer?.name ?? jobInfo.client}
+            customerName={activeCustomer?.displayName ?? jobInfo.client}
             onOpenInbox={() => { setInboxCustomer(activeCustomerId); setSection('inbox' as any); }}
             onOpenInboxWithConversation={(conversationId, channel) => {
               setInboxConversation(conversationId, channel);
@@ -1742,7 +1736,7 @@ export default function CustomerSection() {
         {activeCustomerTab === 'portal' && (
           <CustomerPortalTab customerId={activeCustomerId ?? ''} />
         )}
-        {activeCustomerTab === 'attachments_LEGACY_UNUSED' && (
+        {(activeCustomerTab as any) === 'attachments_LEGACY_UNUSED' && (
           <div className="space-y-4">
             {/* Signed Estimate Copies */}
             {(() => {

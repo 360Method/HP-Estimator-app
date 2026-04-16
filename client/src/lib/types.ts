@@ -525,6 +525,8 @@ export interface EstimatorState {
   userProfile: UserProfile;
   // Custom roles & permissions
   customRoles: CustomRole[];
+  // Internal ping counter for portal unread badge refresh (not persisted)
+  _portalUnreadPing?: number;
 }
 
 // ── Custom Roles & Permissions ─────────────────────────────

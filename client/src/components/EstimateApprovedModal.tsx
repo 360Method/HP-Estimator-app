@@ -167,6 +167,7 @@ export default function EstimateApprovedModal({
       estimatorNotes: state.estimatorNotes,
       clientNote: state.clientNote,
       estimateOverrides: state.estimateOverrides,
+      phaseOverrides: state.phaseOverrides,
       signature: state.signature,
       signedAt: state.signedAt,
       signedBy: state.signedBy,

@@ -92,9 +92,7 @@ function Step1Zip({
   const [checking, setChecking] = useState(false);
   const [denied, setDenied] = useState(false);
 
-  const checkZip = trpc.booking.checkZip.useMutation
-    ? null
-    : null; // checkZip is a query, not mutation — we'll call it imperatively
+  const checkZip = null; // trpc.booking.checkZip.useMutation
 
   const utils = trpc.useUtils();
 

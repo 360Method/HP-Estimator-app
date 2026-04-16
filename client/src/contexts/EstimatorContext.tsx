@@ -1587,7 +1587,7 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
         const dbCust = dbMap.get(c.id);
         if (!dbCust) return c;
         const dbOppMap = new Map((dbCust.opportunities ?? []).map((o: any) => [o.id, o]));
-        const mergedOpps = c.opportunities.map(o => {
+        const mergedOpps = (c.opportunities ?? []).map(o => {
           const dbOpp = dbOppMap.get(o.id);
           if (!dbOpp) return o;
           const dbUpdated = new Date(dbOpp.updatedAt ?? 0).getTime();
@@ -1637,7 +1637,7 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
 
     case 'PORTAL_UNREAD_PING':
       // No state change needed — this ping causes React Query to re-fetch unread count
-      return { ...state, _portalUnreadPing: (state as any)._portalUnreadPing + 1 || 1 };
+      return { ...state, _portalUnreadPing: ((state as any)._portalUnreadPing ?? 0) + 1 };
 
     case 'UPDATE_OPPORTUNITY_SCHEDULE': {
       const now = new Date().toISOString();

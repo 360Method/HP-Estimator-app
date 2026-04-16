@@ -76,20 +76,21 @@ export default function MembershipManagePanel({
   const canUpgrade = tierIdx < TIER_ORDER.length - 1;
   const canDowngrade = tierIdx > 0;
 
-  // Fetch visit history for this property
+  // Fetch visit history for this property via membership ID
+  const membershipId = membership?.id;
   const { data: visits = [], isLoading: visitsLoading } =
-    trpc.properties.listVisits.useQuery(
-      { propertyId: property.id },
-      { enabled: open && !!property.id }
+    trpc.threeSixty.visits.list.useQuery(
+      { membershipId: membershipId },
+      { enabled: open && !!membershipId }
     );
 
-  const changeTierMutation = trpc.properties.changeMembershipTier.useMutation({
+  const changeTierMutation = trpc.properties.changeTier.useMutation({
     onSuccess: () => {
       utils.properties.listByCustomer.invalidate({ customerId: property.customerId });
       toast.success("Membership updated");
       onChanged();
     },
-    onError: (e) =>
+    onError: (e: { message: string }) =>
       toast.error(e.message),
   });
 
@@ -101,7 +102,7 @@ export default function MembershipManagePanel({
       onChanged();
       onClose();
     },
-    onError: (e) =>
+    onError: (e: { message: string }) =>
       toast.error(e.message),
   });
 
@@ -144,11 +145,11 @@ export default function MembershipManagePanel({
                 {membership.billingCadence ?? "annual"}
               </span>
             </div>
-            {membership.nextRenewalAt && (
+            {membership.renewalDate && (
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Next renewal</span>
                 <span className="text-sm font-medium">
-                  {new Date(membership.nextRenewalAt).toLocaleDateString()}
+                  {new Date(membership.renewalDate).toLocaleDateString()}
                 </span>
               </div>
             )}

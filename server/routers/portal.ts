@@ -68,6 +68,7 @@ import {
   addPortalDocument,
   getPortalDocumentsByCustomer,
   markAllPortalMessagesRead,
+  createPortalEstimate,
 } from "../portalDb";
 import { sendEmail } from "../gmail";
 import { updateOpportunity } from "../db";
@@ -749,7 +750,7 @@ export const portalRouter = router({
         senderName: ctx.user.name ?? "Handy Pioneers",
         body: input.body,
       });
-      try { broadcastPortalMessage(customer.id); } catch {}
+      try { broadcastPortalMessage(customer.id, { type: 'new_message' }); } catch {}
       return { ok: true };
     }),
 
@@ -1505,6 +1506,7 @@ export const portalRouter = router({
     const { portalReports } = await import('../../drizzle/schema');
     const { eq, desc } = await import('drizzle-orm');
     const db = await getDb();
+    if (!db) return [];
     const reports = await db
       .select()
       .from(portalReports)
@@ -1524,6 +1526,7 @@ export const portalRouter = router({
       const { portalReports } = await import('../../drizzle/schema');
       const { and, eq } = await import('drizzle-orm');
       const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       const [report] = await db
         .select()
         .from(portalReports)

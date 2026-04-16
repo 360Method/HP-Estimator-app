@@ -99,7 +99,7 @@ export default function LeadNurturingPanel() {
   const [smsBody, setSmsBody] = useState('');
   const [smsSending, setSmsSending] = useState(false);
 
-  const onlineRequestId = activeOpp.onlineRequestId;
+  const onlineRequestId = activeOpp?.onlineRequestId;
   const { data: onlineRequest } = trpc.booking.getRequest.useQuery(
     { id: onlineRequestId! },
     { enabled: !!onlineRequestId },

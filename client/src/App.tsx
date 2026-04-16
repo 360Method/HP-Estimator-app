@@ -85,7 +85,7 @@ function Router() {
       <Route path="/portal/reports" component={PortalReports} />
 
       {/* Data migration onboarding wizard */}
-      <Route path="/onboarding" component={DataMigrationPage} />
+      <Route path="/onboarding" component={() => <DataMigrationPage />} />
 
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />

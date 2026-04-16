@@ -342,7 +342,7 @@ function EventFormModal({ initial, customers, onSave, onClose }: EventFormModalP
       notes: form.notes || '',
       color: form.color,
       completed: form.completed || false,
-      recurrence: recurrenceEnabled ? { frequency: recurrenceFreq, endDate: recurrenceEnd || undefined } : undefined,
+      recurrence: recurrenceEnabled ? { frequency: recurrenceFreq, interval: 1, endDate: recurrenceEnd || undefined } : undefined,
     });
   }
 
@@ -780,7 +780,7 @@ export default function SchedulePage() {
           assignedTo: Array.isArray(payload.assignedTo)
             ? JSON.stringify(payload.assignedTo)
             : (payload.assignedTo ?? '[]'),
-        },
+        } as any,
       });
     } else {
       // Pre-generate ID so we can write to both local state and DB with the same ID

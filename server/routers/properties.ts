@@ -49,6 +49,7 @@ async function computeHealthScore(
   membershipId: number | null
 ): Promise<HealthScore> {
   const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
   const reasons: string[] = [];
   let score = 100;
 
@@ -145,6 +146,7 @@ export const propertiesRouter = router({
     .input(z.object({ customerId: z.string() }))
     .query(async ({ input }) => {
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       const rows = await db
         .select()
         .from(properties)
@@ -198,6 +200,7 @@ export const propertiesRouter = router({
     .input(z.object({ id: z.string() }))
     .query(async ({ input }) => {
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       const [prop] = await db
         .select()
         .from(properties)
@@ -217,6 +220,7 @@ export const propertiesRouter = router({
     )
     .mutation(async ({ input }) => {
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       const id = nanoid();
 
       // If isPrimary, clear existing primary flags
@@ -258,6 +262,7 @@ export const propertiesRouter = router({
     .input(propertyInput.partial().extend({ id: z.string() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       const { id, ...data } = input;
 
       const [existing] = await db
@@ -293,6 +298,7 @@ export const propertiesRouter = router({
     .input(z.object({ id: z.string() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
 
       const [linkedOpp] = await db
         .select({ id: opportunities.id })
@@ -317,6 +323,7 @@ export const propertiesRouter = router({
     .input(z.object({ id: z.string(), customerId: z.string() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       await db
         .update(properties)
         .set({ isPrimary: false })
@@ -333,6 +340,7 @@ export const propertiesRouter = router({
     .input(z.object({ id: z.string() }))
     .query(async ({ input }) => {
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       const [prop] = await db
         .select()
         .from(properties)
@@ -361,6 +369,7 @@ export const propertiesRouter = router({
     )
     .mutation(async ({ input }) => {
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
 
       // Check if property already has an active membership
       const [prop] = await db
@@ -446,6 +455,7 @@ export const propertiesRouter = router({
     )
     .mutation(async ({ input }) => {
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       const [prop] = await db
         .select()
         .from(properties)
@@ -480,6 +490,7 @@ export const propertiesRouter = router({
     )
     .mutation(async ({ input }) => {
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       const [prop] = await db
         .select()
         .from(properties)
@@ -518,6 +529,7 @@ export const propertiesRouter = router({
     )
     .mutation(async ({ input }) => {
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
 
       // Check if primary property already exists
       const existing = await db

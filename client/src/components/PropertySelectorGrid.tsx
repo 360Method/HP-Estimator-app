@@ -58,7 +58,7 @@ export default function PropertySelectorGrid({
   const autoMigrate = trpc.properties.autoMigrateFromCustomer.useMutation({
     onSuccess: (prop) => {
       utils.properties.listByCustomer.invalidate({ customerId });
-      onAutoMigrated?.(prop as Property);
+      onAutoMigrated?.(prop as unknown as Property);
     },
   });
 
@@ -124,11 +124,11 @@ export default function PropertySelectorGrid({
           {properties.map((prop) => (
             <PropertyCard
               key={prop.id}
-              property={prop as Property}
+              property={prop as unknown as Property}
               isActive={prop.id === activePropertyId}
               onSelect={(id) => {
                 const p = properties.find((x) => x.id === id);
-                if (p) onSelectProperty(p as Property);
+                if (p) onSelectProperty(p as unknown as Property);
               }}
               onEdit={(id) => setEditPropertyId(id)}
               onDelete={(id) => {
@@ -169,7 +169,7 @@ export default function PropertySelectorGrid({
       {(showAddForm || editPropertyId) && (
         <PropertyFormDialog
           customerId={customerId}
-          property={editingProperty as Property | null}
+          property={editingProperty as unknown as Property | null}
           open={showAddForm || !!editPropertyId}
           onClose={() => {
             setShowAddForm(false);
@@ -186,7 +186,7 @@ export default function PropertySelectorGrid({
       {/* Enroll in 360° dialog */}
       {enrollProperty && (
         <MembershipEnrollDialog
-          property={enrollProperty as Property}
+          property={enrollProperty as unknown as Property}
           open={!!enrollPropertyId}
           onClose={() => setEnrollPropertyId(null)}
           onEnrolled={() => {
@@ -202,7 +202,7 @@ export default function PropertySelectorGrid({
         const manageProp = properties.find((p) => p.id === manageMembershipId);
         return manageProp ? (
           <MembershipManagePanel
-            property={manageProp as Property}
+            property={manageProp as unknown as Property}
             open={!!manageMembershipId}
             onClose={() => setManageMembershipId(null)}
             onChanged={() => {

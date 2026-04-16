@@ -393,15 +393,15 @@ export const customersRouter = router({
             zip: row.zip || '',
             customerType: (row.customerType as any) || 'homeowner',
             leadSource: (row.leadSource as any) || 'other',
-            notes: row.notes || '',
+            customerNotes: row.notes || '',
             tags,
-            lifetimeValue: '0',
-            outstandingBalance: '0',
+            lifetimeValue: 0,
+            outstandingBalance: 0,
           });
           created++;
         }
       }
-      return { created, updated, total: input.rows.length };
+      return { created, updated, skipped: 0, total: input.rows.length };
     }),
 
   // ── Real-time duplicate lookup (used during intake forms) ─────────────────

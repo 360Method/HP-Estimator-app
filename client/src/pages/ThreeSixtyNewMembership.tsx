@@ -57,12 +57,12 @@ export default function ThreeSixtyNewMembership({ onBack }: Props) {
   const [cadence, setCadence] = useState<BillingCadence>('monthly');
   const [customerId, setCustomerId] = useState<string>('');
 
-  const { data: customers } = trpc.customers.list.useQuery();
+  const { data: customers } = trpc.customers.list.useQuery({});
 
   const enroll = trpc.threeSixty.memberships.create.useMutation({
     onSuccess: () => {
       utils.threeSixty.memberships.list.invalidate();
-      toast('Membership created successfully');
+      toast.success('Membership created successfully');
       onBack();
     },
     onError: err => {
@@ -80,9 +80,9 @@ export default function ThreeSixtyNewMembership({ onBack }: Props) {
       return;
     }
     enroll.mutate({
-      customerId: parseInt(customerId),
+      customerId: customerId,
       tier: selectedTier,
-      billingCadence: cadence,
+      startDate: Date.now(),
     });
   };
 

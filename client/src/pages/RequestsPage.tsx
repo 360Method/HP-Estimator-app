@@ -116,7 +116,7 @@ interface RequestCardProps {
     state: string;
     serviceType: string;
     description?: string | null;
-    timeline: string;
+    timeline: string | null;
     photoUrls?: string | null;
     smsConsent: boolean;
     customerId?: string | null;
@@ -194,7 +194,7 @@ function RequestCard({ req }: RequestCardProps) {
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <span
-            className={`text-xs font-medium px-2 py-0.5 rounded-full border ${TIMELINE_COLORS[req.timeline] ?? "bg-gray-100 text-gray-600 border-gray-200"}`}
+            className={`text-xs font-medium px-2 py-0.5 rounded-full border ${TIMELINE_COLORS[req.timeline ?? ""] ?? "bg-gray-100 text-gray-600 border-gray-200"}`}
           >
             {req.timeline}
           </span>

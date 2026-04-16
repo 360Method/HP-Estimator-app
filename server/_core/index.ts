@@ -15,7 +15,7 @@ import { exchangeGmailCode, pollInboundEmails, sendOverdueReminderEmail } from "
 import { getFirstGmailToken, listOpportunities, updateOpportunity } from "../db";
 import { addSSEClient, broadcastNewMessage } from "../sse";
 import { getPortalInvoiceByStripePaymentIntentId, updatePortalInvoicePaid, getPortalInvoiceByCheckoutSessionId, findPortalCustomerById, getOverdueInvoicesForReminder, markPortalInvoiceReminderSent, getSignOffsEligibleForReviewRequest, getSignOffsEligibleForReviewReminder, markReviewRequestSent, markReviewReminderSent } from "../portalDb";
-import { create360MembershipFromWebhook, create360PortfolioMembershipsFromWebhook } from "../threeSixtyWebhook.ts";
+import { create360MembershipFromWebhook, create360PortfolioMembershipsFromWebhook, releaseDeferredLaborBankCredits } from "../threeSixtyWebhook.ts";
 import { sendEmail } from "../gmail";
 import { notifyOwner } from "../_core/notification";
 import { randomUUID } from "crypto";
@@ -349,8 +349,8 @@ async function startServer() {
       const portalCustomer = await findPortalCustomerById(session.customerId);
       if (!portalCustomer) { res.status(401).json({ error: "Customer not found" }); return; }
 
-      const est = await getPortalEstimateById(req.params.id);
-      if (!est || est.customerId !== portalCustomer.id) { res.status(404).json({ error: "Not found" }); return; }
+      const est = await getPortalEstimateById(Number(req.params.id));
+      if (!est || Number(est.customerId) !== portalCustomer.id) { res.status(404).json({ error: "Not found" }); return; }
 
       // Parse stored lineItemsJson
       let phases: any[] = [];
@@ -440,7 +440,7 @@ async function startServer() {
         <div class="gold-bar"></div>
         <div class="body">
           <table class="meta-table"><tr>
-            <td><span class="section-label">For</span><br/><strong>${est.customerName || portalCustomer.name}</strong></td>
+            <td><span class="section-label">For</span><br/><strong>${portalCustomer.name}</strong></td>
             <td class="right"><span class="label">Estimate Date:</span> <span class="value">${fmtDate(est.sentAt)}</span><br/><span class="label">Expires:</span> <span class="value">${fmtDate(est.expiresAt)}</span></td>
           </tr></table>
           ${lineItemsHtml}
@@ -682,6 +682,25 @@ async function startServer() {
   run360DripEmails().catch(console.error);
   setInterval(run360DripEmails, 60 * 60 * 1000);
   console.log("[360 Drip] Cart abandonment drip scheduler started (runs every hour)");
+
+  // ── 360° Deferred Labor Bank Credit Release (runs every 6 hours) ─────────────────
+  const runDeferredCreditRelease = async () => {
+    try {
+      const credited = await releaseDeferredLaborBankCredits();
+      if (credited > 0) {
+        console.log(`[360 Deferred Credit] Released deferred credits for ${credited} membership(s)`);
+        await notifyOwner({
+          title: `360° Deferred Credits Released`,
+          content: `${credited} membership(s) received their 90-day deferred labor bank credit.`,
+        }).catch(() => {});
+      }
+    } catch (err) {
+      console.error("[360 Deferred Credit] Job error:", err);
+    }
+  };
+  runDeferredCreditRelease().catch(console.error);
+  setInterval(runDeferredCreditRelease, 6 * 60 * 60 * 1000); // every 6 hours
+  console.log("[360 Deferred Credit] Deferred labor bank credit scheduler started (runs every 6 hours)");
 
   // tRPC API
   app.use(

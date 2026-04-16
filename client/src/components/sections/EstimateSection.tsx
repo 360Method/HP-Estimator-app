@@ -321,7 +321,7 @@ export default function EstimateSection() {
   const portalApprovalQuery = trpc.portal.getPortalApprovalStatus.useQuery(
     { hpOpportunityId: state.activeOpportunityId ?? '' },
     {
-      enabled: !!state.activeOpportunityId && !!state.jobInfo.sentAt,
+      enabled: !!state.activeOpportunityId && !!(state.jobInfo as any).sentAt,
       refetchInterval: 30_000,
       staleTime: 20_000,
     }
@@ -556,7 +556,7 @@ export default function EstimateSection() {
       {showSendDialog && (
         <SendEstimateDialog
           estimateNumber={estimateNumber}
-          customerName={activeCustomer?.name || state.jobInfo.client || 'Customer'}
+          customerName={activeCustomer?.displayName || (activeCustomer ? `${activeCustomer.firstName} ${activeCustomer.lastName ?? ''}`.trim() : '') || state.jobInfo.client || 'Customer'}
           jobTitle={state.jobInfo.scope || state.jobInfo.jobNumber || 'Project Estimate'}
           totalPrice={totals.totalPrice}
           depositLabel={depositLabel}

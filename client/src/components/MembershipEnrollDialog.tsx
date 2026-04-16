@@ -72,13 +72,10 @@ export default function MembershipEnrollDialog({
 
   const enrollMutation = trpc.properties.enrollMembership.useMutation({
     onSuccess: () => {
-      toast({
-        title: "Enrolled in 360°",
-        description: `${property.label} is now on the ${tier} plan.`,
-      });
+      toast.success(`${property.label} enrolled in 360° ${tier} plan.`);
       onEnrolled();
     },
-    onError: (e) =>
+    onError: (e: { message: string }) =>
       toast.error(e.message),
   });
 
@@ -178,7 +175,7 @@ export default function MembershipEnrollDialog({
                 propertyId: property.id,
                 customerId: property.customerId,
                 tier,
-                billingCadence: cadence,
+                cadence: cadence,
               })
             }
             disabled={enrollMutation.isPending}

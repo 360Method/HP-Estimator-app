@@ -35,6 +35,7 @@ import { findCustomerByEmail, createCustomer, createOpportunity } from "../db";
 const membershipRouter = router({
   list: protectedProcedure.query(async () => {
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       return await db
         .select()
         .from(threeSixtyMemberships)
@@ -45,6 +46,7 @@ const membershipRouter = router({
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       const [membership] = await db
         .select()
         .from(threeSixtyMemberships)
@@ -57,6 +59,7 @@ const membershipRouter = router({
     .input(z.object({ customerId: z.string() }))
     .query(async ({ input }) => {
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       return await db
         .select()
         .from(threeSixtyMemberships)
@@ -79,6 +82,7 @@ const membershipRouter = router({
       const renewalDate = input.startDate + 365 * 24 * 60 * 60 * 1000;
 
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       const [result] = await db
         .insert(threeSixtyMemberships)
         .values({
@@ -122,6 +126,7 @@ const membershipRouter = router({
     .mutation(async ({ input }) => {
       const { id, ...updates } = input;
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       await db
         .update(threeSixtyMemberships)
         .set(updates)
@@ -158,6 +163,7 @@ const visitsRouter = router({
     )
     .query(async ({ input }) => {
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       const conditions = [];
       if (input.membershipId !== undefined)
         conditions.push(eq(threeSixtyVisits.membershipId, input.membershipId));
@@ -179,6 +185,7 @@ const visitsRouter = router({
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       const [visit] = await db
         .select()
         .from(threeSixtyVisits)
@@ -199,6 +206,7 @@ const visitsRouter = router({
     )
     .mutation(async ({ input }) => {
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       const [result] = await db.insert(threeSixtyVisits).values({
         membershipId: input.membershipId,
         customerId: input.customerId,
@@ -237,6 +245,7 @@ const visitsRouter = router({
     )
     .mutation(async ({ input }) => {
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       const { id, laborBankUsed, inspectionItems, ...updates } = input;
 
       // Enrich inspection items with cascade risk scores
@@ -370,6 +379,7 @@ const visitsRouter = router({
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       await db
         .update(threeSixtyVisits)
         .set({ status: "skipped" })
@@ -381,6 +391,7 @@ const visitsRouter = router({
     .input(z.object({ visitId: z.number(), opportunityId: z.string() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       await db
         .update(threeSixtyVisits)
         .set({ linkedOpportunityId: input.opportunityId })
@@ -401,6 +412,7 @@ const checklistRouter = router({
     )
     .query(async ({ input }) => {
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       return await db
         .select()
         .from(threeSixtyChecklist)
@@ -421,6 +433,7 @@ const checklistRouter = router({
     .input(z.object({ region: z.string().default("PNW") }))
     .query(async ({ input }) => {
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       return await db
         .select()
         .from(threeSixtyChecklist)
@@ -447,6 +460,7 @@ const checklistRouter = router({
     .mutation(async ({ input }) => {
       const { id, ...updates } = input;
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       await db
         .update(threeSixtyChecklist)
         .set(updates)
@@ -462,6 +476,7 @@ const laborBankRouter = router({
     .input(z.object({ membershipId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       return await db
         .select()
         .from(threeSixtyLaborBankTransactions)
@@ -482,6 +497,7 @@ const laborBankRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       const { membershipId, type, amountCents, description } = input;
 
       await db.insert(threeSixtyLaborBankTransactions).values({
@@ -590,6 +606,7 @@ const scansRouter = router({
     .input(z.object({ membershipId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       return await db
         .select()
         .from(threeSixtyScans)
@@ -601,6 +618,7 @@ const scansRouter = router({
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       const [scan] = await db
         .select()
         .from(threeSixtyScans)
@@ -613,6 +631,7 @@ const scansRouter = router({
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       const [scan] = await db
         .select()
         .from(threeSixtyScans)
@@ -642,6 +661,7 @@ const scansRouter = router({
     )
     .mutation(async ({ input }) => {
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       const [result] = await db.insert(threeSixtyScans).values({
         ...input,
         status: "draft",
@@ -663,6 +683,7 @@ const scansRouter = router({
     .mutation(async ({ input }) => {
       const { id, ...updates } = input;
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       if (updates.status === "completed" || updates.status === "delivered") {
         const [scan] = await db
           .select()
@@ -686,6 +707,7 @@ const scansRouter = router({
     .input(z.object({ id: z.number(), summary: z.string() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       await db
         .update(threeSixtyScans)
         .set({ summary: input.summary })
@@ -697,6 +719,7 @@ const scansRouter = router({
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       const [scan] = await db
         .select()
         .from(threeSixtyScans)
@@ -782,6 +805,7 @@ const scansRouter = router({
     .input(z.object({ scanId: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       const [scan] = await db
         .select()
         .from(threeSixtyScans)
@@ -813,7 +837,7 @@ const scansRouter = router({
         portalCustomerId: portalCustomer.id,
         scanId: scan.id,
         membershipId: scan.membershipId,
-        hpCustomerId: scan.customerId,
+        hpCustomerId: parseInt(scan.customerId as string) || 0,
         healthScore: scan.healthScore,
         reportJson,
         pdfUrl: scan.pdfUrl ?? undefined,
@@ -835,6 +859,7 @@ const propertySystemsRouter = router({
     .input(z.object({ membershipId: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       return await db
         .select()
         .from(threeSixtyPropertySystems)
@@ -871,6 +896,7 @@ const propertySystemsRouter = router({
     )
     .mutation(async ({ input }) => {
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       const { id, photoUrls, ...values } = input;
       const payload = {
         ...values,
@@ -879,11 +905,11 @@ const propertySystemsRouter = router({
       if (id) {
         await db
           .update(threeSixtyPropertySystems)
-          .set(payload)
+          .set(payload as any)
           .where(eq(threeSixtyPropertySystems.id, id));
         return { id };
       } else {
-        const [result] = await db.insert(threeSixtyPropertySystems).values(payload);
+        const [result] = await db.insert(threeSixtyPropertySystems).values(payload as any);
         return { id: (result as any).insertId as number };
       }
     }),
@@ -892,6 +918,7 @@ const propertySystemsRouter = router({
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       await db
         .delete(threeSixtyPropertySystems)
         .where(eq(threeSixtyPropertySystems.id, input.id));
@@ -923,6 +950,7 @@ const scansLatestRouter = router({
     .input(z.object({ customerId: z.string() }))
     .query(async ({ input }) => {
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       const [scan] = await db
         .select()
         .from(threeSixtyScans)
@@ -945,6 +973,7 @@ const scansLatestRouter = router({
     .query(async ({ input }) => {
       if (!input.customerIds.length) return {};
       const db = await getDb();
+  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
       const allScans = await db
         .select({
           customerId: threeSixtyScans.customerId,
@@ -955,7 +984,7 @@ const scansLatestRouter = router({
         .where(inArray(threeSixtyScans.customerId, input.customerIds))
         .orderBy(desc(threeSixtyScans.scanDate));
       // Reduce to latest per customer
-      const result: Record<number, { healthScore: number | null; scanDate: number | null }> = {};
+      const result: Record<string, { healthScore: number | null; scanDate: number | null }> = {};
       for (const s of allScans) {
         if (s.customerId !== null && !(s.customerId in result)) {
           result[s.customerId] = { healthScore: s.healthScore, scanDate: s.scanDate };
@@ -1179,7 +1208,7 @@ const portfolioCheckoutRouter = router({
         apiVersion: "2025-03-31.basil",
       });
       const { cadence, properties, origin } = input;
-      const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = properties.map((prop) => ({
+      const lineItems: any[] = properties.map((prop) => ({
         price: PORTFOLIO_PRICE_IDS[prop.tier][cadence],
         quantity: 1,
       }));

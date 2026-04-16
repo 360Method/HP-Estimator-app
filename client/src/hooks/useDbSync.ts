@@ -151,7 +151,7 @@ function dbInvoiceToLocal(dbInv: any): Invoice {
     stripePaymentIntentId: dbInv.stripePaymentIntentId ?? undefined,
     stripeClientSecret: dbInv.stripeClientSecret ?? undefined,
     paypalOrderId: dbInv.paypalOrderId ?? undefined,
-    completionSignatureUrl: dbInv.completionSignatureUrl ?? undefined,
+    completionSignature: dbInv.completionSignature ?? undefined,
     completionSignedBy: dbInv.completionSignedBy ?? undefined,
     completionSignedAt: dbInv.completionSignedAt ?? undefined,
   };

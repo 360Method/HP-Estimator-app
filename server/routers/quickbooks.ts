@@ -350,7 +350,7 @@ export const quickbooksRouter = router({
         FamilyName: cust.lastName ?? undefined,
         CompanyName: cust.company ?? undefined,
         PrimaryEmailAddr: cust.email ? { Address: cust.email } : undefined,
-        PrimaryPhone: cust.phone ? { FreeFormNumber: cust.phone } : undefined,
+        PrimaryPhone: cust.mobilePhone ? { FreeFormNumber: cust.mobilePhone } : undefined,
       };
 
       const result = await qbApiCall(ctx.user.id, "POST", "/customer", qbPayload);
