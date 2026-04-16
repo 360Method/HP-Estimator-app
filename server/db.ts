@@ -989,8 +989,6 @@ export async function listExpenses(opts: {
   opportunityId?: string;
   customerId?: string;
   category?: string;
-  /** 'job' | 'business' — omit to return all */
-  scope?: string;
   dateFrom?: string;
   dateTo?: string;
   limit?: number;
@@ -1003,7 +1001,6 @@ export async function listExpenses(opts: {
   if (opts.opportunityId) conditions.push(eq(expenses.opportunityId, opts.opportunityId));
   if (opts.customerId) conditions.push(eq(expenses.customerId, opts.customerId));
   if (opts.category) conditions.push(eq(expenses.category, opts.category));
-  if (opts.scope) conditions.push(eq(expenses.scope, opts.scope));
   if (opts.dateFrom) conditions.push(gte(expenses.date, opts.dateFrom));
   if (opts.dateTo) conditions.push(lte(expenses.date, opts.dateTo));
   return db
@@ -1045,7 +1042,6 @@ export async function sumExpenses(opts: {
   userId?: number;
   opportunityId?: string;
   customerId?: string;
-  scope?: string;
   dateFrom?: string;
   dateTo?: string;
 }): Promise<number> {
@@ -1055,7 +1051,6 @@ export async function sumExpenses(opts: {
   if (opts.userId !== undefined) conditions.push(eq(expenses.userId, opts.userId));
   if (opts.opportunityId) conditions.push(eq(expenses.opportunityId, opts.opportunityId));
   if (opts.customerId) conditions.push(eq(expenses.customerId, opts.customerId));
-  if (opts.scope) conditions.push(eq(expenses.scope, opts.scope));
   if (opts.dateFrom) conditions.push(gte(expenses.date, opts.dateFrom));
   if (opts.dateTo) conditions.push(lte(expenses.date, opts.dateTo));
   const rows = await db

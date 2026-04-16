@@ -31,12 +31,6 @@ const expenseInput = z.object({
   /** Amount in cents */
   amount: z.number().int().min(0),
   category: z.enum(EXPENSE_CATEGORIES).default("other"),
-  /**
-   * 'job' = linked to a specific job/opportunity
-   * 'business' = general overhead, not tied to any job
-   * Auto-inferred: if opportunityId is set → 'job', else 'business'
-   */
-  scope: z.enum(["job", "business"]).optional(),
   description: z.string().optional(),
   receiptUrl: z.string().url().optional(),
   /** ISO date YYYY-MM-DD */
@@ -50,7 +44,6 @@ export const expensesRouter = router({
         opportunityId: z.string().optional(),
         customerId: z.string().optional(),
         category: z.string().optional(),
-        scope: z.enum(["job", "business"]).optional(),
         dateFrom: z.string().optional(),
         dateTo: z.string().optional(),
         limit: z.number().int().min(1).max(500).default(200),
@@ -59,21 +52,6 @@ export const expensesRouter = router({
     )
     .query(async ({ ctx, input }) => {
       return listExpenses({ userId: ctx.user.id, ...input });
-    }),
-
-  /** List only business-level expenses (no job link) */
-  listBusiness: protectedProcedure
-    .input(
-      z.object({
-        category: z.string().optional(),
-        dateFrom: z.string().optional(),
-        dateTo: z.string().optional(),
-        limit: z.number().int().min(1).max(500).default(200),
-        offset: z.number().int().min(0).default(0),
-      })
-    )
-    .query(async ({ ctx, input }) => {
-      return listExpenses({ userId: ctx.user.id, scope: "business", ...input });
     }),
 
   summary: protectedProcedure
@@ -105,8 +83,6 @@ export const expensesRouter = router({
     .input(expenseInput)
     .mutation(async ({ ctx, input }) => {
       const id = nanoid();
-      // Auto-infer scope: if linked to a job/opportunity it's 'job', otherwise 'business'
-      const scope = input.scope ?? (input.opportunityId ? "job" : "business");
       return createExpense({
         id,
         userId: ctx.user.id,
@@ -115,7 +91,6 @@ export const expensesRouter = router({
         vendor: input.vendor ?? null,
         amount: input.amount,
         category: input.category,
-        scope,
         description: input.description ?? null,
         receiptUrl: input.receiptUrl ?? null,
         date: input.date,

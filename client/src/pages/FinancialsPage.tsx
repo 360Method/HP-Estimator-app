@@ -11,9 +11,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   DollarSign, TrendingUp, AlertCircle, CheckCircle2,
   Clock, Users, CreditCard, BarChart3, TrendingDown,
-  Download, Mail, MessageSquare, ChevronDown, Receipt, Building2, Briefcase,
+  Download, Mail, MessageSquare, ChevronDown, Receipt,
 } from "lucide-react";
-import BusinessExpensesPanel from "@/components/BusinessExpensesPanel";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, LineChart, Line,
@@ -493,10 +492,10 @@ export default function FinancialsPage() {
           )}
         </div>
 
-        {/* ── P&L KPI CARDS ───────────────────────────────────── */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+        {/* ── P&L KPI CARDS ─────────────────────────────────────── */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           {pnlLoading ? (
-            Array.from({ length: 5 }).map((_, i) => (
+            Array.from({ length: 4 }).map((_, i) => (
               <Card key={i}><CardContent className="pt-5 pb-4"><Skeleton className="h-16 w-full" /></CardContent></Card>
             ))
           ) : (
@@ -509,17 +508,10 @@ export default function FinancialsPage() {
                 color="bg-emerald-600"
               />
               <KpiCard
-                label="Job Expenses"
-                value={fmtShort(expenseSummary?.byScope?.job ?? 0)}
-                sub="Linked to jobs"
-                icon={Briefcase}
-                color="bg-amber-500"
-              />
-              <KpiCard
-                label="Business Overhead"
-                value={fmtShort(expenseSummary?.byScope?.business ?? 0)}
-                sub="General operating costs"
-                icon={Building2}
+                label="Total Expenses"
+                value={fmtShort(totalExpenses)}
+                sub={`${Object.keys(expenseSummary?.byCategory ?? {}).length} categories`}
+                icon={Receipt}
                 color="bg-orange-500"
               />
               <KpiCard
@@ -631,11 +623,9 @@ export default function FinancialsPage() {
             <CardHeader className="pb-2">
               <CardTitle className="text-base flex items-center gap-1.5">
                 <Receipt className="w-4 h-4 text-orange-600" />
-                Expense Breakdown by Category
+                Expense Breakdown
               </CardTitle>
-              <CardDescription>
-                All expenses (job + business) · Job: {fmtShort(expenseSummary.byScope?.job ?? 0)} · Business overhead: {fmtShort(expenseSummary.byScope?.business ?? 0)}
-              </CardDescription>
+              <CardDescription>All-time expenses by category</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
@@ -668,26 +658,6 @@ export default function FinancialsPage() {
             </CardContent>
           </Card>
         )}
-
-        {/* ── FULL EXPENSE LEDGER ───────────────────────────────── */}
-        <Card className="mb-6">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="text-base flex items-center gap-1.5">
-                  <Receipt className="w-4 h-4 text-orange-600" />
-                  Expense Ledger
-                </CardTitle>
-                <CardDescription>
-                  All job and business expenses — add overhead costs directly here
-                </CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <BusinessExpensesPanel />
-          </CardContent>
-        </Card>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
 

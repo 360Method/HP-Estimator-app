@@ -1057,11 +1057,6 @@ export const expenses = mysqlTable("expenses", {
   receiptUrl: text("receiptUrl"),
   /** ISO date string YYYY-MM-DD */
   date: varchar("date", { length: 16 }).notNull(),
-  /**
-   * 'job' = linked to a specific opportunity/customer
-   * 'business' = general overhead not tied to any job
-   */
-  scope: varchar("scope", { length: 16 }).notNull().default("job"),
   // QuickBooks sync
   qbEntityId: varchar("qbEntityId", { length: 64 }),
   qbSyncedAt: varchar("qbSyncedAt", { length: 32 }),
