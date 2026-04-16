@@ -95,6 +95,49 @@ export const workOrdersRouter = router({
         assignedTo: input.assignedTo ? JSON.stringify(input.assignedTo) : wo.assignedTo,
       });
 
+      // Auto-create a linked CRM job so it appears in the customer Jobs tab and Calendar
+      // Only create if one doesn't already exist for this work order
+      if (!wo.hpOpportunityId) {
+        try {
+          const db = await getDb();
+          if (db) {
+            const [membership] = await db
+              .select()
+              .from(threeSixtyMemberships)
+              .where(eq(threeSixtyMemberships.id, wo.membershipId))
+              .limit(1);
+            if (membership?.hpCustomerId) {
+              const WO_TYPE_LABELS: Record<string, string> = {
+                baseline_scan: 'Baseline Scan',
+                spring: 'Spring Visit',
+                summer: 'Summer Visit',
+                fall: 'Fall Visit',
+                winter: 'Winter Visit',
+              };
+              const visitLabel = WO_TYPE_LABELS[wo.type] ?? wo.type;
+              const jobId = nanoid();
+              const scheduledDateStr = new Date(input.scheduledDate).toISOString();
+              await createOpportunity({
+                id: jobId,
+                customerId: membership.hpCustomerId,
+                area: 'job',
+                stage: 'Scheduled',
+                title: `360° ${visitLabel} — ${wo.visitYear}`,
+                value: 0,
+                scheduledDate: scheduledDateStr,
+                assignedTo: input.assignedTo ? JSON.stringify(input.assignedTo) : null,
+                membershipId: wo.membershipId,
+                propertyId: membership.propertyAddressId ? String(membership.propertyAddressId) : null,
+                notes: `Auto-created from 360° Work Order #${wo.id}`,
+              });
+              await updateWorkOrder(input.id, { hpOpportunityId: jobId });
+            }
+          }
+        } catch (err) {
+          console.error('[WorkOrders] Failed to auto-create linked job on schedule:', err);
+        }
+      }
+
       // Send customer scheduling confirmation email
       try {
         const db = await getDb();

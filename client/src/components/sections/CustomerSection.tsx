@@ -1652,6 +1652,7 @@ export default function CustomerSection() {
               return (
                 <button
                   key={tab.key}
+                  data-tab={tab.key}
                   onClick={() => handleTabClick(tab.key)}
                   className={`shrink-0 flex items-center gap-1 px-3 sm:px-4 py-3 text-xs font-semibold whitespace-nowrap border-b-2 transition-colors ${
                     activeCustomerTab === tab.key

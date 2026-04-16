@@ -265,7 +265,20 @@ export default function ThreeSixtyPage() {
             const isOverdue = diffDays < 0;
             const isRenewingSoon = diffDays >= 0 && diffDays <= 30;
             return (
-              <Card key={m.id} className="border shadow-sm hover:shadow-md transition-shadow">
+              <Card
+                key={m.id}
+                className="border shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                onClick={() => {
+                  if ((m as any).hpCustomerId) {
+                    setActiveCustomer((m as any).hpCustomerId, 'direct');
+                    setSection('customer');
+                    setTimeout(() => {
+                      const el = document.querySelector('[data-tab="membership360"]') as HTMLElement | null;
+                      el?.click();
+                    }, 150);
+                  }
+                }}
+              >
                 <CardContent className="py-3 px-4 flex items-center gap-3">
                   <TierIcon className={`w-4 h-4 shrink-0 ${
                     m.tier === 'gold' ? 'text-yellow-500' :

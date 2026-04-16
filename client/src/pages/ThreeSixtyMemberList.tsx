@@ -68,6 +68,25 @@ export default function ThreeSixtyMemberList({ onBack }: Props) {
     if (m.hpCustomerId) {
       setActiveCustomer(m.hpCustomerId, 'direct');
       setSection('customer');
+      // Deep-link to the 360° tab inside the customer profile
+      setTimeout(() => {
+        const el = document.querySelector('[data-tab="membership360"]') as HTMLElement | null;
+        el?.click();
+      }, 150);
+    }
+  };
+
+  // Primary card click → go directly to customer profile 360° tab
+  const handleCardClick = (m: any) => {
+    if (m.hpCustomerId) {
+      setActiveCustomer(m.hpCustomerId, 'direct');
+      setSection('customer');
+      setTimeout(() => {
+        const el = document.querySelector('[data-tab="membership360"]') as HTMLElement | null;
+        el?.click();
+      }, 150);
+    } else {
+      setSelectedId(m.id);
     }
   };
 
@@ -110,7 +129,7 @@ export default function ThreeSixtyMemberList({ onBack }: Props) {
               <Card
                 key={m.id}
                 className="border shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-                onClick={() => setSelectedId(m.id)}
+                onClick={() => handleCardClick(m)}
               >
                 <CardContent className="py-3 px-4">
                   <div className="flex items-start gap-3">
