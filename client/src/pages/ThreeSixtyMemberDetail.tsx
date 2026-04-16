@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
-import { ArrowLeft, CalendarCheck, Wallet, ClipboardList, Plus, CheckCircle2, Clock, SkipForward, Wrench, CalendarClock, AlertTriangle, User, ExternalLink } from 'lucide-react';
+import { ArrowLeft, CalendarCheck, Wallet, ClipboardList, Plus, CheckCircle2, Clock, SkipForward, Wrench, CalendarClock, AlertTriangle, User, ExternalLink, Briefcase } from 'lucide-react';
 import { formatDollars, TIER_DEFINITIONS, type MemberTier } from '../../../shared/threeSixtyTiers';
 import { toast } from 'sonner';
 import ThreeSixtyVisitDetail from './ThreeSixtyVisitDetail';
@@ -39,7 +39,7 @@ interface Props {
 }
 
 export default function ThreeSixtyMemberDetail({ membershipId, onBack }: Props) {
-  const { setActiveCustomer, setSection } = useEstimator();
+  const { setActiveCustomer, setSection, setActiveOpportunity } = useEstimator();
   const [selectedVisitId, setSelectedVisitId] = useState<number | null>(null);
   const [showBaselineWizard, setShowBaselineWizard] = useState(false);
   const [selectedScanId, setSelectedScanId] = useState<number | null>(null);
@@ -52,6 +52,7 @@ export default function ThreeSixtyMemberDetail({ membershipId, onBack }: Props) 
   const { data: scans } = trpc.threeSixty.scans.list.useQuery({ membershipId });
   const { data: propertySystems } = trpc.threeSixty.propertySystems.list.useQuery({ membershipId });
   const { data: workOrders } = trpc.workOrders.list.useQuery({ membershipId });
+  const { data: linkedJobs } = trpc.threeSixty.memberships.listJobsByMembership.useQuery({ membershipId });
 
   const createScan = trpc.threeSixty.scans.create.useMutation({
     onSuccess: (data) => {
@@ -295,6 +296,50 @@ export default function ThreeSixtyMemberDetail({ membershipId, onBack }: Props) 
                   </Card>
                 );
               })}
+            </div>
+          )}
+          {/* Linked Jobs section */}
+          {linkedJobs && linkedJobs.length > 0 && (
+            <div className="mt-6">
+              <div className="flex items-center gap-2 mb-3">
+                <Briefcase className="w-4 h-4 text-muted-foreground" />
+                <h3 className="text-sm font-semibold">Linked Jobs & Estimates</h3>
+                <span className="text-xs text-muted-foreground">({linkedJobs.length})</span>
+              </div>
+              <div className="space-y-2">
+                {linkedJobs.map(job => (
+                  <Card
+                    key={job.id}
+                    className="border shadow-sm cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => {
+                      setActiveOpportunity(job.id);
+                      setSection('opp-details');
+                    }}
+                  >
+                    <CardContent className="py-3 px-4 flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-emerald-100">
+                        <Briefcase className="w-4 h-4 text-emerald-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">{job.title || `Job #${job.id}`}</div>
+                        {job.scheduledDate && (
+                          <div className="text-xs text-muted-foreground mt-0.5">
+                            Scheduled {new Date(job.scheduledDate).toLocaleDateString()}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-col items-end gap-1">
+                        <Badge variant="outline" className="text-[10px]">{job.stage}</Badge>
+                        {job.value > 0 && (
+                          <span className="text-xs font-semibold text-muted-foreground">
+                            ${(job.value / 100).toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
             </div>
           )}
         </TabsContent>

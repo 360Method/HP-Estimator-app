@@ -212,6 +212,12 @@ function KanbanCard({
               CO Pending
             </div>
           )}
+          {opp.membershipId && (
+            <div className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-full text-[9px] font-semibold">
+              <span className="text-[8px]">360°</span>
+              Member
+            </div>
+          )}
         </div>
 
         <button

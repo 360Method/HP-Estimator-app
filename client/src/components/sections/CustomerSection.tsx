@@ -44,6 +44,7 @@ import ManualMergeFlow from '@/components/ManualMergeFlow';
 import DuplicateSuggestionBanner from '@/components/DuplicateSuggestionBanner';
 import { toast } from 'sonner';
 import { nanoid } from 'nanoid';
+import CustomerMembershipPanel from '@/components/CustomerMembershipPanel';
 
 // ─── Constants ────────────────────────────────────────────────
 const LEAD_SOURCES: LeadSource[] = [
@@ -53,6 +54,7 @@ const LEAD_SOURCES: LeadSource[] = [
 
 const CUSTOMER_TABS: { key: CustomerProfileTab; label: string; icon: React.ReactNode }[] = [
   { key: 'profile', label: 'Profile', icon: <User size={13} /> },
+  { key: 'membership360', label: '360°', icon: <RefreshCw size={13} /> },
   { key: 'properties', label: 'Properties', icon: <Building2 size={13} /> },
   { key: 'leads', label: 'Leads', icon: <Star size={13} /> },
   { key: 'estimates', label: 'Estimates', icon: <FileText size={13} /> },
@@ -620,6 +622,7 @@ export default function CustomerSection() {
   const areaMap: Record<CustomerProfileTab, PipelineArea | null> = {
     profile: null, properties: null, leads: 'lead', estimates: 'estimate', jobs: 'job',
     invoices: null, expenses: null, communication: null, attachments: null, notes: null, portal: null,
+    membership360: null,
   };
 
   const handleTabClick = (tab: CustomerProfileTab) => {
@@ -1735,6 +1738,9 @@ export default function CustomerSection() {
         )}
         {activeCustomerTab === 'portal' && (
           <CustomerPortalTab customerId={activeCustomerId ?? ''} />
+        )}
+        {activeCustomerTab === 'membership360' && (
+          <CustomerMembershipPanel customerId={activeCustomerId ?? ''} />
         )}
         {(activeCustomerTab as any) === 'attachments_LEGACY_UNUSED' && (
           <div className="space-y-4">

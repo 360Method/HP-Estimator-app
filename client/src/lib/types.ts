@@ -226,7 +226,7 @@ export interface ChangeOrder {
   rejectedReason?: string;
 }
 
-export type CustomerProfileTab = 'profile' | 'properties' | 'leads' | 'estimates' | 'jobs' | 'invoices' | 'expenses' | 'communication' | 'attachments' | 'notes' | 'portal';
+export type CustomerProfileTab = 'profile' | 'properties' | 'leads' | 'estimates' | 'jobs' | 'invoices' | 'expenses' | 'communication' | 'attachments' | 'notes' | 'portal' | 'membership360';
 
 export interface JobInfo {
   client: string;
@@ -682,6 +682,8 @@ export interface Opportunity {
   // Property this opportunity is linked to
   propertyId?: string | null;
   propertyIdSource?: 'manual' | 'auto-migrated' | null;
+  // 360° Membership this job was created from
+  membershipId?: number | null;
   // Change orders (only on job opportunities)
   changeOrders?: ChangeOrder[];
   // If this estimate is a change order, link back to the parent job
