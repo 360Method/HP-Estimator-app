@@ -88,7 +88,7 @@ function Router() {
       <Route path="/portal/360-membership" component={Portal360Membership} />
 
       {/* Internal 360° work order completion wizard */}
-      <Route path="/360/work-orders/:id" component={WorkOrderDetail} />
+      <Route path="/360/work-orders/:id">{() => <WorkOrderDetail />}</Route>
 
       {/* Data migration onboarding wizard */}
       <Route path="/onboarding" component={() => <DataMigrationPage />} />

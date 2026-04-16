@@ -15,7 +15,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
   RefreshCw, Users, Wallet, Crown, Shield, Star,
   Search, CalendarClock, AlertCircle, CheckCircle2,
+  User, ExternalLink, MapPin,
 } from 'lucide-react';
+import { useEstimator } from '@/contexts/EstimatorContext';
 import {
   TIER_DEFINITIONS,
   ALL_TIERS,
@@ -42,6 +44,7 @@ type TierFilter = 'all' | MemberTier;
 type StatusFilter = 'all' | 'active' | 'paused' | 'cancelled';
 
 export default function ThreeSixtyPage() {
+  const { setActiveCustomer, setSection } = useEstimator();
   const [view, setView] = useState<'roster' | 'member-list' | 'checklists'>('roster');
   const [search, setSearch] = useState('');
   const [tierFilter, setTierFilter] = useState<TierFilter>('all');
@@ -275,11 +278,32 @@ export default function ThreeSixtyPage() {
                     <div className="text-sm font-medium truncate">
                       {(m as any).customerName ?? `Member #${m.id}`}
                     </div>
-                    <div className="text-xs text-muted-foreground truncate">
-                      {(m as any).propertyAddress ?? '—'} · Labor bank: {formatDollars(m.laborBankBalance ?? 0)}
+                    <div className="text-xs text-muted-foreground truncate flex items-center gap-1">
+                      {((m as any).propertyStreet || (m as any).propertyCity) && (
+                        <><MapPin className="w-3 h-3 shrink-0" />
+                        <span className="truncate">{[(m as any).propertyStreet, (m as any).propertyCity].filter(Boolean).join(', ')}</span>
+                        <span className="mx-1">·</span></>
+                      )}
+                      <span>Labor bank: {formatDollars(m.laborBankBalance ?? 0)}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
+                    {(m as any).hpCustomerId && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs gap-1 text-muted-foreground hover:text-foreground h-7 px-2"
+                        onClick={() => {
+                          setActiveCustomer((m as any).hpCustomerId, 'direct');
+                          setSection('customer');
+                        }}
+                        title="Open customer profile"
+                      >
+                        <User className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Profile</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </Button>
+                    )}
                     {isOverdue ? (
                       <Badge variant="destructive" className="text-[10px] px-1.5">Overdue</Badge>
                     ) : isRenewingSoon ? (

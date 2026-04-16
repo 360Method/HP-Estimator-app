@@ -16,6 +16,9 @@ import {
   threeSixtyPropertySystems,
   portalReports,
   portalCustomers,
+  customers,
+  properties,
+  opportunities,
 } from "../../drizzle/schema";
 import { storagePut } from "../storage";
 import { eq, and, desc, asc, inArray } from "drizzle-orm";
@@ -32,39 +35,97 @@ import { findCustomerByEmail, createCustomer, createOpportunity } from "../db";
 
 // ─── MEMBERSHIPS ─────────────────────────────────────────────────────────────
 
+// ─── HELPER: enrich a membership row with customer name + property ────────────
+async function enrichMembership(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, m: typeof threeSixtyMemberships.$inferSelect) {
+  // Customer name from CRM customers table (hpCustomerId is a varchar nanoid)
+  let customerName = '';
+  let customerPhone = '';
+  if (m.hpCustomerId) {
+    const [cust] = await db.select({ firstName: customers.firstName, lastName: customers.lastName, mobilePhone: customers.mobilePhone, displayName: customers.displayName })
+      .from(customers).where(eq(customers.id, m.hpCustomerId));
+    if (cust) {
+      customerName = cust.displayName || `${cust.firstName} ${cust.lastName}`.trim();
+      customerPhone = cust.mobilePhone;
+    }
+  }
+  // Property linked to this membership
+  const [prop] = await db.select({ id: properties.id, label: properties.label, street: properties.street, city: properties.city, state: properties.state, zip: properties.zip })
+    .from(properties).where(eq(properties.membershipId, m.id));
+  return {
+    ...m,
+    customerName,
+    customerPhone,
+    propertyId: prop?.id ?? null,
+    propertyLabel: prop?.label ?? null,
+    propertyStreet: prop?.street ?? null,
+    propertyCity: prop?.city ?? null,
+    propertyState: prop?.state ?? null,
+    propertyZip: prop?.zip ?? null,
+  };
+}
+
 const membershipRouter = router({
   list: protectedProcedure.query(async () => {
-      const db = await getDb();
-  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
-      return await db
-        .select()
-        .from(threeSixtyMemberships)
-        .orderBy(desc(threeSixtyMemberships.createdAt));
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
+    const rows = await db.select().from(threeSixtyMemberships).orderBy(desc(threeSixtyMemberships.createdAt));
+    return Promise.all(rows.map(m => enrichMembership(db, m)));
   }),
 
   get: protectedProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
       const db = await getDb();
-  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
-      const [membership] = await db
-        .select()
-        .from(threeSixtyMemberships)
-        .where(eq(threeSixtyMemberships.id, input.id));
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
+      const [membership] = await db.select().from(threeSixtyMemberships).where(eq(threeSixtyMemberships.id, input.id));
       if (!membership) throw new TRPCError({ code: "NOT_FOUND" });
-      return membership;
+      return enrichMembership(db, membership);
     }),
 
   getByCustomer: protectedProcedure
     .input(z.object({ customerId: z.string() }))
     .query(async ({ input }) => {
       const db = await getDb();
-  if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
-      return await db
-        .select()
-        .from(threeSixtyMemberships)
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
+      const rows = await db.select().from(threeSixtyMemberships)
         .where(eq(threeSixtyMemberships.customerId, input.customerId))
         .orderBy(desc(threeSixtyMemberships.createdAt));
+      return Promise.all(rows.map(m => enrichMembership(db, m)));
+    }),
+
+  /** All memberships for a specific property */
+  listByProperty: protectedProcedure
+    .input(z.object({ propertyId: z.string() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
+      const props = await db.select({ membershipId: properties.membershipId })
+        .from(properties).where(eq(properties.id, input.propertyId));
+      const membershipId = props[0]?.membershipId;
+      if (!membershipId) return [];
+      const [m] = await db.select().from(threeSixtyMemberships).where(eq(threeSixtyMemberships.id, membershipId));
+      if (!m) return [];
+      return [await enrichMembership(db, m)];
+    }),
+
+  /** All jobs/estimates linked to a membership */
+  listJobsByMembership: protectedProcedure
+    .input(z.object({ membershipId: z.number() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
+      return db.select({
+        id: opportunities.id,
+        title: opportunities.title,
+        area: opportunities.area,
+        stage: opportunities.stage,
+        value: opportunities.value,
+        scheduledDate: opportunities.scheduledDate,
+        propertyId: opportunities.propertyId,
+        createdAt: opportunities.createdAt,
+      }).from(opportunities)
+        .where(eq(opportunities.membershipId, input.membershipId))
+        .orderBy(desc(opportunities.createdAt));
     }),
 
   create: protectedProcedure

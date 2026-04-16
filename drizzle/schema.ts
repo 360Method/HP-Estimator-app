@@ -604,6 +604,8 @@ export const opportunities = mysqlTable("opportunities", {
   propertyId: varchar("propertyId", { length: 64 }),
   /** How propertyId was set: 'manual' | 'auto-migrated' | null */
   propertyIdSource: varchar("propertyIdSource", { length: 32 }),
+  /** FK to threeSixtyMemberships.id — set when job is created from a 360° work order */
+  membershipId: int("membershipId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -1157,6 +1159,8 @@ export const threeSixtyWorkOrders = mysqlTable("threeSixtyWorkOrders", {
   healthScore: int("healthScore"),
   /** Reason for skipping (if status=skipped) */
   skipReason: varchar("skipReason", { length: 255 }),
+  /** FK to opportunities.id — set when completion creates or links a job/estimate */
+  hpOpportunityId: varchar("hpOpportunityId", { length: 64 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

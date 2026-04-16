@@ -5,13 +5,14 @@
 
 import { useState } from 'react';
 import { useLocation } from 'wouter';
+import { useEstimator } from '@/contexts/EstimatorContext';
 import { trpc } from '@/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
-import { ArrowLeft, CalendarCheck, Wallet, ClipboardList, Plus, CheckCircle2, Clock, SkipForward, Wrench, CalendarClock, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, CalendarCheck, Wallet, ClipboardList, Plus, CheckCircle2, Clock, SkipForward, Wrench, CalendarClock, AlertTriangle, User, ExternalLink } from 'lucide-react';
 import { formatDollars, TIER_DEFINITIONS, type MemberTier } from '../../../shared/threeSixtyTiers';
 import { toast } from 'sonner';
 import ThreeSixtyVisitDetail from './ThreeSixtyVisitDetail';
@@ -38,7 +39,7 @@ interface Props {
 }
 
 export default function ThreeSixtyMemberDetail({ membershipId, onBack }: Props) {
-  
+  const { setActiveCustomer, setSection } = useEstimator();
   const [selectedVisitId, setSelectedVisitId] = useState<number | null>(null);
   const [showBaselineWizard, setShowBaselineWizard] = useState(false);
   const [selectedScanId, setSelectedScanId] = useState<number | null>(null);
@@ -131,7 +132,7 @@ export default function ThreeSixtyMemberDetail({ membershipId, onBack }: Props) 
           <ArrowLeft className="w-4 h-4" />
         </Button>
         <div className="flex-1">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-xl font-bold">Membership #{membership.id}</h1>
             <Badge className={
               membership.tier === 'gold' ? 'bg-yellow-100 text-yellow-800 border-yellow-300' :
@@ -148,6 +149,21 @@ export default function ThreeSixtyMemberDetail({ membershipId, onBack }: Props) 
             {tierDef.tagline} · Renews {new Date(membership.renewalDate).toLocaleDateString()}
           </p>
         </div>
+        {membership.hpCustomerId && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 gap-1.5 text-xs"
+            onClick={() => {
+              setActiveCustomer(membership.hpCustomerId!, 'direct');
+              setSection('customer');
+            }}
+          >
+            <User className="w-3.5 h-3.5" />
+            Customer Profile
+            <ExternalLink className="w-3 h-3" />
+          </Button>
+        )}
       </div>
 
       {/* KPI strip */}

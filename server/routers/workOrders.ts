@@ -23,6 +23,8 @@ import {
   portalReports,
   portalCustomers,
   portalEstimates,
+  opportunities,
+  properties,
 } from "../../drizzle/schema";
 import { eq, desc, and } from "drizzle-orm";
 import { sendEmail } from "../gmail";
@@ -419,6 +421,21 @@ export const workOrdersRouter = router({
           });
         }
       }
+
+      // ── WRITE BACK hpOpportunityId: find the most recent opportunity linked to this membership ──
+      // This covers the case where an estimate was already created from a prior flagged item
+      // and we want to surface it on the work order for cross-navigation.
+      try {
+        const [linkedOpp] = await db
+          .select({ id: opportunities.id })
+          .from(opportunities)
+          .where(eq(opportunities.membershipId, wo.membershipId))
+          .orderBy(desc(opportunities.createdAt))
+          .limit(1);
+        if (linkedOpp) {
+          await updateWorkOrder(input.id, { hpOpportunityId: linkedOpp.id });
+        }
+      } catch (_) { /* non-blocking */ }
 
       return { success: true, portalReportId };
     }),

@@ -1,5 +1,7 @@
 /**
  * 360 Method — Member List Page
+ * Shows customer name, property address, tier, status, and labor bank.
+ * Provides "View Customer Profile" navigation back to the customer.
  */
 
 import { useState } from 'react';
@@ -8,9 +10,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Search, Crown, Star, Shield } from 'lucide-react';
+import { ArrowLeft, Search, Crown, Star, Shield, User, MapPin, ExternalLink } from 'lucide-react';
 import { formatDollars, type MemberTier } from '../../../shared/threeSixtyTiers';
 import ThreeSixtyMemberDetail from './ThreeSixtyMemberDetail';
+import { useEstimator } from '@/contexts/EstimatorContext';
 
 const TIER_ICONS: Record<MemberTier, React.ElementType> = {
   bronze: Shield,
@@ -31,6 +34,7 @@ interface Props {
 export default function ThreeSixtyMemberList({ onBack }: Props) {
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const { setActiveCustomer, setSection } = useEstimator();
 
   const { data: memberships, isLoading } = trpc.threeSixty.memberships.list.useQuery();
 
@@ -43,12 +47,29 @@ export default function ThreeSixtyMemberList({ onBack }: Props) {
     );
   }
 
-  const filtered = (memberships ?? []).filter(m =>
-    search === '' ||
-    m.tier.includes(search.toLowerCase()) ||
-    m.status.includes(search.toLowerCase()) ||
-    String(m.id).includes(search)
-  );
+  const filtered = (memberships ?? []).filter(m => {
+    if (search === '') return true;
+    const q = search.toLowerCase();
+    const name = (m as any).customerName ?? '';
+    const street = (m as any).propertyStreet ?? '';
+    const city = (m as any).propertyCity ?? '';
+    return (
+      name.toLowerCase().includes(q) ||
+      street.toLowerCase().includes(q) ||
+      city.toLowerCase().includes(q) ||
+      m.tier.includes(q) ||
+      m.status.includes(q) ||
+      String(m.id).includes(q)
+    );
+  });
+
+  const handleViewCustomer = (e: React.MouseEvent, m: any) => {
+    e.stopPropagation();
+    if (m.hpCustomerId) {
+      setActiveCustomer(m.hpCustomerId, 'direct');
+      setSection('customer');
+    }
+  };
 
   return (
     <div className="container py-6 max-w-4xl">
@@ -66,7 +87,7 @@ export default function ThreeSixtyMemberList({ onBack }: Props) {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input
           className="pl-9"
-          placeholder="Search by tier, status, or ID…"
+          placeholder="Search by name, address, tier, or status…"
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
@@ -80,31 +101,78 @@ export default function ThreeSixtyMemberList({ onBack }: Props) {
         <div className="space-y-2">
           {filtered.map(m => {
             const TierIcon = TIER_ICONS[m.tier as MemberTier];
+            const customerName = (m as any).customerName as string | undefined;
+            const propertyStreet = (m as any).propertyStreet as string | undefined;
+            const propertyCity = (m as any).propertyCity as string | undefined;
+            const propertyLabel = (m as any).propertyLabel as string | undefined;
+            const propertyLine = [propertyStreet, propertyCity].filter(Boolean).join(', ');
             return (
               <Card
                 key={m.id}
                 className="border shadow-sm hover:shadow-md transition-shadow cursor-pointer"
                 onClick={() => setSelectedId(m.id)}
               >
-                <CardContent className="py-3 px-4 flex items-center gap-3">
-                  <TierIcon className="w-4 h-4 text-muted-foreground shrink-0" />
-                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${TIER_BADGE[m.tier as MemberTier]}`}>
-                    {m.tier.charAt(0).toUpperCase() + m.tier.slice(1)}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium">Membership #{m.id}</div>
-                    <div className="text-xs text-muted-foreground">
-                      Started {new Date(m.startDate).toLocaleDateString()} ·
-                      Renews {new Date(m.renewalDate).toLocaleDateString()} ·
-                      Labor bank: {formatDollars(m.laborBankBalance ?? 0)}
+                <CardContent className="py-3 px-4">
+                  <div className="flex items-start gap-3">
+                    {/* Tier icon */}
+                    <div className="mt-0.5 shrink-0">
+                      <TierIcon className="w-4 h-4 text-muted-foreground" />
                     </div>
+
+                    {/* Main info */}
+                    <div className="flex-1 min-w-0">
+                      {/* Customer name (primary) */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {customerName ? (
+                          <span className="text-sm font-semibold">{customerName}</span>
+                        ) : (
+                          <span className="text-sm font-medium text-muted-foreground">Membership #{m.id}</span>
+                        )}
+                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${TIER_BADGE[m.tier as MemberTier]}`}>
+                          {m.tier.charAt(0).toUpperCase() + m.tier.slice(1)}
+                        </span>
+                        <Badge
+                          variant={m.status === 'active' ? 'default' : 'secondary'}
+                          className="text-xs"
+                        >
+                          {m.status}
+                        </Badge>
+                      </div>
+
+                      {/* Property address */}
+                      {propertyLine && (
+                        <div className="flex items-center gap-1 mt-0.5 text-xs text-muted-foreground">
+                          <MapPin className="w-3 h-3 shrink-0" />
+                          <span className="truncate">
+                            {propertyLabel && propertyLabel !== 'Home' ? `${propertyLabel} — ` : ''}
+                            {propertyLine}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Meta row */}
+                      <div className="text-xs text-muted-foreground mt-0.5">
+                        Membership #{m.id} · Started {new Date(m.startDate).toLocaleDateString()} ·
+                        Renews {new Date(m.renewalDate).toLocaleDateString()} ·
+                        Labor bank: <span className="font-medium text-emerald-700">{formatDollars(m.laborBankBalance ?? 0)}</span>
+                      </div>
+                    </div>
+
+                    {/* View customer profile button */}
+                    {(m as any).hpCustomerId && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="shrink-0 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                        onClick={e => handleViewCustomer(e, m)}
+                        title="Open customer profile"
+                      >
+                        <User className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Profile</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </Button>
+                    )}
                   </div>
-                  <Badge
-                    variant={m.status === 'active' ? 'default' : 'secondary'}
-                    className="text-xs shrink-0"
-                  >
-                    {m.status}
-                  </Badge>
                 </CardContent>
               </Card>
             );
