@@ -195,6 +195,15 @@ export async function markConversationRead(conversationId: number) {
     .where(and(eq(messages.conversationId, conversationId), sql`${messages.readAt} IS NULL`));
 }
 
+export async function updateConversation(
+  conversationId: number,
+  data: Partial<InsertConversation>,
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(conversations).set(data).where(eq(conversations.id, conversationId));
+}
+
 export async function incrementUnread(conversationId: number) {
   const db = await getDb();
   if (!db) return;
@@ -359,6 +368,64 @@ export async function findCustomerByEmail(email: string): Promise<DbCustomer | n
     .where(eq(customers.email, email.toLowerCase().trim()))
     .limit(1);
   return rows[0] ?? null;
+}
+
+/**
+ * Find a CRM customer by phone number (normalised to last-10-digit match).
+ * Checks mobilePhone, homePhone, and workPhone columns.
+ */
+export async function findCustomerByPhone(phone: string): Promise<DbCustomer | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const norm = phone.replace(/\D/g, '').replace(/^1/, '').slice(-10);
+  if (norm.length < 7) return null;
+  const suffix = `%${norm}`;
+  const rows = await db.select().from(customers).where(
+    or(
+      like(customers.mobilePhone, suffix),
+      like(customers.homePhone, suffix),
+      like(customers.workPhone, suffix),
+    )
+  ).limit(1);
+  return rows[0] ?? null;
+}
+
+/**
+ * Given an inbound caller phone, find the matching CRM customer.
+ * If none exists, auto-create a stub customer so every call is anchored
+ * to a real customer record. Returns { customer, wasCreated }.
+ */
+export async function findOrCreateCustomerFromCall(
+  callerPhone: string,
+): Promise<{ customer: DbCustomer; wasCreated: boolean }> {
+  const existing = await findCustomerByPhone(callerPhone);
+  if (existing) return { customer: existing, wasCreated: false };
+  const { nanoid } = await import('nanoid');
+  const id = nanoid(12);
+  const stub: InsertDbCustomer = {
+    id,
+    firstName: 'Unknown',
+    lastName: 'Caller',
+    displayName: `Unknown Caller ${callerPhone}`,
+    company: '',
+    mobilePhone: callerPhone,
+    homePhone: '',
+    workPhone: '',
+    email: '',
+    role: '',
+    customerType: 'homeowner',
+    doNotService: false,
+    street: '', unit: '', city: '', state: '', zip: '',
+    billsTo: '',
+    leadSource: 'inbound_call',
+    referredBy: '',
+    sendNotifications: false,
+    sendMarketingOptIn: false,
+    lifetimeValue: 0,
+    outstandingBalance: 0,
+  };
+  const customer = await createCustomer(stub);
+  return { customer, wasCreated: true };
 }
 
 export async function createCustomer(data: InsertDbCustomer): Promise<DbCustomer> {

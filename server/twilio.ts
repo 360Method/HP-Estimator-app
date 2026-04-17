@@ -13,7 +13,7 @@
  */
 
 import twilio from "twilio";
-import { findOrCreateConversation, incrementUnread, insertCallLog, insertMessage, updateConversationLastMessage } from "./db";
+import { findOrCreateConversation, findOrCreateCustomerFromCall, incrementUnread, insertCallLog, insertMessage, updateConversationLastMessage, updateConversation } from "./db";
 
 function getTwilioClient() {
   const sid = process.env.TWILIO_ACCOUNT_SID;
@@ -52,8 +52,13 @@ export async function handleInboundSms(params: {
 }) {
   const { From, Body, MessageSid, MediaUrl0, MediaContentType0 } = params;
 
-  // Find or create conversation for this phone number
-  const conv = await findOrCreateConversation(From, null, null);
+  // Find or create customer from phone, then link conversation
+  const { customer } = await findOrCreateCustomerFromCall(From).catch(() => ({ customer: null }));
+  const conv = await findOrCreateConversation(From, null, customer?.displayName ?? null, customer?.id);
+  // Backfill customerId if conversation existed but wasn't linked yet
+  if (customer && !conv.customerId) {
+    await updateConversation(conv.id, { customerId: customer.id, contactName: customer.displayName });
+  }
 
   // Insert inbound message
   const msg = await insertMessage({
@@ -96,7 +101,16 @@ export async function handleCallStatusUpdate(params: {
   if (!terminalStatuses.includes(CallStatus)) return;
 
   const callerPhone = Direction === "inbound" ? From : To;
-  const conv = await findOrCreateConversation(callerPhone, null, null);
+  // Auto-link to customer (or create stub) on every call
+  const { customer, wasCreated } = await findOrCreateCustomerFromCall(callerPhone).catch(() => ({ customer: null, wasCreated: false }));
+  if (wasCreated && customer) {
+    console.log(`[Twilio] Auto-created customer stub for unknown caller ${callerPhone} → ${customer.id}`);
+  }
+  const conv = await findOrCreateConversation(callerPhone, null, customer?.displayName ?? null, customer?.id);
+  // Backfill customerId if conversation existed but wasn't linked
+  if (customer && !conv.customerId) {
+    await updateConversation(conv.id, { customerId: customer.id, contactName: customer.displayName });
+  }
 
   // Map Twilio status to our status
   const statusMap: Record<string, string> = {

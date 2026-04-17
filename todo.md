@@ -1868,3 +1868,16 @@
 - [x] Add phone tRPC router: getSettings, updateSettings, testCall procedures
 - [x] Build Settings → Phone tab UI with forwarding mode toggle, number fields, test call button
 - [x] Document Twilio Console configuration steps (webhook URL shown in UI)
+
+## Phone System — Customer-Centric Call Routing
+
+- [x] Add findCustomerByPhone() to db.ts (normalizes and matches mobilePhone/homePhone/workPhone)
+- [x] Add findOrCreateCustomerFromCall() to db.ts (auto-creates "Unknown Caller +1xxx" customer if no match)
+- [x] Update handleCallStatusUpdate in twilio.ts to auto-link/create customer on every inbound call
+- [x] Update handleInboundSms in twilio.ts to auto-link/create customer on every inbound SMS
+- [x] Add updateConversation() to db.ts for backfilling customerId on existing conversations
+- [x] findOrCreateConversation already accepts customerId and persists it on creation
+- [x] listWithActivity already surfaces all customer-linked conversations (stubs included)
+- [x] Inbox customer list shows "Unknown" badge for auto-created stub customers
+- [x] Thread header has View Profile button (Users icon) to navigate to customer profile
+- [ ] Add linkConversationToCustomer tRPC procedure so staff can manually re-link a call to a different customer

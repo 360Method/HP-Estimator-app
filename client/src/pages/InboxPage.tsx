@@ -183,7 +183,7 @@ function FeedBubble({ item }: { item: FeedItem }) {
 
 // ─── Customer list item ───────────────────────────────────────────────────────
 function CustomerListItem({
-  name, phone, lastPreview, lastAt, unread, isActive, onClick,
+  name, phone, lastPreview, lastAt, unread, isActive, isStub, onClick,
 }: {
   name: string;
   phone?: string | null;
@@ -191,6 +191,7 @@ function CustomerListItem({
   lastAt?: Date | null;
   unread: number;
   isActive: boolean;
+  isStub?: boolean;
   onClick: () => void;
 }) {
   return (
@@ -207,6 +208,9 @@ function CustomerListItem({
         <div className="flex items-baseline justify-between gap-2">
           <span className={`text-[14px] font-semibold truncate ${unread > 0 ? 'text-foreground' : 'text-foreground/80'}`}>
             {name}
+            {isStub && (
+              <span className="ml-1.5 text-[9px] font-bold uppercase tracking-wide text-amber-600 bg-amber-100 rounded px-1 py-0.5">Unknown</span>
+            )}
           </span>
           {lastAt && (
             <span className="text-[11px] text-muted-foreground flex-shrink-0">{fmtTime(lastAt)}</span>
@@ -229,7 +233,7 @@ function CustomerListItem({
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function InboxPage() {
-  const { state, setInboxCustomer } = useEstimator();
+  const { state, setInboxCustomer, setActiveCustomer, navigateToTopLevel } = useEstimator();
   const { inboxCustomerId } = state;
 
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
@@ -325,6 +329,7 @@ export default function InboxPage() {
         phone: c.mobilePhone,
         email: c.email,
         activity: activityMap.get(c.id),
+        isStub: (c as any).leadSource === 'inbound_call' && (c.firstName === 'Unknown' || !c.firstName),
       }))
       .sort((a, b) => {
         const ta = a.activity?.lastMessageAt?.getTime() ?? 0;
@@ -464,6 +469,7 @@ export default function InboxPage() {
               lastAt={c.activity?.lastMessageAt}
               unread={c.activity?.unreadCount ?? 0}
               isActive={selectedCustomerId === c.id}
+              isStub={c.isStub}
               onClick={() => {
                 setSelectedCustomerId(c.id);
                 setMobileScreen('thread');
@@ -507,6 +513,16 @@ export default function InboxPage() {
                   toast.success(`Call ended — ${Math.floor(secs / 60)}m ${secs % 60}s`);
                 }}
               />
+              <button
+                onClick={() => {
+                  setActiveCustomer(selectedCustomerId, 'direct');
+                  navigateToTopLevel('customer');
+                }}
+                title="View customer profile"
+                className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
+              >
+                <Users className="w-4 h-4" />
+              </button>
               <button className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground">
                 <MoreHorizontal className="w-4 h-4" />
               </button>
