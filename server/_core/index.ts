@@ -964,9 +964,16 @@ async function startServer() {
 
       if (type === "homeowner") {
         if (!tier) return res.status(400).json({ error: "tier required for homeowner" });
-        const key = `STRIPE_PRICE_${(tier as string).toUpperCase()}_${(cadence as string).toUpperCase()}`;
+        // Normalize funnel tier names to internal Stripe product names
+        const HOMEOWNER_TIER_MAP: Record<string, string> = {
+          exterior_shield: "BRONZE", bronze: "BRONZE", essential: "BRONZE",
+          full_coverage: "SILVER", silver: "SILVER", full: "SILVER",
+          max: "GOLD", gold: "GOLD", maximum: "GOLD",
+        };
+        const normalizedTier = HOMEOWNER_TIER_MAP[(tier as string).toLowerCase()] ?? (tier as string).toUpperCase();
+        const key = `STRIPE_PRICE_${normalizedTier}_${(cadence as string).toUpperCase()}`;
         const priceId = process.env[key];
-        if (!priceId) return res.status(400).json({ error: `Stripe price not configured: ${key}` });
+        if (!priceId) return res.status(400).json({ error: `Stripe price not configured: ${key} (raw tier: ${tier})` });
         lineItems = [{ price: priceId, quantity: 1 }];
       } else if (type === "portfolio") {
         if (!Array.isArray(properties) || properties.length === 0) {

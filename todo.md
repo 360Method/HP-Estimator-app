@@ -2049,3 +2049,9 @@
 - [x] Added fallback webhook endpoint for handyfield-jkw2dpqj.manus.space with new STRIPE_WEBHOOK_SECRET_FALLBACK
 - [x] Updated webhook handler to try both primary and fallback secrets
 - [x] All 212 tests pass including new stripe.webhook.test.ts (4 tests)
+
+## 360 Funnel — Tier Key + Webhook Deploy Fix
+- [x] Root cause 1: Stripe webhook hits pro.handypioneers.com (deployed build) — must publish to take effect
+- [x] Root cause 2: Checkout endpoint used raw tier name (max/full_coverage) as Stripe key prefix — no STRIPE_PRICE_MAX_* env vars exist
+- [x] Fixed: Added HOMEOWNER_TIER_MAP normalization in /api/360/checkout (max→GOLD, full_coverage→SILVER, exterior_shield→BRONZE)
+- [x] Verified all 9 homeowner price IDs resolve correctly after normalization
