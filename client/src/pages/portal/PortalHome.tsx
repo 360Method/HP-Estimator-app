@@ -7,6 +7,7 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import PortalLayout from "@/components/PortalLayout";
+import OnboardingModal from "@/components/OnboardingModal";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import {
@@ -243,6 +244,9 @@ export default function PortalHome() {
     refetchOnWindowFocus: false,
   });
 
+  // Your Team card
+  const { data: teamInfo } = trpc.portal.getTeamInfo.useQuery();
+
   const pendingEstimates = estimates.filter((e) => e.status === "sent" || e.status === "viewed");
   const openInvoices = invoices.filter((i) => i.status !== "paid");
   const overdueInvoices = openInvoices.filter(
@@ -257,6 +261,10 @@ export default function PortalHome() {
 
   return (
     <PortalLayout>
+      {/* Onboarding modal — shown only on first login */}
+      {customer && !customer.onboardingCompletedAt && (
+        <OnboardingModal customer={customer} onComplete={() => refetch()} />
+      )}
       <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-6">
         {/* Breadcrumb */}
         <p className="text-xs text-gray-400">Customer Portal &rsaquo; Home</p>
@@ -307,19 +315,36 @@ export default function PortalHome() {
                 View details →
               </button>
             </div>
-            <div className="mt-4 grid grid-cols-3 gap-3">
-              <div className="bg-white rounded-lg border border-emerald-100 px-3 py-2 text-center">
+            {/* Property address row */}
+            {membershipData.membership.propertyAddressId && (
+              <div className="mt-3 flex items-center gap-1.5 text-xs text-emerald-800">
+                <MapPin className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">{customer?.address ?? 'Property on file'}</span>
+              </div>
+            )}
+            <div className="mt-4 grid grid-cols-4 gap-2">
+              <div className="bg-white rounded-lg border border-emerald-100 px-2 py-2 text-center">
                 <p className="text-lg font-bold text-emerald-700">${(membershipData.laborBankBalance / 100).toFixed(0)}</p>
                 <p className="text-[10px] text-gray-500">Labor Bank</p>
               </div>
-              <div className="bg-white rounded-lg border border-emerald-100 px-3 py-2 text-center">
+              <div className="bg-white rounded-lg border border-emerald-100 px-2 py-2 text-center">
                 <p className="text-lg font-bold text-gray-900">{membershipData.workOrders.filter((w: any) => w.status !== 'completed').length}</p>
                 <p className="text-[10px] text-gray-500">Upcoming Visits</p>
               </div>
-              <div className="bg-white rounded-lg border border-emerald-100 px-3 py-2 text-center">
+              <div className="bg-white rounded-lg border border-emerald-100 px-2 py-2 text-center">
                 <p className="text-lg font-bold text-amber-600">{membershipData.linkedEstimates.filter((e: any) => e.status === 'sent' || e.status === 'viewed').length}</p>
                 <p className="text-[10px] text-gray-500">Repair Estimates</p>
               </div>
+              {/* Health score from latest report */}
+              {membershipData.reports.length > 0 && (membershipData.reports[0] as any).healthScore != null ? (
+                <div className="bg-white rounded-lg border border-emerald-100 px-2 py-2 text-center">
+                  <p className={`text-lg font-bold ${
+                    (membershipData.reports[0] as any).healthScore >= 80 ? 'text-emerald-600' :
+                    (membershipData.reports[0] as any).healthScore >= 60 ? 'text-amber-600' : 'text-red-600'
+                  }`}>{(membershipData.reports[0] as any).healthScore}</p>
+                  <p className="text-[10px] text-gray-500">Home Score</p>
+                </div>
+              ) : null}
             </div>
             {membershipData.linkedEstimates.filter((e: any) => e.status === 'sent' || e.status === 'viewed').length > 0 && (
               <button
@@ -584,6 +609,45 @@ export default function PortalHome() {
             </div>
           </div>
         )}
+
+        {/* Your Team card */}
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <h3 className="font-semibold text-gray-900 text-sm mb-4">Your Team</h3>
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-full bg-[#1a2e1a] flex items-center justify-center shrink-0">
+              <User className="w-6 h-6 text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-gray-900">{teamInfo?.name ?? 'Handy Pioneers Team'}</p>
+              <p className="text-xs text-gray-500">Your Account Manager</p>
+            </div>
+          </div>
+          <div className="mt-4 space-y-2">
+            {teamInfo?.phone && (
+              <a
+                href={`tel:${teamInfo.phone}`}
+                className="flex items-center gap-2 text-sm text-gray-700 hover:text-[#1a2e1a] transition-colors"
+              >
+                <Phone className="w-4 h-4 text-[#c8922a] shrink-0" />
+                {teamInfo.phone}
+              </a>
+            )}
+            <a
+              href={`mailto:${teamInfo?.email ?? 'help@handypioneers.com'}`}
+              className="flex items-center gap-2 text-sm text-gray-700 hover:text-[#1a2e1a] transition-colors"
+            >
+              <Mail className="w-4 h-4 text-[#c8922a] shrink-0" />
+              {teamInfo?.email ?? 'help@handypioneers.com'}
+            </a>
+          </div>
+          <button
+            onClick={() => navigate('/portal/messages')}
+            className="mt-4 w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-[#1a2e1a] text-white text-sm font-semibold hover:bg-[#2d4a2d] transition-colors"
+          >
+            <MessageSquare className="w-4 h-4" />
+            Send a Message
+          </button>
+        </div>
 
         {/* Empty state: no activity */}
         {estimates.length === 0 && invoices.length === 0 && appointments.length === 0 && (

@@ -1767,3 +1767,67 @@
   - [x] Profile button to jump to customer profile
   - [x] Schedule button opens inline date/time/tech modal
   - [x] On schedule: invalidates queue, shows success toast, linked job auto-created
+
+## Phase 1 — Identity Bridge (Pre-Launch Plan)
+
+- [x] Add "Portal" tab to customer profile (CustomerSection CUSTOMER_TABS)
+- [x] Portal tab shows: portal account status (linked/not linked), portal email, View in Portal button
+- [x] "Send Portal Invite" button — sends email with magic link to customer's email
+- [x] Backend: portal.sendInvite procedure — generates token, sends email via Gmail (inviteCustomerToPortal)
+- [x] Backend: portal.getByCustomerId procedure — looks up portalCustomer by hpCustomerId (getCustomerPortalData)
+- [x] "Your Team" card on portal home — shows owner name, phone, email, Message CTA (getTeamInfo procedure)
+
+## Phase 4 — Service Request → CRM Lead Pipeline (Pre-Launch Plan)
+
+- [x] When submitServiceRequest fires: auto-create CRM lead opportunity (area: 'lead', stage: 'New') with customerId, propertyId, request details
+- [x] Send owner notification (in-app + SMS) with request details and deep-link to new lead
+- [x] Add Service Requests section to internal Dashboard showing unactioned requests with Open and Dismiss buttons
+- [x] Portal: after submitting a request, show confirmation "We'll be in touch within 24 hours"
+
+## Phase 5 — Job Completion Sign-Off (Pre-Launch Plan)
+
+- [x] When job moves to "Awaiting Sign-Off" stage: send portal email with sign-off CTA link
+- [x] Portal job detail page: show "Sign Off on This Job" CTA when job is in awaiting-sign-off stage
+- [x] Portal sign-off: customer taps button, confirms, sets portalApprovedAt timestamp (existing submitJobSignOff)
+- [x] Internal: "Awaiting Sign-Off" badge on job cards in Jobs list (rose color, added to JobStage type + JOB_STAGES)
+
+## Phase 6 — Estimate→Deposit→Job Chain on Portal (Pre-Launch Plan)
+
+- [x] Portal estimate detail: show progress stepper (Estimate Sent → Deposit Paid → Work Scheduled → Complete → Signed Off)
+- [x] Portal estimate detail: when estimate is approved and deposit invoice exists, show "Pay Deposit" CTA
+- [x] Portal estimate detail: when deposit is paid, stepper shows Deposit Paid step as complete
+- [x] Portal job detail: sign-off CTA shown when stage is Awaiting Sign-Off (Phase 5 covers this)
+
+## Phase 8 — Calendar Scheduling → Portal Appointments (Pre-Launch Plan)
+
+- [x] When a job is scheduled (scheduledDate set): write a portalAppointment record for the linked portal customer
+- [x] Portal Appointments page: show upcoming scheduled visits with date, time, tech, and job title
+- [x] Portal: "Request Reschedule" button on upcoming appointment sends message to HP team
+
+## Phase 2 — Property-Centric Portal Home Redesign (Pre-Launch Plan)
+
+- [x] Portal home: show property address on 360° membership card (from portalCustomer.address)
+- [x] Portal home: show membership tier badge on 360° card (already shown as tier plan name)
+- [x] Portal home: upcoming visits count shown on 360° card (links to Appointments tab)
+- [x] Portal home: show health score from latest 360° report on 360° membership card (color-coded)
+
+## Phase 7 — Internal Messages Inbox with Unread Badge (Pre-Launch Plan)
+
+- [x] Internal InboxPage: unread badge on Inbox nav item (MetricsBar uses trpc.portal.getPortalUnreadCount)
+- [x] Internal InboxPage: customer-centric unified feed already implemented (inbox.unifiedFeed.getByCustomer)
+- [x] Internal InboxPage: HP staff portal reply via portal.replyToPortalMessage (sends email + creates message)
+
+## Phase 9 — New Member Onboarding Flow on Portal (Pre-Launch Plan)
+
+- [x] Portal: after first login post-enrollment, show welcome modal with 3 steps (profile, property, what to expect)
+- [x] Portal: onboarding step 1 — confirm/edit name, phone, address
+- [x] Portal: onboarding step 2 — confirm property address for 360° service
+- [x] Portal: onboarding step 3 — "What to expect" info card (baseline scan within 48h, labor bank, reports)
+- [x] Backend: track onboardingCompletedAt on portalCustomers; show modal only when null (migration 0038 applied)
+
+## Phase 10 — 360° Off-Cycle Visit Request on Portal (Pre-Launch Plan)
+
+- [x] Portal 360° membership page: add "Request Extra Visit" button
+- [x] Portal: off-cycle visit request form (reason, urgency, preferred date range)
+- [x] Backend: portal.requestOffCycleVisit procedure — creates portalServiceRequest with type=off_cycle_visit + notifies owner
+- [x] Internal: off-cycle visit requests appear in Service Requests section of Dashboard with 360° Extra Visit badge

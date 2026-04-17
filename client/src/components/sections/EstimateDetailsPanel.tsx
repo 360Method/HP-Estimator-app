@@ -157,6 +157,7 @@ const JOB_STAGE_COLOR: Record<JobStage, string> = {
   'Scheduled':              'bg-blue-50 text-blue-700 border-blue-300',
   'In Progress':            'bg-indigo-50 text-indigo-700 border-indigo-300',
   'Completed':              'bg-emerald-100 text-emerald-800 border-emerald-400',
+  'Awaiting Sign-Off':      'bg-rose-50 text-rose-700 border-rose-300',
   'Invoice Sent':           'bg-sky-50 text-sky-700 border-sky-300',
   'Invoice Paid':           'bg-emerald-50 text-emerald-700 border-emerald-300',
 };

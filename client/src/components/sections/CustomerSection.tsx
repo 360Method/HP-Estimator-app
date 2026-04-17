@@ -2339,14 +2339,20 @@ function CustomerPortalTab({ customerId }: { customerId: string }) {
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-sm truncate">{customer.name}</p>
           <p className="text-xs text-muted-foreground truncate">{customer.email}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Portal ID: #{customer.id}
+            {customer.createdAt && (
+              <span className="ml-2 text-emerald-600">Active since {new Date(customer.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}</span>
+            )}
+          </p>
         </div>
         <a
-          href={`${portalBase}/portal/estimates`}
+          href={`${portalBase}/portal/home`}
           target="_blank"
           rel="noreferrer"
           className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-semibold hover:bg-primary/90 transition-colors"
         >
-          <ExternalLink size={12} /> Open Portal
+          <ExternalLink size={12} /> View in Portal
         </a>
       </div>
 

@@ -605,6 +605,7 @@ export type JobStage =
   | 'Scheduled'
   | 'In Progress'
   | 'Completed'
+  | 'Awaiting Sign-Off'
   | 'Invoice Sent'
   | 'Invoice Paid';
 
@@ -724,7 +725,7 @@ export const ESTIMATE_STAGES: EstimateStage[] = [
 export const JOB_STAGES: JobStage[] = [
   'New Job', 'Deposit Needed', 'Deposit Collected', 'Need to Order Materials',
   'Waiting on Materials', 'Materials Received', 'Unscheduled', 'Scheduled',
-  'In Progress', 'Completed', 'Invoice Sent', 'Invoice Paid',
+  'In Progress', 'Completed', 'Awaiting Sign-Off', 'Invoice Sent', 'Invoice Paid',
 ];
 
 export const JOB_TYPES = [

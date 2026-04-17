@@ -45,6 +45,8 @@ export default function PortalJobDetail() {
 
   const currentMilestone = milestones.find((m) => m.status === "in_progress") ?? milestones.find((m) => m.status === "pending");
   const allComplete = total > 0 && milestones.every((m) => m.status === "complete");
+  // Also show sign-off CTA if HP has marked the job as Awaiting Sign-Off (even with no milestones)
+  const awaitingSignOff = data?.stage === 'Awaiting Sign-Off';
 
   // Check if customer has already signed off
   const { data: signOff } = trpc.portal.getJobSignOff.useQuery(
@@ -135,8 +137,8 @@ export default function PortalJobDetail() {
                     )}
                   </p>
                 )}
-                {/* Sign-off CTA — shown when all milestones complete and not yet signed */}
-                {allComplete && !signOff && (
+                {/* Sign-off CTA — shown when all milestones complete OR job is Awaiting Sign-Off */}
+                {(allComplete || awaitingSignOff) && !signOff && (
                   <div className="mt-4 pt-4 border-t border-gray-100">
                     <Button
                       className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"

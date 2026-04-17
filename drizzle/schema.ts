@@ -147,6 +147,8 @@ export const portalCustomers = mysqlTable("portalCustomers", {
   referralCode: varchar("referralCode", { length: 32 }).unique(),
   /** hpCustomerId of who referred this customer */
   referredBy: varchar("referredBy", { length: 64 }),
+  /** Set when customer completes the welcome onboarding flow */
+  onboardingCompletedAt: timestamp("onboardingCompletedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -629,6 +631,10 @@ export const portalServiceRequests = mysqlTable("portalServiceRequests", {
   status: varchar("status", { length: 32 }).notNull().default("pending"),
   /** HP lead ID created from this request */
   leadId: varchar("leadId", { length: 64 }),
+  /** service_request | off_cycle_visit */
+  requestType: varchar("requestType", { length: 32 }).notNull().default("service_request"),
+  /** Preferred date range for off-cycle visits */
+  preferredDateRange: varchar("preferredDateRange", { length: 64 }),
   /** Set when HP staff views/reads this request */
   readAt: timestamp("readAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

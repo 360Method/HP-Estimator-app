@@ -123,6 +123,39 @@ export const opportunitiesRouter = router({
       const update: Record<string, unknown> = { stage: input.stage };
       if (input.area) update.area = input.area;
       await updateOpportunity(input.id, update);
+
+      // When job moves to "Awaiting Sign-Off": send portal sign-off email
+      if (input.stage === 'Awaiting Sign-Off') {
+        try {
+          const { findPortalCustomerByHpId, getPortalEstimateByOpportunityId } = await import('../portalDb');
+          const opp = await getOpportunityById(input.id);
+          if (opp) {
+            const portalCustomer = await findPortalCustomerByHpId(opp.customerId);
+            const estimate = await getPortalEstimateByOpportunityId(input.id);
+            if (portalCustomer) {
+              const { sendEmail } = await import('../gmail');
+              const { buildSignOffRequestEmail } = await import('../routers/portal');
+              const baseUrl = process.env.PORTAL_BASE_URL ?? 'https://client.handypioneers.com';
+              const signOffUrl = estimate
+                ? `${baseUrl}/portal/job/${input.id}`
+                : `${baseUrl}/portal/home`;
+              await sendEmail({
+                to: portalCustomer.email,
+                subject: `Your Job is Complete — Please Sign Off`,
+                html: buildSignOffRequestEmail(
+                  portalCustomer.name,
+                  estimate?.title ?? 'Your Project',
+                  signOffUrl,
+                  baseUrl,
+                ),
+              }).catch(() => null);
+            }
+          }
+        } catch (e) {
+          console.error('[moveStage] Failed to send sign-off email:', e);
+        }
+      }
+
       return { success: true };
     }),
 

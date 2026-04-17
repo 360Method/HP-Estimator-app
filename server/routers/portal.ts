@@ -233,11 +233,26 @@ export const portalRouter = router({
         throw new TRPCError({ code: "NOT_FOUND" });
       }
       await markPortalEstimateViewed(input.id);
+      // Fetch deposit invoice status for the progress stepper
+      let depositInvoicePaidAt: Date | null = null;
+      let depositInvoiceId: number | null = null;
+      try {
+        const invoices = await getPortalInvoicesByCustomer(ctx.portalCustomer.id);
+        const depositInv = invoices.find(inv => inv.estimateId === input.id && inv.type === 'deposit');
+        if (depositInv) {
+          depositInvoiceId = depositInv.id;
+          if (depositInv.status === 'paid') {
+            depositInvoicePaidAt = depositInv.paidAt ? new Date(depositInv.paidAt as any) : new Date();
+          }
+        }
+      } catch {}
       return {
         ...est,
         customerName: ctx.portalCustomer.name,
         customerAddress: ctx.portalCustomer.address,
         customerEmail: ctx.portalCustomer.email,
+        depositInvoicePaidAt,
+        depositInvoiceId,
       };
     }),
 
@@ -976,12 +991,55 @@ export const portalRouter = router({
         timeline: input.timeline,
         address: input.address ?? ctx.portalCustomer.address ?? undefined,
       });
-      // Notify HP team
+
+      // Auto-create CRM lead opportunity
+      let newLeadId: string | undefined;
+      try {
+        const { createOpportunity } = await import('../db');
+        const { randomBytes } = await import('crypto');
+        newLeadId = randomBytes(8).toString('hex');
+        const hpCustomerId = ctx.portalCustomer.hpCustomerId ?? `portal-${ctx.portalCustomer.id}`;
+        const timelineLabel = input.timeline === 'asap' ? 'ASAP' : input.timeline === 'within_week' ? 'Within a week' : 'Flexible';
+        await createOpportunity({
+          id: newLeadId,
+          customerId: hpCustomerId,
+          area: 'lead',
+          stage: 'New Lead',
+          title: `Service Request — ${ctx.portalCustomer.name}`,
+          notes: `From portal service request #${req?.id ?? '?'}\n\n${input.description}\n\nTimeline: ${timelineLabel}${input.address ? `\nAddress: ${input.address}` : ''}`,
+          onlineRequestId: req?.id ?? undefined,
+          value: 0,
+        });
+        // Link the service request to the new lead
+        if (req?.id) {
+          await updatePortalServiceRequestStatus(req.id, 'pending', newLeadId);
+        }
+      } catch (e) {
+        console.error('[Portal] Failed to create CRM lead from service request:', e);
+      }
+
+      // Notify HP team (in-app + SMS)
+      const baseUrl = process.env.PORTAL_BASE_URL ?? 'https://pro.handypioneers.com';
+      const leadLink = newLeadId ? ` View lead: ${baseUrl}` : '';
       await notifyOwner({
-        title: `New Booking Request from ${ctx.portalCustomer.name}`,
-        content: `${ctx.portalCustomer.name} (${ctx.portalCustomer.email}) submitted a service request:\n\n${input.description}\n\nTimeline: ${input.timeline}`,
+        title: `New Service Request from ${ctx.portalCustomer.name}`,
+        content: `${ctx.portalCustomer.name} (${ctx.portalCustomer.email}) submitted a service request:\n\n${input.description}\n\nTimeline: ${input.timeline}${leadLink}`,
       });
-      return { ok: true, id: req?.id };
+      // SMS alert
+      try {
+        const { sendSms } = await import('../twilio');
+        const { ENV } = await import('../_core/env');
+        if (ENV.ownerPhone) {
+          await sendSms(
+            ENV.ownerPhone,
+            `[HP] New service request from ${ctx.portalCustomer.name}: "${input.description.slice(0, 80)}${input.description.length > 80 ? '...' : ''}" — Timeline: ${input.timeline}`,
+          );
+        }
+      } catch (e) {
+        console.error('[Portal] SMS alert failed:', e);
+      }
+
+      return { ok: true, id: req?.id, leadId: newLeadId };
     }),
   /** Customer views their own service requests */
   getServiceRequests: portalProcedure.query(async ({ ctx }) => {
@@ -1154,7 +1212,13 @@ export const portalRouter = router({
           }
         }
       } catch {}
-      return { milestones, updates, membershipId, membershipTier };
+      let stage: string | null = null;
+      try {
+        const { getOpportunityById: getOpp2 } = await import('../db');
+        const opp2 = await getOpp2(input.hpOpportunityId);
+        stage = opp2?.stage ?? null;
+      } catch {}
+      return { milestones, updates, membershipId, membershipTier, stage };
     }),
 
   // ─── JOB SIGN-OFF: CUSTOMER PROCEDURES ───────────────────────────────────
@@ -1701,6 +1765,77 @@ export const portalRouter = router({
       allMemberships: membershipDetails,
     };
   }),
+
+  /** Portal: returns HP team contact info for the "Your Team" card */
+  getTeamInfo: portalPublicProcedure.query(async () => {
+    return {
+      name: process.env.OWNER_NAME ?? 'Handy Pioneers Team',
+      phone: process.env.OWNER_PHONE ?? '',
+      email: 'help@handypioneers.com',
+    };
+  }),
+
+  /** Portal: request an off-cycle 360° visit */
+  requestOffCycleVisit: portalProcedure
+    .input(z.object({
+      reason: z.string().min(5),
+      urgency: z.enum(['asap', 'within_week', 'flexible']).default('flexible'),
+      preferredDateRange: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const req = await createPortalServiceRequest({
+        customerId: ctx.portalCustomer.id,
+        description: `Off-cycle visit request\n\nReason: ${input.reason}\nUrgency: ${input.urgency}${input.preferredDateRange ? `\nPreferred dates: ${input.preferredDateRange}` : ''}`,
+        timeline: input.urgency,
+        address: ctx.portalCustomer.address ?? undefined,
+        requestType: 'off_cycle_visit',
+        preferredDateRange: input.preferredDateRange,
+      });
+
+      // Notify HP team
+      await notifyOwner({
+        title: `Off-Cycle Visit Request from ${ctx.portalCustomer.name}`,
+        content: `${ctx.portalCustomer.name} (${ctx.portalCustomer.email}) is requesting an extra 360° visit.\n\nReason: ${input.reason}\nUrgency: ${input.urgency}${input.preferredDateRange ? `\nPreferred dates: ${input.preferredDateRange}` : ''}`,
+      });
+      try {
+        const { sendSms } = await import('../twilio');
+        const { ENV } = await import('../_core/env');
+        if (ENV.ownerPhone) {
+          await sendSms(
+            ENV.ownerPhone,
+            `[HP] Off-cycle visit request from ${ctx.portalCustomer.name}: "${input.reason.slice(0, 80)}" — ${input.urgency}`,
+          );
+        }
+      } catch (e) {
+        console.error('[Portal] SMS alert failed:', e);
+      }
+
+      return { ok: true, id: req?.id };
+    }),
+
+  /** Portal: marks onboarding as complete for the logged-in customer */
+  completeOnboarding: portalProcedure
+    .input(z.object({
+      name: z.string().min(1).optional(),
+      phone: z.string().optional(),
+      address: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const { getDb } = await import('../db');
+      const { portalCustomers } = await import('../../drizzle/schema');
+      const { eq } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'DB unavailable' });
+      await db.update(portalCustomers)
+        .set({
+          ...(input.name ? { name: input.name } : {}),
+          ...(input.phone !== undefined ? { phone: input.phone } : {}),
+          ...(input.address !== undefined ? { address: input.address } : {}),
+          onboardingCompletedAt: new Date(),
+        })
+        .where(eq(portalCustomers.id, ctx.portalCustomer.id));
+      return { ok: true };
+    }),
 });
 // ─── EMAIL TEMPLATES ──────────────────────────────────────────────────────────
 // HP brand palette: forest green #1a2e1a / #2d4a2d, warm gold #c8922a
@@ -1918,4 +2053,22 @@ export function buildReviewRequestEmail(
       <p style="margin:24px 0 0;font-size:13px;color:#888;text-align:center;">Thank you for choosing Handy Pioneers. We look forward to working with you again!</p>
     `),
   };
+}
+
+export function buildSignOffRequestEmail(
+  name: string,
+  jobTitle: string,
+  signOffUrl: string,
+  _baseUrl: string,
+) {
+  const firstName = name.split(' ')[0];
+  return emailWrapper(`
+    <h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#1a2e1a;">Your Job is Complete — Please Sign Off</h2>
+    <p style="margin:0 0 12px;">Hi ${firstName},</p>
+    <p style="margin:0 0 8px;">Great news! Your project has been completed:</p>
+    <p style="margin:0 0 20px;padding:12px 16px;background:#f8f9fa;border-left:3px solid #1a2e1a;border-radius:0 4px 4px 0;font-weight:600;color:#1a2e1a;">${jobTitle}</p>
+    <p style="margin:0 0 20px;">Please take a moment to review the work and sign off on completion. This allows us to close out your project and issue your final invoice.</p>
+    ${ctaButton('Sign Off on This Job', signOffUrl, '#1a2e1a')}
+    <p style="margin:0;font-size:13px;color:#888;text-align:center;">Questions? <a href="mailto:help@handypioneers.com" style="color:#c8922a;">Reply to this email</a> or call us at (360) 544-9858.</p>
+  `);
 }

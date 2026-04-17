@@ -443,7 +443,26 @@ export async function getPortalServiceRequestsByCustomer(customerId: number) {
 
 export async function getAllPendingPortalServiceRequests() {
   const db = await d();
-  return db.select().from(portalServiceRequests).where(eq(portalServiceRequests.status, 'pending')).orderBy(desc(portalServiceRequests.createdAt));
+  const rows = await db
+    .select({
+      id: portalServiceRequests.id,
+      customerId: portalServiceRequests.customerId,
+      description: portalServiceRequests.description,
+      timeline: portalServiceRequests.timeline,
+      address: portalServiceRequests.address,
+      status: portalServiceRequests.status,
+      leadId: portalServiceRequests.leadId,
+      readAt: portalServiceRequests.readAt,
+      createdAt: portalServiceRequests.createdAt,
+      customerName: portalCustomers.name,
+      customerEmail: portalCustomers.email,
+      hpCustomerId: portalCustomers.hpCustomerId,
+    })
+    .from(portalServiceRequests)
+    .leftJoin(portalCustomers, eq(portalServiceRequests.customerId, portalCustomers.id))
+    .where(eq(portalServiceRequests.status, 'pending'))
+    .orderBy(desc(portalServiceRequests.createdAt));
+  return rows;
 }
 
 export async function updatePortalServiceRequestStatus(id: number, status: string, leadId?: string) {

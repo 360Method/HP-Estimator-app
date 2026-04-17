@@ -18,6 +18,8 @@ import { TIER_DEFINITIONS } from "@shared/threeSixtyTiers";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import {
   Loader2,
@@ -39,6 +41,7 @@ import {
   Sun,
   Snowflake,
   Wind,
+  CalendarPlus,
 } from "lucide-react";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -213,6 +216,19 @@ export default function Portal360Membership() {
   const [, navigate] = useLocation();
   const { data, isLoading } = trpc.portal.getMembership360.useQuery();
   const [selectedIdx, setSelectedIdx] = useState(0);
+  const [showVisitModal, setShowVisitModal] = useState(false);
+  const [visitReason, setVisitReason] = useState('');
+  const [visitUrgency, setVisitUrgency] = useState<'asap' | 'within_week' | 'flexible'>('flexible');
+  const [visitDateRange, setVisitDateRange] = useState('');
+  const [visitSubmitted, setVisitSubmitted] = useState(false);
+
+  const requestVisitMutation = trpc.portal.requestOffCycleVisit.useMutation({
+    onSuccess: () => {
+      setVisitSubmitted(true);
+      toast.success('Visit request sent! We\'ll be in touch within 24 hours.');
+    },
+    onError: (err) => toast.error(err.message),
+  });
 
   if (isLoading) {
     return (
@@ -283,6 +299,19 @@ export default function Portal360Membership() {
           <span className={`text-xs px-3 py-1 rounded-full border font-semibold ${tier.bg} ${tier.color}`}>
             {tier.label} Member
           </span>
+        </div>
+
+        {/* Request Extra Visit button */}
+        <div className="flex justify-end mb-3">
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5 border-[#1a2e1a]/30 text-[#1a2e1a] hover:bg-[#1a2e1a]/5"
+            onClick={() => { setShowVisitModal(true); setVisitSubmitted(false); }}
+          >
+            <CalendarPlus className="w-3.5 h-3.5" />
+            Request Extra Visit
+          </Button>
         </div>
 
         {/* Property switcher — only shown when customer has multiple memberships */}
@@ -510,6 +539,77 @@ export default function Portal360Membership() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Off-Cycle Visit Request Modal */}
+      <Dialog open={showVisitModal} onOpenChange={setShowVisitModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-[#1a2e1a]">
+              <CalendarPlus className="w-4 h-4 text-[#c8922a]" />
+              Request an Extra Visit
+            </DialogTitle>
+          </DialogHeader>
+          {visitSubmitted ? (
+            <div className="py-6 text-center">
+              <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-3" />
+              <h3 className="font-semibold text-gray-900 mb-1">Request Received!</h3>
+              <p className="text-sm text-muted-foreground mb-4">We'll be in touch within 24 hours to schedule your visit.</p>
+              <Button size="sm" variant="outline" onClick={() => setShowVisitModal(false)}>Close</Button>
+            </div>
+          ) : (
+            <div className="space-y-4 pt-2">
+              <div>
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider block mb-1.5">Reason for Extra Visit</label>
+                <Textarea
+                  placeholder="e.g. Noticed a leak under the sink, want it checked before it gets worse..."
+                  value={visitReason}
+                  onChange={(e) => setVisitReason(e.target.value)}
+                  rows={3}
+                  className="text-sm"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider block mb-1.5">Urgency</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['asap', 'within_week', 'flexible'] as const).map((u) => (
+                    <button
+                      key={u}
+                      onClick={() => setVisitUrgency(u)}
+                      className={`rounded-lg border px-2 py-2 text-xs font-medium transition-all ${
+                        visitUrgency === u
+                          ? 'border-[#1a2e1a] bg-[#1a2e1a] text-white'
+                          : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                      }`}
+                    >
+                      {u === 'asap' ? 'ASAP' : u === 'within_week' ? 'Within a Week' : 'Flexible'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-500 uppercase tracking-wider block mb-1.5">Preferred Date Range (optional)</label>
+                <input
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#c8922a]"
+                  placeholder="e.g. Any weekday after May 5th"
+                  value={visitDateRange}
+                  onChange={(e) => setVisitDateRange(e.target.value)}
+                />
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Button variant="outline" size="sm" className="flex-1" onClick={() => setShowVisitModal(false)}>Cancel</Button>
+                <Button
+                  size="sm"
+                  className="flex-1 bg-[#1a2e1a] hover:bg-[#2d4a2d] text-white"
+                  disabled={visitReason.trim().length < 5 || requestVisitMutation.isPending}
+                  onClick={() => requestVisitMutation.mutate({ reason: visitReason.trim(), urgency: visitUrgency, preferredDateRange: visitDateRange.trim() || undefined })}
+                >
+                  {requestVisitMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Send Request'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </PortalLayout>
   );
 }

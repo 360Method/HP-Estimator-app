@@ -62,7 +62,7 @@ export default function PortalRequest() {
           </div>
           <h2 className="text-xl font-bold text-gray-900 mb-2">Request Submitted!</h2>
           <p className="text-gray-500 mb-6 max-w-sm">
-            We've received your request and will be in touch shortly to schedule your appointment.
+            We've received your request and will be in touch within 24 hours to schedule your appointment.
           </p>
           <div className="flex gap-3">
             <Button

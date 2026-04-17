@@ -29,6 +29,7 @@ const STAGE_COLORS: Record<string, string> = {
   'Scheduled':                'bg-sky-100 text-sky-800',
   'In Progress':              'bg-indigo-100 text-indigo-800',
   'Completed':                'bg-emerald-100 text-emerald-800',
+  'Awaiting Sign-Off':        'bg-rose-100 text-rose-800',
   'Invoice Sent':             'bg-violet-100 text-violet-800',
   'Invoice Paid':             'bg-green-100 text-green-800',
 };

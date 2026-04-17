@@ -184,20 +184,64 @@ export default function PortalEstimateDetail() {
           <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6 text-green-700 text-sm">
             <div className="flex items-center justify-between flex-wrap gap-3">
               <span className="font-medium">✓ Estimate approved on {fmtDate(est.approvedAt)} — Thank you, {est.signerName}!</span>
-              {est.hpOpportunityId && (
-                <button
-                  onClick={() => navigate(`/portal/job/${est.hpOpportunityId}`)}
-                  className="inline-flex items-center gap-1.5 bg-[#2d4a2d] hover:bg-[#1a2e1a] text-white text-xs font-medium px-3 py-1.5 rounded-md transition-colors"
-                >
-                  View Job Progress →
-                </button>
-              )}
+              <div className="flex items-center gap-2 flex-wrap">
+                {est.depositInvoiceId && !est.depositInvoicePaidAt && (
+                  <button
+                    onClick={() => navigate(`/portal/invoices/${est.depositInvoiceId}`)}
+                    className="inline-flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold px-3 py-1.5 rounded-md transition-colors"
+                  >
+                    Pay Deposit →
+                  </button>
+                )}
+                {est.hpOpportunityId && (
+                  <button
+                    onClick={() => navigate(`/portal/job/${est.hpOpportunityId}`)}
+                    className="inline-flex items-center gap-1.5 bg-[#2d4a2d] hover:bg-[#1a2e1a] text-white text-xs font-medium px-3 py-1.5 rounded-md transition-colors"
+                  >
+                    View Job Progress →
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}
         {isDeclined && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 text-red-700 text-sm font-medium">
             This estimate was declined.
+          </div>
+        )}
+
+        {/* ── Progress Stepper ── */}
+        {(isApproved || canApprove) && (
+          <div className="bg-white border border-gray-200 rounded-xl p-4 mb-6 shadow-sm">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Project Progress</p>
+            <div className="flex items-center gap-0">
+              {[
+                { label: 'Estimate Sent', done: true },
+                { label: 'Approved', done: isApproved },
+                { label: 'Deposit Paid', done: isApproved && !!est.depositInvoicePaidAt },
+                { label: 'Work Scheduled', done: false },
+                { label: 'Complete', done: false },
+              ].map((step, i, arr) => (
+                <div key={step.label} className="flex items-center flex-1 min-w-0">
+                  <div className="flex flex-col items-center flex-1 min-w-0">
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                      step.done ? 'bg-emerald-500 text-white' : 'bg-gray-200 text-gray-400'
+                    }`}>
+                      {step.done ? '✓' : i + 1}
+                    </div>
+                    <span className={`text-[9px] mt-1 text-center leading-tight ${
+                      step.done ? 'text-emerald-600 font-semibold' : 'text-gray-400'
+                    }`}>{step.label}</span>
+                  </div>
+                  {i < arr.length - 1 && (
+                    <div className={`h-0.5 flex-1 mx-1 shrink-0 ${
+                      arr[i + 1].done ? 'bg-emerald-400' : 'bg-gray-200'
+                    }`} />
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

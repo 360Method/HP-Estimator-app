@@ -267,6 +267,20 @@
       "when": 1776371521661,
       "tag": "0037_yellow_ares",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "5",
+      "when": 1776387413622,
+      "tag": "0038_lyrical_gauntlet",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "5",
+      "when": 1776387660641,
+      "tag": "0039_easy_talos",
+      "breakpoints": true
     }
   ]
 }

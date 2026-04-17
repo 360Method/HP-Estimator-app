@@ -196,6 +196,49 @@ export const workOrdersRouter = router({
         console.error("[WorkOrders] Failed to send scheduling email:", err);
       }
 
+      // Create / update portal appointment so customer sees it in Appointments tab
+      try {
+        const { createPortalAppointment, findPortalCustomerByHpId } = await import('../portalDb');
+        const db2 = await getDb();
+        if (db2) {
+          const [mem2] = await db2.select().from(threeSixtyMemberships).where(eq(threeSixtyMemberships.id, wo.membershipId)).limit(1);
+          if (mem2?.hpCustomerId) {
+            const pc = await findPortalCustomerByHpId(mem2.hpCustomerId);
+            if (pc) {
+              const WO_TYPE_LABELS2: Record<string, string> = {
+                baseline_scan: 'Annual 360° Home Scan',
+                spring: 'Spring 360° Visit',
+                summer: 'Summer 360° Visit',
+                fall: 'Fall 360° Visit',
+                winter: 'Winter 360° Visit',
+              };
+              // Try to get property address from customerAddresses
+              let apptAddress: string | null = null;
+              if (mem2.propertyAddressId) {
+                try {
+                  const { customerAddresses } = await import('../../drizzle/schema');
+                  const { eq: eq2 } = await import('drizzle-orm');
+                  const [addr] = await db2.select().from(customerAddresses).where(eq2(customerAddresses.id, String(mem2.propertyAddressId))).limit(1);
+                  if (addr) apptAddress = [addr.street, addr.city, addr.state].filter(Boolean).join(', ');
+                } catch {}
+              }
+              await createPortalAppointment({
+                customerId: pc.id,
+                title: WO_TYPE_LABELS2[wo.type] ?? `360° Visit`,
+                type: 'job',
+                scheduledAt: new Date(input.scheduledDate),
+                techName: input.assignedTo?.join(', ') ?? null,
+                address: apptAddress,
+                status: 'scheduled',
+                notes: `Work Order #${wo.id}`,
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[WorkOrders] Failed to create portal appointment:', err);
+      }
+
       return { success: true };
     }),
 

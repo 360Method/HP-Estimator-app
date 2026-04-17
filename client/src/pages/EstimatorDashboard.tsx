@@ -186,6 +186,15 @@ export default function EstimatorDashboard() {
     try { return localStorage.getItem('hp_onboarding_dismissed') === '1'; } catch { return false; }
   });
 
+  // ── Portal service requests (pending) ─────────────────────
+  const { data: serviceRequests, refetch: refetchServiceReqs } = trpc.portal.getAllServiceRequests.useQuery(undefined, {
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
+  });
+  const reviewServiceReq = trpc.portal.reviewServiceRequest.useMutation({
+    onSuccess: () => refetchServiceReqs(),
+  });
+
   // ── DB-backed revenue stats (portal payments) ───────────────
   const { data: revenueStats } = trpc.portal.getRevenueStats.useQuery(undefined, {
     staleTime: 60_000,
@@ -747,6 +756,61 @@ export default function EstimatorDashboard() {
                     </button>
                   );
                 })}
+            </div>
+          </div>
+        )}
+
+        {/* ── Service Requests from Portal ───────────────────── */}
+        {serviceRequests && serviceRequests.length > 0 && (
+          <div className="bg-white rounded-xl border border-amber-200 p-5 shadow-sm">
+            <SectionHeader
+              title={`Service Requests (${serviceRequests.length})`}
+              sub="Submitted via customer portal — needs action"
+            />
+            <div className="space-y-3 mt-3">
+              {serviceRequests.map((req: any) => {
+                const age = Math.floor((Date.now() - new Date(req.createdAt).getTime()) / 3_600_000);
+                const urgency = age < 12 ? 'text-green-600 bg-green-50' : age < 24 ? 'text-amber-600 bg-amber-50' : 'text-red-600 bg-red-50';
+                return (
+                  <div key={req.id} className="flex items-start gap-3 p-3 rounded-lg border border-border bg-amber-50/30">
+                    <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center shrink-0 text-amber-700 font-bold text-sm">
+                      {(req.customerName?.[0] ?? '?').toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-sm text-foreground">{req.customerName ?? 'Unknown'}</span>
+                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${urgency}`}>
+                          {age < 1 ? 'Just now' : age < 24 ? `${age}h ago` : `${Math.floor(age / 24)}d ago`}
+                        </span>
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 capitalize">{req.timeline?.replace('_', ' ')}</span>
+                        {req.requestType === 'off_cycle_visit' && (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-violet-100 text-violet-700">360° Extra Visit</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{req.description}</p>
+                      {req.address && <p className="text-xs text-muted-foreground mt-0.5">📍 {req.address}</p>}
+                    </div>
+                    <div className="flex flex-col gap-1.5 shrink-0">
+                      <button
+                        onClick={() => {
+                          const customer = allCustomers.find(c => c.id === req.hpCustomerId);
+                          if (customer) setActiveCustomer(customer.id);
+                          reviewServiceReq.mutate({ id: req.id, status: 'reviewed' });
+                        }}
+                        className="text-xs px-2 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
+                      >
+                        Open
+                      </button>
+                      <button
+                        onClick={() => reviewServiceReq.mutate({ id: req.id, status: 'dismissed' })}
+                        className="text-xs px-2 py-1 rounded border border-border hover:bg-accent text-muted-foreground"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
