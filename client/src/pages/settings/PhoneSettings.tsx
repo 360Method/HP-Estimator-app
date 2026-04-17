@@ -3,12 +3,13 @@
 // ============================================================
 
 import { useState } from 'react';
-import { Phone, PhoneForwarded, Bot, Voicemail, TestTube, Save, Loader2, Clock } from 'lucide-react';
+import { Phone, PhoneForwarded, Bot, Voicemail, TestTube, Save, Loader2, Clock, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 
 type ForwardingMode = 'forward_to_number' | 'forward_to_ai' | 'voicemail';
@@ -22,6 +23,34 @@ const DAYS = [
   { num: 5, label: 'Fri' },
   { num: 6, label: 'Sat' },
 ];
+
+// ─── Greeting example templates ──────────────────────────────────────────────
+const GREETING_EXAMPLES: { label: string; text: string; tag?: string }[] = [
+  {
+    label: 'Professional (with recording notice)',
+    tag: 'recommended',
+    text: "Thank you for calling Handy Pioneers. This call may be recorded for quality and training purposes. Please hold while we connect you.",
+  },
+  {
+    label: 'Friendly & warm',
+    text: "Hi, you've reached Handy Pioneers — your local home improvement experts. We're excited to help you with your next project. Please hold for just a moment.",
+  },
+  {
+    label: 'Brief & direct',
+    text: "Thank you for calling Handy Pioneers. Please hold.",
+  },
+  {
+    label: 'Voicemail prompt (with recording notice)',
+    text: "You've reached Handy Pioneers. This call may be recorded. We're unavailable right now — please leave your name, number, and a brief description of your project and we'll call you back within one business day.",
+  },
+  {
+    label: 'After-hours voicemail',
+    text: "Thank you for calling Handy Pioneers. Our office is currently closed. Our business hours are Monday through Friday, 8 AM to 5 PM Pacific. Please leave a message and we'll return your call the next business day.",
+  },
+];
+
+const RECORDING_DISCLOSURE = "This call may be recorded for quality and training purposes.";
+const MAX_GREETING_LENGTH = 500;
 
 export default function PhoneSettings() {
   const { data: settings, isLoading, refetch } = trpc.phone.getSettings.useQuery();
@@ -37,6 +66,7 @@ export default function PhoneSettings() {
   const [businessHoursEnd, setBusinessHoursEnd] = useState<string | null>(null);
   const [businessDays, setBusinessDays] = useState<string | null>(null);
   const [testNumber, setTestNumber] = useState('');
+  const [showExamples, setShowExamples] = useState(false);
 
   // Use server values as defaults when local state is null
   const effectiveMode = (mode ?? settings?.forwardingMode ?? 'forward_to_number') as ForwardingMode;
@@ -61,6 +91,23 @@ export default function PhoneSettings() {
     }
     setBusinessDays(Array.from(current).sort((a, b) => a - b).join(','));
   };
+
+  // Apply an example template — optionally prepend recording disclosure if recording is on
+  const applyExample = (text: string) => {
+    setGreeting(text);
+    setShowExamples(false);
+  };
+
+  // When recording is toggled on, offer to add disclosure if not already present
+  const handleRecordingToggle = (enabled: boolean) => {
+    setCallRecording(enabled);
+    if (enabled && !effectiveGreeting.toLowerCase().includes('recorded') && !effectiveGreeting.toLowerCase().includes('recording')) {
+      // Don't auto-insert — just show a hint (handled in UI below)
+    }
+  };
+
+  const greetingHasDisclosure = effectiveGreeting.toLowerCase().includes('recorded') ||
+    effectiveGreeting.toLowerCase().includes('recording');
 
   const updateMutation = trpc.phone.updateSettings.useMutation({
     onSuccess: () => {
@@ -210,18 +257,116 @@ export default function PhoneSettings() {
         </div>
       )}
 
-      {/* Greeting */}
-      <div className="space-y-2">
-        <Label htmlFor="greeting">Custom Greeting (optional)</Label>
-        <Input
+      {/* ── Greeting editor ── */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <Label htmlFor="greeting" className="text-sm font-semibold">
+            Custom Greeting
+          </Label>
+          <button
+            type="button"
+            onClick={() => setShowExamples(v => !v)}
+            className="flex items-center gap-1 text-xs text-primary hover:underline"
+          >
+            <Sparkles size={12} />
+            Examples
+            {showExamples ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+          </button>
+        </div>
+
+        {/* Example templates panel */}
+        {showExamples && (
+          <div className="border border-border rounded-lg divide-y divide-border bg-card">
+            {GREETING_EXAMPLES.map((ex, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => applyExample(ex.text)}
+                className="w-full text-left px-4 py-3 hover:bg-muted/50 transition-colors"
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs font-semibold text-foreground">{ex.label}</span>
+                  {ex.tag && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
+                      {ex.tag}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">{ex.text}</p>
+              </button>
+            ))}
+          </div>
+        )}
+
+        <Textarea
           id="greeting"
-          placeholder="Thank you for calling Handy Pioneers…"
+          placeholder="Thank you for calling Handy Pioneers. This call may be recorded for quality and training purposes. Please hold while we connect you."
           value={effectiveGreeting}
-          onChange={e => setGreeting(e.target.value)}
+          onChange={e => setGreeting(e.target.value.slice(0, MAX_GREETING_LENGTH))}
+          rows={4}
+          className="resize-none text-sm"
         />
-        <p className="text-xs text-muted-foreground">
-          Played before routing. Leave blank for no greeting (voicemail mode uses a default message).
-        </p>
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-muted-foreground">
+            Played to callers before routing. Leave blank for no greeting.
+          </p>
+          <span className={`text-xs tabular-nums ${effectiveGreeting.length >= MAX_GREETING_LENGTH - 20 ? 'text-amber-500' : 'text-muted-foreground'}`}>
+            {effectiveGreeting.length}/{MAX_GREETING_LENGTH}
+          </span>
+        </div>
+
+        {/* Recording disclosure nudge */}
+        {effectiveCallRecording && !greetingHasDisclosure && effectiveGreeting.trim() && (
+          <div className="flex items-start gap-3 p-3 rounded-lg border border-amber-500/30 bg-amber-500/5">
+            <div className="mt-0.5 text-amber-500">
+              <Phone size={13} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-amber-600 dark:text-amber-400">
+                Call recording is on — consider adding a disclosure
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Many states require notifying callers before recording.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  const trimmed = effectiveGreeting.trimEnd();
+                  const separator = trimmed.endsWith('.') || trimmed.endsWith('!') || trimmed.endsWith('?') ? ' ' : '. ';
+                  const updated = (trimmed + separator + RECORDING_DISCLOSURE).slice(0, MAX_GREETING_LENGTH);
+                  setGreeting(updated);
+                }}
+                className="mt-2 text-xs text-primary underline hover:no-underline"
+              >
+                Add "{RECORDING_DISCLOSURE}"
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Disclosure hint when greeting is empty and recording is on */}
+        {effectiveCallRecording && !effectiveGreeting.trim() && (
+          <div className="flex items-start gap-3 p-3 rounded-lg border border-amber-500/30 bg-amber-500/5">
+            <div className="mt-0.5 text-amber-500">
+              <Phone size={13} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-amber-600 dark:text-amber-400">
+                Call recording is on — a greeting with disclosure is recommended
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Many states require notifying callers before recording. Use the Examples picker above to get started.
+              </p>
+              <button
+                type="button"
+                onClick={() => applyExample(GREETING_EXAMPLES[0].text)}
+                className="mt-2 text-xs text-primary underline hover:no-underline"
+              >
+                Use recommended greeting
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Toggles */}
@@ -233,7 +378,7 @@ export default function PhoneSettings() {
           </div>
           <Switch
             checked={effectiveCallRecording}
-            onCheckedChange={v => setCallRecording(v)}
+            onCheckedChange={handleRecordingToggle}
           />
         </div>
         {effectiveMode === 'voicemail' && (
@@ -275,7 +420,6 @@ export default function PhoneSettings() {
                 {DAYS.map(({ num, label }) => (
                   <button
                     key={num}
-                    type="button"
                     onClick={() => toggleDay(num)}
                     className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors border ${
                       selectedDays.includes(num)
@@ -378,8 +522,7 @@ export default function PhoneSettings() {
             className="text-primary underline"
           >
             Twilio Console → Phone Numbers → Manage → Active Numbers
-          </a>
-          .
+          </a>.
         </p>
       </div>
     </div>

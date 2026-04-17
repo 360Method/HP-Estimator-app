@@ -1895,3 +1895,13 @@
 - [x] Add All/Calls tab bar to Inbox thread panel
 - [x] Calls tab shows call log cards: direction icon, status badge, duration, timestamp, recording/voicemail links
 - [x] Add listCallLogsByConversation() to db.ts and inbox.callLogs.byConversation tRPC procedure
+
+## Custom Greeting + Call Recording Disclosure
+
+- [x] Confirm greeting field exists in phoneSettings schema (varchar 500) and is used in inbound TwiML via Polly.Joanna <Say>
+- [x] No schema change needed — disclosure is handled in the greeting text itself
+- [x] Greeting editor upgraded: Input → Textarea with 500-char counter
+- [x] 5 example templates with one-click apply (professional+disclosure, friendly, brief, voicemail+disclosure, after-hours)
+- [x] Smart disclosure nudge: amber banner when callRecording=true and greeting lacks 'recorded/recording' keyword
+- [x] One-click 'Add disclosure sentence' appends RECORDING_DISCLOSURE to existing greeting
+- [x] One-click 'Use recommended greeting' applies professional+disclosure template when greeting is empty
