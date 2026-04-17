@@ -32,12 +32,13 @@ import AllowlistSettings from './AllowlistSettings';
 import ServiceAreaSettings from './ServiceAreaSettings';
 import ImportDataSettings from './ImportDataSettings';
 import PhoneSettings from './PhoneSettings';
+import AutomationsSettings from './AutomationsSettings';
 
 export type SettingsSection =
   | 'company' | 'billing' | 'notifications' | 'team' | 'roles' | 'allowlist'
   | 'estimates' | 'invoices' | 'jobs' | 'leads' | 'pipeline' | 'price-book'
   | 'checklists' | 'job-fields' | 'lead-sources' | 'tags'
-  | 'integrations' | 'service-area' | 'import-data' | 'phone';
+  | 'integrations' | 'service-area' | 'import-data' | 'phone' | 'automations';
 
 interface NavGroup {
   label: string;
@@ -80,7 +81,8 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: 'Integrations',
     items: [
-      { id: 'integrations', label: 'Integrations', icon: Zap },
+      { id: 'automations',  label: 'Automations',  icon: Zap   },
+      { id: 'integrations', label: 'Integrations', icon: Settings },
       { id: 'phone',        label: 'Phone',         icon: Phone },
     ],
   },
@@ -136,6 +138,7 @@ export default function SettingsPage({ onBack, initialSection = 'company' }: Pro
       case 'service-area':  return <ServiceAreaSettings />;
       case 'import-data':   return <ImportDataSettings />;
       case 'phone':          return <PhoneSettings />;
+      case 'automations':    return <AutomationsSettings />;
     }
   };
 

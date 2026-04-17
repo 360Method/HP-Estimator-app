@@ -1984,3 +1984,10 @@
 - [x] Add "Open in Inbox" arrow button on each feed item in the profile Activity Feed — navigates to the Inbox tab and opens that conversation
 - [x] Add unread message badge (red dot + count) on customer profile header avatar/name area
 - [x] Add unread badge on customer list rows in CustomersListPage
+
+## Settings & Automations Full Build (Apr 17)
+- [ ] Phase 1: Add appSettings, notificationPreferences, automationRules, automationRuleLogs tables to schema + db:push
+- [ ] Phase 2: appSettings router (getSettings/updateSettings), notificationPreferences router (getAll/upsert), automationRules router (list/create/update/delete/toggle), automationEngine helper
+- [ ] Phase 3: Settings Company page wired to appSettings DB; Settings Notifications page wired to notificationPreferences DB
+- [ ] Phase 4: AutomationsSettings page with rule list, create/edit modal, trigger/action/delay builder; add to sidebar nav
+- [ ] Phase 5: Wire trigger points — opportunities, estimate, portal, financials, twilio webhook, booking — to automationEngine

@@ -316,6 +316,13 @@
       "when": 1776400814225,
       "tag": "0044_black_hellion",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "5",
+      "when": 1776407321007,
+      "tag": "0045_dizzy_moira_mactaggert",
+      "breakpoints": true
     }
   ]
 }

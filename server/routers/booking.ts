@@ -20,6 +20,7 @@ import {
 } from "../db";
 import { notifyOwner } from "../_core/notification";
 import { nanoid } from "nanoid";
+import { runAutomationsForTrigger } from "../automationEngine";
 
 export const bookingRouter = router({
   /** Check if a zip code is in the service area. Public — no auth required. */
@@ -137,6 +138,15 @@ export const bookingRouter = router({
         ].filter(Boolean).join("\n"),
       });
 
+      // Fire new_booking automation (non-blocking)
+      runAutomationsForTrigger('new_booking', {
+        customerName: displayName,
+        customerFirstName: input.firstName,
+        phone: input.phone,
+        email: input.email,
+        description: input.serviceType,
+        referenceNumber: leadId,
+      }).catch(e => console.error('[automation] new_booking error:', e));
       return {
         success: true,
         leadId,

@@ -17,6 +17,7 @@ import {
 } from "../db";
 import { sendSms, isTwilioConfigured } from "../twilio";
 import { nanoid } from "nanoid";
+import { runAutomationsForTrigger } from "../automationEngine";
 
 const OpportunityInput = z.object({
   customerId: z.string(),
@@ -83,7 +84,14 @@ export const opportunitiesRouter = router({
     .input(OpportunityInput)
     .mutation(async ({ input }) => {
       const id = nanoid();
-      return createOpportunity({ id, ...input });
+      const result = await createOpportunity({ id, ...input });
+      // Fire lead_created automation (non-blocking)
+      const triggerName = input.area === 'job' ? 'job_created' : input.area === 'estimate' ? 'estimate_sent' : 'lead_created';
+      runAutomationsForTrigger(triggerName as any, {
+        description: input.title || `New ${input.area}`,
+        referenceNumber: id,
+      }).catch(e => console.error(`[automation] ${triggerName} error:`, e));
+      return result;
     }),
 
   /** Update an existing opportunity */
@@ -124,6 +132,16 @@ export const opportunitiesRouter = router({
       if (input.area) update.area = input.area;
       await updateOpportunity(input.id, update);
 
+      // Fire job_completed automation when stage moves to Completed or Awaiting Sign-Off
+      if (input.stage === 'Completed' || input.stage === 'Awaiting Sign-Off') {
+        const opp2 = await getOpportunityById(input.id);
+        if (opp2) {
+          runAutomationsForTrigger('job_completed', {
+            description: opp2.title,
+            referenceNumber: opp2.jobNumber ?? input.id,
+          }).catch(e => console.error('[automation] job_completed error:', e));
+        }
+      }
       // When job moves to "Awaiting Sign-Off": send portal sign-off email
       if (input.stage === 'Awaiting Sign-Off') {
         try {

@@ -10,6 +10,7 @@ import { invoices, invoicePayments, customers, expenses } from "../../drizzle/sc
 import { and, ne, sql, desc, eq, gte, lte } from "drizzle-orm";
 import { isGmailConfigured, sendOverdueReminderEmail } from "../gmail";
 import { sendSms, isTwilioConfigured } from "../twilio";
+import { runAutomationsForTrigger } from "../automationEngine";
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 
@@ -391,6 +392,15 @@ export const financialsRouter = router({
         }
       }
 
+      // Fire invoice_overdue automation (non-blocking)
+      runAutomationsForTrigger('invoice_overdue', {
+        customerName,
+        customerFirstName: customerName.split(' ')[0],
+        phone: cust.phone ?? undefined,
+        email: cust.email ?? undefined,
+        referenceNumber: inv.invoiceNumber ?? inv.id,
+        amount: inv.balance ? `$${(inv.balance / 100).toFixed(2)}` : undefined,
+      }).catch(e => console.error('[automation] invoice_overdue error:', e));
       return { results };
     }),
 

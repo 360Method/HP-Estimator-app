@@ -77,6 +77,7 @@ import { storagePut } from "../storage";
 import { broadcastOpportunityUpdate, broadcastPortalMessage } from "../sse";
 import Stripe from "stripe";
 import { ENV } from "../_core/env";
+import { runAutomationsForTrigger } from "../automationEngine";
 
 // ─── SIGNATURE STORAGE HELPER ───────────────────────────────────────────────
 /**
@@ -233,6 +234,15 @@ export const portalRouter = router({
         throw new TRPCError({ code: "NOT_FOUND" });
       }
       await markPortalEstimateViewed(input.id);
+      // Fire estimate_viewed automation (non-blocking)
+      runAutomationsForTrigger('estimate_viewed', {
+        customerName: ctx.portalCustomer.name,
+        customerFirstName: ctx.portalCustomer.name?.split(' ')[0],
+        email: ctx.portalCustomer.email,
+        phone: (ctx.portalCustomer as any).phone ?? undefined,
+        referenceNumber: est.estimateNumber,
+        description: est.title ?? undefined,
+      }).catch(e => console.error('[automation] estimate_viewed error:', e));
       // Fetch deposit invoice status for the progress stepper
       let depositInvoicePaidAt: Date | null = null;
       let depositInvoiceId: number | null = null;
@@ -349,6 +359,16 @@ export const portalRouter = router({
         title: `\u2705 Estimate Approved: ${est.estimateNumber}`,
         content: `${ctx.portalCustomer.name} approved estimate ${est.estimateNumber} (${est.title}) and signed electronically.${est.hpOpportunityId ? ` Opportunity ${est.hpOpportunityId} marked Won.` : ''}`,
       }).catch(() => null);
+      // Fire estimate_approved automation (non-blocking)
+      runAutomationsForTrigger('estimate_approved', {
+        customerName: ctx.portalCustomer.name,
+        customerFirstName: ctx.portalCustomer.name?.split(' ')[0],
+        email: ctx.portalCustomer.email,
+        phone: (ctx.portalCustomer as any).phone ?? undefined,
+        referenceNumber: est.estimateNumber,
+        amount: est.totalAmount ? `$${(est.totalAmount / 100).toFixed(2)}` : undefined,
+        description: est.title ?? undefined,
+      }).catch(e => console.error('[automation] estimate_approved error:', e));
 
       return { estimate: await getPortalEstimateById(input.id), depositInvoice };
     }),

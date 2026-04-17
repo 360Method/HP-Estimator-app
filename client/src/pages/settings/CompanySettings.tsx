@@ -1,81 +1,76 @@
 // ============================================================
-// CompanySettings — Business info, description, logo, T&C, hours, service area
-// Pre-filled with Handy Pioneers data
+// CompanySettings — DB-backed via trpc.appSettings
+// White-label foundation: all fields persist to appSettings table
 // ============================================================
 
-import { useState } from 'react';
-import { Building2, Clock, MapPin, Save, Edit2, X, Check } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Building2, Clock, MapPin, Save, Edit2, X, Check, Loader2, Globe, Phone, Mail, FileText, Palette } from 'lucide-react';
 import { toast } from 'sonner';
+import { trpc } from '@/lib/trpc';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 
 const HP_LOGO = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg';
 
 const TIMEZONES = [
-  '(GMT-08:00) Pacific Time - Los Angeles',
-  '(GMT-07:00) Mountain Time - Denver',
-  '(GMT-06:00) Central Time - Chicago',
-  '(GMT-05:00) Eastern Time - New York',
+  { value: 'America/Los_Angeles', label: '(GMT-08:00) Pacific Time — Los Angeles' },
+  { value: 'America/Denver',      label: '(GMT-07:00) Mountain Time — Denver' },
+  { value: 'America/Chicago',     label: '(GMT-06:00) Central Time — Chicago' },
+  { value: 'America/New_York',    label: '(GMT-05:00) Eastern Time — New York' },
+  { value: 'America/Phoenix',     label: '(GMT-07:00) Arizona (no DST)' },
+  { value: 'America/Anchorage',   label: '(GMT-09:00) Alaska' },
+  { value: 'Pacific/Honolulu',    label: '(GMT-10:00) Hawaii' },
 ];
 
-const HOURS_DEFAULT = [
-  { day: 'Monday',    open: '07:00', close: '17:00', closed: false },
-  { day: 'Tuesday',   open: '07:00', close: '17:00', closed: false },
-  { day: 'Wednesday', open: '07:00', close: '17:00', closed: false },
-  { day: 'Thursday',  open: '07:00', close: '17:00', closed: false },
-  { day: 'Friday',    open: '07:00', close: '17:00', closed: false },
-  { day: 'Saturday',  open: '08:00', close: '14:00', closed: false },
-  { day: 'Sunday',    open: '',      close: '',       closed: true  },
-];
-
-type Tab = 'profile' | 'hours' | 'service-area';
-
-interface BusinessInfo {
-  name: string; address: string; city: string; state: string; zip: string;
-  timezone: string; supportEmail: string; licenseNumber: string;
-  phone: string; website: string; legalName: string; industry: string;
-  description: string; invoiceMessage: string; termsAndConditions: string;
-}
+type Tab = 'profile' | 'branding' | 'documents';
 
 export default function CompanySettings() {
   const [tab, setTab] = useState<Tab>('profile');
   const [editing, setEditing] = useState<string | null>(null);
-  const [info, setInfo] = useState<BusinessInfo>({
-    name: 'Handy Pioneers',
-    address: '808 SE Chkalov Dr 3-433',
-    city: 'Vancouver', state: 'WA', zip: '98683',
-    timezone: '(GMT-08:00) Pacific Time - Los Angeles',
-    supportEmail: 'help@handypioneers.com',
-    licenseNumber: 'HANDYP*761NH',
-    phone: '(360) 544-9858',
-    website: 'https://handypioneers.com',
-    legalName: 'PIONEER PACIFIC PROPERTIES, LLC',
-    industry: 'General Contractor',
-    description: 'At Handy Pioneers, we believe every home deserves revitalization and functional improvements that reflect your unique style. Our professional team works diligently to transform your spaces into places you\'ll love. Reach out today to request an estimate for our unparalleled handyman and remodeling services.',
-    invoiceMessage: '',
-    termsAndConditions: `WA Contractor License: HANDYP*761NH\nWebsite: www.HandyPioneers.com\nPhone: 360-544-9858\n\nPayment is due upon completion unless otherwise agreed in writing. A 50% deposit may be required for projects over $1,000. All work is guaranteed for 1 year from completion date. Customer is responsible for obtaining any required permits unless otherwise specified in the estimate.`,
-  });
-  const [draft, setDraft] = useState<Partial<BusinessInfo>>({});
-  const [hours, setHours] = useState(HOURS_DEFAULT);
-  const [serviceRadius, setServiceRadius] = useState(50);
-  const [serviceNote, setServiceNote] = useState('Serving the greater Vancouver, WA and Portland, OR metro area. We travel up to 50 miles from our base in Vancouver, WA.');
+  const [draft, setDraft] = useState<Record<string, string | number>>({});
 
-  const startEdit = (section: string) => {
-    setDraft({ ...info });
-    setEditing(section);
-  };
+  const { data: settings, isLoading } = trpc.appSettings.getSettings.useQuery();
+  const updateMutation = trpc.appSettings.updateSettings.useMutation({
+    onSuccess: () => {
+      toast.success('Settings saved');
+      setEditing(null);
+      setDraft({});
+      utils.appSettings.getSettings.invalidate();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+  const utils = trpc.useUtils();
+
+  // Seed draft when settings load or editing section changes
+  useEffect(() => {
+    if (settings && editing) {
+      setDraft({ ...settings } as Record<string, string | number>);
+    }
+  }, [editing, settings]);
+
+  const startEdit = (section: string) => setEditing(section);
+  const cancelEdit = () => { setEditing(null); setDraft({}); };
 
   const saveEdit = () => {
-    setInfo(prev => ({ ...prev, ...draft }));
-    setEditing(null);
-    toast.success('Settings saved');
+    const payload: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(draft)) {
+      if (v !== (settings as any)?.[k]) payload[k] = v;
+    }
+    if (Object.keys(payload).length === 0) { setEditing(null); return; }
+    updateMutation.mutate(payload as any);
   };
-
-  const cancelEdit = () => { setDraft({}); setEditing(null); };
 
   const EditBar = ({ section }: { section: string }) => (
     editing === section ? (
       <div className="flex items-center gap-2">
-        <button onClick={saveEdit} className="flex items-center gap-1 text-xs text-primary font-semibold hover:underline">
-          <Check size={12} /> Save
+        <button
+          onClick={saveEdit}
+          disabled={updateMutation.isPending}
+          className="flex items-center gap-1 text-xs text-primary font-semibold hover:underline disabled:opacity-50"
+        >
+          {updateMutation.isPending ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Save
         </button>
         <button onClick={cancelEdit} className="flex items-center gap-1 text-xs text-muted-foreground hover:underline">
           <X size={12} /> Cancel
@@ -88,50 +83,103 @@ export default function CompanySettings() {
     )
   );
 
-  const Field = ({ label, value, field, type = 'text', options }: {
-    label: string; value: string; field: keyof BusinessInfo;
-    type?: 'text' | 'email' | 'tel' | 'url' | 'select' | 'textarea';
-    options?: string[];
-  }) => (
-    <div>
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">{label}</p>
-      {editing === 'business-info' || editing === 'description' || editing === 'invoice-message' || editing === 'terms' ? (
-        type === 'select' ? (
-          <select
-            value={draft[field] ?? value}
-            onChange={e => setDraft(d => ({ ...d, [field]: e.target.value }))}
-            className="field-input"
-          >
-            {options?.map(o => <option key={o}>{o}</option>)}
-          </select>
-        ) : type === 'textarea' ? (
-          <textarea
-            value={draft[field] ?? value}
-            onChange={e => setDraft(d => ({ ...d, [field]: e.target.value }))}
-            rows={4}
-            className="field-input resize-none"
-          />
+  const Field = ({
+    label, field, type = 'text', options, placeholder, rows,
+  }: {
+    label: string;
+    field: string;
+    type?: 'text' | 'email' | 'tel' | 'url' | 'select' | 'textarea' | 'number' | 'color';
+    options?: { value: string; label: string }[];
+    placeholder?: string;
+    rows?: number;
+  }) => {
+    const value = (settings as any)?.[field] ?? '';
+    const draftValue = draft[field] ?? value;
+    const isEditMode = editing !== null;
+
+    return (
+      <div>
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">{label}</p>
+        {isEditMode ? (
+          type === 'select' ? (
+            <select
+              value={String(draftValue)}
+              onChange={e => setDraft(d => ({ ...d, [field]: e.target.value }))}
+              className="field-input"
+            >
+              {options?.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          ) : type === 'textarea' ? (
+            <textarea
+              value={String(draftValue)}
+              onChange={e => setDraft(d => ({ ...d, [field]: e.target.value }))}
+              rows={rows ?? 4}
+              placeholder={placeholder}
+              className="field-input resize-none"
+            />
+          ) : type === 'color' ? (
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={String(draftValue)}
+                onChange={e => setDraft(d => ({ ...d, [field]: e.target.value }))}
+                className="w-10 h-8 rounded border border-border cursor-pointer"
+              />
+              <input
+                type="text"
+                value={String(draftValue)}
+                onChange={e => setDraft(d => ({ ...d, [field]: e.target.value }))}
+                className="field-input flex-1"
+                placeholder="#1E3A5F"
+              />
+            </div>
+          ) : (
+            <input
+              type={type}
+              value={String(draftValue)}
+              onChange={e => setDraft(d => ({ ...d, [field]: type === 'number' ? Number(e.target.value) : e.target.value }))}
+              placeholder={placeholder}
+              className="field-input"
+            />
+          )
         ) : (
-          <input
-            type={type}
-            value={draft[field] ?? value}
-            onChange={e => setDraft(d => ({ ...d, [field]: e.target.value }))}
-            className="field-input"
-          />
-        )
-      ) : (
-        <p className="text-sm text-foreground">{value || <span className="text-muted-foreground italic">(Optional)</span>}</p>
-      )}
-    </div>
-  );
+          <p className="text-sm text-foreground">
+            {type === 'color' && value ? (
+              <span className="flex items-center gap-2">
+                <span className="w-4 h-4 rounded-full border border-border inline-block" style={{ background: String(value) }} />
+                {String(value)}
+              </span>
+            ) : (
+              String(value) || <span className="text-muted-foreground italic">(Not set)</span>
+            )}
+          </p>
+        )}
+      </div>
+    );
+  };
+
+  if (isLoading) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 py-6 flex items-center gap-2 text-muted-foreground">
+        <Loader2 className="animate-spin" size={16} /> Loading settings…
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-6">
       <h2 className="text-2xl font-bold text-foreground mb-1">Company</h2>
+      <p className="text-sm text-muted-foreground mb-6">
+        These settings are the foundation for white-labeling. Every field here is persisted to the database and used across estimates, invoices, the customer portal, and any future white-labeled deployments.
+      </p>
 
       {/* Tabs */}
       <div className="flex gap-0 border-b border-border mb-6">
-        {([['profile', 'Profile'], ['hours', 'Business hours'], ['service-area', 'Service area']] as [Tab, string][]).map(([id, label]) => (
+        {([
+          ['profile', 'Business Profile'],
+          ['branding', 'Branding & Portal'],
+          ['documents', 'Documents & Terms'],
+        ] as [Tab, string][]).map(([id, label]) => (
           <button
             key={id}
             onClick={() => setTab(id)}
@@ -144,9 +192,9 @@ export default function CompanySettings() {
         ))}
       </div>
 
+      {/* ── Profile Tab ── */}
       {tab === 'profile' && (
         <div className="space-y-6">
-          {/* Business Information */}
           <section className="card-section">
             <div className="card-section-header justify-between">
               <div className="flex items-center gap-2">
@@ -156,181 +204,157 @@ export default function CompanySettings() {
               <EditBar section="business-info" />
             </div>
             <div className="card-section-body grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label="Business name" value={info.name} field="name" />
-              <Field label="Address" value={`${info.address}, ${info.city}, ${info.state} ${info.zip}`} field="address" />
-              <Field label="Time Zone" value={info.timezone} field="timezone" type="select" options={TIMEZONES} />
-              <Field label="Support email" value={info.supportEmail} field="supportEmail" type="email" />
-              <Field label="License number" value={info.licenseNumber} field="licenseNumber" />
-              <Field label="Business phone" value={info.phone} field="phone" type="tel" />
-              <Field label="Website" value={info.website} field="website" type="url" />
-              <Field label="Legal entity name" value={info.legalName} field="legalName" />
-              <Field label="Industry" value={info.industry} field="industry" />
+              <Field label="Company Name" field="companyName" placeholder="Handy Pioneers" />
+              <Field label="Support Email" field="supportEmail" type="email" placeholder="help@company.com" />
+              <Field label="Support Phone" field="supportPhone" type="tel" placeholder="(360) 544-9858" />
+              <Field label="Website URL" field="websiteUrl" type="url" placeholder="https://handypioneers.com" />
+              <Field label="Address Line 1" field="addressLine1" placeholder="808 SE Chkalov Dr 3-433" />
+              <Field label="City, State ZIP" field="addressLine2" placeholder="Vancouver, WA 98683" />
+              <Field label="Timezone" field="timezone" type="select" options={TIMEZONES} />
             </div>
           </section>
 
-          {/* Company Description */}
           <section className="card-section">
             <div className="card-section-header justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider">Company Description</span>
-              <EditBar section="description" />
-            </div>
-            <div className="card-section-body">
-              <Field label="" value={info.description} field="description" type="textarea" />
-            </div>
-          </section>
-
-          {/* Logo */}
-          <section className="card-section">
-            <div className="card-section-header justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider">Logo</span>
-              <button className="text-xs text-primary font-semibold hover:underline flex items-center gap-1">
-                <Edit2 size={12} /> Edit
-              </button>
-            </div>
-            <div className="card-section-body">
-              <div className="w-40 h-28 border border-border rounded-xl flex items-center justify-center bg-white p-3">
-                <img src={HP_LOGO} alt="Handy Pioneers logo" className="max-w-full max-h-full object-contain" />
+              <div className="flex items-center gap-2">
+                <Globe size={13} />
+                <span className="text-xs font-bold uppercase tracking-wider">Document Numbering</span>
               </div>
-              <p className="text-xs text-muted-foreground mt-2">Recommended: PNG or SVG, at least 200×200px</p>
+              <EditBar section="numbering" />
+            </div>
+            <div className="card-section-body grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <Field label="Estimate Prefix" field="estimatePrefix" placeholder="EST" />
+              <Field label="Invoice Prefix" field="invoicePrefix" placeholder="INV" />
+              <Field label="Job Prefix" field="jobPrefix" placeholder="JOB" />
             </div>
           </section>
 
-          {/* Invoice / Estimate message */}
           <section className="card-section">
             <div className="card-section-header justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider">Message on invoice, receipt, and estimate</span>
-              <EditBar section="invoice-message" />
+              <div className="flex items-center gap-2">
+                <FileText size={13} />
+                <span className="text-xs font-bold uppercase tracking-wider">Defaults</span>
+              </div>
+              <EditBar section="defaults" />
+            </div>
+            <div className="card-section-body grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">Default Tax Rate (basis points)</p>
+                {editing !== null ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      value={Number(draft.defaultTaxBps ?? settings?.defaultTaxBps ?? 875)}
+                      onChange={e => setDraft(d => ({ ...d, defaultTaxBps: Number(e.target.value) }))}
+                      min={0} max={10000}
+                      className="field-input w-28"
+                    />
+                    <span className="text-xs text-muted-foreground">= {((Number(draft.defaultTaxBps ?? settings?.defaultTaxBps ?? 875)) / 100).toFixed(2)}%</span>
+                  </div>
+                ) : (
+                  <p className="text-sm text-foreground">{settings?.defaultTaxBps ?? 875} bps ({((settings?.defaultTaxBps ?? 875) / 100).toFixed(2)}%)</p>
+                )}
+              </div>
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">Default Deposit %</p>
+                {editing !== null ? (
+                  <input
+                    type="number"
+                    value={Number(draft.defaultDepositPct ?? settings?.defaultDepositPct ?? 50)}
+                    onChange={e => setDraft(d => ({ ...d, defaultDepositPct: Number(e.target.value) }))}
+                    min={0} max={100}
+                    className="field-input w-24"
+                  />
+                ) : (
+                  <p className="text-sm text-foreground">{settings?.defaultDepositPct ?? 50}%</p>
+                )}
+              </div>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {/* ── Branding Tab ── */}
+      {tab === 'branding' && (
+        <div className="space-y-6">
+          <section className="card-section">
+            <div className="card-section-header justify-between">
+              <div className="flex items-center gap-2">
+                <Palette size={13} />
+                <span className="text-xs font-bold uppercase tracking-wider">Brand Identity</span>
+              </div>
+              <EditBar section="branding" />
+            </div>
+            <div className="card-section-body space-y-4">
+              <Field label="Brand Primary Color" field="brandColor" type="color" />
+              <Field label="Logo URL (CDN)" field="logoUrl" type="url" placeholder="https://cdn.example.com/logo.png" />
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">Current Logo Preview</p>
+                <div className="w-40 h-28 border border-border rounded-xl flex items-center justify-center bg-white p-3">
+                  <img
+                    src={settings?.logoUrl || HP_LOGO}
+                    alt="Company logo"
+                    className="max-w-full max-h-full object-contain"
+                    onError={e => { (e.target as HTMLImageElement).src = HP_LOGO; }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">Recommended: PNG or SVG, at least 200×200px</p>
+              </div>
+            </div>
+          </section>
+
+          <section className="card-section">
+            <div className="card-section-header justify-between">
+              <div className="flex items-center gap-2">
+                <Globe size={13} />
+                <span className="text-xs font-bold uppercase tracking-wider">Customer Portal</span>
+              </div>
+              <EditBar section="portal" />
             </div>
             <div className="card-section-body">
-              {editing === 'invoice-message' ? (
-                <textarea
-                  value={draft.invoiceMessage ?? info.invoiceMessage}
-                  onChange={e => setDraft(d => ({ ...d, invoiceMessage: e.target.value }))}
-                  rows={3}
-                  placeholder="Optional message shown on all customer-facing documents…"
-                  className="field-input resize-none"
-                />
-              ) : (
-                <p className="text-sm text-muted-foreground italic">{info.invoiceMessage || '(Optional)'}</p>
-              )}
+              <Field label="Portal Base URL" field="portalUrl" type="url" placeholder="https://client.handypioneers.com" />
+              <p className="text-xs text-muted-foreground mt-2">
+                Used in estimate approval emails, invoice payment links, and all customer-facing communications. Change this to white-label the portal for a different domain.
+              </p>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {/* ── Documents Tab ── */}
+      {tab === 'documents' && (
+        <div className="space-y-6">
+          <section className="card-section">
+            <div className="card-section-header justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider">Document Footer</span>
+              <EditBar section="footer" />
+            </div>
+            <div className="card-section-body">
+              <Field
+                label="Footer text shown on estimates and invoices"
+                field="documentFooter"
+                type="textarea"
+                rows={3}
+                placeholder="Optional message shown at the bottom of all customer-facing documents…"
+              />
             </div>
           </section>
 
-          {/* Terms & Conditions */}
           <section className="card-section">
             <div className="card-section-header justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider">Terms and Conditions</span>
+              <span className="text-xs font-bold uppercase tracking-wider">Terms & Conditions</span>
               <EditBar section="terms" />
             </div>
             <div className="card-section-body">
-              {editing === 'terms' ? (
-                <textarea
-                  value={draft.termsAndConditions ?? info.termsAndConditions}
-                  onChange={e => setDraft(d => ({ ...d, termsAndConditions: e.target.value }))}
-                  rows={6}
-                  className="field-input resize-none font-mono text-xs"
-                />
-              ) : (
-                <pre className="text-xs text-foreground whitespace-pre-wrap font-sans leading-relaxed">{info.termsAndConditions}</pre>
-              )}
+              <Field
+                label="Shown on estimates and in the customer portal"
+                field="termsText"
+                type="textarea"
+                rows={8}
+                placeholder="Enter your terms and conditions…"
+              />
             </div>
           </section>
-        </div>
-      )}
-
-      {tab === 'hours' && (
-        <div className="space-y-4">
-          <section className="card-section">
-            <div className="card-section-header">
-              <Clock size={13} />
-              <span className="text-xs font-bold uppercase tracking-wider">Business Hours</span>
-            </div>
-            <div className="card-section-body divide-y divide-border/60">
-              {hours.map((h, i) => (
-                <div key={h.day} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-                  <span className="w-24 text-sm font-semibold text-foreground">{h.day}</span>
-                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={!h.closed}
-                      onChange={e => setHours(prev => prev.map((r, ri) => ri === i ? { ...r, closed: !e.target.checked } : r))}
-                      className="rounded"
-                    />
-                    Open
-                  </label>
-                  {!h.closed ? (
-                    <div className="flex items-center gap-2 ml-auto">
-                      <input
-                        type="time"
-                        value={h.open}
-                        onChange={e => setHours(prev => prev.map((r, ri) => ri === i ? { ...r, open: e.target.value } : r))}
-                        className="field-input w-28 text-xs"
-                      />
-                      <span className="text-muted-foreground text-xs">to</span>
-                      <input
-                        type="time"
-                        value={h.close}
-                        onChange={e => setHours(prev => prev.map((r, ri) => ri === i ? { ...r, close: e.target.value } : r))}
-                        className="field-input w-28 text-xs"
-                      />
-                    </div>
-                  ) : (
-                    <span className="ml-auto text-xs text-muted-foreground italic">Closed</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </section>
-          <button
-            onClick={() => { toast.success('Business hours saved'); }}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors"
-          >
-            <Save size={14} /> Save Hours
-          </button>
-        </div>
-      )}
-
-      {tab === 'service-area' && (
-        <div className="space-y-4">
-          <section className="card-section">
-            <div className="card-section-header">
-              <MapPin size={13} />
-              <span className="text-xs font-bold uppercase tracking-wider">Service Area</span>
-            </div>
-            <div className="card-section-body space-y-4">
-              <div>
-                <label className="field-label">Service radius (miles from Vancouver, WA)</label>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="range"
-                    min={5} max={150} step={5}
-                    value={serviceRadius}
-                    onChange={e => setServiceRadius(Number(e.target.value))}
-                    className="flex-1"
-                  />
-                  <span className="text-sm font-bold text-primary w-12">{serviceRadius} mi</span>
-                </div>
-              </div>
-              <div>
-                <label className="field-label">Service area description</label>
-                <textarea
-                  value={serviceNote}
-                  onChange={e => setServiceNote(e.target.value)}
-                  rows={3}
-                  className="field-input resize-none"
-                />
-              </div>
-              <div className="rounded-xl border border-border overflow-hidden h-48 bg-muted/30 flex items-center justify-center">
-                <p className="text-sm text-muted-foreground">Map preview — centered on Vancouver, WA</p>
-              </div>
-            </div>
-          </section>
-          <button
-            onClick={() => toast.success('Service area saved')}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors"
-          >
-            <Save size={14} /> Save Service Area
-          </button>
         </div>
       )}
     </div>

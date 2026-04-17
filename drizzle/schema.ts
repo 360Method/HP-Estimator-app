@@ -1221,3 +1221,115 @@ export const phoneSettings = mysqlTable("phoneSettings", {
 });
 export type DbPhoneSettings = typeof phoneSettings.$inferSelect;
 export type InsertDbPhoneSettings = typeof phoneSettings.$inferInsert;
+
+// ─── App Settings (singleton, id=1) ─────────────────────────────────────────
+// White-label foundation: every workspace-level config lives here.
+export const appSettings = mysqlTable("appSettings", {
+  id: int("id").primaryKey().default(1),
+  /** Company display name */
+  companyName: varchar("companyName", { length: 120 }).default("Handy Pioneers"),
+  /** Public logo URL (CDN) */
+  logoUrl: varchar("logoUrl", { length: 500 }).default(""),
+  /** Brand primary color (hex, e.g. #1E3A5F) */
+  brandColor: varchar("brandColor", { length: 20 }).default("#1E3A5F"),
+  /** IANA timezone string (e.g. America/Los_Angeles) */
+  timezone: varchar("timezone", { length: 60 }).default("America/Los_Angeles"),
+  /** Prefix for estimate numbers (e.g. EST) */
+  estimatePrefix: varchar("estimatePrefix", { length: 10 }).default("EST"),
+  /** Prefix for invoice numbers (e.g. INV) */
+  invoicePrefix: varchar("invoicePrefix", { length: 10 }).default("INV"),
+  /** Prefix for job numbers (e.g. JOB) */
+  jobPrefix: varchar("jobPrefix", { length: 10 }).default("JOB"),
+  /** Customer-facing portal base URL */
+  portalUrl: varchar("portalUrl", { length: 300 }).default("https://client.handypioneers.com"),
+  /** Company website URL */
+  websiteUrl: varchar("websiteUrl", { length: 300 }).default("https://handypioneers.com"),
+  /** Support / contact email shown to customers */
+  supportEmail: varchar("supportEmail", { length: 320 }).default(""),
+  /** Support phone shown to customers */
+  supportPhone: varchar("supportPhone", { length: 30 }).default(""),
+  /** Physical address line 1 */
+  addressLine1: varchar("addressLine1", { length: 200 }).default(""),
+  /** City, State ZIP */
+  addressLine2: varchar("addressLine2", { length: 200 }).default(""),
+  /** Default tax rate (basis points, e.g. 875 = 8.75%) */
+  defaultTaxBps: int("defaultTaxBps").default(875),
+  /** Default deposit percentage (0–100) */
+  defaultDepositPct: int("defaultDepositPct").default(50),
+  /** Footer text shown on estimates and invoices */
+  documentFooter: text("documentFooter"),
+  /** Terms & conditions text shown on estimates */
+  termsText: text("termsText"),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbAppSettings = typeof appSettings.$inferSelect;
+
+// ─── Notification Preferences ────────────────────────────────────────────────
+// One row per event type + channel combination. Checked before any notification fires.
+export const notificationPreferences = mysqlTable("notificationPreferences", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Stable event key, e.g. 'new_lead', 'estimate_sent', 'invoice_paid' */
+  eventKey: varchar("eventKey", { length: 60 }).notNull(),
+  /** Channel: email | sms | in_app */
+  channel: mysqlEnum("channel", ["email", "sms", "in_app"]).notNull(),
+  /** Whether this channel is enabled for this event */
+  enabled: boolean("enabled").notNull().default(true),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbNotificationPreference = typeof notificationPreferences.$inferSelect;
+
+// ─── Automation Rules ─────────────────────────────────────────────────────────
+// User-created if-this-then-that rules. Evaluated by the automation engine.
+export const automationRules = mysqlTable("automationRules", {
+  id: int("id").autoincrement().primaryKey(),
+  /** Human-readable rule name */
+  name: varchar("name", { length: 120 }).notNull(),
+  /** Trigger event key, e.g. 'lead_created', 'estimate_sent', 'missed_call' */
+  trigger: varchar("trigger", { length: 60 }).notNull(),
+  /**
+   * Optional condition as JSON array of {field, operator, value} objects.
+   * Example: [{"field":"leadSource","operator":"eq","value":"Google Ads"}]
+   */
+  conditions: text("conditions"),
+  /** Action type: send_sms | send_email | notify_owner | create_note */
+  actionType: mysqlEnum("actionType", [
+    "send_sms",
+    "send_email",
+    "notify_owner",
+    "create_note",
+  ]).notNull(),
+  /**
+   * Action payload as JSON. Shape depends on actionType:
+   *   send_sms:      { messageTemplate: string }
+   *   send_email:    { subject: string, bodyTemplate: string }
+   *   notify_owner:  { title: string, contentTemplate: string }
+   *   create_note:   { noteTemplate: string }
+   */
+  actionPayload: text("actionPayload").notNull(),
+  /** Minutes to wait before executing the action (0 = immediate) */
+  delayMinutes: int("delayMinutes").notNull().default(0),
+  /** Whether this rule is active */
+  enabled: boolean("enabled").notNull().default(true),
+  /** Display order */
+  sortOrder: int("sortOrder").notNull().default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbAutomationRule = typeof automationRules.$inferSelect;
+
+// ─── Automation Rule Logs ─────────────────────────────────────────────────────
+// Execution history for each rule run. Used for debugging and audit.
+export const automationRuleLogs = mysqlTable("automationRuleLogs", {
+  id: int("id").autoincrement().primaryKey(),
+  ruleId: int("ruleId").notNull(),
+  /** Trigger event key */
+  trigger: varchar("trigger", { length: 60 }).notNull(),
+  /** JSON snapshot of the trigger payload */
+  triggerPayload: text("triggerPayload"),
+  /** Execution result */
+  status: mysqlEnum("status", ["success", "failed", "skipped"]).notNull(),
+  /** Error message if status = failed */
+  errorMessage: text("errorMessage"),
+  executedAt: timestamp("executedAt").defaultNow().notNull(),
+});
+export type DbAutomationRuleLog = typeof automationRuleLogs.$inferSelect;

@@ -6,6 +6,7 @@ import { sendEmail } from "../gmail";
 import { sendSms, isTwilioConfigured } from "../twilio";
 import { createPortalToken, upsertPortalCustomer, createPortalEstimate, generateReferralCode } from "../portalDb";
 import { CLARK_COUNTY_TAX_RATES } from "../../shared/taxRates";
+import { runAutomationsForTrigger } from "../automationEngine";
 
 // ─── Catalog: all line items the AI can reference ──────────────────────────
 const CATALOG = [
@@ -516,6 +517,16 @@ export const estimateRouter = router({
       if (results.errors.length > 0 && !results.email && !results.sms) {
         throw new Error(results.errors.join("; "));
       }
+      // ── Fire automations (non-blocking) ─────────────────────────────────────
+      runAutomationsForTrigger('estimate_sent', {
+        customerName: input.customerName,
+        customerFirstName: input.customerName?.split(' ')[0],
+        phone: input.toPhone ?? undefined,
+        email: input.toEmail ?? undefined,
+        referenceNumber: input.estimateNumber,
+        amount: input.totalPrice ? `$${input.totalPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : undefined,
+        description: input.jobTitle,
+      }).catch(e => console.error('[automation] estimate_sent error:', e));
       return results;
     }),
 

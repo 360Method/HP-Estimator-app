@@ -15,6 +15,7 @@
 import twilio from "twilio";
 import { findOrCreateConversation, findOrCreateCustomerFromCall, getCallLogByTwilioSid, incrementUnread, insertCallLog, insertMessage, updateCallLog, updateConversationLastMessage, updateConversation } from "./db";
 import { storagePut } from "./storage";
+import { runAutomationsForTrigger } from "./automationEngine";
 
 /**
  * Downloads a Twilio recording (requires Basic Auth) and re-uploads it to app S3.
@@ -112,7 +113,13 @@ export async function handleInboundSms(params: {
 
   await updateConversationLastMessage(conv.id, Body || "(media)", "sms");
   await incrementUnread(conv.id);
-
+  // Fire inbound_sms automation (non-blocking)
+  runAutomationsForTrigger('inbound_sms', {
+    customerName: customer?.displayName ?? undefined,
+    customerFirstName: customer?.displayName?.split(' ')[0],
+    phone: From,
+    description: Body?.slice(0, 100),
+  }).catch(e => console.error('[automation] inbound_sms error:', e));
   console.log(`[Twilio] Inbound SMS from ${From}: ${Body?.slice(0, 50)}`);
   return msg;
 }
@@ -198,8 +205,15 @@ export async function handleCallStatusUpdate(params: {
   });
 
   await updateConversationLastMessage(conv.id, preview, "call");
-  if (isMissed) await incrementUnread(conv.id);
-
+  if (isMissed) {
+    await incrementUnread(conv.id);
+    // Fire missed_call automation (non-blocking)
+    runAutomationsForTrigger('missed_call', {
+      customerName: customer?.displayName ?? undefined,
+      customerFirstName: customer?.displayName?.split(' ')[0],
+      phone: callerPhone,
+    }).catch(e => console.error('[automation] missed_call error:', e));
+  }
   console.log(`[Twilio] Call ${CallSid} ${CallStatus} — ${durationSecs}s`);
 }
 

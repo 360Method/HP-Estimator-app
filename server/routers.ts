@@ -23,6 +23,9 @@ import { expensesRouter } from "./routers/expenses";
 import { quickbooksRouter } from "./routers/quickbooks";
 import { propertiesRouter } from "./routers/properties";
 import { phoneRouter } from "./routers/phone";
+import { appSettingsRouter } from "./routers/appSettings";
+import { notificationPreferencesRouter } from "./routers/notificationPreferences";
+import { automationRulesRouter } from "./routers/automationRules";
 import {
   getAdminAllowlist,
   addAdminAllowlistEmail,
@@ -51,6 +54,9 @@ export const appRouter = router({
   quickbooks: quickbooksRouter,
   properties: propertiesRouter,
   phone: phoneRouter,
+  appSettings: appSettingsRouter,
+  notificationPreferences: notificationPreferencesRouter,
+  automationRules: automationRulesRouter,
 
   auth: router({
     /**
