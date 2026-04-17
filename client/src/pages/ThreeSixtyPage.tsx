@@ -2,20 +2,23 @@
  * Members — Global 360° Membership Roster
  * Read-only roster of all active memberships, filterable by tier, renewal date, and labor bank balance.
  * Memberships are managed from Customer → Property → Membership panel.
+ *
+ * NEW ENROLLMENTS QUEUE: Shows unscheduled baseline_scan work orders with 48h SLA badge.
  */
 
 import { useState, useMemo } from 'react';
 import { trpc } from '@/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   RefreshCw, Users, Wallet, Crown, Shield, Star,
   Search, CalendarClock, AlertCircle, CheckCircle2,
-  User, ExternalLink, MapPin,
+  User, ExternalLink, MapPin, Clock, Calendar,
+  Inbox,
 } from 'lucide-react';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import {
@@ -26,6 +29,7 @@ import {
 } from '../../../shared/threeSixtyTiers';
 import ThreeSixtyMemberList from './ThreeSixtyMemberList';
 import ThreeSixtyChecklists from './ThreeSixtyChecklists';
+import { toast } from 'sonner';
 
 const TIER_COLORS: Record<MemberTier, { badge: string; dot: string }> = {
   bronze: { badge: 'bg-amber-100 text-amber-800 border-amber-300', dot: 'bg-amber-500' },
@@ -43,6 +47,33 @@ type RenewalFilter = 'all' | 'overdue' | '30d' | '60d' | '90d';
 type TierFilter = 'all' | MemberTier;
 type StatusFilter = 'all' | 'active' | 'paused' | 'cancelled';
 
+/** SLA badge: red if >48h since createdAt, amber if 24-48h, green if <24h */
+function SlaBadge({ createdAt }: { createdAt: Date }) {
+  const hoursElapsed = (Date.now() - new Date(createdAt).getTime()) / 3_600_000;
+  if (hoursElapsed > 48) {
+    return (
+      <Badge variant="destructive" className="text-[10px] px-1.5 gap-1 shrink-0">
+        <AlertCircle className="w-3 h-3" />
+        {Math.round(hoursElapsed)}h — Overdue
+      </Badge>
+    );
+  }
+  if (hoursElapsed > 24) {
+    return (
+      <Badge className="text-[10px] px-1.5 gap-1 shrink-0 bg-amber-500 hover:bg-amber-500">
+        <Clock className="w-3 h-3" />
+        {Math.round(hoursElapsed)}h / 48h SLA
+      </Badge>
+    );
+  }
+  return (
+    <Badge className="text-[10px] px-1.5 gap-1 shrink-0 bg-emerald-500 hover:bg-emerald-500">
+      <Clock className="w-3 h-3" />
+      {Math.round(hoursElapsed)}h / 48h SLA
+    </Badge>
+  );
+}
+
 export default function ThreeSixtyPage() {
   const { setActiveCustomer, setSection } = useEstimator();
   const [view, setView] = useState<'roster' | 'member-list' | 'checklists'>('roster');
@@ -51,6 +82,34 @@ export default function ThreeSixtyPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('active');
   const [renewalFilter, setRenewalFilter] = useState<RenewalFilter>('all');
 
+  // New Enrollments queue — unscheduled baseline scans
+  const [scheduleWorkOrderId, setScheduleWorkOrderId] = useState<number | null>(null);
+  const [scheduleMembershipId, setScheduleMembershipId] = useState<number | null>(null);
+  const [scheduleDate, setScheduleDate] = useState('');
+  const [scheduleTime, setScheduleTime] = useState('09:00');
+  const [scheduleAssigned, setScheduleAssigned] = useState<string[]>([]);
+  const utils = trpc.useUtils();
+
+  const { data: staffList } = trpc.workOrders.listStaff.useQuery();
+
+  const scheduleWO = trpc.workOrders.schedule.useMutation({
+    onSuccess: () => {
+      utils.workOrders.listGlobal.invalidate();
+      setScheduleWorkOrderId(null);
+      setScheduleMembershipId(null);
+      setScheduleDate('');
+      setScheduleTime('09:00');
+      setScheduleAssigned([]);
+      toast.success('Baseline scan scheduled — linked job created in Jobs tab and Calendar.');
+    },
+    onError: (err) => toast.error(`Failed to schedule: ${err.message}`),
+  });
+
+  const { data: newEnrollments, isLoading: enrollmentsLoading } = trpc.workOrders.listGlobal.useQuery({
+    type: 'baseline_scan',
+    status: 'open',
+  });
+
   const { data: memberships, isLoading } = trpc.threeSixty.memberships.list.useQuery();
 
   const now = Date.now();
@@ -58,11 +117,8 @@ export default function ThreeSixtyPage() {
   const filtered = useMemo(() => {
     if (!memberships) return [];
     return memberships.filter(m => {
-      // Tier
       if (tierFilter !== 'all' && m.tier !== tierFilter) return false;
-      // Status
       if (statusFilter !== 'all' && m.status !== statusFilter) return false;
-      // Renewal window
       if (renewalFilter !== 'all') {
         const renewalMs = new Date(m.renewalDate).getTime();
         const diffDays = (renewalMs - now) / 86_400_000;
@@ -71,7 +127,6 @@ export default function ThreeSixtyPage() {
         if (renewalFilter === '60d' && (diffDays < 0 || diffDays > 60)) return false;
         if (renewalFilter === '90d' && (diffDays < 0 || diffDays > 90)) return false;
       }
-      // Search (member id for now — will show customer name once linked)
       if (search.trim()) {
         const q = search.toLowerCase();
         const idStr = String(m.id);
@@ -121,6 +176,104 @@ export default function ThreeSixtyPage() {
           </Button>
         </div>
       </div>
+
+      {/* ── NEW ENROLLMENTS QUEUE ─────────────────────────────────────────── */}
+      {(enrollmentsLoading || (newEnrollments && newEnrollments.length > 0)) && (
+        <Card className={`mb-6 border-2 ${
+          newEnrollments?.some(wo => (Date.now() - new Date(wo.createdAt).getTime()) / 3_600_000 > 48)
+            ? 'border-red-300 bg-red-50/50'
+            : 'border-amber-300 bg-amber-50/50'
+        }`}>
+          <CardHeader className="pb-2 pt-4 px-4">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <Inbox className="w-4 h-4 text-amber-600" />
+                New Enrollments — Schedule Baseline Scan
+                {newEnrollments && newEnrollments.length > 0 && (
+                  <Badge className="bg-amber-500 hover:bg-amber-500 text-white text-[10px] px-1.5">
+                    {newEnrollments.length} pending
+                  </Badge>
+                )}
+              </CardTitle>
+              <span className="text-xs text-muted-foreground">48h SLA from enrollment</span>
+            </div>
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            {enrollmentsLoading ? (
+              <div className="space-y-2">
+                {[1, 2].map(i => <Skeleton key={i} className="h-14 w-full rounded-lg" />)}
+              </div>
+            ) : newEnrollments && newEnrollments.length > 0 ? (
+              <div className="space-y-2">
+                {newEnrollments.map(wo => {
+                  const tier = (wo.membershipTier ?? 'bronze') as MemberTier;
+                  const colors = TIER_COLORS[tier] ?? TIER_COLORS.bronze;
+                  const TierIcon = TIER_ICONS[tier] ?? Shield;
+                  return (
+                    <div
+                      key={wo.id}
+                      className="flex items-center gap-3 bg-white rounded-lg border px-3 py-2.5 shadow-sm"
+                    >
+                      <TierIcon className={`w-4 h-4 shrink-0 ${
+                        tier === 'gold' ? 'text-yellow-500' :
+                        tier === 'silver' ? 'text-slate-400' : 'text-amber-500'
+                      }`} />
+                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border shrink-0 ${colors.badge}`}>
+                        {tier.charAt(0).toUpperCase() + tier.slice(1)}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">
+                          {wo.membershipCustomerName ?? `Membership #${wo.membershipId}`}
+                        </div>
+                        <div className="text-xs text-muted-foreground truncate flex items-center gap-1">
+                          {wo.membershipPropertyAddress && (
+                            <>
+                              <MapPin className="w-3 h-3 shrink-0" />
+                              <span className="truncate">{wo.membershipPropertyAddress}</span>
+                              <span className="mx-1">·</span>
+                            </>
+                          )}
+                          <Calendar className="w-3 h-3 shrink-0" />
+                          <span>Enrolled {new Date(wo.createdAt).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <SlaBadge createdAt={wo.createdAt} />
+                        {wo.membershipCustomerId && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                            onClick={() => {
+                              setActiveCustomer(wo.membershipCustomerId!, 'direct');
+                              setSection('customer');
+                            }}
+                            title="Open customer profile"
+                          >
+                            <User className="w-3.5 h-3.5" />
+                            <span className="hidden sm:inline">Profile</span>
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          className="h-7 px-3 text-xs gap-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                          onClick={() => {
+                            setScheduleWorkOrderId(wo.id);
+                            setScheduleMembershipId(wo.membershipId);
+                          }}
+                        >
+                          <CalendarClock className="w-3.5 h-3.5" />
+                          Schedule
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      )}
 
       {/* KPI strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
@@ -245,9 +398,7 @@ export default function ThreeSixtyPage() {
         <Card className="border-dashed">
           <CardContent className="py-12 text-center">
             <RefreshCw className="w-8 h-8 text-muted-foreground mx-auto mb-3 opacity-40" />
-            <p className="text-sm font-medium text-muted-foreground">
-              {memberships?.length === 0 ? 'No memberships yet' : 'No memberships match these filters'}
-            </p>
+            <p className="text-sm font-medium text-muted-foreground">No memberships match these filters</p>
             <p className="text-xs text-muted-foreground mt-1">
               {memberships?.length === 0
                 ? 'Enroll a homeowner from their Customer → Property tab.'
@@ -306,7 +457,8 @@ export default function ThreeSixtyPage() {
                         variant="ghost"
                         size="sm"
                         className="text-xs gap-1 text-muted-foreground hover:text-foreground h-7 px-2"
-                        onClick={() => {
+                        onClick={e => {
+                          e.stopPropagation();
                           setActiveCustomer((m as any).hpCustomerId, 'direct');
                           setSection('customer');
                         }}
@@ -340,6 +492,76 @@ export default function ThreeSixtyPage() {
           <p className="text-xs text-muted-foreground text-right pt-1">
             Showing {filtered.length} of {memberships?.length ?? 0} memberships
           </p>
+        </div>
+      )}
+
+      {/* Schedule Visit modal — triggered from New Enrollments queue */}
+      {scheduleWorkOrderId !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setScheduleWorkOrderId(null)}>
+          <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm mx-4" onClick={e => e.stopPropagation()}>
+            <h3 className="text-base font-semibold mb-1">Schedule Baseline Scan</h3>
+            <p className="text-xs text-muted-foreground mb-4">
+              {newEnrollments?.find(w => w.id === scheduleWorkOrderId)?.membershipCustomerName ?? 'Member'}
+              {newEnrollments?.find(w => w.id === scheduleWorkOrderId)?.membershipPropertyAddress
+                ? ` — ${newEnrollments.find(w => w.id === scheduleWorkOrderId)?.membershipPropertyAddress}`
+                : ''}
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium block mb-1">Date</label>
+                <input
+                  type="date"
+                  className="w-full border rounded-lg px-3 py-2 text-sm"
+                  value={scheduleDate}
+                  min={new Date().toISOString().slice(0,10)}
+                  onChange={e => setScheduleDate(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium block mb-1">Time</label>
+                <input
+                  type="time"
+                  className="w-full border rounded-lg px-3 py-2 text-sm"
+                  value={scheduleTime}
+                  onChange={e => setScheduleTime(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium block mb-1">Assign Tech (optional)</label>
+                <div className="space-y-1 max-h-32 overflow-y-auto border rounded-lg p-2">
+                  {(staffList ?? []).length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No staff found</p>
+                  ) : (staffList ?? []).map(s => (
+                    <label key={s.id} className="flex items-center gap-2 text-xs cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={scheduleAssigned.includes(s.name ?? s.openId)}
+                        onChange={e => {
+                          const val = s.name ?? s.openId;
+                          setScheduleAssigned(prev => e.target.checked ? [...prev, val] : prev.filter(x => x !== val));
+                        }}
+                      />
+                      {s.name ?? s.openId}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-5">
+              <Button variant="outline" className="flex-1" onClick={() => setScheduleWorkOrderId(null)}>Cancel</Button>
+              <Button
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
+                disabled={!scheduleDate || scheduleWO.isPending}
+                onClick={() => {
+                  if (!scheduleDate) return;
+                  const dt = new Date(`${scheduleDate}T${scheduleTime}`);
+                  scheduleWO.mutate({ id: scheduleWorkOrderId!, scheduledDate: dt.getTime(), assignedTo: scheduleAssigned.length > 0 ? scheduleAssigned : undefined });
+                }}
+              >
+                {scheduleWO.isPending ? 'Scheduling…' : 'Confirm'}
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </div>

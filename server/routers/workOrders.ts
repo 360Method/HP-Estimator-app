@@ -545,4 +545,57 @@ export const workOrdersRouter = router({
       if (Object.keys(patch).length > 0) await updateWorkOrder(input.id, patch as any);
       return { success: true };
     }),
+
+  /**
+   * Global list of all work orders — used for the New Enrollments queue and dispatcher view.
+   * Optionally filter by status and/or type.
+   */
+  listGlobal: protectedProcedure
+    .input(
+      z.object({
+        status: z.string().optional(),
+        type: z.string().optional(),
+        sinceMs: z.number().optional(),
+        limit: z.number().optional(),
+      }).optional()
+    )
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
+
+      const conditions: ReturnType<typeof eq>[] = [];
+      if (input?.status) conditions.push(eq(threeSixtyWorkOrders.status, input.status));
+      if (input?.type) conditions.push(eq(threeSixtyWorkOrders.type, input.type));
+
+      const rows = await db
+        .select()
+        .from(threeSixtyWorkOrders)
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .orderBy(desc(threeSixtyWorkOrders.createdAt))
+        .limit(input?.limit ?? 200);
+
+      const filtered = input?.sinceMs
+        ? rows.filter(r => r.createdAt.getTime() >= input.sinceMs!)
+        : rows;
+
+      // Enrich with membership data
+      const membershipIds = [...new Set(filtered.map(r => r.membershipId))];
+      const membershipMap = new Map<number, typeof rows[0] & { tier?: string; customerId?: string; customerName?: string; propertyAddress?: string }>();
+      for (const mid of membershipIds) {
+        const [m] = await db.select().from(threeSixtyMemberships).where(eq(threeSixtyMemberships.id, mid));
+        if (m) membershipMap.set(mid, m as any);
+      }
+
+      return filtered.map(wo => {
+        const m = membershipMap.get(wo.membershipId) as any;
+        return {
+          ...wo,
+          membershipTier: m?.tier ?? null,
+          membershipCustomerId: m?.customerId ?? null,
+          membershipCustomerName: m?.customerName ?? null,
+          membershipPropertyAddress: m?.propertyAddress ?? null,
+        };
+      });
+    }),
 });
+

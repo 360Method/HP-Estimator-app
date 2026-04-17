@@ -1690,3 +1690,80 @@
 ### Phase 8 — Tests + Checkpoint
 - [x] Run full test suite (208/208 passing)
 - [x] Save checkpoint
+
+## Pre-Launch Interconnection Phases
+
+### Phase 3 — New Enrollments Queue
+- [ ] New Enrollments section on 360° Members page showing last-7-day enrollments
+- [ ] 48h SLA badge on baseline_scan work orders unscheduled after 24 hours
+- [ ] Twilio SMS to owner on new 360° enrollment (in addition to existing in-app notification)
+- [ ] "Schedule Baseline Scan" one-click button on each new enrollment card
+
+### Phase 1 — Identity Bridge
+- [ ] Portal tab on customer profile: portal login status, last login, magic link send button
+- [ ] "View in Portal" button on customer profile header (opens portal in new tab)
+- [ ] "Send Portal Invite" button that emails magic link to customer
+- [ ] "Your Team" card on portal home with HP contact info and message CTA
+- [ ] Internal customer profile links back to portal customer record via hpCustomerId
+
+### Phase 4 — Service Request → CRM Lead
+- [ ] submitServiceRequest auto-creates CRM lead opportunity (area: lead, stage: New)
+- [ ] Owner notification (in-app + email) on new service request with deep-link to lead
+- [ ] Service Requests section on internal Dashboard with "Convert to Estimate" and "Dismiss" buttons
+- [ ] Portal confirmation page after service request submission with status link
+
+### Phase 5 — Job Completion Loop
+- [ ] Job stage change to Completed auto-sends portal sign-off email with magic link
+- [ ] "Awaiting Sign-Off" badge on internal job card when complete but not signed off
+- [ ] Portal job detail: prominent "Mark as Complete & Leave a Review" CTA when job is Completed
+- [ ] After sign-off: auto-create final invoice if not already created + notify staff
+
+### Phase 6 — Estimate → Deposit → Job CTA Chain
+- [ ] Portal home: "Next Step: Pay Deposit" banner when approved estimate has unpaid deposit invoice
+- [ ] After estimate approval: redirect to deposit invoice page instead of estimates list
+- [ ] Progress stepper on portal job detail: Estimate Approved → Deposit Paid → Scheduled → In Progress → Complete → Signed Off
+- [ ] Stepper wired to actual job/invoice/estimate status fields
+
+### Phase 8 — Calendar ↔ Portal Appointments Sync
+- [ ] Job scheduledDate write-back creates/updates portalAppointments record
+- [ ] Portal home: "What's Coming Up" section with upcoming appointments
+- [ ] Portal Appointments page: past and upcoming with status badges
+- [ ] "Reschedule Request" button on portal appointments creates service request type=reschedule
+
+### Phase 2 — Property-Centric Portal Home
+- [ ] Portal home redesign: Properties section at top with one card per property
+- [ ] Property card shows: address, 360° badge, open job count, outstanding invoice amount
+- [ ] Property Detail page on portal: jobs, estimates, invoices, 360° status, upcoming visits, gallery
+- [ ] Property filter dropdown on portal Jobs, Estimates, Invoices list pages
+
+### Phase 7 — Internal Messages Inbox
+- [ ] Messages nav item in internal app top bar with unread badge count
+- [ ] Internal MessagesPage: threads grouped by customer, conversation view, reply field
+- [ ] Staff reply writes to portalMessages with senderRole: hp_team + email notification to customer
+- [ ] Portal Messages page polls for new messages and shows unread indicators
+
+### Phase 9 — New Member Onboarding Flow
+- [ ] Welcome email link goes to /portal/welcome?token=xxx instead of /portal/home
+- [ ] Welcome page: 3-step checklist (confirm address, review benefits, set communication prefs)
+- [ ] After checklist: redirect to portal home with "baseline scan being scheduled" banner
+- [ ] Non-360° customers: welcome modal on first login
+
+### Phase 10 — 360° Off-Cycle Visit Request
+- [ ] "Request a Visit" button on portal 360° membership page
+- [ ] Form: preferred date range, visit type, notes
+- [ ] On submit: creates threeSixtyWorkOrders record type=requested + owner notification
+- [ ] Staff see request in New Enrollments queue with "Schedule" button
+
+## Phase 3 — New Enrollments Queue (Pre-Launch Plan)
+
+- [x] Add `workOrders.listGlobal` tRPC procedure (filter by type/status, enrich with membership data)
+- [x] Add Twilio SMS owner alert in `threeSixtyWebhook.ts` on single-property enrollment
+- [x] Add Twilio SMS owner alert in `threeSixtyWebhook.ts` on portfolio enrollment
+- [x] Add `OWNER_PHONE` env var to `server/_core/env.ts`
+- [x] Build New Enrollments queue section at top of ThreeSixtyPage (Members page)
+  - [x] Shows only `baseline_scan` work orders with `open` status
+  - [x] 48h SLA countdown badge (green <24h, amber 24-48h, red >48h)
+  - [x] Customer name, property address, enrollment date
+  - [x] Profile button to jump to customer profile
+  - [x] Schedule button opens inline date/time/tech modal
+  - [x] On schedule: invalidates queue, shows success toast, linked job auto-created

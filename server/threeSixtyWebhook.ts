@@ -24,6 +24,8 @@ import { eq, isNotNull, lte, gt, and } from "drizzle-orm";
 import { TIER_DEFINITIONS, type MemberTier, type BillingCadence } from "../shared/threeSixtyTiers";
 import { sendEmail } from "./gmail";
 import { notifyOwner } from "./_core/notification";
+import { sendSms } from "./twilio";
+import { ENV } from "./_core/env";
 import {
   findCustomerByEmail,
   createCustomer,
@@ -339,6 +341,14 @@ export async function create360MembershipFromWebhook(
     title: `🏠 New 360° Member — ${tier.charAt(0).toUpperCase() + tier.slice(1)}`,
     content: `${customerName} (${customerEmail}) enrolled in the ${tier} tier (${cadence} billing). Membership ID: ${membershipId}. A baseline work order has been created — schedule within 48 hours.`,
   }).catch(() => null);
+
+  // ── 9. SMS owner alert ────────────────────────────────────────────────────
+  if (ENV.ownerPhone) {
+    await sendSms(
+      ENV.ownerPhone,
+      `[Handy Pioneers] New 360° Enrollment: ${customerName} — ${tier.charAt(0).toUpperCase() + tier.slice(1)} tier. Schedule baseline scan within 48h. Membership #${membershipId}.`
+    ).catch((err) => console.error('[360 Webhook] SMS alert failed:', err));
+  }
 }
 
 
@@ -474,6 +484,13 @@ export async function create360PortfolioMembershipsFromWebhook(
     title: `New 360 Portfolio — ${properties.length} Properties`,
     content: `${customerName} (${customerEmail}) enrolled ${properties.length} properties (${cadence}). Membership ID: ${membershipId}. Schedule Portfolio Scan within 48 hours.`,
   }).catch(() => null);
+
+  if (ENV.ownerPhone) {
+    await sendSms(
+      ENV.ownerPhone,
+      `[Handy Pioneers] New 360° Portfolio: ${customerName} — ${properties.length} properties (${cadence}). Schedule scan within 48h. Membership #${membershipId}.`
+    ).catch((err) => console.error('[360 Portfolio Webhook] SMS alert failed:', err));
+  }
 }
 
 // DEFERRED CREDIT RELEASE
