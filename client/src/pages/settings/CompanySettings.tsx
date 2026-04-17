@@ -24,7 +24,7 @@ const TIMEZONES = [
   { value: 'Pacific/Honolulu',    label: '(GMT-10:00) Hawaii' },
 ];
 
-type Tab = 'profile' | 'branding' | 'documents';
+type Tab = 'profile' | 'branding' | 'documents' | 'email-templates';
 
 export default function CompanySettings() {
   const [tab, setTab] = useState<Tab>('profile');
@@ -179,6 +179,7 @@ export default function CompanySettings() {
           ['profile', 'Business Profile'],
           ['branding', 'Branding & Portal'],
           ['documents', 'Documents & Terms'],
+          ['email-templates', 'Email Templates'],
         ] as [Tab, string][]).map(([id, label]) => (
           <button
             key={id}
@@ -317,6 +318,96 @@ export default function CompanySettings() {
               <p className="text-xs text-muted-foreground mt-2">
                 Used in estimate approval emails, invoice payment links, and all customer-facing communications. Change this to white-label the portal for a different domain.
               </p>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {/* ── Email Templates Tab ── */}
+      {tab === 'email-templates' && (
+        <div className="space-y-6">
+          <p className="text-sm text-muted-foreground -mt-2 mb-2">
+            These are the transactional confirmation emails sent automatically by the portal. Edit the subject and body here — they will be used the next time that event fires. Supports <code className="text-xs bg-muted px-1 rounded">{'{{customerFirstName}}'}</code>, <code className="text-xs bg-muted px-1 rounded">{'{{referenceNumber}}'}</code>, <code className="text-xs bg-muted px-1 rounded">{'{{portalUrl}}'}</code>, and other standard variables.
+          </p>
+
+          <section className="card-section">
+            <div className="card-section-header justify-between">
+              <div className="flex items-center gap-2">
+                <Mail size={13} />
+                <span className="text-xs font-bold uppercase tracking-wider">Estimate Approved</span>
+              </div>
+              <EditBar section="email-estimate-approved" />
+            </div>
+            <div className="card-section-body space-y-4">
+              <Field label="Subject" field="emailEstimateApprovedSubject" placeholder="Your estimate has been approved — Handy Pioneers" />
+              <Field
+                label="Body"
+                field="emailEstimateApprovedBody"
+                type="textarea"
+                rows={6}
+                placeholder="Hi {{customerFirstName}},\n\nThank you for approving your estimate! We'll be in touch shortly to schedule your project.\n\nBest,\nThe Handy Pioneers Team"
+              />
+            </div>
+          </section>
+
+          <section className="card-section">
+            <div className="card-section-header justify-between">
+              <div className="flex items-center gap-2">
+                <Mail size={13} />
+                <span className="text-xs font-bold uppercase tracking-wider">Job Sign-Off</span>
+              </div>
+              <EditBar section="email-job-signoff" />
+            </div>
+            <div className="card-section-body space-y-4">
+              <Field label="Subject" field="emailJobSignOffSubject" placeholder="Job complete — your final invoice is ready" />
+              <Field
+                label="Body"
+                field="emailJobSignOffBody"
+                type="textarea"
+                rows={6}
+                placeholder="Hi {{customerFirstName}},\n\nThank you for signing off on your project! Your final invoice is available in your portal.\n\nBest,\nThe Handy Pioneers Team"
+              />
+            </div>
+          </section>
+
+          <section className="card-section">
+            <div className="card-section-header justify-between">
+              <div className="flex items-center gap-2">
+                <Mail size={13} />
+                <span className="text-xs font-bold uppercase tracking-wider">Change Order Approved</span>
+              </div>
+              <EditBar section="email-change-order" />
+            </div>
+            <div className="card-section-body space-y-4">
+              <Field label="Subject" field="emailChangeOrderApprovedSubject" placeholder="Change order approved — Handy Pioneers" />
+              <Field
+                label="Body"
+                field="emailChangeOrderApprovedBody"
+                type="textarea"
+                rows={6}
+                placeholder="Hi {{customerFirstName}},\n\nYour change order has been approved. We'll proceed with the updated scope.\n\nBest,\nThe Handy Pioneers Team"
+              />
+            </div>
+          </section>
+
+          <section className="card-section">
+            <div className="card-section-header justify-between">
+              <div className="flex items-center gap-2">
+                <Mail size={13} />
+                <span className="text-xs font-bold uppercase tracking-wider">Magic Link Login</span>
+              </div>
+              <EditBar section="email-magic-link" />
+            </div>
+            <div className="card-section-body space-y-4">
+              <Field label="Subject" field="emailMagicLinkSubject" placeholder="Your Handy Pioneers Customer Portal Login" />
+              <Field
+                label="Body"
+                field="emailMagicLinkBody"
+                type="textarea"
+                rows={6}
+                placeholder="Hi {{customerFirstName}},\n\nClick the link below to access your customer portal:\n\n{{magicLink}}\n\nThis link expires in 24 hours.\n\nBest,\nThe Handy Pioneers Team"
+              />
+              <p className="text-xs text-muted-foreground">Use <code className="bg-muted px-1 rounded">{'{{magicLink}}'}</code> where the login URL should appear.</p>
             </div>
           </section>
         </div>

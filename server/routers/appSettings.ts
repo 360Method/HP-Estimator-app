@@ -23,6 +23,16 @@ const DEFAULT_SETTINGS = {
   defaultDepositPct: 50,
   documentFooter: "",
   termsText: "",
+  googleReviewLink: "",
+  // Transactional email templates
+  emailEstimateApprovedSubject: "Your estimate has been approved — Handy Pioneers",
+  emailEstimateApprovedBody: "",
+  emailJobSignOffSubject: "Job complete — your final invoice is ready",
+  emailJobSignOffBody: "",
+  emailChangeOrderApprovedSubject: "Change order approved — Handy Pioneers",
+  emailChangeOrderApprovedBody: "",
+  emailMagicLinkSubject: "Your Handy Pioneers Customer Portal Login",
+  emailMagicLinkBody: "",
 };
 
 async function getOrCreateAppSettings() {
@@ -69,6 +79,16 @@ export const appSettingsRouter = router({
         defaultDepositPct: z.number().int().min(0).max(100).optional(),
         documentFooter: z.string().optional(),
         termsText: z.string().optional(),
+        googleReviewLink: z.string().max(500).optional(),
+        // Transactional email templates
+        emailEstimateApprovedSubject: z.string().max(300).optional(),
+        emailEstimateApprovedBody: z.string().optional(),
+        emailJobSignOffSubject: z.string().max(300).optional(),
+        emailJobSignOffBody: z.string().optional(),
+        emailChangeOrderApprovedSubject: z.string().max(300).optional(),
+        emailChangeOrderApprovedBody: z.string().optional(),
+        emailMagicLinkSubject: z.string().max(300).optional(),
+        emailMagicLinkBody: z.string().optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -81,4 +101,12 @@ export const appSettingsRouter = router({
         .where(eq(appSettings.id, 1));
       return getOrCreateAppSettings();
     }),
+
+  /** Public getter for server-side use (e.g. portal email templates) */
+  getSettingsPublic: protectedProcedure.query(async () => {
+    return getOrCreateAppSettings();
+  }),
 });
+
+/** Server-side helper — fetch settings without tRPC context */
+export { getOrCreateAppSettings };

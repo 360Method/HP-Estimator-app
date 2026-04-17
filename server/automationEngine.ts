@@ -25,7 +25,13 @@ export type AutomationTrigger =
   | "invoice_overdue"
   | "missed_call"
   | "inbound_sms"
-  | "new_booking";
+  | "new_booking"
+  | "job_signoff_submitted"
+  | "change_order_approved"
+  | "change_order_declined"
+  | "offcycle_visit_requested"
+  | "portal_onboarding_complete"
+  | "invoice_paid";
 
 // ─── Trigger payload shape ────────────────────────────────────────────────────
 export interface TriggerPayload {

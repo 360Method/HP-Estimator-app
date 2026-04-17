@@ -2000,3 +2000,11 @@
 
 ## Automation Preview
 - [x] Add inline message preview to each rule card (expand/collapse, sample variables substituted)
+
+## Portal Trigger Gaps & Editable Email Templates
+- [x] Add 6 new portal triggers to automationEngine (job_signoff_submitted, change_order_approved, change_order_declined, offcycle_visit_requested, portal_onboarding_complete, invoice_paid)
+- [x] Wire 6 new trigger points in portal.ts
+- [x] Seed pre-built automation rules for 6 new portal triggers
+- [x] Add email template fields to appSettings schema (estimateApprovalEmailTemplate, jobSignoffEmailTemplate, changeOrderApprovalEmailTemplate)
+- [x] Update CompanySettings UI with editable email template fields
+- [x] Wire portal.ts hardcoded emails to use appSettings templates

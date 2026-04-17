@@ -78,6 +78,20 @@ import { broadcastOpportunityUpdate, broadcastPortalMessage } from "../sse";
 import Stripe from "stripe";
 import { ENV } from "../_core/env";
 import { runAutomationsForTrigger } from "../automationEngine";
+import { getOrCreateAppSettings } from "./appSettings";
+
+// ─── TEMPLATE INTERPOLATION HELPER ─────────────────────────────────────────
+/**
+ * Replaces {{variable}} tokens in a template string with values from vars.
+ * Returns null if template is empty so callers can fall back to hardcoded HTML.
+ */
+function interpolatePortalTemplate(
+  template: string | null | undefined,
+  vars: Record<string, string | undefined>,
+): string | null {
+  if (!template?.trim()) return null;
+  return template.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? `{{${key}}}`);
+}
 
 // ─── SIGNATURE STORAGE HELPER ───────────────────────────────────────────────
 /**
@@ -156,10 +170,23 @@ export const portalRouter = router({
 
       const portalUrl = `${process.env.PORTAL_BASE_URL ?? "https://client.handypioneers.com"}/portal/auth?token=${token}`;
 
+      const appCfg = await getOrCreateAppSettings().catch(() => null);
+      const tmplVars = {
+        customerName: customer.name,
+        customerFirstName: customer.name?.split(' ')[0],
+        email: customer.email,
+        magicLink: portalUrl,
+        portalUrl,
+      };
+      const emailSubject = appCfg?.emailMagicLinkSubject?.trim() || "Your Handy Pioneers Customer Portal Login";
+      const emailHtml = interpolatePortalTemplate(appCfg?.emailMagicLinkBody, tmplVars)
+        ? `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;">${interpolatePortalTemplate(appCfg?.emailMagicLinkBody, tmplVars)!.replace(/\n/g, '<br/>')}</div>`
+        : buildMagicLinkEmail(customer.name, portalUrl);
+
       await sendEmail({
         to: customer.email,
-        subject: "Your Handy Pioneers Customer Portal Login",
-        html: buildMagicLinkEmail(customer.name, portalUrl),
+        subject: emailSubject,
+        html: emailHtml,
       }).catch(() => null);
 
       return { sent: true };
@@ -341,18 +368,24 @@ export const portalRouter = router({
       const invoiceUrl = depositInvoice
         ? `${baseUrl}/portal/invoices/${depositInvoice.id}`
         : `${baseUrl}/portal/invoices`;
-      await sendEmail({
-        to: ctx.portalCustomer.email,
-        subject: `Estimate ${est.estimateNumber} Approved — Thank You!`,
-        html: buildApprovalConfirmationEmail(
-          ctx.portalCustomer.name,
-          est.estimateNumber,
-          est.title ?? 'Your Project',
-          depositFmt,
+      {
+        const appCfg = await getOrCreateAppSettings().catch(() => null);
+        const tmplVars = {
+          customerName: ctx.portalCustomer.name,
+          customerFirstName: ctx.portalCustomer.name?.split(' ')[0],
+          email: ctx.portalCustomer.email,
+          referenceNumber: est.estimateNumber,
+          description: est.title ?? 'Your Project',
+          amount: depositFmt ?? '',
           invoiceUrl,
-          baseUrl,
-        ),
-      }).catch(() => null);
+          portalUrl: baseUrl,
+        };
+        const approvalSubject = appCfg?.emailEstimateApprovedSubject?.trim() || `Estimate ${est.estimateNumber} Approved — Thank You!`;
+        const approvalHtml = interpolatePortalTemplate(appCfg?.emailEstimateApprovedBody, tmplVars)
+          ? `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;">${interpolatePortalTemplate(appCfg?.emailEstimateApprovedBody, tmplVars)!.replace(/\n/g, '<br/>')}</div>`
+          : buildApprovalConfirmationEmail(ctx.portalCustomer.name, est.estimateNumber, est.title ?? 'Your Project', depositFmt, invoiceUrl, baseUrl);
+        await sendEmail({ to: ctx.portalCustomer.email, subject: approvalSubject, html: approvalHtml }).catch(() => null);
+      }
 
       // Notify HP team
       await notifyOwner({
@@ -478,6 +511,17 @@ export const portalRouter = router({
       await notifyOwner({
         title: `Invoice Paid: ${inv.invoiceNumber}`,
         content: `${ctx.portalCustomer.name} paid invoice ${inv.invoiceNumber} — $${(input.amountPaid / 100).toFixed(2)}`,
+      }).catch(() => null);
+      // Fire invoice_paid automation (non-blocking)
+      runAutomationsForTrigger('invoice_paid', {
+        customerId: ctx.portalCustomer.id,
+        customerName: ctx.portalCustomer.name,
+        customerFirstName: ctx.portalCustomer.name?.split(' ')[0],
+        email: ctx.portalCustomer.email,
+        phone: (ctx.portalCustomer as any).phone ?? undefined,
+        referenceNumber: inv.invoiceNumber,
+        amount: `$${(input.amountPaid / 100).toFixed(2)}`,
+        description: inv.title ?? undefined,
       }).catch(() => null);
       return { ok: true };
     }),
@@ -1323,18 +1367,23 @@ export const portalRouter = router({
       const invoiceUrl = finalInvoice
         ? `${baseUrl}/portal/invoices/${finalInvoice.id}`
         : `${baseUrl}/portal/invoices`;
-      await sendEmail({
-        to: ctx.portalCustomer.email,
-        subject: 'Job Completion Confirmed — Thank You!',
-        html: buildSignOffConfirmationEmail(
-          ctx.portalCustomer.name,
-          estimate?.title ?? 'Your Project',
-          signedAt,
-          finalInvoice ? finalInvoice.amountDue : null,
+      {
+        const appCfg = await getOrCreateAppSettings().catch(() => null);
+        const tmplVars = {
+          customerName: ctx.portalCustomer.name,
+          customerFirstName: ctx.portalCustomer.name?.split(' ')[0],
+          email: ctx.portalCustomer.email,
+          description: estimate?.title ?? 'Your Project',
+          amount: finalInvoice ? `$${(finalInvoice.amountDue / 100).toFixed(2)}` : '',
           invoiceUrl,
-          baseUrl,
-        ),
-      }).catch(() => null);
+          portalUrl: baseUrl,
+        };
+        const signOffSubject = appCfg?.emailJobSignOffSubject?.trim() || 'Job Completion Confirmed — Thank You!';
+        const signOffHtml = interpolatePortalTemplate(appCfg?.emailJobSignOffBody, tmplVars)
+          ? `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;">${interpolatePortalTemplate(appCfg?.emailJobSignOffBody, tmplVars)!.replace(/\n/g, '<br/>')}</div>`
+          : buildSignOffConfirmationEmail(ctx.portalCustomer.name, estimate?.title ?? 'Your Project', signedAt, finalInvoice ? finalInvoice.amountDue : null, invoiceUrl, baseUrl);
+        await sendEmail({ to: ctx.portalCustomer.email, subject: signOffSubject, html: signOffHtml }).catch(() => null);
+      }
 
       // Notify HP team
       await notifyOwner({
@@ -1342,6 +1391,18 @@ export const portalRouter = router({
         content: `${ctx.portalCustomer.name} signed off on job completion for ${estimate?.title ?? input.hpOpportunityId}.${
           finalInvoice ? ` Final invoice $${(finalInvoice.amountDue / 100).toFixed(2)} is now due.` : ''
         }`,
+      }).catch(() => null);
+
+      // Fire job_signoff_submitted automation (non-blocking)
+      runAutomationsForTrigger('job_signoff_submitted', {
+        customerId: ctx.portalCustomer.id,
+        customerName: ctx.portalCustomer.name,
+        customerFirstName: ctx.portalCustomer.name?.split(' ')[0],
+        email: ctx.portalCustomer.email,
+        phone: (ctx.portalCustomer as any).phone ?? undefined,
+        referenceNumber: estimate?.estimateNumber ?? input.hpOpportunityId,
+        description: estimate?.title ?? input.hpOpportunityId,
+        amount: finalInvoice ? `$${(finalInvoice.amountDue / 100).toFixed(2)}` : undefined,
       }).catch(() => null);
 
       return { signOff, finalInvoiceId: finalInvoice?.id ?? null };
@@ -1479,23 +1540,41 @@ export const portalRouter = router({
       // Send confirmation email
       const baseUrl = process.env.PORTAL_BASE_URL ?? 'https://client.handypioneers.com';
       const invoiceUrl = coInvoice ? `${baseUrl}/portal/invoices/${coInvoice.id}` : null;
-      await sendEmail({
-        to: ctx.portalCustomer.email,
-        subject: `Change Order Approved — ${co.coNumber}`,
-        html: buildChangeOrderApprovalEmail(
-          ctx.portalCustomer.name,
-          co.title,
-          co.coNumber,
-          co.totalAmount,
-          invoiceUrl,
-          baseUrl,
-        ),
-      }).catch(() => null);
+      {
+        const appCfg = await getOrCreateAppSettings().catch(() => null);
+        const tmplVars = {
+          customerName: ctx.portalCustomer.name,
+          customerFirstName: ctx.portalCustomer.name?.split(' ')[0],
+          email: ctx.portalCustomer.email,
+          referenceNumber: co.coNumber,
+          description: co.title,
+          amount: `$${(co.totalAmount / 100).toFixed(2)}`,
+          invoiceUrl: invoiceUrl ?? '',
+          portalUrl: baseUrl,
+        };
+        const coSubject = appCfg?.emailChangeOrderApprovedSubject?.trim() || `Change Order Approved — ${co.coNumber}`;
+        const coHtml = interpolatePortalTemplate(appCfg?.emailChangeOrderApprovedBody, tmplVars)
+          ? `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;">${interpolatePortalTemplate(appCfg?.emailChangeOrderApprovedBody, tmplVars)!.replace(/\n/g, '<br/>')}</div>`
+          : buildChangeOrderApprovalEmail(ctx.portalCustomer.name, co.title, co.coNumber, co.totalAmount, invoiceUrl, baseUrl);
+        await sendEmail({ to: ctx.portalCustomer.email, subject: coSubject, html: coHtml }).catch(() => null);
+      }
 
       // Notify HP team
       await notifyOwner({
         title: `✅ Change Order Approved: ${co.coNumber}`,
         content: `${ctx.portalCustomer.name} approved change order "${co.title}" ($${(co.totalAmount / 100).toFixed(2)}).`,
+      }).catch(() => null);
+
+      // Fire change_order_approved automation (non-blocking)
+      runAutomationsForTrigger('change_order_approved', {
+        customerId: ctx.portalCustomer.id,
+        customerName: ctx.portalCustomer.name,
+        customerFirstName: ctx.portalCustomer.name?.split(' ')[0],
+        email: ctx.portalCustomer.email,
+        phone: (ctx.portalCustomer as any).phone ?? undefined,
+        referenceNumber: co.coNumber,
+        description: co.title,
+        amount: `$${(co.totalAmount / 100).toFixed(2)}`,
       }).catch(() => null);
 
       return { co: await getPortalChangeOrderById(co.id), invoiceId: coInvoice?.id ?? null };
@@ -1525,6 +1604,17 @@ export const portalRouter = router({
       await notifyOwner({
         title: `❌ Change Order Declined: ${co.coNumber}`,
         content: `${ctx.portalCustomer.name} declined change order "${co.title}".${input.declineReason ? ` Reason: ${input.declineReason}` : ''}`,
+      }).catch(() => null);
+
+      // Fire change_order_declined automation (non-blocking)
+      runAutomationsForTrigger('change_order_declined', {
+        customerId: ctx.portalCustomer.id,
+        customerName: ctx.portalCustomer.name,
+        customerFirstName: ctx.portalCustomer.name?.split(' ')[0],
+        email: ctx.portalCustomer.email,
+        phone: (ctx.portalCustomer as any).phone ?? undefined,
+        referenceNumber: co.coNumber,
+        description: co.title,
       }).catch(() => null);
 
       return { ok: true };
@@ -1832,6 +1922,16 @@ export const portalRouter = router({
         console.error('[Portal] SMS alert failed:', e);
       }
 
+      // Fire offcycle_visit_requested automation (non-blocking)
+      runAutomationsForTrigger('offcycle_visit_requested', {
+        customerId: ctx.portalCustomer.id,
+        customerName: ctx.portalCustomer.name,
+        customerFirstName: ctx.portalCustomer.name?.split(' ')[0],
+        email: ctx.portalCustomer.email,
+        phone: (ctx.portalCustomer as any).phone ?? undefined,
+        description: input.reason,
+      }).catch(() => null);
+
       return { ok: true, id: req?.id };
     }),
 
@@ -1856,6 +1956,14 @@ export const portalRouter = router({
           onboardingCompletedAt: new Date(),
         })
         .where(eq(portalCustomers.id, ctx.portalCustomer.id));
+      // Fire portal_onboarding_complete automation (non-blocking)
+      runAutomationsForTrigger('portal_onboarding_complete', {
+        customerId: ctx.portalCustomer.id,
+        customerName: input.name ?? ctx.portalCustomer.name,
+        customerFirstName: (input.name ?? ctx.portalCustomer.name)?.split(' ')[0],
+        email: ctx.portalCustomer.email,
+        phone: input.phone ?? (ctx.portalCustomer as any).phone ?? undefined,
+      }).catch(() => null);
       return { ok: true };
     }),
 

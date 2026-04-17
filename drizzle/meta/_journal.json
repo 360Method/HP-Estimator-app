@@ -337,6 +337,13 @@
       "when": 1776440728924,
       "tag": "0047_rainy_romulus",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "5",
+      "when": 1776443039457,
+      "tag": "0048_open_shadow_king",
+      "breakpoints": true
     }
   ]
 }

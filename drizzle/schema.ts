@@ -1262,6 +1262,23 @@ export const appSettings = mysqlTable("appSettings", {
   termsText: text("termsText"),
   /** Google Business review link (used in review-request automations) */
   googleReviewLink: varchar("googleReviewLink", { length: 500 }).default(""),
+  // ── Transactional email templates (editable from Settings → Company) ──────
+  /** Subject for the estimate approval confirmation email */
+  emailEstimateApprovedSubject: varchar("emailEstimateApprovedSubject", { length: 300 }).default("Your estimate has been approved — Handy Pioneers"),
+  /** Body for the estimate approval confirmation email (HTML allowed) */
+  emailEstimateApprovedBody: text("emailEstimateApprovedBody"),
+  /** Subject for the job sign-off confirmation email */
+  emailJobSignOffSubject: varchar("emailJobSignOffSubject", { length: 300 }).default("Job complete — your final invoice is ready"),
+  /** Body for the job sign-off confirmation email (HTML allowed) */
+  emailJobSignOffBody: text("emailJobSignOffBody"),
+  /** Subject for the change order approval confirmation email */
+  emailChangeOrderApprovedSubject: varchar("emailChangeOrderApprovedSubject", { length: 300 }).default("Change order approved — Handy Pioneers"),
+  /** Body for the change order approval confirmation email (HTML allowed) */
+  emailChangeOrderApprovedBody: text("emailChangeOrderApprovedBody"),
+  /** Subject for the magic link login email */
+  emailMagicLinkSubject: varchar("emailMagicLinkSubject", { length: 300 }).default("Your Handy Pioneers Customer Portal Login"),
+  /** Body for the magic link login email (HTML allowed) */
+  emailMagicLinkBody: text("emailMagicLinkBody"),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 export type DbAppSettings = typeof appSettings.$inferSelect;
