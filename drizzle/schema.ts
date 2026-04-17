@@ -1262,6 +1262,12 @@ export const appSettings = mysqlTable("appSettings", {
   termsText: text("termsText"),
   /** Google Business review link (used in review-request automations) */
   googleReviewLink: varchar("googleReviewLink", { length: 500 }).default(""),
+  /** Internal labor rate in cents per hour (e.g. 15000 = $150/hr) */
+  internalLaborRateCents: int("internalLaborRateCents").default(15000),
+  /** Default markup percentage applied to material costs (0–200) */
+  defaultMarkupPct: int("defaultMarkupPct").default(20),
+  /** SMS sender name shown to customers (max 11 chars for alphanumeric sender) */
+  smsFromName: varchar("smsFromName", { length: 30 }).default("HandyPioneers"),
   // ── Transactional email templates (editable from Settings → Company) ──────
   /** Subject for the estimate approval confirmation email */
   emailEstimateApprovedSubject: varchar("emailEstimateApprovedSubject", { length: 300 }).default("Your estimate has been approved — Handy Pioneers"),

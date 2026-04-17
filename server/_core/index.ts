@@ -48,6 +48,7 @@ async function startServer() {
   app.use(cors({
     origin: [
       "https://360.handypioneers.com",
+      "https://hp360funnel-pdnj394m.manus.space",
       "https://client.handypioneers.com",
       "http://localhost:3001",
       "http://localhost:5173",
@@ -103,23 +104,36 @@ async function startServer() {
         const session = event.data.object as Stripe.Checkout.Session;
         console.log(`[Webhook] Checkout session completed: ${session.id}`);
         // ── 360 Method subscription enrollment ──────────────────────────────
-        if (session.mode === "subscription" && session.metadata?.planType === "portfolio") {
-          // Portfolio multi-property enrollment
-          try {
-            await create360PortfolioMembershipsFromWebhook(session);
-            console.log(`[Webhook] 360 portfolio membership created for session ${session.id}`);
-          } catch (errPortfolio) {
-            console.error(`[Webhook] 360 portfolio membership creation failed:`, errPortfolio);
+        if (session.mode === "subscription" && (session.metadata?.planType === "portfolio" || session.metadata?.tier)) {
+          const customerEmail = session.metadata?.customerEmail ?? session.customer_email ?? null;
+          // Cancel cart abandonment drip: archive the Cart Abandoned lead for this email
+          if (customerEmail) {
+            try {
+              const { listOpportunities: listOps, updateOpportunity: updateOpp } = await import("../db");
+              const leads = await listOps("lead", undefined, false, 500);
+              const abandoned = leads.filter((o: any) => o.stage === "Cart Abandoned" && (o.notes ?? "").includes(`<${customerEmail.toLowerCase()}>`) );
+              for (const lead of abandoned) {
+                await updateOpp(lead.id, { archived: true, notes: (lead.notes ?? "") + "\n[Drip cancelled — checkout completed]" }).catch(() => null);
+              }
+              if (abandoned.length > 0) console.log(`[Webhook] Cancelled ${abandoned.length} cart abandonment lead(s) for ${customerEmail}`);
+            } catch (dripErr) {
+              console.error("[Webhook] Drip cancellation error:", dripErr);
+            }
           }
-          res.json({ received: true });
-          return;
-        }
-        if (session.mode === "subscription" && session.metadata?.tier) {
-          try {
-            await create360MembershipFromWebhook(session);
-            console.log(`[Webhook] 360 membership created for session ${session.id}`);
-          } catch (err360) {
-            console.error(`[Webhook] 360 membership creation failed:`, err360);
+          if (session.metadata?.planType === "portfolio") {
+            try {
+              await create360PortfolioMembershipsFromWebhook(session);
+              console.log(`[Webhook] 360 portfolio membership created for session ${session.id}`);
+            } catch (errPortfolio) {
+              console.error(`[Webhook] 360 portfolio membership creation failed:`, errPortfolio);
+            }
+          } else {
+            try {
+              await create360MembershipFromWebhook(session);
+              console.log(`[Webhook] 360 membership created for session ${session.id}`);
+            } catch (err360) {
+              console.error(`[Webhook] 360 membership creation failed:`, err360);
+            }
           }
           res.json({ received: true });
           return;
@@ -862,6 +876,159 @@ async function startServer() {
   runDeferredCreditRelease().catch(console.error);
   setInterval(runDeferredCreditRelease, 6 * 60 * 60 * 1000); // every 6 hours
   console.log("[360 Deferred Credit] Deferred labor bank credit scheduler started (runs every 6 hours)");
+
+  // ── 360 Funnel Gateway ────────────────────────────────────────────────────────────────
+  // POST /api/360/event  — fire-and-forget event capture (abandonment, page views, etc.)
+  // POST /api/360/checkout — create Stripe session, return URL
+  // Frontend knows nothing about Stripe price IDs or business logic.
+
+  app.post("/api/360/event", async (req, res) => {
+    const { event, type, data } = req.body ?? {};
+    if (!event || !type || !data) {
+      return res.status(400).json({ ok: false, error: "Missing event, type, or data" });
+    }
+    // Async handlers — fire and forget so frontend gets instant 200
+    setImmediate(async () => {
+      if (event === "checkout_started") {
+        try {
+          const { findCustomerByEmail, createCustomer, createOpportunity } = await import("../db");
+          const { nanoid } = await import("nanoid");
+          const { customerName, customerEmail, customerPhone, tier, cadence, serviceAddress, serviceCity, serviceState, serviceZip, properties } = data;
+          if (!customerEmail) return;
+          let customer = await findCustomerByEmail(customerEmail);
+          if (!customer) {
+            const nameParts = (customerName ?? "").trim().split(" ");
+            customer = await createCustomer({
+              id: nanoid(),
+              firstName: nameParts[0] ?? "",
+              lastName: nameParts.slice(1).join(" ") || "",
+              displayName: (customerName ?? "").trim(),
+              email: customerEmail.toLowerCase().trim(),
+              mobilePhone: customerPhone || "",
+              street: serviceAddress || "",
+              city: serviceCity || "",
+              state: serviceState || "",
+              zip: serviceZip || "",
+              customerType: "homeowner",
+              leadSource: type === "portfolio" ? "360 Portfolio Funnel" : "360 Funnel",
+              customerNotes: type === "portfolio"
+                ? `Initiated 360\u00b0 Portfolio checkout (${cadence}). Did not complete payment. Portfolio: ${(properties ?? []).length} properties.`
+                : `Initiated 360\u00b0 checkout (${tier} ${cadence}). Did not complete payment.`,
+              sendNotifications: true,
+              tags: "[]",
+            });
+          }
+          const propCount = (properties ?? []).length;
+          const title = type === "portfolio"
+            ? `360\u00b0 Portfolio Plan (${cadence}) \u2014 ${propCount} propert${propCount === 1 ? "y" : "ies"} \u2014 Abandoned`
+            : `360\u00b0 ${(tier ?? "").charAt(0).toUpperCase() + (tier ?? "").slice(1)} Plan (${cadence}) \u2014 Abandoned`;
+          await createOpportunity({
+            id: nanoid(),
+            customerId: customer.id,
+            area: "lead",
+            stage: "Cart Abandoned",
+            title,
+            notes: [
+              type === "portfolio" ? `Cadence: ${cadence} | Properties: ${propCount}` : `Tier: ${tier} | Cadence: ${cadence}`,
+              `Contact: ${customerName} <${customerEmail}>${customerPhone ? ` | ${customerPhone}` : ""}`,
+              `Source: 360\u00b0 Funnel \u2014 cart abandonment capture`,
+            ].join("\n"),
+            archived: false,
+          });
+          console.log(`[360 Gateway] checkout_started captured for ${customerEmail}`);
+        } catch (err) {
+          console.error("[360 Gateway] checkout_started handler error:", err);
+        }
+      }
+    });
+    return res.json({ ok: true });
+  });
+
+  app.post("/api/360/checkout", async (req, res) => {
+    const { type, tier, cadence, properties, customer, origin } = req.body ?? {};
+    if (!type || !cadence || !customer || !origin) {
+      return res.status(400).json({ error: "Missing required fields: type, cadence, customer, origin" });
+    }
+    try {
+      const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2025-03-31.basil" });
+      let lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [];
+
+      if (type === "homeowner") {
+        if (!tier) return res.status(400).json({ error: "tier required for homeowner" });
+        const key = `STRIPE_PRICE_${(tier as string).toUpperCase()}_${(cadence as string).toUpperCase()}`;
+        const priceId = process.env[key];
+        if (!priceId) return res.status(400).json({ error: `Stripe price not configured: ${key}` });
+        lineItems = [{ price: priceId, quantity: 1 }];
+      } else if (type === "portfolio") {
+        if (!Array.isArray(properties) || properties.length === 0) {
+          return res.status(400).json({ error: "properties array required for portfolio" });
+        }
+        const tierKeyMap: Record<string, string> = {
+          essential: "EXTERIOR", exterior_shield: "EXTERIOR",
+          full: "FULL", full_coverage: "FULL",
+          maximum: "MAX", max: "MAX",
+        };
+        lineItems = (properties as any[]).map((p) => {
+          const tierKey = tierKeyMap[(p.tier as string)?.toLowerCase()] ?? "EXTERIOR";
+          const priceKey = `STRIPE_PRICE_PORTFOLIO_${tierKey}_${(cadence as string).toUpperCase()}`;
+          const priceId = process.env[priceKey];
+          if (!priceId) throw new Error(`Stripe price not configured: ${priceKey}`);
+          return { price: priceId, quantity: 1 };
+        });
+        // Interior add-on: per-cadence pricing based on property type (door count)
+        // sfh=1 door, duplex=2, triplex=3, fourplex=4
+        const DOOR_COUNT: Record<string, number> = { sfh: 1, duplex: 2, triplex: 3, fourplex: 4 };
+        for (const prop of (properties as any[])) {
+          if (!prop.interiorAddon) continue;
+          const doors = DOOR_COUNT[(prop.type as string)?.toLowerCase()] ?? 1;
+          const addonKey = `STRIPE_PRICE_INTERIOR_ADDON_${(cadence as string).toUpperCase()}_PER_DOOR`;
+          const addonId = process.env[addonKey] ?? process.env.STRIPE_PRICE_INTERIOR_ADDON_ANNUAL_PER_DOOR;
+          if (addonId) lineItems.push({ price: addonId, quantity: doors });
+        }
+      } else {
+        return res.status(400).json({ error: `Unknown type: ${type}` });
+      }
+
+      const successPath = `/360/confirmation?session_id={CHECKOUT_SESSION_ID}`;
+      const cancelPath = type === "portfolio"
+        ? `/360/multifamily?cancelled=1`
+        : `/360/checkout?tier=${tier}&cadence=${cadence}&cancelled=1`;
+
+      const session = await stripe.checkout.sessions.create({
+        mode: "subscription",
+        line_items: lineItems,
+        customer_email: (customer as any).email ?? undefined,
+        allow_promotion_codes: true,
+        success_url: `${origin}${successPath}`,
+        cancel_url: `${origin}${cancelPath}`,
+        metadata: {
+          planType: type as string,
+          tier: (tier as string) ?? "",
+          cadence: cadence as string,
+          customerName: (customer as any).name ?? "",
+          customerEmail: (customer as any).email ?? "",
+          customerPhone: (customer as any).phone ?? "",
+          serviceAddress: (customer as any).address ?? "",
+          serviceCity: (customer as any).city ?? "",
+          serviceState: (customer as any).state ?? "",
+          serviceZip: (customer as any).zip ?? "",
+          properties: type === "portfolio" ? JSON.stringify(properties) : "",
+        },
+        subscription_data: {
+          metadata: {
+            planType: type as string,
+            tier: (tier as string) ?? "",
+            cadence: cadence as string,
+            customerEmail: (customer as any).email ?? "",
+          },
+        },
+      });
+      return res.json({ url: session.url! });
+    } catch (err: any) {
+      console.error("[360 Gateway] checkout error:", err);
+      return res.status(500).json({ error: err.message });
+    }
+  });
 
   // tRPC API
   app.use(

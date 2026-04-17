@@ -2016,3 +2016,29 @@
 - [x] Pre-fill all 4 transactional email template bodies with production-ready Handy Pioneers content
 - [x] getOrCreateAppSettings backfills blank fields on existing rows (lazy migration, no manual SQL needed)
 - [x] Seed script applied to live DB — all 13 fields now populated
+
+## Settings — Single Source of Truth Overhaul
+- [ ] Fix CompanySettings input focus/locking bug (controlled input loses focus on each keystroke)
+- [ ] Add missing global fields to appSettings schema: internalLaborRateCents, defaultMarkupPct, smsFromName
+- [ ] Run pnpm db:push after schema changes
+- [ ] Create useAppSettings() React hook — fetches settings once, exposes typed fields app-wide
+- [ ] Wire InvoiceSection deposit % default to appSettings.defaultDepositPct
+- [ ] Wire InvoiceSection tax rate default to appSettings.defaultTaxBps
+- [ ] Wire EstimateSection tax rate default to appSettings.defaultTaxBps
+- [ ] Wire automation engine to inject supportPhone, supportEmail, companyName, websiteUrl into all SMS/email templates
+- [ ] Rebuild CompanySettings as always-editable per-section form (remove edit/cancel toggle pattern)
+- [ ] Add new Settings sections: Financials (tax, deposit, markup, labor rate), Notifications (SMS from name)
+
+## 360 Gateway + CompanySettings Overhaul (Apr 17)
+- [x] Add hp360funnel manus.space to CORS allowed origins
+- [x] Fix /api/360/checkout response shape to return clean {url} instead of nested tRPC shape
+- [x] Fix portfolio success_url path to /360/confirmation
+- [x] Add drip cancellation on checkout.session.completed webhook (archives Cart Abandoned leads)
+- [x] Fix interior add-on pricing to use per-cadence per-property-type door count
+- [x] Add tier name normalization in threeSixtyWebhook.ts (exterior_shield/full_coverage/max → bronze/silver/gold)
+- [x] Implement portal auto-login via ?session_id= on /portal/home (calls autoLoginFromStripeSession)
+- [x] Fix CompanySettings focus bug (extract Field outside component)
+- [x] Rebuild CompanySettings as always-editable per-section form with Save buttons
+- [x] Add Pricing Defaults section (tax rate, deposit %, labor rate, markup %)
+- [x] Add SMS Settings section (smsFromName)
+- [x] Add hint text to all fields explaining propagation to rest of app

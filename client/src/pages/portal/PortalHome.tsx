@@ -3,7 +3,7 @@
  * Shows: profile summary, pending estimates, open invoices, upcoming appointments.
  * Mobile-first, HP brand colors (forest green / warm gold).
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import PortalLayout from "@/components/PortalLayout";
@@ -219,6 +219,27 @@ function ProfileCard({ customer, onUpdated }: {
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 export default function PortalHome() {
   const [, navigate] = useLocation();
+  const [autoLoginDone, setAutoLoginDone] = useState(false);
+  const autoLogin = trpc.portal.autoLoginFromStripeSession.useMutation({
+    onSuccess: () => {
+      // Strip session_id from URL without reload
+      const url = new URL(window.location.href);
+      url.searchParams.delete("session_id");
+      window.history.replaceState({}, "", url.toString());
+      setAutoLoginDone(true);
+    },
+    onError: () => setAutoLoginDone(true),
+  });
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get("session_id");
+    if (sessionId && !autoLogin.isPending && !autoLogin.isSuccess && !autoLogin.isError) {
+      autoLogin.mutate({ sessionId });
+    } else {
+      setAutoLoginDone(true);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const { data, isLoading, refetch } = trpc.portal.getDashboard.useQuery(undefined, {
     refetchOnWindowFocus: true,
   });
@@ -228,6 +249,16 @@ export default function PortalHome() {
   });
   const { data: teamInfo } = trpc.portal.getTeamInfo.useQuery();
 
+  if (!autoLoginDone || autoLogin.isPending) {
+    return (
+      <PortalLayout>
+        <div className="flex flex-col justify-center items-center py-24 gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-[#c8922a]" />
+          {autoLogin.isPending && <p className="text-sm text-gray-400">Setting up your account…</p>}
+        </div>
+      </PortalLayout>
+    );
+  }
   if (isLoading) {
     return (
       <PortalLayout>

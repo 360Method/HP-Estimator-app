@@ -68,7 +68,14 @@ export async function create360MembershipFromWebhook(
   if (!db) throw new Error('Database unavailable');
   const meta = session.metadata ?? {};
 
-  const tier = (meta.tier ?? "bronze") as MemberTier;
+  // Normalize funnel tier names (exterior_shield/full_coverage/max/essential/full/maximum) to internal names
+  const TIER_NAME_MAP: Record<string, MemberTier> = {
+    exterior_shield: "bronze", bronze: "bronze", essential: "bronze",
+    full_coverage: "silver", silver: "silver", full: "silver",
+    max: "gold", gold: "gold", maximum: "gold",
+  };
+  const rawTier = (meta.tier ?? "bronze").toLowerCase();
+  const tier = (TIER_NAME_MAP[rawTier] ?? "bronze") as MemberTier;
   const cadence = (meta.cadence ?? "annual") as BillingCadence;
   const hpCustomerId = meta.hpCustomerId || null;
   const propertyAddressId = meta.propertyAddressId ? parseInt(meta.propertyAddressId) : null;
