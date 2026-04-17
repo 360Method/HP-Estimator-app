@@ -2042,3 +2042,10 @@
 - [x] Add Pricing Defaults section (tax rate, deposit %, labor rate, markup %)
 - [x] Add SMS Settings section (smsFromName)
 - [x] Add hint text to all fields explaining propagation to rest of app
+
+## 360 Funnel → Backend Webhook Fix
+- [x] Root cause: Stripe webhook was pointing to handyfield-jkw2dpqj.manus.space, not pro.handypioneers.com
+- [x] Updated primary Stripe webhook URL to https://pro.handypioneers.com/api/stripe/webhook
+- [x] Added fallback webhook endpoint for handyfield-jkw2dpqj.manus.space with new STRIPE_WEBHOOK_SECRET_FALLBACK
+- [x] Updated webhook handler to try both primary and fallback secrets
+- [x] All 212 tests pass including new stripe.webhook.test.ts (4 tests)

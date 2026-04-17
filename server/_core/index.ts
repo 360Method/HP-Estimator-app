@@ -59,19 +59,28 @@ async function startServer() {
   // ── Stripe webhook: MUST be registered BEFORE express.json() ──
   app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async (req, res) => {
     const sig = req.headers["stripe-signature"] as string;
-    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
-    if (!webhookSecret) {
+    const primarySecret = process.env.STRIPE_WEBHOOK_SECRET;
+    const fallbackSecret = process.env.STRIPE_WEBHOOK_SECRET_FALLBACK;
+    if (!primarySecret) {
       res.status(400).json({ error: "Webhook secret not configured" });
       return;
     }
     let event: Stripe.Event;
-    try {
-      const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2025-03-31.basil" });
-      event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error("[Webhook] Signature verification failed:", msg);
-      res.status(400).json({ error: `Webhook Error: ${msg}` });
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2025-03-31.basil" });
+    // Try primary secret first, then fallback (supports dual-endpoint setup)
+    let verified = false;
+    for (const secret of [primarySecret, fallbackSecret].filter(Boolean) as string[]) {
+      try {
+        event = stripe.webhooks.constructEvent(req.body, sig, secret);
+        verified = true;
+        break;
+      } catch {
+        // try next secret
+      }
+    }
+    if (!verified) {
+      console.error("[Webhook] Signature verification failed with all configured secrets");
+      res.status(400).json({ error: "Webhook signature verification failed" });
       return;
     }
     // Handle test events
