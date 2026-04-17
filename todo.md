@@ -2055,3 +2055,24 @@
 - [x] Root cause 2: Checkout endpoint used raw tier name (max/full_coverage) as Stripe key prefix — no STRIPE_PRICE_MAX_* env vars exist
 - [x] Fixed: Added HOMEOWNER_TIER_MAP normalization in /api/360/checkout (max→GOLD, full_coverage→SILVER, exterior_shield→BRONZE)
 - [x] Verified all 9 homeowner price IDs resolve correctly after normalization
+
+## Portal 360° Upgrade — Non-member funnel + member dashboard
+- [ ] Non-member: hero section (forest green bg, gold CTA, proactive vs reactive headline)
+- [ ] Non-member: problem stats row (emergency repair cost, deferred maintenance, % without plan)
+- [ ] Non-member: tier comparison cards with cadence toggle (monthly/quarterly/annual)
+- [ ] Non-member: savings calculator (slider → projected savings per tier)
+- [ ] Non-member: testimonial cards (3 placeholder)
+- [ ] Non-member: FAQ accordion (5 questions)
+- [ ] Non-member: sticky bottom CTA bar
+- [ ] Member: savings counter (total member discounts applied to completed jobs)
+- [ ] Member: seasonal visit year-at-a-glance timeline
+- [ ] Member: upgrade nudge card (Bronze/Silver only → one-click to checkout)
+- [ ] Member: referral shortcut link
+- [ ] PortalHome: non-member teaser banner → /portal/360-membership
+- [ ] PortalHome: member card savings badge
+
+## Portal 360° Upgrade — 2026-04-17
+- [x] Non-member funnel: hero, problem stats, tier cards, cadence toggle, savings calculator, testimonials, FAQ, sticky CTA
+- [x] Member dashboard: savings counter, seasonal visit timeline, upgrade nudge, referral shortcut
+- [x] PortalHome: non-member teaser banner with stats and CTA
+- [x] PortalHome: member savings badge on 360 card

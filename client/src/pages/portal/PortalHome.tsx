@@ -321,6 +321,40 @@ export default function PortalHome() {
           )}
         </div>
 
+        {/* 360° Membership — teaser for non-members */}
+        {!membershipData && (
+          <div
+            className="rounded-xl border-2 border-dashed border-[#1a2e1a]/30 bg-gradient-to-r from-[#1a2e1a]/5 to-amber-50/50 p-5 cursor-pointer hover:border-[#1a2e1a]/50 hover:shadow-sm transition-all"
+            onClick={() => navigate('/portal/360-membership')}
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-lg bg-[#1a2e1a] flex items-center justify-center shrink-0">
+                <RefreshCw className="w-5 h-5 text-[#c8922a]" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-[#c8922a] font-bold uppercase tracking-wide mb-0.5">360° Home Method</p>
+                <p className="text-sm font-bold text-[#1a2e1a] leading-snug">Protect your home proactively — stop paying emergency rates</p>
+                <p className="text-xs text-muted-foreground mt-1">Seasonal visits · Labor bank · Member discounts · Home health reports</p>
+              </div>
+            </div>
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              {[
+                { stat: "$6,200", label: "Avg emergency repair" },
+                { stat: "$250–$500", label: "Labor bank credit" },
+                { stat: "Up to 15%", label: "Off all repairs" },
+              ].map((s, i) => (
+                <div key={i} className="bg-white rounded-lg border border-[#1a2e1a]/10 px-2 py-2 text-center">
+                  <p className="text-sm font-black text-[#c8922a]">{s.stat}</p>
+                  <p className="text-[10px] text-gray-500 leading-tight">{s.label}</p>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 flex items-center justify-center gap-1.5 py-2 rounded-lg bg-[#1a2e1a] text-white text-xs font-bold">
+              See Plans &amp; Pricing →
+            </div>
+          </div>
+        )}
+
         {/* 360° Membership card — shown only if enrolled */}
         {membershipData && (
           <div
@@ -334,6 +368,11 @@ export default function PortalHome() {
                 <div>
                   <p className="text-xs text-emerald-700 font-semibold uppercase tracking-wide">360° Home Membership</p>
                   <p className="text-base font-bold text-gray-900 capitalize">{membershipData.membership.tier} Plan</p>
+                  {(membershipData as any).totalMemberSavingsCents > 0 && (
+                    <p className="text-[10px] text-emerald-700 font-semibold mt-0.5">
+                      You've saved ${Math.round((membershipData as any).totalMemberSavingsCents / 100)} with your membership
+                    </p>
+                  )}
                 </div>
               </div>
               <button
