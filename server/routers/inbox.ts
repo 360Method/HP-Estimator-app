@@ -15,6 +15,7 @@ import {
   listConversationsByCustomer,
   listMessages,
   markConversationRead,
+  updateConversation,
   updateConversationLastMessage,
 } from "../db";
 import { sendSms, generateVoiceToken, isTwilioConfigured } from "../twilio";
@@ -86,6 +87,20 @@ const conversationsRouter = router({
         input.customerId,
       );
       return { conversationId: conv.id };
+    }),
+
+  /**
+   * Re-link a conversation to a different customer.
+   * Used when staff want to assign an unknown-caller stub to the correct customer.
+   */
+  linkToCustomer: protectedProcedure
+    .input(z.object({
+      conversationId: z.number(),
+      customerId: z.string(),
+    }))
+    .mutation(async ({ input }) => {
+      await updateConversation(input.conversationId, { customerId: input.customerId });
+      return { success: true };
     }),
 });
 

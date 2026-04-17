@@ -1880,4 +1880,4 @@
 - [x] listWithActivity already surfaces all customer-linked conversations (stubs included)
 - [x] Inbox customer list shows "Unknown" badge for auto-created stub customers
 - [x] Thread header has View Profile button (Users icon) to navigate to customer profile
-- [ ] Add linkConversationToCustomer tRPC procedure so staff can manually re-link a call to a different customer
+- [x] Add linkConversationToCustomer tRPC procedure so staff can manually re-link a call to a different customer
