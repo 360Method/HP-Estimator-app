@@ -272,6 +272,15 @@ export async function getCallLogByTwilioSid(sid: string) {
   return rows[0] ?? null;
 }
 
+/** Batch fetch call logs by multiple twilioCallSids — used to enrich unified feed with recordingAppUrl */
+export async function getCallLogsByTwilioSids(sids: string[]) {
+  if (!sids.length) return [] as (typeof callLogs.$inferSelect)[];
+  const db = await getDb();
+  if (!db) return [] as (typeof callLogs.$inferSelect)[];
+  const { inArray } = await import("drizzle-orm");
+  return db.select().from(callLogs).where(inArray(callLogs.twilioCallSid, sids));
+}
+
 // ─── GMAIL TOKEN HELPERS ─────────────────────────────────────────────────────
 
 export async function getGmailToken(email: string) {

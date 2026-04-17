@@ -113,16 +113,27 @@ function ChannelBadge({ channel }: { channel: string }) {
 function FeedBubble({ item }: { item: FeedItem }) {
   const isOut = item.direction === 'outbound';
 
-  // Call log — centered pill
+  // Call log — centered card with optional inline audio player
   if (item.channel === 'call') {
+    const recordingUrl = (item as any).recordingAppUrl as string | null | undefined;
     return (
       <div className="flex justify-center my-3">
-        <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2 text-xs text-emerald-800">
-          {isOut
-            ? <PhoneOutgoing className="w-3.5 h-3.5 text-blue-500" />
-            : <PhoneIncoming className="w-3.5 h-3.5 text-emerald-600" />}
-          <span className="font-medium">{isOut ? 'Outbound call' : 'Inbound call'}</span>
-          <span className="text-emerald-600">{fmtTime(item.sentAt)}</span>
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2 text-xs text-emerald-800 max-w-xs w-full">
+          <div className="flex items-center gap-2">
+            {isOut
+              ? <PhoneOutgoing className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+              : <PhoneIncoming className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />}
+            <span className="font-medium">{isOut ? 'Outbound call' : 'Inbound call'}</span>
+            <span className="text-emerald-600 ml-auto">{fmtTime(item.sentAt)}</span>
+          </div>
+          {recordingUrl && (
+            <div className="mt-2">
+              <p className="text-[10px] text-emerald-700 mb-1 flex items-center gap-1">
+                <Phone className="w-2.5 h-2.5" /> Recording
+              </p>
+              <audio controls src={recordingUrl} className="w-full h-8" preload="none" />
+            </div>
+          )}
         </div>
       </div>
     );

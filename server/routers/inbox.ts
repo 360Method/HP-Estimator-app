@@ -7,6 +7,7 @@ import { protectedProcedure, router } from "../_core/trpc";
 import {
   findOrCreateConversation,
   getConversationById,
+  getCallLogsByTwilioSids,
   incrementUnread,
   insertCallLog,
   insertMessage,
@@ -271,12 +272,29 @@ const unifiedFeedRouter = router({
         senderName: m.senderName ?? null,
       }));
 
-      // 4. Merge and sort chronologically (oldest first)
-      const feed = [...convMessages, ...portalFeedItems].sort(
+      // 4. Enrich call feed items with recordingAppUrl from callLogs
+      const callTwilioSids = convMessages
+        .filter(m => m.channel === 'call' && m.twilioSid)
+        .map(m => m.twilioSid!);
+      const callLogMap = new Map<string, string | null>();
+      if (callTwilioSids.length) {
+        const logs = await getCallLogsByTwilioSids(callTwilioSids);
+        for (const log of logs) {
+          if (log.twilioCallSid) callLogMap.set(log.twilioCallSid, (log as any).recordingAppUrl ?? log.recordingUrl ?? null);
+        }
+      }
+      const enrichedConvMessages = convMessages.map(m =>
+        m.channel === 'call' && m.twilioSid && callLogMap.has(m.twilioSid)
+          ? { ...m, recordingAppUrl: callLogMap.get(m.twilioSid) ?? null }
+          : { ...m, recordingAppUrl: null }
+      );
+
+      // 5. Merge and sort chronologically (oldest first)
+      const feed = [...enrichedConvMessages, ...portalFeedItems.map(m => ({ ...m, recordingAppUrl: null }))].sort(
         (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
       );
 
-      // 5. Return feed + conversation metadata for compose bar
+      // 6. Return feed + conversation metadata for compose bar
       const primaryConv = convs[0] ?? null;
       return {
         feed,

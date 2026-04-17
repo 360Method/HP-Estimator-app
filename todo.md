@@ -1918,12 +1918,12 @@
 
 ## Outbound Call Fix (VoiceCallPanel)
 
-- [ ] Diagnose why the call button in VoiceCallPanel fails
-- [ ] Fix Twilio Device initialization / token fetch
-- [ ] Fix /api/twilio/voice/connect TwiML endpoint if needed
-- [ ] Fix /api/twilio/token endpoint if missing or broken
-- [ ] Verify TwiML App SID is configured in Twilio Console
-- [ ] Test outbound call end-to-end
+- [x] Diagnosed: Twilio API Key is Restricted type — cannot sign JWT access tokens for Voice SDK
+- [x] Fix: user must create a Standard API key in Twilio Console and update TWILIO_API_KEY + TWILIO_API_SECRET
+- [x] /api/twilio/voice/connect TwiML endpoint is correct and tested
+- [x] voiceToken procedure generates correct JWT structure
+- [x] TwiML App SID is configured via TWILIO_TWIML_APP_SID env var
+- [ ] Test outbound call end-to-end (pending Standard API key from user)
 
 ## Two-Stage Inbound Call Routing
 
@@ -1936,12 +1936,12 @@
 
 ## Call Recordings — Inline in App (S3 Upload)
 
-- [ ] Add recordingAppUrl column to callLogs schema (stores app S3 URL after download from Twilio)
-- [ ] Run db:push for new column
-- [ ] Add downloadAndStoreRecording() helper in server/twilio.ts: fetch from Twilio with auth, upload to S3, return app URL
-- [ ] Call downloadAndStoreRecording() in voicemail callback and call status handler; save to recordingAppUrl
-- [ ] Add inline <audio> player to Inbox Calls tab call cards using recordingAppUrl
-- [ ] Add inline <audio> player to feed items of type 'call' in the All tab thread view
+- [x] Add recordingAppUrl column to callLogs schema
+- [x] Run db:push for new column
+- [x] Add downloadAndStoreRecording() helper in server/twilio.ts
+- [x] Call downloadAndStoreRecording() in voicemail callback and handleCallStatusUpdate
+- [x] Inbox Calls tab: inline <audio> player using recordingAppUrl (falls back to recordingUrl)
+- [x] Add inline <audio> player to feed items of type 'call' in the All tab thread view (getByCustomer enriches call items with recordingAppUrl via getCallLogsByTwilioSids batch join)
 
 ## Call Recordings — Inline Playback (Apr 17)
 
