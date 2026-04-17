@@ -19,7 +19,9 @@ import {
   threeSixtyVisits,
   threeSixtyWorkOrders,
   portalCustomers,
+  portalTokens,
 } from "../drizzle/schema";
+import { randomBytes } from "crypto";
 import { eq, isNotNull, lte, gt, and } from "drizzle-orm";
 import { TIER_DEFINITIONS, type MemberTier, type BillingCadence } from "../shared/threeSixtyTiers";
 import { sendEmail } from "./gmail";
@@ -177,8 +179,21 @@ export async function create360MembershipFromWebhook(
     });
   }
 
-  // ── 5. Send welcome email ─────────────────────────────────────────────────
+  // ── 5. Generate portal magic link + send welcome email ────────────────────────
   if (customerEmail) {
+    // Generate a 7-day one-click magic link so the customer can access the portal immediately
+    let portalMagicLink = "https://client.handypioneers.com";
+    if (portalCustomerId) {
+      try {
+        const token = randomBytes(32).toString("hex");
+        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+        await db.insert(portalTokens).values({ customerId: portalCustomerId, token, expiresAt });
+        portalMagicLink = `https://client.handypioneers.com/portal/auth?token=${token}`;
+        console.log(`[360 Webhook] Portal magic link generated for ${customerEmail}`);
+      } catch (tokenErr) {
+        console.error("[360 Webhook] Magic link generation failed:", tokenErr);
+      }
+    }
     const laborBankDisplay =
       tierDef.laborBankCreditCents > 0
         ? `<p>Your <strong>$${tierDef.laborBankCreditCents / 100} labor bank credit</strong> is ready to use on your first call.</p>`
@@ -207,7 +222,9 @@ export async function create360MembershipFromWebhook(
   ${laborBankDisplay}
   ${priorityNote}
   <p style="text-align:center;margin-top:28px;">
-    <a href="https://client.handypioneers.com" style="display:inline-block;background:#c8922a;color:#fff;font-weight:700;padding:14px 36px;border-radius:6px;text-decoration:none;font-size:15px;">Access Your Member Portal →</a>
+    <a href="${portalMagicLink}" style="display:inline-block;background:#c8922a;color:#fff;font-weight:700;padding:14px 36px;border-radius:6px;text-decoration:none;font-size:15px;">Access Your Member Portal →</a>
+  </p>
+  <p style="font-size:12px;color:#aaa;text-align:center;margin-top:8px;">This link is valid for 7 days and logs you in automatically.
   </p>
   <p style="font-size:13px;color:#888;text-align:center;margin-top:24px;">Questions? <a href="mailto:help@handypioneers.com" style="color:#c8922a;">help@handypioneers.com</a> | (360) 544-9858</p>
 </td></tr></table></body></html>`;
