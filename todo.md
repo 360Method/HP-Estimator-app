@@ -1966,3 +1966,14 @@
 - [x] Add getRecordingProxyUrl() helper in InboxPage: uses app S3 URL if available, otherwise extracts RE SID and routes through proxy
 - [x] Both FeedBubble (All tab) and Calls tab use getRecordingProxyUrl for all recording/voicemail audio
 - [x] S3 async upload still runs in background — future recordings will use S3 URL once upload succeeds
+
+## Customer Profile Communication Upgrade (Apr 17)
+
+- [x] Replace header Call button (tel: link) with in-app VoiceCallPanel trigger — opens inline call widget in profile header, same as inbox
+- [x] Add quick-action bar in profile header: SMS / Email / Note / Call buttons that open inline compose or call widget without leaving the profile
+- [x] SMS/Email quick actions: findOrCreateByCustomer then open inline compose panel (not navigate to inbox)
+- [x] Note quick action: inline note compose that persists to conversation via messages.send (channel: note) and refreshes unified feed
+- [x] Replace local-only activityFeed (EstimatorContext) in Profile tab with server-backed unifiedFeed.getByCustomer — shows calls, SMS, emails, notes, portal messages from ALL sources
+- [x] Unified feed in profile: show channel icon, direction badge, body preview, timestamp, and audio player for call recordings
+- [x] Unified feed: auto-refresh on SSE new_message event so profile stays live without manual reload
+- [x] Unified feed: show empty state with quick-action prompt when no activity yet

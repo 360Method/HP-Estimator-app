@@ -30,7 +30,8 @@ import {
   Activity, Send, CheckCircle2, XCircle, Clock, PhoneCall, Wallet,
   ExternalLink, Edit3, Save, X, AlertCircle, TrendingUp, Archive,
   RefreshCw, FolderOpen, Download, Wrench, Trophy, FileUp, Camera, CalendarPlus,
-  GitMerge, Search, Receipt, ShieldCheck,
+  GitMerge, Search, Receipt, ShieldCheck, ChevronRight, Volume2, Voicemail,
+  Inbox, ArrowUpRight, ArrowDownLeft, StickyNote,
 } from 'lucide-react';
 import PropertySelectorGrid from '@/components/PropertySelectorGrid';
 import { Badge } from '@/components/ui/badge';
@@ -41,6 +42,7 @@ import InvoiceSection from '@/components/sections/InvoiceSection';
 import CustomerExpensesTab from '@/components/CustomerExpensesTab';
 import VoiceCallPanel from '@/components/VoiceCallPanel';
 import ManualMergeFlow from '@/components/ManualMergeFlow';
+import { useInboxSSE } from '@/hooks/useInboxSSE';
 import DuplicateSuggestionBanner from '@/components/DuplicateSuggestionBanner';
 import { toast } from 'sonner';
 import { nanoid } from 'nanoid';
@@ -689,6 +691,12 @@ export default function CustomerSection() {
   const [showMergeDialog, setShowMergeDialog] = useState(false);
   // Stub merge dialog state (for unknown-caller auto-created customers)
   const [showStubMergeDialog, setShowStubMergeDialog] = useState(false);
+  // Quick-action bar state
+  const [showCallPanel, setShowCallPanel] = useState(false);
+  const [quickAction, setQuickAction] = useState<'sms' | 'email' | 'note' | null>(null);
+  const [quickActionBody, setQuickActionBody] = useState('');
+  const [quickActionSubject, setQuickActionSubject] = useState('');
+  const [quickActionSending, setQuickActionSending] = useState(false);
   const mergeStubMutation = trpc.customers.mergeStub.useMutation({
     onSuccess: (_data, vars) => {
       removeCustomer(vars.stubId);
@@ -737,6 +745,98 @@ export default function CustomerSection() {
     { customerId: activeCustomerId! },
     { enabled: !!activeCustomerId }
   );
+
+  // ── Unified feed (server-backed, replaces local activityFeed) ────────────
+  const utils = trpc.useUtils();
+  const { data: unifiedFeedData, isLoading: feedLoading } = trpc.inbox.unifiedFeed.getByCustomer.useQuery(
+    { customerId: activeCustomerId! },
+    { enabled: !!activeCustomerId, staleTime: 30_000 }
+  );
+  const unifiedFeed = unifiedFeedData?.feed ?? [];
+  const feedConversationId = unifiedFeedData?.conversationId ?? null;
+  const feedContactPhone = unifiedFeedData?.contactPhone ?? null;
+  const feedContactEmail = unifiedFeedData?.contactEmail ?? null;
+
+  // Auto-refresh unified feed on SSE new_message events
+  useInboxSSE({
+    onNewMessage: () => {
+      if (activeCustomerId) utils.inbox.unifiedFeed.getByCustomer.invalidate({ customerId: activeCustomerId });
+    },
+    onPortalMessage: () => {
+      if (activeCustomerId) utils.inbox.unifiedFeed.getByCustomer.invalidate({ customerId: activeCustomerId });
+    },
+  });
+
+  // ── Quick-action mutations ────────────────────────────────────────────────
+  const findOrCreateConvMutation = trpc.inbox.conversations.findOrCreateByCustomer.useMutation();
+  const sendMessageMutation = trpc.inbox.messages.send.useMutation({
+    onSuccess: () => {
+      if (activeCustomerId) utils.inbox.unifiedFeed.getByCustomer.invalidate({ customerId: activeCustomerId });
+      setQuickAction(null);
+      setQuickActionBody('');
+      setQuickActionSubject('');
+      setQuickActionSending(false);
+      toast.success('Message sent');
+    },
+    onError: (err) => { setQuickActionSending(false); toast.error(err.message); },
+  });
+  const sendSmsMutation = trpc.inbox.twilio.sendSms.useMutation({
+    onSuccess: () => {
+      if (activeCustomerId) utils.inbox.unifiedFeed.getByCustomer.invalidate({ customerId: activeCustomerId });
+      setQuickAction(null);
+      setQuickActionBody('');
+      setQuickActionSending(false);
+      toast.success('SMS sent');
+    },
+    onError: (err) => { setQuickActionSending(false); toast.error(err.message); },
+  });
+  const sendEmailMutation = trpc.gmail.sendEmail.useMutation({
+    onSuccess: () => {
+      if (activeCustomerId) utils.inbox.unifiedFeed.getByCustomer.invalidate({ customerId: activeCustomerId });
+      setQuickAction(null);
+      setQuickActionBody('');
+      setQuickActionSubject('');
+      setQuickActionSending(false);
+      toast.success('Email sent');
+    },
+    onError: (err) => { setQuickActionSending(false); toast.error(err.message); },
+  });
+
+  const handleQuickSend = async () => {
+    if (!quickAction || !quickActionBody.trim()) return;
+    if (!activeCustomerId) { toast.error('No active customer'); return; }
+    setQuickActionSending(true);
+    try {
+      // Ensure we have a conversation to post into
+      const phone = activeCustomer?.mobilePhone ?? jobInfo.phone;
+      const email = activeCustomer?.email ?? jobInfo.email;
+      const name = customerFullName || jobInfo.client;
+      let convId = feedConversationId;
+      if (!convId) {
+        const result = await findOrCreateConvMutation.mutateAsync({
+          customerId: activeCustomerId,
+          phone: phone || undefined,
+          email: email || undefined,
+          name: name || undefined,
+          channel: quickAction === 'email' ? 'email' : quickAction === 'sms' ? 'sms' : 'note',
+        });
+        convId = result.conversationId;
+      }
+      if (!convId) { toast.error('Could not find or create conversation'); setQuickActionSending(false); return; }
+
+      if (quickAction === 'sms') {
+        if (!phone) { toast.error('No phone number on file'); setQuickActionSending(false); return; }
+        await sendSmsMutation.mutateAsync({ conversationId: convId, to: phone, body: quickActionBody.trim() });
+      } else if (quickAction === 'email') {
+        if (!email) { toast.error('No email on file'); setQuickActionSending(false); return; }
+        await sendEmailMutation.mutateAsync({ conversationId: convId, to: email, subject: quickActionSubject.trim() || `Message from Handy Pioneers`, body: quickActionBody.trim() });
+      } else if (quickAction === 'note') {
+        await sendMessageMutation.mutateAsync({ conversationId: convId, channel: 'note', body: quickActionBody.trim(), isInternal: true });
+      }
+    } catch {
+      setQuickActionSending(false);
+    }
+  };
 
   // isSilentSaveRef: true = auto-save (no toast), false = manual save (shows toast)
   const isSilentSaveRef = useRef(false);
@@ -1496,45 +1596,110 @@ export default function CustomerSection() {
           </div>
         </div>
 
-        {/* Activity Feed */}
+        {/* Activity Feed — server-backed unified feed */}
         <div className="card-section">
           <div className="card-section-header text-xs font-semibold uppercase tracking-wider">
             <Activity size={13} />
             <span>Activity Feed</span>
+            <span className="ml-auto text-[10px] text-muted-foreground font-normal">All channels — live</span>
           </div>
           <div className="card-section-body space-y-3">
-            {/* Quick note input */}
+            {/* Quick note shortcut */}
             <div className="flex gap-2">
-              <input
-                type="text"
-                value={newNote}
-                onChange={e => setNewNote(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && addNote()}
-                placeholder="Add a note to the activity feed..."
-                className="field-input flex-1 text-sm"
-              />
-              <button onClick={addNote} className="px-3 py-2 bg-primary text-primary-foreground rounded-lg text-xs font-semibold hover:bg-primary/90 transition-colors shrink-0">
-                Add
+              <button
+                onClick={() => { setQuickAction('note'); setShowCallPanel(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                className="flex-1 text-left field-input text-sm text-muted-foreground hover:text-foreground cursor-text"
+              >
+                Add an internal note…
               </button>
+              <button
+                onClick={() => { setQuickAction('sms'); setShowCallPanel(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                className="px-3 py-2 border border-border rounded-lg text-xs text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+                title="Send SMS"
+              ><MessageSquare size={13} /></button>
+              <button
+                onClick={() => { setQuickAction('email'); setShowCallPanel(false); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                className="px-3 py-2 border border-border rounded-lg text-xs text-muted-foreground hover:border-sky-500 hover:text-sky-600 transition-colors"
+                title="Send Email"
+              ><Mail size={13} /></button>
+              <button
+                onClick={() => { setShowCallPanel(true); setQuickAction(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                className="px-3 py-2 border border-border rounded-lg text-xs text-muted-foreground hover:border-emerald-500 hover:text-emerald-600 transition-colors"
+                title="Call"
+              ><Phone size={13} /></button>
             </div>
 
             {/* Feed */}
-            {activityFeed.length === 0 ? (
+            {feedLoading ? (
+              <div className="text-center py-8 text-muted-foreground text-sm">
+                <RefreshCw size={16} className="mx-auto mb-2 animate-spin opacity-50" />
+                Loading activity…
+              </div>
+            ) : unifiedFeed.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground text-sm border-2 border-dashed border-border rounded-xl">
-                No activity yet. Actions like sending an estimate or logging a call will appear here.
+                <Inbox size={24} className="mx-auto mb-2 opacity-30" />
+                No activity yet. SMS, calls, emails, and notes will all appear here.
               </div>
             ) : (
-              <div className="space-y-3">
-                {activityFeed.map(event => (
-                  <div key={event.id} className="flex items-start gap-3">
-                    <ActivityIcon type={event.type} />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-foreground">{event.title}</div>
-                      <div className="text-xs text-muted-foreground mt-0.5">{event.description}</div>
+              <div className="space-y-2">
+                {[...unifiedFeed].reverse().map(item => {
+                  const isInbound = item.direction === 'inbound';
+                  const channelIcon = item.channel === 'sms' ? <MessageSquare size={13} className="text-primary" /> :
+                    item.channel === 'email' ? <Mail size={13} className="text-sky-500" /> :
+                    item.channel === 'call' ? <PhoneCall size={13} className="text-emerald-500" /> :
+                    item.channel === 'portal' ? <AtSign size={13} className="text-violet-500" /> :
+                    item.channel === 'note' ? <StickyNote size={13} className="text-amber-500" /> :
+                    <MessageSquare size={13} className="text-muted-foreground" />;
+                  const channelLabel = item.channel === 'sms' ? 'SMS' :
+                    item.channel === 'email' ? 'Email' :
+                    item.channel === 'call' ? 'Call' :
+                    item.channel === 'portal' ? 'Portal' :
+                    item.channel === 'note' ? 'Note' : item.channel;
+                  return (
+                    <div key={item.id} className="flex items-start gap-3 p-3 rounded-xl border bg-card hover:bg-muted/30 transition-colors">
+                      <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center shrink-0 mt-0.5">
+                        {channelIcon}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{channelLabel}</span>
+                          <span className={`inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
+                            isInbound ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                          }`}>
+                            {isInbound ? <ArrowDownLeft size={9} /> : <ArrowUpRight size={9} />}
+                            {isInbound ? 'In' : 'Out'}
+                          </span>
+                          {item.isInternal && (
+                            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">Internal</span>
+                          )}
+                          {item.subject && (
+                            <span className="text-xs text-muted-foreground truncate max-w-[200px]" title={item.subject}>{item.subject}</span>
+                          )}
+                        </div>
+                        <p className="text-sm text-foreground line-clamp-2">{item.body || '(no content)'}</p>
+                        {/* Recording player for call items */}
+                        {item.channel === 'call' && (item as any).recordingAppUrl && (
+                          <audio
+                            controls
+                            src={(item as any).recordingAppUrl}
+                            className="mt-2 h-8 w-full max-w-xs"
+                            preload="none"
+                          />
+                        )}
+                        {/* Attachment */}
+                        {item.attachmentUrl && (
+                          <a href={item.attachmentUrl} target="_blank" rel="noreferrer"
+                            className="inline-flex items-center gap-1 mt-1 text-xs text-primary hover:underline">
+                            <Paperclip size={11} /> Attachment
+                          </a>
+                        )}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground shrink-0 mt-0.5">
+                        {fmtRelative(new Date(item.sentAt).toISOString())}
+                      </div>
                     </div>
-                    <div className="text-[10px] text-muted-foreground shrink-0">{fmtRelative(event.timestamp)}</div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1673,15 +1838,48 @@ export default function CustomerSection() {
                   <span className="hidden sm:inline">Add card</span>
                 </button>
               )}
-              {/* Call button */}
-              <a
-                href={jobInfo.phone ? `tel:${jobInfo.phone}` : '#'}
-                onClick={e => { if (!jobInfo.phone) { e.preventDefault(); toast.error('Add a phone number first'); } else { logCall(); } }}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-semibold hover:bg-primary/90 transition-colors"
+              {/* Quick-action buttons */}
+              <button
+                onClick={() => { setQuickAction(q => q === 'sms' ? null : 'sms'); setShowCallPanel(false); }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors border ${
+                  quickAction === 'sms' ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground hover:border-primary hover:text-primary'
+                }`}
+                title="Send SMS"
+              >
+                <MessageSquare size={13} />
+                <span className="hidden sm:inline">SMS</span>
+              </button>
+              <button
+                onClick={() => { setQuickAction(q => q === 'email' ? null : 'email'); setShowCallPanel(false); }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors border ${
+                  quickAction === 'email' ? 'bg-sky-600 text-white border-sky-600' : 'border-border text-muted-foreground hover:border-sky-500 hover:text-sky-600'
+                }`}
+                title="Send Email"
+              >
+                <Mail size={13} />
+                <span className="hidden sm:inline">Email</span>
+              </button>
+              <button
+                onClick={() => { setQuickAction(q => q === 'note' ? null : 'note'); setShowCallPanel(false); }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors border ${
+                  quickAction === 'note' ? 'bg-amber-500 text-white border-amber-500' : 'border-border text-muted-foreground hover:border-amber-500 hover:text-amber-600'
+                }`}
+                title="Add internal note"
+              >
+                <StickyNote size={13} />
+                <span className="hidden sm:inline">Note</span>
+              </button>
+              {/* Call button — opens in-app VoiceCallPanel */}
+              <button
+                onClick={() => { setShowCallPanel(v => !v); setQuickAction(null); }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                  showCallPanel ? 'bg-emerald-600 text-white' : 'bg-primary text-primary-foreground hover:bg-primary/90'
+                }`}
+                title="In-app call"
               >
                 <PhoneCall size={13} />
                 <span className="hidden sm:inline">Call</span>
-              </a>
+              </button>
               {/* Merge button */}
               {activeCustomerId && (
                 <button
@@ -1728,6 +1926,82 @@ export default function CustomerSection() {
           })()}
         </div>
       </div>
+
+      {/* ── Inline Quick-Action Compose Panel ── */}
+      {(quickAction || showCallPanel) && (
+        <div className="bg-muted/30 border-b border-border px-4 py-3">
+          <div className="max-w-6xl mx-auto">
+            {showCallPanel && (
+              <div className="rounded-xl border bg-card overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/30">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    <PhoneCall size={12} /> In-Browser Call — {customerFullName || jobInfo.client}
+                  </span>
+                  <button onClick={() => setShowCallPanel(false)} className="text-muted-foreground hover:text-foreground"><X size={14} /></button>
+                </div>
+                <div className="p-4">
+                  <VoiceCallPanel
+                    toNumber={activeCustomer?.mobilePhone ?? jobInfo.phone}
+                    toName={customerFullName || jobInfo.client}
+                    onCallEnd={() => {
+                      setShowCallPanel(false);
+                      if (activeCustomerId) utils.inbox.unifiedFeed.getByCustomer.invalidate({ customerId: activeCustomerId });
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+            {quickAction && (
+              <div className="rounded-xl border bg-card overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-2 border-b bg-muted/30">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                    {quickAction === 'sms' && <><MessageSquare size={12} /> New SMS to {activeCustomer?.mobilePhone || jobInfo.phone || 'customer'}</>}
+                    {quickAction === 'email' && <><Mail size={12} /> New Email to {activeCustomer?.email || jobInfo.email || 'customer'}</>}
+                    {quickAction === 'note' && <><StickyNote size={12} /> Add Internal Note</>}
+                  </span>
+                  <button onClick={() => { setQuickAction(null); setQuickActionBody(''); setQuickActionSubject(''); }} className="text-muted-foreground hover:text-foreground"><X size={14} /></button>
+                </div>
+                <div className="p-4 space-y-2">
+                  {quickAction === 'email' && (
+                    <input
+                      type="text"
+                      value={quickActionSubject}
+                      onChange={e => setQuickActionSubject(e.target.value)}
+                      placeholder="Subject…"
+                      className="field-input w-full text-sm"
+                    />
+                  )}
+                  <textarea
+                    value={quickActionBody}
+                    onChange={e => setQuickActionBody(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleQuickSend(); }}
+                    placeholder={
+                      quickAction === 'sms' ? 'Type your SMS message… (Ctrl+Enter to send)' :
+                      quickAction === 'email' ? 'Type your email body… (Ctrl+Enter to send)' :
+                      'Add an internal note… (Ctrl+Enter to save)'
+                    }
+                    rows={3}
+                    className="field-input w-full resize-none text-sm"
+                    autoFocus
+                  />
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">
+                      {quickAction === 'note' ? 'Internal only — not visible to customer' : 'Ctrl+Enter to send'}
+                    </span>
+                    <button
+                      onClick={handleQuickSend}
+                      disabled={quickActionSending || !quickActionBody.trim()}
+                      className="flex items-center gap-1.5 px-4 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
+                    >
+                      {quickActionSending ? 'Sending…' : quickAction === 'note' ? 'Save Note' : 'Send'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Stub Merge Banner ── */}
       {activeCustomer?.leadSource === 'inbound_call' && !activeCustomer?.firstName && !activeCustomer?.email && activeCustomerId && (
