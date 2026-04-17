@@ -2008,3 +2008,6 @@
 - [x] Add email template fields to appSettings schema (estimateApprovalEmailTemplate, jobSignoffEmailTemplate, changeOrderApprovalEmailTemplate)
 - [x] Update CompanySettings UI with editable email template fields
 - [x] Wire portal.ts hardcoded emails to use appSettings templates
+## Automations Enabled by Default
+- [x] Enable all 25 seeded automation rules by default (enabled=true)
+- [x] Update seed scripts to UPSERT so re-runs refresh templates without resetting user toggles

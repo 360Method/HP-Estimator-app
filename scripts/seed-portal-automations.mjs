@@ -1,9 +1,9 @@
 /**
- * Seed pre-built automation rules for the 6 new portal triggers.
+ * Seed pre-built automation rules for the 6 portal triggers.
  * Run: node scripts/seed-portal-automations.mjs
  *
- * All rules are inserted with enabled=false (off by default).
- * If a rule with the same name already exists it is skipped.
+ * All rules are inserted with enabled=true (on by default).
+ * Uses UPDATE on existing rows so re-running is safe and refreshes templates.
  */
 import 'dotenv/config';
 import mysql from 'mysql2/promise';
@@ -31,7 +31,7 @@ const RULES = [
     actionType: 'send_sms',
     actionPayload: JSON.stringify({
       messageTemplate:
-        'Hi {{customerFirstName}}, we\'re so glad the project is complete! If you\'re happy with the work, a quick Google review would mean the world to us: {{googleReviewLink}} — Handy Pioneers',
+        "Hi {{customerFirstName}}, we're so glad the project is complete! If you're happy with the work, a quick Google review would mean the world to us: {{googleReviewLink}} — Handy Pioneers",
     }),
     delayMinutes: 1440, // 24 hours
     sortOrder: 51,
@@ -45,7 +45,7 @@ const RULES = [
     actionType: 'send_sms',
     actionPayload: JSON.stringify({
       messageTemplate:
-        'Hi {{customerFirstName}}, your change order {{referenceNumber}} has been approved! We\'ll proceed with the updated scope. — Handy Pioneers',
+        "Hi {{customerFirstName}}, your change order {{referenceNumber}} has been approved! We'll proceed with the updated scope. — Handy Pioneers",
     }),
     delayMinutes: 0,
     sortOrder: 35,
@@ -57,7 +57,7 @@ const RULES = [
     actionType: 'send_sms',
     actionPayload: JSON.stringify({
       messageTemplate:
-        'Hi {{customerFirstName}}, we received your decision on change order {{referenceNumber}}. No worries — we\'ll continue with the original scope. Reach out if you have questions. — Handy Pioneers',
+        "Hi {{customerFirstName}}, we received your decision on change order {{referenceNumber}}. No worries — we'll continue with the original scope. Reach out if you have questions. — Handy Pioneers",
     }),
     delayMinutes: 0,
     sortOrder: 36,
@@ -83,7 +83,7 @@ const RULES = [
     actionType: 'send_sms',
     actionPayload: JSON.stringify({
       messageTemplate:
-        'Hi {{customerFirstName}}, thank you for your payment! If you\'re happy with our service, a Google review would really help us out: {{googleReviewLink}} — Handy Pioneers',
+        "Hi {{customerFirstName}}, thank you for your payment! If you're happy with our service, a Google review would really help us out: {{googleReviewLink}} — Handy Pioneers",
     }),
     delayMinutes: 2880, // 48 hours
     sortOrder: 52,
@@ -111,7 +111,7 @@ const RULES = [
     actionType: 'send_sms',
     actionPayload: JSON.stringify({
       messageTemplate:
-        'Hi {{customerFirstName}}, we received your request for an extra visit! Our team will review it and reach out to schedule. — Handy Pioneers',
+        "Hi {{customerFirstName}}, we received your request for an extra visit! Our team will review it and reach out to schedule. — Handy Pioneers",
     }),
     delayMinutes: 0,
     sortOrder: 16,
@@ -119,7 +119,7 @@ const RULES = [
 ];
 
 let inserted = 0;
-let skipped = 0;
+let updated = 0;
 
 for (const rule of RULES) {
   const [existing] = await conn.execute(
@@ -127,19 +127,26 @@ for (const rule of RULES) {
     [rule.name]
   );
   if (existing.length > 0) {
-    console.log(`  SKIP  ${rule.name}`);
-    skipped++;
+    await conn.execute(
+      `UPDATE automationRules
+         SET stage = ?, \`trigger\` = ?, actionType = ?, actionPayload = ?,
+             delayMinutes = ?, sortOrder = ?, enabled = 1
+       WHERE name = ?`,
+      [rule.stage, rule.trigger, rule.actionType, rule.actionPayload, rule.delayMinutes, rule.sortOrder, rule.name]
+    );
+    console.log(`  UPDATE ${rule.name}`);
+    updated++;
     continue;
   }
   await conn.execute(
     `INSERT INTO automationRules
        (name, stage, \`trigger\`, actionType, actionPayload, delayMinutes, enabled, sortOrder, conditions)
-     VALUES (?, ?, ?, ?, ?, ?, 0, ?, '[]')`,
+     VALUES (?, ?, ?, ?, ?, ?, 1, ?, '[]')`,
     [rule.name, rule.stage, rule.trigger, rule.actionType, rule.actionPayload, rule.delayMinutes, rule.sortOrder]
   );
   console.log(`  INSERT ${rule.name}`);
   inserted++;
 }
 
-console.log(`\nDone. Inserted: ${inserted}, Skipped: ${skipped}`);
+console.log(`\nDone. Inserted: ${inserted}, Updated: ${updated}`);
 await conn.end();
