@@ -1905,3 +1905,13 @@
 - [x] Smart disclosure nudge: amber banner when callRecording=true and greeting lacks 'recorded/recording' keyword
 - [x] One-click 'Add disclosure sentence' appends RECORDING_DISCLOSURE to existing greeting
 - [x] One-click 'Use recommended greeting' applies professional+disclosure template when greeting is empty
+
+## Split Greeting + Voicemail Prompt
+
+- [x] Add voicemailPrompt column to phoneSettings schema (varchar 600)
+- [x] Run db:push for new column
+- [x] Update phone router getSettings/updateSettings to include voicemailPrompt
+- [x] Update buildInboundCallTwiml: use greeting before routing, use voicemailPrompt before recording
+- [x] Update PhoneSettings UI: separate "Call Greeting" and "Voicemail Prompt" editors with own example sets
+- [x] Confirm voicemails save to app DB (callLogs table via /api/twilio/voice/voicemail callback), not to personal cell
+- [x] Fix voicemail callback in index.ts to call handleCallStatusUpdate so recording URL is persisted to callLogs

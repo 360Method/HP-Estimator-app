@@ -1199,8 +1199,10 @@ export const phoneSettings = mysqlTable("phoneSettings", {
   forwardingNumber: varchar("forwardingNumber", { length: 20 }).default(""),
   /** E.164 number of the AI answering service */
   aiServiceNumber: varchar("aiServiceNumber", { length: 20 }).default(""),
-  /** Optional TTS greeting played before connecting/recording */
+  /** Optional TTS greeting played before connecting the call (forwarding modes only) */
   greeting: varchar("greeting", { length: 500 }).default(""),
+  /** TTS prompt played to callers before they leave a voicemail (voicemail mode + after-hours) */
+  voicemailPrompt: varchar("voicemailPrompt", { length: 600 }).default(""),
   /** Whether to record inbound calls */
   callRecording: boolean("callRecording").notNull().default(false),
   /** Voicemail transcription enabled */

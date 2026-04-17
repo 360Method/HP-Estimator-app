@@ -254,12 +254,31 @@ async function startServer() {
 
   // ── Twilio Voice — voicemail recording callback ────────────────────────────
   // POST /api/twilio/voice/voicemail — called after voicemail is recorded
+  // Persists the recording to the app DB (callLogs) AND notifies the owner.
   app.post("/api/twilio/voice/voicemail", express.urlencoded({ extended: false }), async (req, res) => {
     try {
-      const { From, RecordingUrl, TranscriptionText, RecordingDuration } = req.body;
+      const { CallSid, From, To, RecordingUrl, TranscriptionText, RecordingDuration } = req.body;
       const callerNumber = From || "Unknown";
-      const duration = RecordingDuration ? `${RecordingDuration}s` : "unknown duration";
+      const durationSecs = RecordingDuration ? parseInt(RecordingDuration, 10) : 0;
+      const duration = durationSecs ? `${durationSecs}s` : "unknown duration";
       const transcription = TranscriptionText ? `\n\nTranscription: ${TranscriptionText}` : "";
+
+      // ── Persist voicemail to app DB ──────────────────────────────────────────
+      // Call handleCallStatusUpdate so the voicemail is saved in callLogs and
+      // linked to the customer profile (creates stub customer if unknown).
+      if (CallSid) {
+        await handleCallStatusUpdate({
+          CallSid,
+          From: From || "",
+          To: To || "",
+          CallStatus: "completed",
+          CallDuration: RecordingDuration || "0",
+          Direction: "inbound",
+          RecordingUrl: RecordingUrl || undefined,
+        }).catch(dbErr => console.warn("[Voicemail DB persist] Failed:", dbErr));
+      }
+
+      // ── Notify owner ─────────────────────────────────────────────────────────
       await notifyOwner({
         title: `📞 New Voicemail from ${callerNumber}`,
         content: `Voicemail received from ${callerNumber} (${duration}).${transcription}${RecordingUrl ? `\n\nRecording: ${RecordingUrl}` : ""}`,

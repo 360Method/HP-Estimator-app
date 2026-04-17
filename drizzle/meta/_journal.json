@@ -302,6 +302,13 @@
       "when": 1776396251951,
       "tag": "0042_salty_romulus",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "5",
+      "when": 1776397861545,
+      "tag": "0043_boring_blacklash",
+      "breakpoints": true
     }
   ]
 }

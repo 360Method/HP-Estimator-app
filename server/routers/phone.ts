@@ -13,9 +13,16 @@ export const phoneRouter = router({
         forwardingMode: z.enum(["forward_to_number", "forward_to_ai", "voicemail"]).optional(),
         forwardingNumber: z.string().optional(),
         aiServiceNumber: z.string().optional(),
-        greeting: z.string().optional(),
+        /** Greeting played before routing (forwarding modes) */
+        greeting: z.string().max(500).optional(),
+        /** Prompt played before voicemail recording */
+        voicemailPrompt: z.string().max(600).optional(),
         callRecording: z.boolean().optional(),
         transcribeVoicemail: z.boolean().optional(),
+        afterHoursEnabled: z.boolean().optional(),
+        businessHoursStart: z.string().optional(),
+        businessHoursEnd: z.string().optional(),
+        businessDays: z.string().optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -25,7 +32,6 @@ export const phoneRouter = router({
   testCall: protectedProcedure
     .input(z.object({ toNumber: z.string().min(10) }))
     .mutation(async ({ input, ctx }) => {
-      // Build callback base URL from the request headers (same pattern as inbound route)
       const req = ctx.req as import("express").Request;
       const forwardedProto = (req.headers["x-forwarded-proto"] as string) || req.protocol;
       const forwardedHost = (req.headers["x-forwarded-host"] as string) || req.get("host") || "localhost";

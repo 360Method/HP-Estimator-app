@@ -1,10 +1,14 @@
 /**
  * phone.ts — Phone settings DB helpers + inbound call routing logic
  *
+ * Two separate prompts:
+ *   greeting        — played before routing (forwarding modes only)
+ *   voicemailPrompt — played before the voicemail beep (voicemail mode + after-hours)
+ *
  * Inbound routing modes:
  *   forward_to_number — dial forwardingNumber (owner's personal cell)
  *   forward_to_ai     — dial aiServiceNumber (AI answering service)
- *   voicemail         — record voicemail, notify owner
+ *   voicemail         — play voicemailPrompt, record, notify owner
  *
  * After-hours routing:
  *   When afterHoursEnabled=true, calls outside businessHours are routed to
@@ -15,6 +19,14 @@ import { getDb } from "./db";
 import { phoneSettings } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
 import { ENV } from "./_core/env";
+
+// ─── Default voicemail prompts ────────────────────────────────────────────────
+
+const DEFAULT_VOICEMAIL_PROMPT =
+  "You've reached Handy Pioneers. We're unavailable right now. Please leave your name, number, and a brief description of your project after the beep and we'll call you back shortly.";
+
+const DEFAULT_AFTER_HOURS_PROMPT =
+  "You've reached Handy Pioneers. Our office is currently closed. Please leave your name, number, and a brief description of your project after the beep and we'll call you back during business hours.";
 
 // ─── DB helpers ──────────────────────────────────────────────────────────────
 
@@ -29,6 +41,7 @@ export async function getPhoneSettings() {
     forwardingNumber: ENV.ownerPhone || "",
     aiServiceNumber: "",
     greeting: "",
+    voicemailPrompt: "",
     callRecording: false,
     transcribeVoicemail: true,
     afterHoursEnabled: false,
@@ -60,7 +73,7 @@ export async function updatePhoneSettings(
  * businessHoursStart / businessHoursEnd are "HH:MM" strings in 24h format.
  * businessDays is a comma-separated list of weekday numbers (0=Sun, 6=Sat).
  */
-function isBusinessHours(
+export function isBusinessHours(
   businessHoursStart: string | null | undefined,
   businessHoursEnd: string | null | undefined,
   businessDays: string | null | undefined,
@@ -94,6 +107,12 @@ function isBusinessHours(
 /**
  * Build TwiML for an inbound call based on current phoneSettings.
  * Returns the TwiML XML string.
+ *
+ * Flow:
+ *   1. If greeting is set, speak it (forwarding modes only — before <Dial>)
+ *   2. Route based on effectiveMode:
+ *      - forward_to_number / forward_to_ai → <Dial>
+ *      - voicemail (or after-hours fallback) → speak voicemailPrompt, then <Record>
  */
 export async function buildInboundCallTwiml(callbackBaseUrl: string): Promise<string> {
   const VoiceResponse = twilio.twiml.VoiceResponse;
@@ -105,6 +124,7 @@ export async function buildInboundCallTwiml(callbackBaseUrl: string): Promise<st
     forwardingNumber,
     aiServiceNumber,
     greeting,
+    voicemailPrompt,
     callRecording,
     transcribeVoicemail,
     afterHoursEnabled,
@@ -119,12 +139,11 @@ export async function buildInboundCallTwiml(callbackBaseUrl: string): Promise<st
     : true;
   const effectiveMode = withinHours ? forwardingMode : "voicemail";
 
-  // Optional greeting before routing
-  if (greeting && greeting.trim()) {
-    twiml.say({ voice: "Polly.Joanna" }, greeting.trim());
-  }
-
   if (effectiveMode === "forward_to_number" && forwardingNumber) {
+    // Play greeting before connecting (forwarding modes only)
+    if (greeting && greeting.trim()) {
+      twiml.say({ voice: "Polly.Joanna" }, greeting.trim());
+    }
     const dial = twiml.dial({
       callerId: ENV.twilioPhoneNumber || "",
       record: callRecording ? "record-from-answer" : "do-not-record",
@@ -132,6 +151,10 @@ export async function buildInboundCallTwiml(callbackBaseUrl: string): Promise<st
     });
     dial.number(forwardingNumber);
   } else if (effectiveMode === "forward_to_ai" && aiServiceNumber) {
+    // Play greeting before connecting (forwarding modes only)
+    if (greeting && greeting.trim()) {
+      twiml.say({ voice: "Polly.Joanna" }, greeting.trim());
+    }
     const dial = twiml.dial({
       callerId: ENV.twilioPhoneNumber || "",
       record: callRecording ? "record-from-answer" : "do-not-record",
@@ -139,14 +162,11 @@ export async function buildInboundCallTwiml(callbackBaseUrl: string): Promise<st
     });
     dial.number(aiServiceNumber);
   } else {
-    // Voicemail (or fallback when no number is configured, or after-hours)
-    const afterHoursMsg = !withinHours
-      ? "You've reached Handy Pioneers. Our office is currently closed. Please leave a message after the beep and we'll call you back during business hours."
-      : "You've reached Handy Pioneers. We're unavailable right now. Please leave a message after the beep and we'll call you back shortly.";
-    twiml.say(
-      { voice: "Polly.Joanna" },
-      greeting?.trim() || afterHoursMsg
-    );
+    // Voicemail mode (or fallback when no number configured, or after-hours)
+    // Use voicemailPrompt if set; otherwise fall back to context-aware default
+    const fallbackPrompt = !withinHours ? DEFAULT_AFTER_HOURS_PROMPT : DEFAULT_VOICEMAIL_PROMPT;
+    const promptText = (voicemailPrompt && voicemailPrompt.trim()) ? voicemailPrompt.trim() : fallbackPrompt;
+    twiml.say({ voice: "Polly.Joanna" }, promptText);
     twiml.record({
       maxLength: 120,
       transcribe: transcribeVoicemail,
