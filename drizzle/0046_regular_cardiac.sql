@@ -1,0 +1,1 @@
+ALTER TABLE `appSettings` ADD `googleReviewLink` varchar(500) DEFAULT '';

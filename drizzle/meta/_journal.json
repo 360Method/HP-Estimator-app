@@ -323,6 +323,20 @@
       "when": 1776407321007,
       "tag": "0045_dizzy_moira_mactaggert",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "5",
+      "when": 1776440595652,
+      "tag": "0046_regular_cardiac",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "5",
+      "when": 1776440728924,
+      "tag": "0047_rainy_romulus",
+      "breakpoints": true
     }
   ]
 }

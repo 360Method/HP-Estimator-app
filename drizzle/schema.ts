@@ -1260,6 +1260,8 @@ export const appSettings = mysqlTable("appSettings", {
   documentFooter: text("documentFooter"),
   /** Terms & conditions text shown on estimates */
   termsText: text("termsText"),
+  /** Google Business review link (used in review-request automations) */
+  googleReviewLink: varchar("googleReviewLink", { length: 500 }).default(""),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 export type DbAppSettings = typeof appSettings.$inferSelect;
@@ -1312,6 +1314,8 @@ export const automationRules = mysqlTable("automationRules", {
   enabled: boolean("enabled").notNull().default(true),
   /** Display order */
   sortOrder: int("sortOrder").notNull().default(0),
+  /** Lifecycle stage for grouping: lead | estimate | job | invoice | review */
+  stage: varchar("stage", { length: 30 }).notNull().default("lead"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

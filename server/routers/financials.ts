@@ -8,8 +8,6 @@ import { router, protectedProcedure } from "../_core/trpc";
 import { getDb } from "../db";
 import { invoices, invoicePayments, customers, expenses } from "../../drizzle/schema";
 import { and, ne, sql, desc, eq, gte, lte } from "drizzle-orm";
-import { isGmailConfigured, sendOverdueReminderEmail } from "../gmail";
-import { sendSms, isTwilioConfigured } from "../twilio";
 import { runAutomationsForTrigger } from "../automationEngine";
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
@@ -311,7 +309,9 @@ export const financialsRouter = router({
     }),
 
   /**
-   * Send overdue payment reminder via email and/or SMS.
+   * Send overdue payment reminder.
+   * All delivery (email/SMS) is handled by the automation engine.
+   * Enable rules in Settings → Automations to control what fires.
    */
   sendReminder: protectedProcedure
     .input(z.object({
@@ -354,54 +354,20 @@ export const financialsRouter = router({
       if (!cust) throw new Error("Customer not found");
 
       const customerName = [cust.firstName, cust.lastName].filter(Boolean).join(" ") || "Valued Customer";
-      const results: { channel: string; success: boolean; error?: string }[] = [];
 
-      if (input.channels.includes("email") && cust.email) {
-        if (!isGmailConfigured()) {
-          results.push({ channel: "email", success: false, error: "Gmail not configured" });
-        } else {
-          try {
-            await sendOverdueReminderEmail({
-              to: cust.email,
-              customerName,
-              invoiceNumber: inv.invoiceNumber ?? inv.id,
-              amountDueCents: inv.balance ?? 0,
-              dueDate: inv.dueDate ? new Date(inv.dueDate) : null,
-              portalInvoiceId: 0,
-              origin: input.origin ?? "https://pro.handypioneers.com",
-            });
-            results.push({ channel: "email", success: true });
-          } catch (e: any) {
-            results.push({ channel: "email", success: false, error: e.message });
-          }
-        }
-      }
-
-      if (input.channels.includes("sms") && cust.phone) {
-        if (!isTwilioConfigured()) {
-          results.push({ channel: "sms", success: false, error: "Twilio not configured" });
-        } else {
-          try {
-            const balStr = `$${((inv.balance ?? 0) / 100).toFixed(2)}`;
-            const msg = `Hi ${customerName.split(" ")[0]}, this is a reminder that invoice ${inv.invoiceNumber ?? inv.id} for ${balStr} is overdue. Pay online at ${input.origin ?? "https://pro.handypioneers.com"}/portal. Reply STOP to opt out.`;
-            await sendSms(cust.phone, msg);
-            results.push({ channel: "sms", success: true });
-          } catch (e: any) {
-            results.push({ channel: "sms", success: false, error: e.message });
-          }
-        }
-      }
-
-      // Fire invoice_overdue automation (non-blocking)
-      runAutomationsForTrigger('invoice_overdue', {
+      // Delegate entirely to the automation engine — no hardcoded sends.
+      // Enable 'Invoice Overdue — Reminder Email' / 'Invoice Overdue — Reminder SMS'
+      // in Settings → Automations to control delivery.
+      await runAutomationsForTrigger('invoice_overdue', {
         customerName,
         customerFirstName: customerName.split(' ')[0],
         phone: cust.phone ?? undefined,
         email: cust.email ?? undefined,
         referenceNumber: inv.invoiceNumber ?? inv.id,
         amount: inv.balance ? `$${(inv.balance / 100).toFixed(2)}` : undefined,
-      }).catch(e => console.error('[automation] invoice_overdue error:', e));
-      return { results };
+      });
+
+      return { queued: true };
     }),
 
   /**

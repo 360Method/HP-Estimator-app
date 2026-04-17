@@ -208,6 +208,7 @@ export default function CompanySettings() {
               <Field label="Support Email" field="supportEmail" type="email" placeholder="help@company.com" />
               <Field label="Support Phone" field="supportPhone" type="tel" placeholder="(360) 544-9858" />
               <Field label="Website URL" field="websiteUrl" type="url" placeholder="https://handypioneers.com" />
+              <Field label="Google Review Link" field="googleReviewLink" type="url" placeholder="https://g.page/r/YOUR_PLACE_ID/review" />
               <Field label="Address Line 1" field="addressLine1" placeholder="808 SE Chkalov Dr 3-433" />
               <Field label="City, State ZIP" field="addressLine2" placeholder="Vancouver, WA 98683" />
               <Field label="Timezone" field="timezone" type="select" options={TIMEZONES} />

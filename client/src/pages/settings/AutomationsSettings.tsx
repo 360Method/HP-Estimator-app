@@ -341,6 +341,15 @@ function RuleModal({
   );
 }
 
+// ─── Stage config ────────────────────────────────────────────────────────────
+const STAGES = [
+  { key: 'lead',     label: 'Lead',     emoji: '🎯', description: 'New bookings, inbound calls, and lead creation' },
+  { key: 'estimate', label: 'Estimate', emoji: '📋', description: 'Estimate sent, viewed, and approved events' },
+  { key: 'job',      label: 'Job',      emoji: '🔨', description: 'Job kickoff, completion, and review requests' },
+  { key: 'invoice',  label: 'Invoice',  emoji: '💰', description: 'Invoice sent and overdue payment reminders' },
+  { key: 'review',   label: 'Reviews',  emoji: '⭐', description: 'Google review follow-up automations' },
+];
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function AutomationsSettings() {
   const [showModal, setShowModal] = useState(false);
@@ -432,27 +441,41 @@ export default function AutomationsSettings() {
         </Button>
       </div>
 
-      {/* ── Rule list ── */}
+      {/* ── Rule list grouped by stage ── */}
       {isLoading ? (
         <div className="flex items-center gap-2 text-muted-foreground text-sm">
           <Loader2 size={14} className="animate-spin" /> Loading rules…
         </div>
-      ) : !rules?.length ? (
-        <div className="card-section">
-          <div className="card-section-body flex flex-col items-center py-10 text-center gap-3">
-            <Zap size={32} className="text-muted-foreground/40" />
-            <p className="font-semibold text-foreground">No automation rules yet</p>
-            <p className="text-sm text-muted-foreground max-w-sm">
-              Create your first rule to automatically send SMS follow-ups, email customers, notify the team, or log internal notes when events happen.
-            </p>
-            <Button onClick={() => setShowModal(true)} className="mt-2">
-              <Plus size={14} className="mr-1" /> Create First Rule
-            </Button>
-          </div>
-        </div>
       ) : (
-        <div className="space-y-3">
-          {rules.map(rule => (
+        <div className="space-y-6">
+          {STAGES.map(stage => {
+            const stageRules = (rules ?? []).filter((r: any) => (r.stage ?? 'lead') === stage.key);
+            const enabledCount = stageRules.filter((r: any) => r.enabled).length;
+            return (
+              <div key={stage.key}>
+                {/* Stage header */}
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">{stage.emoji}</span>
+                    <div>
+                      <h3 className="font-bold text-foreground text-sm">{stage.label} Stage</h3>
+                      <p className="text-[11px] text-muted-foreground">{stage.description}</p>
+                    </div>
+                  </div>
+                  {stageRules.length > 0 && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-semibold">
+                      {enabledCount}/{stageRules.length} active
+                    </span>
+                  )}
+                </div>
+
+                {stageRules.length === 0 ? (
+                  <div className="border border-dashed border-border rounded-xl p-4 text-center">
+                    <p className="text-xs text-muted-foreground">No rules in this stage yet.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {stageRules.map((rule: any) => (
             <div
               key={rule.id}
               className={`card-section transition-opacity ${rule.enabled ? '' : 'opacity-60'}`}
@@ -462,8 +485,10 @@ export default function AutomationsSettings() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-foreground text-sm">{rule.name}</span>
-                      {!rule.enabled && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-semibold uppercase tracking-wider">Paused</span>
+                      {rule.enabled ? (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-950/40 text-green-700 dark:text-green-400 font-semibold uppercase tracking-wider">Active</span>
+                      ) : (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-semibold uppercase tracking-wider">Off</span>
                       )}
                     </div>
                     <div className="flex items-center gap-2 mt-1.5 flex-wrap">
@@ -474,7 +499,7 @@ export default function AutomationsSettings() {
                       {rule.delayMinutes > 0 && (
                         <>
                           <span className="text-xs text-muted-foreground bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 px-2 py-0.5 rounded-full flex items-center gap-1">
-                            <Clock size={10} /> {rule.delayMinutes}m delay
+                            <Clock size={10} /> {rule.delayMinutes >= 60 ? `${Math.round(rule.delayMinutes / 60)}h` : `${rule.delayMinutes}m`} delay
                           </span>
                           <span className="text-xs text-muted-foreground">→</span>
                         </>
@@ -523,7 +548,12 @@ export default function AutomationsSettings() {
                 </div>
               </div>
             </div>
-          ))}
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 

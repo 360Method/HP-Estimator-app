@@ -139,6 +139,16 @@ export async function runAutomationsForTrigger(
 ): Promise<void> {
   try {
     const db = await getDb();
+
+    // Hydrate workspace-level variables from appSettings
+    try {
+      const { appSettings } = await import("../drizzle/schema");
+      const [settings] = await db.select().from(appSettings).limit(1);
+      if (settings?.googleReviewLink) {
+        payload = { ...payload, googleReviewLink: settings.googleReviewLink };
+      }
+    } catch { /* non-fatal */ }
+
     const rules = await db
       .select()
       .from(automationRules)

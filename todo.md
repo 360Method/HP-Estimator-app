@@ -1986,8 +1986,14 @@
 - [x] Add unread badge on customer list rows in CustomersListPage
 
 ## Settings & Automations Full Build (Apr 17)
-- [ ] Phase 1: Add appSettings, notificationPreferences, automationRules, automationRuleLogs tables to schema + db:push
-- [ ] Phase 2: appSettings router (getSettings/updateSettings), notificationPreferences router (getAll/upsert), automationRules router (list/create/update/delete/toggle), automationEngine helper
-- [ ] Phase 3: Settings Company page wired to appSettings DB; Settings Notifications page wired to notificationPreferences DB
-- [ ] Phase 4: AutomationsSettings page with rule list, create/edit modal, trigger/action/delay builder; add to sidebar nav
-- [ ] Phase 5: Wire trigger points — opportunities, estimate, portal, financials, twilio webhook, booking — to automationEngine
+- [x] Phase 1: Add appSettings, notificationPreferences, automationRules, automationRuleLogs tables to schema + db:push
+- [x] Phase 2: appSettings router (getSettings/updateSettings), notificationPreferences router (getAll/upsert), automationRules router (list/create/update/delete/toggle), automationEngine helper
+- [x] Phase 3: Settings Company page wired to appSettings DB; Settings Notifications page wired to notificationPreferences DB
+- [x] Phase 4: AutomationsSettings page with rule list, create/edit modal, trigger/action/delay builder; add to sidebar nav
+- [x] Phase 5: Wire trigger points — opportunities, estimate, portal, financials, twilio webhook, booking — to automationEngine
+
+## Pre-Filled Automation Library
+- [x] Add googleReviewLink column to appSettings schema and run db:push
+- [x] Seed 17 pre-built automation rules (all disabled by default) via seed script
+- [ ] Update AutomationsSettings page to group rules by lifecycle stage
+- [x] Add Google Review Link field to CompanySettings UI
