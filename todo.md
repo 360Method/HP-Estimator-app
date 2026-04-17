@@ -1952,3 +1952,9 @@
 - [x] handleCallStatusUpdate: async download + store after insertCallLog, updates callLog.recordingAppUrl
 - [x] Voicemail callback in index.ts: async download + store after handleCallStatusUpdate
 - [x] Inbox Calls tab: replace external recording links with inline <audio> players using recordingAppUrl (falls back to recordingUrl)
+
+## OAuth Callback Loop Fix (Apr 17)
+
+- [x] Fix getLoginUrl in const.ts: state now encodes {origin, returnPath} JSON, not the callback URL
+- [x] Fix oauth.ts callback: decodes state JSON, validates path is relative, redirects to returnPath (falls back to "/" for legacy states)
+- [x] Open-redirect protection: only relative paths starting with "/" are accepted from state
