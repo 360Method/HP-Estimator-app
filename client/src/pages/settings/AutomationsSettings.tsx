@@ -3,8 +3,8 @@
 // Backed by trpc.automationRules (DB-persisted)
 // ============================================================
 
-import { useState } from 'react';
-import { Zap, Plus, Trash2, Edit2, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, Loader2, Clock, AlertCircle, CheckCircle2, XCircle, SkipForward, X } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { Zap, Plus, Trash2, Edit2, ToggleLeft, ToggleRight, ChevronDown, ChevronUp, Loader2, Clock, AlertCircle, CheckCircle2, XCircle, SkipForward, X, Eye, EyeOff, MessageSquare, Mail, Bell, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -341,6 +341,61 @@ function RuleModal({
   );
 }
 
+// ─── Sample payload for preview ─────────────────────────────────────────────
+const SAMPLE_PAYLOAD: Record<string, string> = {
+  customerName: 'Jane Smith',
+  customerFirstName: 'Jane',
+  phone: '(360) 555-0192',
+  email: 'jane@example.com',
+  referenceNumber: 'EST-2026-042',
+  amount: '$3,200.00',
+  description: 'Bathroom remodel — tile, vanity, fixtures',
+  googleReviewLink: 'https://g.page/r/YOUR_REVIEW_LINK',
+};
+
+function interpolatePreview(template: string): string {
+  if (!template) return '';
+  return template.replace(/\{\{(\w+)\}\}/g, (_, key) => SAMPLE_PAYLOAD[key] ?? `{{${key}}}`);
+}
+
+function getPreviewContent(rule: any): { channel: string; icon: React.ReactNode; lines: { label: string; value: string }[] } | null {
+  const ap = rule.actionPayload ?? {};
+  switch (rule.actionType) {
+    case 'send_sms':
+      return {
+        channel: 'SMS Preview',
+        icon: <MessageSquare size={12} />,
+        lines: [{ label: 'Message', value: interpolatePreview(ap.messageTemplate ?? '') }],
+      };
+    case 'send_email':
+      return {
+        channel: 'Email Preview',
+        icon: <Mail size={12} />,
+        lines: [
+          { label: 'Subject', value: interpolatePreview(ap.subject ?? '') },
+          { label: 'Body', value: interpolatePreview(ap.bodyTemplate ?? '') },
+        ],
+      };
+    case 'notify_owner':
+      return {
+        channel: 'Team Notification Preview',
+        icon: <Bell size={12} />,
+        lines: [
+          { label: 'Title', value: interpolatePreview(ap.title ?? '') },
+          { label: 'Content', value: interpolatePreview(ap.contentTemplate ?? '') },
+        ],
+      };
+    case 'create_note':
+      return {
+        channel: 'Internal Note Preview',
+        icon: <FileText size={12} />,
+        lines: [{ label: 'Note', value: interpolatePreview(ap.noteTemplate ?? '') }],
+      };
+    default:
+      return null;
+  }
+}
+
 // ─── Stage config ────────────────────────────────────────────────────────────
 const STAGES = [
   { key: 'lead',     label: 'Lead',     emoji: '🎯', description: 'New bookings, inbound calls, and lead creation' },
@@ -355,6 +410,15 @@ export default function AutomationsSettings() {
   const [showModal, setShowModal] = useState(false);
   const [editRule, setEditRule] = useState<(RuleForm & { id: number }) | null>(null);
   const [logsForRule, setLogsForRule] = useState<number | null>(null);
+  const [previewOpenIds, setPreviewOpenIds] = useState<Set<number>>(new Set());
+
+  const togglePreview = useCallback((id: number) => {
+    setPreviewOpenIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
 
   const { data: rules, isLoading } = trpc.automationRules.list.useQuery();
   const utils = trpc.useUtils();
@@ -513,6 +577,13 @@ export default function AutomationsSettings() {
                   {/* Actions */}
                   <div className="flex items-center gap-1 shrink-0">
                     <button
+                      onClick={() => togglePreview(rule.id)}
+                      title={previewOpenIds.has(rule.id) ? 'Hide preview' : 'Preview message'}
+                      className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {previewOpenIds.has(rule.id) ? <EyeOff size={14} /> : <Eye size={14} />}
+                    </button>
+                    <button
                       onClick={() => setLogsForRule(rule.id)}
                       title="View execution log"
                       className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
@@ -547,6 +618,29 @@ export default function AutomationsSettings() {
                   </div>
                 </div>
               </div>
+
+              {/* ── Inline preview panel ── */}
+              {previewOpenIds.has(rule.id) && (() => {
+                const preview = getPreviewContent(rule);
+                if (!preview) return null;
+                return (
+                  <div className="border-t border-border bg-muted/30 rounded-b-xl px-4 py-3 space-y-2">
+                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                      {preview.icon}
+                      {preview.channel}
+                      <span className="ml-auto text-[10px] font-normal normal-case">Sample values — not real customer data</span>
+                    </div>
+                    {preview.lines.map(line => (
+                      <div key={line.label}>
+                        <p className="text-[10px] text-muted-foreground font-medium mb-0.5">{line.label}</p>
+                        <div className="bg-background border border-border rounded-lg px-3 py-2 text-xs text-foreground whitespace-pre-wrap leading-relaxed">
+                          {line.value || <span className="italic text-muted-foreground">No template set — edit the rule to add a message.</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
                     ))}
                   </div>

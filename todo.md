@@ -1995,5 +1995,8 @@
 ## Pre-Filled Automation Library
 - [x] Add googleReviewLink column to appSettings schema and run db:push
 - [x] Seed 17 pre-built automation rules (all disabled by default) via seed script
-- [ ] Update AutomationsSettings page to group rules by lifecycle stage
+- [x] Update AutomationsSettings page to group rules by lifecycle stage
 - [x] Add Google Review Link field to CompanySettings UI
+
+## Automation Preview
+- [x] Add inline message preview to each rule card (expand/collapse, sample variables substituted)
