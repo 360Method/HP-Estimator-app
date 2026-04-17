@@ -13,6 +13,7 @@ import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import PortalLayout from "@/components/PortalLayout";
+import EnrollModal from "@/components/EnrollModal";
 import { TIER_DEFINITIONS, formatDollars, calcMemberDiscount } from "@shared/threeSixtyTiers";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -286,8 +287,12 @@ function NonMemberFunnel() {
     });
   }, [spendSlider]);
 
+  const [enrollTier, setEnrollTier] = useState<string | null>(null);
+  const { data: meData } = trpc.portal.me.useQuery();
+  const portalCustomer = meData?.customer;
+
   const goToCheckout = (tier: string) => {
-    window.open(`https://360.handypioneers.com?tier=${tier}&cadence=${cadence}`, "_blank");
+    setEnrollTier(tier);
   };
 
   return (
@@ -551,17 +556,29 @@ function NonMemberFunnel() {
           </Button>
         </div>
       </div>
+
+      {/* ── Enroll Modal ─────────────────────────────────────────────────── */}
+      {enrollTier && portalCustomer && (
+        <EnrollModal
+          open={!!enrollTier}
+          onClose={() => setEnrollTier(null)}
+          tier={enrollTier}
+          customer={portalCustomer}
+        />
+      )}
     </PortalLayout>
   );
 }
-
-// ─── MEMBER DASHBOARD ─────────────────────────────────────────────────────────
+// ─── MEMBER DASHBOARD ──────────────────────────────────────────────────────────
 
 export default function Portal360Membership() {
   const [, navigate] = useLocation();
   const { data, isLoading } = trpc.portal.getMembership360.useQuery();
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [showVisitModal, setShowVisitModal] = useState(false);
+  const [enrollUpgradeTier, setEnrollUpgradeTier] = useState<string | null>(null);
+  const { data: meData } = trpc.portal.me.useQuery();
+  const portalCustomer = meData?.customer;
   const [visitReason, setVisitReason] = useState("");
   const [visitUrgency, setVisitUrgency] = useState<"asap" | "within_week" | "flexible">("flexible");
   const [visitDateRange, setVisitDateRange] = useState("");
@@ -792,7 +809,7 @@ export default function Portal360Membership() {
             <Button
               size="sm"
               className="bg-[#c8922a] hover:bg-[#b07a1f] text-white shrink-0 font-bold text-xs"
-              onClick={() => window.open(`https://360.handypioneers.com?tier=${upgradeTier}&cadence=annual`, "_blank")}
+              onClick={() => setEnrollUpgradeTier(upgradeTier)}
             >
               Upgrade
             </Button>
@@ -978,6 +995,16 @@ export default function Portal360Membership() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* ── Upgrade Enroll Modal ──────────────────────────────────────── */}
+      {enrollUpgradeTier && portalCustomer && (
+        <EnrollModal
+          open={!!enrollUpgradeTier}
+          onClose={() => setEnrollUpgradeTier(null)}
+          tier={enrollUpgradeTier}
+          customer={portalCustomer}
+        />
+      )}
     </PortalLayout>
   );
 }

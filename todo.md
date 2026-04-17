@@ -2076,3 +2076,8 @@
 - [x] Member dashboard: savings counter, seasonal visit timeline, upgrade nudge, referral shortcut
 - [x] PortalHome: non-member teaser banner with stats and CTA
 - [x] PortalHome: member savings badge on 360 card
+
+## In-Portal 360 Enrollment — 2026-04-17
+- [x] Build EnrollModal: tier display, cadence selector, address confirmation, Stripe redirect
+- [x] Replace all external funnel links in Portal360Membership with EnrollModal trigger
+- [x] Wire EnrollModal to POST /api/360/checkout with portal customer data pre-filled
