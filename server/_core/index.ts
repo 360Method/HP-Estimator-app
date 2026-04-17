@@ -18,6 +18,7 @@ import { getPortalInvoiceByStripePaymentIntentId, updatePortalInvoicePaid, getPo
 import { create360MembershipFromWebhook, create360PortfolioMembershipsFromWebhook, releaseDeferredLaborBankCredits } from "../threeSixtyWebhook.ts";
 import { sendEmail } from "../gmail";
 import { notifyOwner } from "../_core/notification";
+import { buildInboundCallTwiml } from "../phone";
 import { randomUUID } from "crypto";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -226,6 +227,59 @@ async function startServer() {
     } catch (err) {
       console.error("[Twilio Voice status]", err);
       res.status(500).send("Error");
+    }
+  });
+
+  // ── Twilio Voice — inbound call routing ──────────────────────────────────────
+  // POST /api/twilio/voice/inbound — Twilio calls this for every inbound call
+  app.post("/api/twilio/voice/inbound", express.urlencoded({ extended: false }), async (req, res) => {
+    try {
+      const forwardedProto = (req.headers["x-forwarded-proto"] as string) || req.protocol;
+      const forwardedHost = (req.headers["x-forwarded-host"] as string) || req.get("host") || "localhost";
+      const proto = forwardedProto.split(",")[0].trim();
+      const host = forwardedHost.split(",")[0].trim();
+      const callbackBaseUrl = `${proto}://${host}`;
+      const twimlXml = await buildInboundCallTwiml(callbackBaseUrl);
+      res.set("Content-Type", "text/xml");
+      res.send(twimlXml);
+    } catch (err) {
+      console.error("[Twilio Voice inbound]", err);
+      const VoiceResponse = twilio.twiml.VoiceResponse;
+      const twiml = new VoiceResponse();
+      twiml.say("We're sorry, we're unable to take your call right now. Please try again later.");
+      res.set("Content-Type", "text/xml");
+      res.send(twiml.toString());
+    }
+  });
+
+  // ── Twilio Voice — voicemail recording callback ────────────────────────────
+  // POST /api/twilio/voice/voicemail — called after voicemail is recorded
+  app.post("/api/twilio/voice/voicemail", express.urlencoded({ extended: false }), async (req, res) => {
+    try {
+      const { From, RecordingUrl, TranscriptionText, RecordingDuration } = req.body;
+      const callerNumber = From || "Unknown";
+      const duration = RecordingDuration ? `${RecordingDuration}s` : "unknown duration";
+      const transcription = TranscriptionText ? `\n\nTranscription: ${TranscriptionText}` : "";
+      await notifyOwner({
+        title: `📞 New Voicemail from ${callerNumber}`,
+        content: `Voicemail received from ${callerNumber} (${duration}).${transcription}${RecordingUrl ? `\n\nRecording: ${RecordingUrl}` : ""}`,
+      });
+      if (process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_ACCOUNT_SID && process.env.OWNER_PHONE && process.env.TWILIO_PHONE_NUMBER) {
+        try {
+          const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+          await twilioClient.messages.create({
+            to: process.env.OWNER_PHONE,
+            from: process.env.TWILIO_PHONE_NUMBER,
+            body: `📞 New voicemail from ${callerNumber} (${duration}).${TranscriptionText ? ` "${TranscriptionText.slice(0, 100)}"` : ""}`,
+          });
+        } catch (smsErr) {
+          console.warn("[Voicemail SMS notify] Failed:", smsErr);
+        }
+      }
+      res.sendStatus(204);
+    } catch (err) {
+      console.error("[Twilio Voice voicemail]", err);
+      res.sendStatus(204);
     }
   });
 

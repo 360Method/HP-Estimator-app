@@ -288,6 +288,13 @@
       "when": 1776389753759,
       "tag": "0040_many_beast",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "5",
+      "when": 1776393481209,
+      "tag": "0041_aromatic_mole_man",
+      "breakpoints": true
     }
   ]
 }

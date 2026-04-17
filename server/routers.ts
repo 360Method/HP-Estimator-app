@@ -22,6 +22,7 @@ import { financialsRouter } from "./routers/financials";
 import { expensesRouter } from "./routers/expenses";
 import { quickbooksRouter } from "./routers/quickbooks";
 import { propertiesRouter } from "./routers/properties";
+import { phoneRouter } from "./routers/phone";
 import {
   getAdminAllowlist,
   addAdminAllowlistEmail,
@@ -49,6 +50,7 @@ export const appRouter = router({
   expenses: expensesRouter,
   quickbooks: quickbooksRouter,
   properties: propertiesRouter,
+  phone: phoneRouter,
 
   auth: router({
     /**

@@ -1174,3 +1174,38 @@ export const threeSixtyWorkOrders = mysqlTable("threeSixtyWorkOrders", {
 });
 export type DbThreeSixtyWorkOrder = typeof threeSixtyWorkOrders.$inferSelect;
 export type InsertDbThreeSixtyWorkOrder = typeof threeSixtyWorkOrders.$inferInsert;
+
+// ─── Phone Settings ───────────────────────────────────────────────────────────
+/**
+ * Single-row table storing inbound call routing configuration.
+ * id is always 1 (singleton pattern — upsert on id=1).
+ */
+export const phoneSettings = mysqlTable("phoneSettings", {
+  id: int("id").primaryKey().default(1),
+  /**
+   * How to route inbound calls:
+   *   forward_to_number — dial forwardingNumber
+   *   forward_to_ai     — dial aiServiceNumber
+   *   voicemail         — record a voicemail and notify owner
+   */
+  forwardingMode: mysqlEnum("forwardingMode", [
+    "forward_to_number",
+    "forward_to_ai",
+    "voicemail",
+  ])
+    .notNull()
+    .default("forward_to_number"),
+  /** E.164 number to forward calls to (personal cell) */
+  forwardingNumber: varchar("forwardingNumber", { length: 20 }).default(""),
+  /** E.164 number of the AI answering service */
+  aiServiceNumber: varchar("aiServiceNumber", { length: 20 }).default(""),
+  /** Optional TTS greeting played before connecting/recording */
+  greeting: varchar("greeting", { length: 500 }).default(""),
+  /** Whether to record inbound calls */
+  callRecording: boolean("callRecording").notNull().default(false),
+  /** Voicemail transcription enabled */
+  transcribeVoicemail: boolean("transcribeVoicemail").notNull().default(true),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbPhoneSettings = typeof phoneSettings.$inferSelect;
+export type InsertDbPhoneSettings = typeof phoneSettings.$inferInsert;

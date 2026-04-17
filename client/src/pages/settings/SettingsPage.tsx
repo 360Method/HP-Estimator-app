@@ -8,7 +8,7 @@ import {
   ArrowLeft, Building2, CreditCard, Bell, Users,
   FileText, Receipt, Briefcase, UserPlus, GitBranch,
   BookOpen, CheckSquare, Tag, Zap, ChevronDown, ChevronRight,
-  DollarSign, Layers, Settings, ShieldCheck, MapPin, Upload,
+  DollarSign, Layers, Settings, ShieldCheck, MapPin, Upload, Phone,
 } from 'lucide-react';
 
 // Sub-page imports
@@ -31,12 +31,13 @@ import RolesSettings from './RolesSettings';
 import AllowlistSettings from './AllowlistSettings';
 import ServiceAreaSettings from './ServiceAreaSettings';
 import ImportDataSettings from './ImportDataSettings';
+import PhoneSettings from './PhoneSettings';
 
 export type SettingsSection =
   | 'company' | 'billing' | 'notifications' | 'team' | 'roles' | 'allowlist'
   | 'estimates' | 'invoices' | 'jobs' | 'leads' | 'pipeline' | 'price-book'
   | 'checklists' | 'job-fields' | 'lead-sources' | 'tags'
-  | 'integrations' | 'service-area' | 'import-data';
+  | 'integrations' | 'service-area' | 'import-data' | 'phone';
 
 interface NavGroup {
   label: string;
@@ -80,6 +81,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'Integrations',
     items: [
       { id: 'integrations', label: 'Integrations', icon: Zap },
+      { id: 'phone',        label: 'Phone',         icon: Phone },
     ],
   },
   {
@@ -133,6 +135,7 @@ export default function SettingsPage({ onBack, initialSection = 'company' }: Pro
       case 'integrations':  return <IntegrationsSettings />;
       case 'service-area':  return <ServiceAreaSettings />;
       case 'import-data':   return <ImportDataSettings />;
+      case 'phone':          return <PhoneSettings />;
     }
   };
 

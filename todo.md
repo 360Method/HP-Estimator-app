@@ -1858,3 +1858,13 @@
 - [x] Inline editing of title and description on each custom request line item in EstimateSection
 - [x] AI button on each custom request line item to improve/rewrite title and description (estimate.rewriteCustomItem)
 - [x] Custom request edits persist via updateCustomItem (description + notes fields)
+
+## Phone System — Twilio Inbound Call Routing
+
+- [x] Add phoneSettings table to schema (forwardingMode, forwardingNumber, aiServiceNumber, greeting, callRecording)
+- [x] Run db:push migration for phoneSettings
+- [x] Add /api/twilio/voice/inbound TwiML webhook that reads phoneSettings and routes accordingly
+- [x] Add /api/twilio/voice/voicemail callback with SMS + notifyOwner
+- [x] Add phone tRPC router: getSettings, updateSettings, testCall procedures
+- [x] Build Settings → Phone tab UI with forwarding mode toggle, number fields, test call button
+- [x] Document Twilio Console configuration steps (webhook URL shown in UI)
