@@ -2011,3 +2011,8 @@
 ## Automations Enabled by Default
 - [x] Enable all 25 seeded automation rules by default (enabled=true)
 - [x] Update seed scripts to UPSERT so re-runs refresh templates without resetting user toggles
+## Company Settings Pre-filled Defaults
+- [x] Pre-fill supportEmail, supportPhone, addressLine1, documentFooter, termsText in appSettings defaults
+- [x] Pre-fill all 4 transactional email template bodies with production-ready Handy Pioneers content
+- [x] getOrCreateAppSettings backfills blank fields on existing rows (lazy migration, no manual SQL needed)
+- [x] Seed script applied to live DB — all 13 fields now populated

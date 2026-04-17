@@ -15,24 +15,24 @@ const DEFAULT_SETTINGS = {
   jobPrefix: "JOB",
   portalUrl: "https://client.handypioneers.com",
   websiteUrl: "https://handypioneers.com",
-  supportEmail: "",
-  supportPhone: "",
-  addressLine1: "",
+  supportEmail: "help@handypioneers.com",
+  supportPhone: "(360) 241-5718",
+  addressLine1: "Vancouver, WA",
   addressLine2: "",
   defaultTaxBps: 875,
   defaultDepositPct: 50,
-  documentFooter: "",
-  termsText: "",
+  documentFooter: "Handy Pioneers • Vancouver, WA • (360) 241-5718 • help@handypioneers.com • handypioneers.com",
+  termsText: "Payment is due within 15 days of invoice date. A 50% deposit is required before work begins. All work is guaranteed for 1 year from completion date. Handy Pioneers is licensed, bonded, and insured in the state of Washington.",
   googleReviewLink: "",
   // Transactional email templates
-  emailEstimateApprovedSubject: "Your estimate has been approved — Handy Pioneers",
-  emailEstimateApprovedBody: "",
-  emailJobSignOffSubject: "Job complete — your final invoice is ready",
-  emailJobSignOffBody: "",
-  emailChangeOrderApprovedSubject: "Change order approved — Handy Pioneers",
-  emailChangeOrderApprovedBody: "",
   emailMagicLinkSubject: "Your Handy Pioneers Customer Portal Login",
-  emailMagicLinkBody: "",
+  emailMagicLinkBody: "Hi {{customerFirstName}},\n\nHere is your one-click login link for the Handy Pioneers customer portal:\n\n{{magicLink}}\n\nThis link expires in 15 minutes and can only be used once. If you did not request this, you can safely ignore this email.\n\nBest,\nThe Handy Pioneers Team\nhttps://client.handypioneers.com",
+  emailEstimateApprovedSubject: "Your estimate has been approved — Handy Pioneers",
+  emailEstimateApprovedBody: "Hi {{customerFirstName}},\n\nThank you for approving your estimate! We\'re excited to get started on your project.\n\nHere\'s a summary:\n- Estimate: {{referenceNumber}}\n- Project: {{description}}\n- Total: {{amount}}\n\nYour deposit invoice has been sent to your portal. Once the deposit is received, we\'ll confirm your project start date.\n\nLog in to your portal anytime at: {{portalUrl}}\n\nQuestions? Reply to this email or call us at (360) 241-5718.\n\nBest,\nThe Handy Pioneers Team",
+  emailJobSignOffSubject: "Job complete — your final invoice is ready",
+  emailJobSignOffBody: "Hi {{customerFirstName}},\n\nThank you for signing off on your project — it was a pleasure working with you!\n\nYour final invoice is now available in your customer portal:\n{{invoiceUrl}}\n\nIf you have any questions about the invoice or the work completed, don\'t hesitate to reach out.\n\nWe\'d also love to hear how we did — a quick Google review means the world to our small team.\n\nBest,\nThe Handy Pioneers Team\n(360) 241-5718 • help@handypioneers.com",
+  emailChangeOrderApprovedSubject: "Change order approved — Handy Pioneers",
+  emailChangeOrderApprovedBody: "Hi {{customerFirstName}},\n\nYour change order {{referenceNumber}} has been approved. Thank you!\n\nChange order: {{description}}\nAmount: {{amount}}\n\nAn invoice for this change order has been added to your portal:\n{{invoiceUrl}}\n\nIf you have any questions, just reply to this email or call us at (360) 241-5718.\n\nBest,\nThe Handy Pioneers Team",
 };
 
 async function getOrCreateAppSettings() {
@@ -42,7 +42,29 @@ async function getOrCreateAppSettings() {
     .from(appSettings)
     .where(eq(appSettings.id, 1))
     .limit(1);
-  if (rows.length > 0) return rows[0];
+
+  if (rows.length > 0) {
+    const row = rows[0];
+    // Backfill any blank template/contact fields with defaults so the UI is never empty
+    const backfill: Partial<typeof DEFAULT_SETTINGS> = {};
+    const textFields = [
+      'supportEmail', 'supportPhone', 'addressLine1', 'documentFooter', 'termsText',
+      'emailMagicLinkSubject', 'emailMagicLinkBody',
+      'emailEstimateApprovedSubject', 'emailEstimateApprovedBody',
+      'emailJobSignOffSubject', 'emailJobSignOffBody',
+      'emailChangeOrderApprovedSubject', 'emailChangeOrderApprovedBody',
+    ] as const;
+    for (const field of textFields) {
+      if (!row[field]) backfill[field] = DEFAULT_SETTINGS[field] as any;
+    }
+    if (Object.keys(backfill).length > 0) {
+      await db.update(appSettings).set({ ...backfill, updatedAt: new Date() }).where(eq(appSettings.id, 1));
+      const updated = await db.select().from(appSettings).where(eq(appSettings.id, 1)).limit(1);
+      return updated[0];
+    }
+    return row;
+  }
+
   await db.insert(appSettings).values(DEFAULT_SETTINGS).onDuplicateKeyUpdate({
     set: { updatedAt: new Date() },
   });
