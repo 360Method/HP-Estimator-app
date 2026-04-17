@@ -363,6 +363,49 @@ async function startServer() {
     res.send(twiml.toString());
   });
 
+  // ── Twilio Recording Proxy ─────────────────────────────────────────────────
+  // GET /api/twilio/recording/:sid — fetches recording from Twilio with Basic Auth
+  // and streams it to the authenticated browser. Avoids exposing Twilio credentials
+  // to the frontend and prevents the browser from prompting for Twilio login.
+  app.get("/api/twilio/recording/:sid", async (req, res) => {
+    try {
+      const accountSid = process.env.TWILIO_ACCOUNT_SID;
+      const authToken = process.env.TWILIO_AUTH_TOKEN;
+      if (!accountSid || !authToken) {
+        res.status(503).json({ error: "Twilio not configured" });
+        return;
+      }
+      const recordingSid = req.params.sid;
+      // Validate recording SID format (RE + 32 hex chars)
+      if (!/^RE[0-9a-f]{32}$/i.test(recordingSid)) {
+        res.status(400).json({ error: "Invalid recording SID" });
+        return;
+      }
+      const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Recordings/${recordingSid}.mp3`;
+      const upstream = await fetch(twilioUrl, {
+        headers: {
+          Authorization: `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString("base64")}`,
+        },
+      });
+      if (!upstream.ok) {
+        res.status(upstream.status).json({ error: "Recording not found" });
+        return;
+      }
+      res.set("Content-Type", "audio/mpeg");
+      res.set("Cache-Control", "private, max-age=3600");
+      if (upstream.body) {
+        const { Readable } = await import("stream");
+        Readable.fromWeb(upstream.body as any).pipe(res);
+      } else {
+        const buf = Buffer.from(await upstream.arrayBuffer());
+        res.send(buf);
+      }
+    } catch (err) {
+      console.error("[Recording Proxy]", err);
+      res.status(500).json({ error: "Proxy error" });
+    }
+  });
+
   // ── SSE endpoint for real-time inbox updates ─────────────────────────────────────────────
   app.get("/api/inbox/events", (req, res) => {
     const clientId = randomUUID();

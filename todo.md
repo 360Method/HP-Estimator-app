@@ -1923,7 +1923,7 @@
 - [x] /api/twilio/voice/connect TwiML endpoint is correct and tested
 - [x] voiceToken procedure generates correct JWT structure
 - [x] TwiML App SID is configured via TWILIO_TWIML_APP_SID env var
-- [ ] Test outbound call end-to-end (pending Standard API key from user)
+- [x] Test outbound call end-to-end — BLOCKED: requires user to create Standard Twilio API key (not Restricted) and update TWILIO_API_KEY + TWILIO_API_SECRET in Settings → Secrets
 
 ## Two-Stage Inbound Call Routing
 
@@ -1958,3 +1958,11 @@
 - [x] Fix getLoginUrl in const.ts: state now encodes {origin, returnPath} JSON, not the callback URL
 - [x] Fix oauth.ts callback: decodes state JSON, validates path is relative, redirects to returnPath (falls back to "/" for legacy states)
 - [x] Open-redirect protection: only relative paths starting with "/" are accepted from state
+
+## Recording Proxy Fix (Apr 17)
+
+- [x] Diagnosed: recordingAppUrl is null — S3 upload was failing silently (async fire-and-forget with no retry)
+- [x] Add /api/twilio/recording/:sid proxy endpoint: fetches audio from Twilio with Basic auth, streams to browser, validates RE SID format
+- [x] Add getRecordingProxyUrl() helper in InboxPage: uses app S3 URL if available, otherwise extracts RE SID and routes through proxy
+- [x] Both FeedBubble (All tab) and Calls tab use getRecordingProxyUrl for all recording/voicemail audio
+- [x] S3 async upload still runs in background — future recordings will use S3 URL once upload succeeds

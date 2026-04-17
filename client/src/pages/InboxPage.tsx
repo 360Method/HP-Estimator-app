@@ -109,13 +109,34 @@ function ChannelBadge({ channel }: { channel: string }) {
   );
 }
 
-// ─── Feed bubble ──────────────────────────────────────────────────────────────
+/**
+ * Returns a URL that plays a Twilio recording without requiring Twilio login.
+ * Priority: app S3 URL (recordingAppUrl) > server proxy > raw Twilio URL.
+ * Extracts the Recording SID from the Twilio URL and routes through /api/twilio/recording/:sid.
+ */
+function getRecordingProxyUrl(recordingAppUrl?: string | null, recordingUrl?: string | null): string | null {
+  // If we already have an app S3 URL (not a Twilio domain), use it directly
+  if (recordingAppUrl && !recordingAppUrl.includes('api.twilio.com')) {
+    return recordingAppUrl;
+  }
+  // Extract Recording SID from Twilio URL (format: .../Recordings/RE<32hex>)
+  const urlToExtract = recordingAppUrl || recordingUrl;
+  if (urlToExtract) {
+    const match = urlToExtract.match(/Recordings\/(RE[0-9a-f]{32})/i);
+    if (match) {
+      return `/api/twilio/recording/${match[1]}`;
+    }
+  }
+  return null;
+}
+
+// ─── Feed bubble ──────────────────────────────────────────────────────────────────────────────
 function FeedBubble({ item }: { item: FeedItem }) {
   const isOut = item.direction === 'outbound';
 
   // Call log — centered card with optional inline audio player
   if (item.channel === 'call') {
-    const recordingUrl = (item as any).recordingAppUrl as string | null | undefined;
+    const recordingUrl = getRecordingProxyUrl((item as any).recordingAppUrl, (item as any).recordingUrl);
     return (
       <div className="flex justify-center my-3">
         <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2 text-xs text-emerald-800 max-w-xs w-full">
@@ -621,37 +642,32 @@ export default function InboxPage() {
                           {log.callerPhone && (
                             <p className="text-xs text-muted-foreground">{log.callerPhone}</p>
                           )}
-                          {/* Inline audio player — uses app S3 URL so no Twilio login needed */}
-                          {((log as any).recordingAppUrl || log.recordingUrl || log.voicemailUrl) && (
-                            <div className="mt-2 space-y-1.5">
-                              {((log as any).recordingAppUrl || log.recordingUrl) && (
-                                <div>
-                                  <p className="text-[10px] text-muted-foreground mb-0.5 flex items-center gap-1">
-                                    <Phone size={9} /> Recording
-                                  </p>
-                                  <audio
-                                    controls
-                                    src={(log as any).recordingAppUrl || log.recordingUrl!}
-                                    className="w-full h-8"
-                                    preload="none"
-                                  />
-                                </div>
-                              )}
-                              {log.voicemailUrl && (
-                                <div>
-                                  <p className="text-[10px] text-muted-foreground mb-0.5 flex items-center gap-1">
-                                    <MessageSquare size={9} /> Voicemail
-                                  </p>
-                                  <audio
-                                    controls
-                                    src={log.voicemailUrl}
-                                    className="w-full h-8"
-                                    preload="none"
-                                  />
-                                </div>
-                              )}
-                            </div>
-                          )}
+                          {/* Inline audio player — proxied through app server, no Twilio login needed */}
+                          {(() => {
+                            const recUrl = getRecordingProxyUrl((log as any).recordingAppUrl, log.recordingUrl);
+                            const vmUrl = getRecordingProxyUrl((log as any).voicemailAppUrl, log.voicemailUrl);
+                            if (!recUrl && !vmUrl) return null;
+                            return (
+                              <div className="mt-2 space-y-1.5">
+                                {recUrl && (
+                                  <div>
+                                    <p className="text-[10px] text-muted-foreground mb-0.5 flex items-center gap-1">
+                                      <Phone size={9} /> Recording
+                                    </p>
+                                    <audio controls src={recUrl} className="w-full h-8" preload="none" />
+                                  </div>
+                                )}
+                                {vmUrl && (
+                                  <div>
+                                    <p className="text-[10px] text-muted-foreground mb-0.5 flex items-center gap-1">
+                                      <MessageSquare size={9} /> Voicemail
+                                    </p>
+                                    <audio controls src={vmUrl} className="w-full h-8" preload="none" />
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
                       </div>
                     );
