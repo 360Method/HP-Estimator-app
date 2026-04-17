@@ -951,13 +951,14 @@ function CreateInvoiceDialog({
   onCreate: (invoice: Invoice) => void;
   defaultTotal: number;
   defaultType: 'deposit' | 'final';
+  defaultDepositPct?: number;
   invoiceNumber: string;
   defaultTaxCode?: string;
   opportunitySnapshot?: EstimateSnapshot;
   jobTitle?: string;
 }) {
   const [type, setType] = useState<'deposit' | 'final'>(defaultType);
-  const [depositPct, setDepositPct] = useState(50);
+  const [depositPct, setDepositPct] = useState(defaultDepositPct ?? 50);
   const [taxRateCode, setTaxRateCode] = useState(defaultTaxCode || '0603'); // pre-fill from customer default
   const [customTaxPct, setCustomTaxPct] = useState(8.9);
   const selectedPreset = CLARK_COUNTY_TAX_RATES.find(r => r.code === taxRateCode);
@@ -1139,6 +1140,10 @@ export default function InvoiceSection() {
   const [showCreate, setShowCreate] = useState(false);
   const [createType, setCreateType] = useState<'deposit' | 'final'>('deposit');
 
+  // Fetch app-wide defaults (deposit %, tax rate) from settings
+  const { data: appSettings } = trpc.appSettings.getSettings.useQuery(undefined, {
+    staleTime: Infinity,
+  });
   // Fetch Stripe publishable key + PayPal client ID
   const { data: stripeData } = trpc.payments.getStripePublishableKey.useQuery(undefined, {
     retry: false,
@@ -1394,6 +1399,7 @@ export default function InvoiceSection() {
         onCreate={handleCreate}
         defaultTotal={estimateValue}
         defaultType={createType}
+        defaultDepositPct={appSettings?.defaultDepositPct ?? 50}
         invoiceNumber={nextInvoiceNumber()}
         defaultTaxCode={
           // Priority: customer default → job zip lookup → estimate global tax → Vancouver default

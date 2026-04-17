@@ -2018,16 +2018,16 @@
 - [x] Seed script applied to live DB — all 13 fields now populated
 
 ## Settings — Single Source of Truth Overhaul
-- [ ] Fix CompanySettings input focus/locking bug (controlled input loses focus on each keystroke)
-- [ ] Add missing global fields to appSettings schema: internalLaborRateCents, defaultMarkupPct, smsFromName
-- [ ] Run pnpm db:push after schema changes
-- [ ] Create useAppSettings() React hook — fetches settings once, exposes typed fields app-wide
-- [ ] Wire InvoiceSection deposit % default to appSettings.defaultDepositPct
-- [ ] Wire InvoiceSection tax rate default to appSettings.defaultTaxBps
-- [ ] Wire EstimateSection tax rate default to appSettings.defaultTaxBps
-- [ ] Wire automation engine to inject supportPhone, supportEmail, companyName, websiteUrl into all SMS/email templates
-- [ ] Rebuild CompanySettings as always-editable per-section form (remove edit/cancel toggle pattern)
-- [ ] Add new Settings sections: Financials (tax, deposit, markup, labor rate), Notifications (SMS from name)
+- [x] Fix CompanySettings input focus/locking bug (controlled input loses focus on each keystroke)
+- [x] Add missing global fields to appSettings schema: internalLaborRateCents, defaultMarkupPct, smsFromName
+- [x] Run pnpm db:push after schema changes
+- [x] Wire appSettings defaults via direct trpc.appSettings.getSettings.useQuery() in components (no separate hook needed)
+- [x] Wire InvoiceSection deposit % default to appSettings.defaultDepositPct
+- [x] Wire InvoiceSection tax rate default to appSettings.defaultTaxBps (via customer defaultTaxCode priority chain)
+- [x] Wire EstimateSection tax rate default to appSettings.defaultTaxBps (via customer defaultTaxCode priority chain)
+- [x] Wire automation engine to inject supportPhone, supportEmail, companyName, websiteUrl into all SMS/email templates
+- [x] Rebuild CompanySettings as always-editable per-section form (remove edit/cancel toggle pattern)
+- [x] Add new Settings sections: Financials (tax, deposit, markup, labor rate), Notifications (SMS from name)
 
 ## 360 Gateway + CompanySettings Overhaul (Apr 17)
 - [x] Add hp360funnel manus.space to CORS allowed origins

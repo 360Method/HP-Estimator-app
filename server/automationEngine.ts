@@ -150,8 +150,19 @@ export async function runAutomationsForTrigger(
     try {
       const { appSettings } = await import("../drizzle/schema");
       const [settings] = await db.select().from(appSettings).limit(1);
-      if (settings?.googleReviewLink) {
-        payload = { ...payload, googleReviewLink: settings.googleReviewLink };
+      if (settings) {
+        // Inject all business identity fields so any template can reference them
+        payload = {
+          ...payload,
+          ...(settings.googleReviewLink ? { googleReviewLink: settings.googleReviewLink } : {}),
+          ...(settings.companyName      ? { companyName: settings.companyName }           : {}),
+          ...(settings.supportPhone     ? { supportPhone: settings.supportPhone }         : {}),
+          ...(settings.supportEmail     ? { supportEmail: settings.supportEmail }         : {}),
+          ...(settings.websiteUrl       ? { websiteUrl: settings.websiteUrl }             : {}),
+          ...(settings.portalUrl        ? { portalUrl: settings.portalUrl }               : {}),
+          ...(settings.addressLine1     ? { addressLine1: settings.addressLine1 }         : {}),
+          ...(settings.addressLine2     ? { addressLine2: settings.addressLine2 }         : {}),
+        };
       }
     } catch { /* non-fatal */ }
 
