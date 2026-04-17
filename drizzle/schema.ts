@@ -1205,6 +1205,14 @@ export const phoneSettings = mysqlTable("phoneSettings", {
   callRecording: boolean("callRecording").notNull().default(false),
   /** Voicemail transcription enabled */
   transcribeVoicemail: boolean("transcribeVoicemail").notNull().default(true),
+  /** When true, calls outside business hours are routed to voicemail regardless of forwardingMode */
+  afterHoursEnabled: boolean("afterHoursEnabled").notNull().default(false),
+  /** Business hours start time in HH:MM 24h format (America/Los_Angeles) */
+  businessHoursStart: varchar("businessHoursStart", { length: 5 }).default("08:00"),
+  /** Business hours end time in HH:MM 24h format (America/Los_Angeles) */
+  businessHoursEnd: varchar("businessHoursEnd", { length: 5 }).default("17:00"),
+  /** Comma-separated days of week (0=Sun,1=Mon,...,6=Sat) e.g. "1,2,3,4,5" */
+  businessDays: varchar("businessDays", { length: 20 }).default("1,2,3,4,5"),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 export type DbPhoneSettings = typeof phoneSettings.$inferSelect;

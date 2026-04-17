@@ -11,6 +11,7 @@ import {
   insertCallLog,
   insertMessage,
   listCallLogs,
+  listCallLogsByConversation,
   listConversations,
   listConversationsByCustomer,
   listMessages,
@@ -161,6 +162,11 @@ const callLogsRouter = router({
     .query(async ({ input }) => {
       const { limit = 100, offset = 0 } = input ?? {};
       return listCallLogs(limit, offset);
+    }),
+  byConversation: protectedProcedure
+    .input(z.object({ conversationId: z.number() }))
+    .query(async ({ input }) => {
+      return listCallLogsByConversation(input.conversationId);
     }),
 });
 

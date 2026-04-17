@@ -20,6 +20,7 @@ import {
   listOpportunities,
   detectDuplicates,
   mergeCustomers,
+  mergeStubIntoCustomer,
   bulkAddTag,
 } from "../db";
 import { nanoid } from "nanoid";
@@ -186,6 +187,20 @@ export const customersRouter = router({
   detectDuplicates: protectedProcedure
     .query(async () => {
       return detectDuplicates();
+    }),
+
+  /**
+   * Merge a stub (unknown-caller) customer into a real customer.
+   * Transfers all conversations, opportunities, invoices, and schedule events, then deletes the stub.
+   */
+  mergeStub: protectedProcedure
+    .input(z.object({ stubId: z.string(), targetId: z.string() }))
+    .mutation(async ({ input }) => {
+      if (input.stubId === input.targetId) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cannot merge a customer into itself' });
+      }
+      await mergeStubIntoCustomer(input.stubId, input.targetId);
+      return { success: true };
     }),
 
   /** Merge sourceId into targetId (re-parents opps/addresses/conversations, soft-deletes source) */

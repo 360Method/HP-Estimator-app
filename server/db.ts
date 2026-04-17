@@ -243,6 +243,13 @@ export async function listCallLogs(limit = 100, offset = 0) {
   return db.select().from(callLogs).orderBy(desc(callLogs.startedAt)).limit(limit).offset(offset);
 }
 
+export async function listCallLogsByConversation(conversationId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(callLogs)
+    .where(eq(callLogs.conversationId, conversationId))
+    .orderBy(desc(callLogs.startedAt));
+}
 export async function insertCallLog(log: InsertCallLog) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -450,7 +457,28 @@ export async function deleteCustomer(id: string): Promise<void> {
   await db.delete(customers).where(eq(customers.id, id));
 }
 
-// ─── CUSTOMER ADDRESS HELPERS ─────────────────────────────────────────────────
+/**
+ * Merge a stub/unknown-caller customer into a real customer.
+ * Transfers all conversations, opportunities, invoices, scheduleEvents, and expenses,
+ * then deletes the stub.
+ */
+export async function mergeStubIntoCustomer(
+  stubId: string,
+  targetId: string,
+): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error('Database not available');
+  // Re-link all related tables
+  await db.update(conversations).set({ customerId: targetId }).where(eq(conversations.customerId, stubId));
+  await db.update(opportunities).set({ customerId: targetId }).where(eq(opportunities.customerId, stubId));
+  await db.update(invoices).set({ customerId: targetId }).where(eq(invoices.customerId, stubId));
+  await db.update(scheduleEvents).set({ customerId: targetId }).where(eq(scheduleEvents.customerId, stubId));
+  await db.update(expenses).set({ customerId: targetId }).where(eq(expenses.customerId, stubId));
+  // Delete the stub
+  await db.delete(customers).where(eq(customers.id, stubId));
+}
+
+// ─── CUSTOMER ADDRESS HELPERSS ─────────────────────────────────────────────────
 
 export async function listCustomerAddresses(customerId: string): Promise<DbCustomerAddress[]> {
   const db = await getDb();

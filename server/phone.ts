@@ -5,6 +5,10 @@
  *   forward_to_number — dial forwardingNumber (owner's personal cell)
  *   forward_to_ai     — dial aiServiceNumber (AI answering service)
  *   voicemail         — record voicemail, notify owner
+ *
+ * After-hours routing:
+ *   When afterHoursEnabled=true, calls outside businessHours are routed to
+ *   voicemail regardless of the forwardingMode setting.
  */
 import twilio from "twilio";
 import { getDb } from "./db";
@@ -27,6 +31,10 @@ export async function getPhoneSettings() {
     greeting: "",
     callRecording: false,
     transcribeVoicemail: true,
+    afterHoursEnabled: false,
+    businessHoursStart: "08:00",
+    businessHoursEnd: "17:00",
+    businessDays: "1,2,3,4,5",
   };
   await db.insert(phoneSettings).values(defaultSettings).onDuplicateKeyUpdate({
     set: { updatedAt: new Date() },
@@ -45,6 +53,42 @@ export async function updatePhoneSettings(
   return getPhoneSettings();
 }
 
+// ─── Business hours helper ────────────────────────────────────────────────────
+
+/**
+ * Returns true if the current time in America/Los_Angeles is within business hours.
+ * businessHoursStart / businessHoursEnd are "HH:MM" strings in 24h format.
+ * businessDays is a comma-separated list of weekday numbers (0=Sun, 6=Sat).
+ */
+function isBusinessHours(
+  businessHoursStart: string | null | undefined,
+  businessHoursEnd: string | null | undefined,
+  businessDays: string | null | undefined,
+): boolean {
+  const tz = "America/Los_Angeles";
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(now);
+  const weekdayStr = parts.find(p => p.type === "weekday")?.value ?? "";
+  const hourStr = parts.find(p => p.type === "hour")?.value ?? "0";
+  const minuteStr = parts.find(p => p.type === "minute")?.value ?? "0";
+  const weekdayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  const dayNum = weekdayMap[weekdayStr] ?? -1;
+  const allowedDays = (businessDays || "1,2,3,4,5").split(",").map(Number);
+  if (!allowedDays.includes(dayNum)) return false;
+  const currentMinutes = parseInt(hourStr, 10) * 60 + parseInt(minuteStr, 10);
+  const [startH, startM] = (businessHoursStart || "08:00").split(":").map(Number);
+  const [endH, endM] = (businessHoursEnd || "17:00").split(":").map(Number);
+  const startMinutes = startH * 60 + startM;
+  const endMinutes = endH * 60 + endM;
+  return currentMinutes >= startMinutes && currentMinutes < endMinutes;
+}
+
 // ─── TwiML builder ───────────────────────────────────────────────────────────
 
 /**
@@ -56,21 +100,38 @@ export async function buildInboundCallTwiml(callbackBaseUrl: string): Promise<st
   const twiml = new VoiceResponse();
 
   const settings = await getPhoneSettings();
-  const { forwardingMode, forwardingNumber, aiServiceNumber, greeting, callRecording, transcribeVoicemail } = settings;
+  const {
+    forwardingMode,
+    forwardingNumber,
+    aiServiceNumber,
+    greeting,
+    callRecording,
+    transcribeVoicemail,
+    afterHoursEnabled,
+    businessHoursStart,
+    businessHoursEnd,
+    businessDays,
+  } = settings;
+
+  // Determine effective routing mode — after-hours overrides to voicemail
+  const withinHours = afterHoursEnabled
+    ? isBusinessHours(businessHoursStart, businessHoursEnd, businessDays)
+    : true;
+  const effectiveMode = withinHours ? forwardingMode : "voicemail";
 
   // Optional greeting before routing
   if (greeting && greeting.trim()) {
     twiml.say({ voice: "Polly.Joanna" }, greeting.trim());
   }
 
-  if (forwardingMode === "forward_to_number" && forwardingNumber) {
+  if (effectiveMode === "forward_to_number" && forwardingNumber) {
     const dial = twiml.dial({
       callerId: ENV.twilioPhoneNumber || "",
       record: callRecording ? "record-from-answer" : "do-not-record",
       action: `${callbackBaseUrl}/api/twilio/voice/status`,
     });
     dial.number(forwardingNumber);
-  } else if (forwardingMode === "forward_to_ai" && aiServiceNumber) {
+  } else if (effectiveMode === "forward_to_ai" && aiServiceNumber) {
     const dial = twiml.dial({
       callerId: ENV.twilioPhoneNumber || "",
       record: callRecording ? "record-from-answer" : "do-not-record",
@@ -78,11 +139,13 @@ export async function buildInboundCallTwiml(callbackBaseUrl: string): Promise<st
     });
     dial.number(aiServiceNumber);
   } else {
-    // Voicemail (or fallback when no number is configured)
+    // Voicemail (or fallback when no number is configured, or after-hours)
+    const afterHoursMsg = !withinHours
+      ? "You've reached Handy Pioneers. Our office is currently closed. Please leave a message after the beep and we'll call you back during business hours."
+      : "You've reached Handy Pioneers. We're unavailable right now. Please leave a message after the beep and we'll call you back shortly.";
     twiml.say(
       { voice: "Polly.Joanna" },
-      greeting?.trim() ||
-        "You've reached Handy Pioneers. We're unavailable right now. Please leave a message after the beep and we'll call you back shortly."
+      greeting?.trim() || afterHoursMsg
     );
     twiml.record({
       maxLength: 120,

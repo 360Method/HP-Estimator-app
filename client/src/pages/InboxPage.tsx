@@ -242,6 +242,7 @@ export default function InboxPage() {
   const [composeBody, setComposeBody] = useState('');
   const [composeSubject, setComposeSubject] = useState('');
   const [mobileScreen, setMobileScreen] = useState<MobileScreen>('list');
+  const [threadTab, setThreadTab] = useState<'all' | 'calls'>('all');
 
   const threadEndRef = useRef<HTMLDivElement>(null);
 
@@ -254,6 +255,12 @@ export default function InboxPage() {
       { customerId: selectedCustomerId! },
       { enabled: !!selectedCustomerId }
     );
+
+  const primaryConvId = unifiedFeed?.conversationId ?? null;
+  const { data: callLogItems = [] } = trpc.inbox.callLogs.byConversation.useQuery(
+    { conversationId: primaryConvId! },
+    { enabled: !!primaryConvId && threadTab === 'calls' }
+  );
 
   const { data: twilioStatus } = trpc.inbox.twilio.status.useQuery();
   const { data: gmailStatus } = trpc.gmail.status.useQuery();
@@ -529,9 +536,111 @@ export default function InboxPage() {
             </div>
           </div>
 
+          {/* Thread tab bar */}
+          <div className="flex items-center gap-1 px-4 py-2 border-b border-border flex-shrink-0 bg-background">
+            {(['all', 'calls'] as const).map(tab => (
+              <button
+                key={tab}
+                onClick={() => setThreadTab(tab)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                  threadTab === tab
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-muted'
+                }`}
+              >
+                {tab === 'all' ? <MessageSquare size={11} /> : <Phone size={11} />}
+                {tab === 'all' ? 'All' : 'Calls'}
+              </button>
+            ))}
+          </div>
+
           {/* Feed */}
           <div className="flex-1 overflow-y-auto px-4 py-4">
-            {feedLoading ? (
+            {threadTab === 'calls' ? (
+              callLogItems.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
+                  <Phone className="w-10 h-10 text-muted-foreground/30" />
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">No calls yet</p>
+                    <p className="text-xs text-muted-foreground/60 mt-1">Inbound calls will appear here</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {callLogItems.map(log => {
+                    const mins = Math.floor((log.durationSecs ?? 0) / 60);
+                    const secs = (log.durationSecs ?? 0) % 60;
+                    const durationStr = log.durationSecs
+                      ? `${mins}m ${secs}s`
+                      : null;
+                    const statusColors: Record<string, string> = {
+                      answered: 'text-green-600 dark:text-green-400',
+                      missed: 'text-red-500',
+                      voicemail: 'text-amber-500',
+                      busy: 'text-orange-500',
+                      'no-answer': 'text-red-400',
+                    };
+                    const statusColor = statusColors[log.status] ?? 'text-muted-foreground';
+                    return (
+                      <div key={log.id} className="flex items-start gap-3 p-3 rounded-lg border border-border bg-card">
+                        <div className={`mt-0.5 p-1.5 rounded-full ${
+                          log.direction === 'inbound' ? 'bg-blue-500/10' : 'bg-muted'
+                        }`}>
+                          {log.direction === 'inbound'
+                            ? <PhoneIncoming size={13} className="text-blue-500" />
+                            : <PhoneOutgoing size={13} className="text-muted-foreground" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-semibold text-foreground capitalize">
+                              {log.direction} call
+                            </span>
+                            <span className={`text-xs font-medium capitalize ${statusColor}`}>
+                              {log.status}
+                            </span>
+                            {durationStr && (
+                              <span className="text-xs text-muted-foreground flex items-center gap-0.5">
+                                <Clock size={10} />{durationStr}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            {new Date(log.startedAt).toLocaleString()}
+                          </p>
+                          {log.callerPhone && (
+                            <p className="text-xs text-muted-foreground">{log.callerPhone}</p>
+                          )}
+                          {(log.recordingUrl || log.voicemailUrl) && (
+                            <div className="mt-2 flex gap-2">
+                              {log.recordingUrl && (
+                                <a
+                                  href={log.recordingUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-primary underline flex items-center gap-1"
+                                >
+                                  <Phone size={10} /> Recording
+                                </a>
+                              )}
+                              {log.voicemailUrl && (
+                                <a
+                                  href={log.voicemailUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-primary underline flex items-center gap-1"
+                                >
+                                  <MessageSquare size={10} /> Voicemail
+                                </a>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )
+            ) : feedLoading ? (
               <div className="flex items-center justify-center h-full text-muted-foreground text-sm">Loading...</div>
             ) : groupedFeed.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full gap-3 text-center">

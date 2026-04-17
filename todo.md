@@ -1881,3 +1881,17 @@
 - [x] Inbox customer list shows "Unknown" badge for auto-created stub customers
 - [x] Thread header has View Profile button (Users icon) to navigate to customer profile
 - [x] Add linkConversationToCustomer tRPC procedure so staff can manually re-link a call to a different customer
+
+## Stub Merge + After-Hours + Calls Tab
+
+- [x] Add mergeStubIntoCustomer DB helper: re-link all conversations, call logs, messages, opportunities, invoices to target, delete stub
+- [x] Add customers.mergeStub tRPC procedure
+- [x] Show "Merge into customer" amber banner in CustomerSection for stub customers (leadSource=inbound_call)
+- [x] StubMergeDialog: customer picker with search, merge confirmation, navigates to merged customer after
+- [x] Add afterHoursEnabled, businessHoursStart, businessHoursEnd, businessDays columns to phoneSettings schema
+- [x] Run db:push for phoneSettings schema change
+- [x] Add After-Hours section to Settings → Phone tab (enable toggle, days checkboxes, start/end time pickers)
+- [x] Update /api/twilio/voice/inbound to check business hours via isBusinessHours() and route to voicemail if outside hours
+- [x] Add All/Calls tab bar to Inbox thread panel
+- [x] Calls tab shows call log cards: direction icon, status badge, duration, timestamp, recording/voicemail links
+- [x] Add listCallLogsByConversation() to db.ts and inbox.callLogs.byConversation tRPC procedure

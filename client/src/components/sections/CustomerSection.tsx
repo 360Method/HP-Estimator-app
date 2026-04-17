@@ -554,7 +554,86 @@ function PipelineAreaPanel({
   );
 }
 
-// ─── Main CustomerSection ─────────────────────────────────────
+// ─── Stub Merge Dialog ────────────────────────────────────────────────────────────────
+interface StubMergeDialogProps {
+  stubId: string;
+  customers: any[];
+  onClose: () => void;
+  onMerge: (targetId: string) => void;
+  isPending: boolean;
+}
+function StubMergeDialog({ stubId, customers, onClose, onMerge, isPending }: StubMergeDialogProps) {
+  const [query, setQuery] = useState('');
+  const realCustomers = customers.filter(c =>
+    c.id !== stubId &&
+    !(c as any).mergedIntoId &&
+    c.leadSource !== 'inbound_call'
+  );
+  const filtered = realCustomers.filter(c => {
+    if (!query.trim()) return true;
+    const q = query.toLowerCase();
+    return (
+      (c.displayName ?? '').toLowerCase().includes(q) ||
+      (c.firstName ?? '').toLowerCase().includes(q) ||
+      (c.lastName ?? '').toLowerCase().includes(q) ||
+      (c.mobilePhone ?? '').includes(q) ||
+      (c.email ?? '').toLowerCase().includes(q)
+    );
+  }).slice(0, 40);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="bg-background border border-border rounded-xl shadow-2xl w-full max-w-md">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <div>
+            <p className="font-semibold text-foreground">Merge into existing customer</p>
+            <p className="text-xs text-muted-foreground mt-0.5">All calls and messages will move to the selected profile.</p>
+          </div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X size={16} /></button>
+        </div>
+        <div className="px-5 py-3 border-b border-border">
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              autoFocus
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Search by name, phone, or email…"
+              className="field-input w-full pl-8"
+            />
+          </div>
+        </div>
+        <div className="max-h-72 overflow-y-auto divide-y divide-border">
+          {filtered.length === 0 && (
+            <div className="px-5 py-8 text-center text-sm text-muted-foreground">No matching customers found</div>
+          )}
+          {filtered.map(c => (
+            <button
+              key={c.id}
+              onClick={() => onMerge(c.id)}
+              disabled={isPending}
+              className="w-full flex items-center gap-3 px-5 py-3 hover:bg-muted/50 transition-colors text-left disabled:opacity-50"
+            >
+              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                <User size={14} className="text-primary" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground truncate">
+                  {[c.firstName, c.lastName].filter(Boolean).join(' ') || c.displayName || c.company || 'Unknown'}
+                </p>
+                <p className="text-xs text-muted-foreground truncate">{c.mobilePhone || c.email || ''}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+        <div className="px-5 py-3 border-t border-border">
+          <button onClick={onClose} className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors">Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main CustomerSection ────────────────────────────────────────────────────────────────
 export default function CustomerSection() {
   const {
     state, setJobInfo, setCustomerProfile, addActivityEvent, setCustomerTab,
@@ -608,6 +687,16 @@ export default function CustomerSection() {
   const [addrLatLng, setAddrLatLng] = useState<{ lat?: number; lng?: number }>({}); // for map preview in form
   // Merge dialog state
   const [showMergeDialog, setShowMergeDialog] = useState(false);
+  // Stub merge dialog state (for unknown-caller auto-created customers)
+  const [showStubMergeDialog, setShowStubMergeDialog] = useState(false);
+  const mergeStubMutation = trpc.customers.mergeStub.useMutation({
+    onSuccess: (_data, vars) => {
+      removeCustomer(vars.stubId);
+      setShowStubMergeDialog(false);
+      toast.success('Caller linked to customer profile');
+    },
+    onError: (err) => toast.error(err.message),
+  });
 
   // ── Derived ──
   // Prefer the customer record's name fields so DB-synced customers always show
@@ -1640,6 +1729,23 @@ export default function CustomerSection() {
         </div>
       </div>
 
+      {/* ── Stub Merge Banner ── */}
+      {activeCustomer?.leadSource === 'inbound_call' && !activeCustomer?.firstName && !activeCustomer?.email && activeCustomerId && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-sm text-amber-800">
+            <PhoneCall size={14} className="shrink-0 text-amber-600" />
+            <span><strong>Unknown caller</strong> — identify this caller and merge their history into the correct customer profile.</span>
+          </div>
+          <button
+            onClick={() => setShowStubMergeDialog(true)}
+            className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-semibold hover:bg-amber-700 transition-colors"
+          >
+            <GitMerge size={12} />
+            Merge into customer
+          </button>
+        </div>
+      )}
+
       {/* ── Tab Nav ── */}
       <div className="bg-white border-b border-border sticky top-[var(--header-h,112px)] z-10">
         <div className="max-w-6xl mx-auto px-4">
@@ -1884,6 +1990,17 @@ export default function CustomerSection() {
           removeCustomer(sourceId);
           setShowMergeDialog(false);
         }}
+      />
+    )}
+
+    {/* Stub Merge Dialog — pick a real customer to absorb this unknown-caller stub */}
+    {showStubMergeDialog && activeCustomerId && (
+      <StubMergeDialog
+        stubId={activeCustomerId}
+        customers={customers}
+        onClose={() => setShowStubMergeDialog(false)}
+        onMerge={(targetId) => mergeStubMutation.mutate({ stubId: activeCustomerId, targetId })}
+        isPending={mergeStubMutation.isPending}
       />
     )}
 

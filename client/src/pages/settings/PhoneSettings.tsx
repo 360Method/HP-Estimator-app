@@ -3,7 +3,7 @@
 // ============================================================
 
 import { useState } from 'react';
-import { Phone, PhoneForwarded, Bot, Voicemail, TestTube, Save, Loader2 } from 'lucide-react';
+import { Phone, PhoneForwarded, Bot, Voicemail, TestTube, Save, Loader2, Clock } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,6 +12,16 @@ import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 
 type ForwardingMode = 'forward_to_number' | 'forward_to_ai' | 'voicemail';
+
+const DAYS = [
+  { num: 0, label: 'Sun' },
+  { num: 1, label: 'Mon' },
+  { num: 2, label: 'Tue' },
+  { num: 3, label: 'Wed' },
+  { num: 4, label: 'Thu' },
+  { num: 5, label: 'Fri' },
+  { num: 6, label: 'Sat' },
+];
 
 export default function PhoneSettings() {
   const { data: settings, isLoading, refetch } = trpc.phone.getSettings.useQuery();
@@ -22,6 +32,10 @@ export default function PhoneSettings() {
   const [greeting, setGreeting] = useState<string | null>(null);
   const [callRecording, setCallRecording] = useState<boolean | null>(null);
   const [transcribeVoicemail, setTranscribeVoicemail] = useState<boolean | null>(null);
+  const [afterHoursEnabled, setAfterHoursEnabled] = useState<boolean | null>(null);
+  const [businessHoursStart, setBusinessHoursStart] = useState<string | null>(null);
+  const [businessHoursEnd, setBusinessHoursEnd] = useState<string | null>(null);
+  const [businessDays, setBusinessDays] = useState<string | null>(null);
   const [testNumber, setTestNumber] = useState('');
 
   // Use server values as defaults when local state is null
@@ -31,6 +45,22 @@ export default function PhoneSettings() {
   const effectiveGreeting = greeting ?? settings?.greeting ?? '';
   const effectiveCallRecording = callRecording ?? settings?.callRecording ?? false;
   const effectiveTranscribeVoicemail = transcribeVoicemail ?? settings?.transcribeVoicemail ?? true;
+  const effectiveAfterHoursEnabled = afterHoursEnabled ?? settings?.afterHoursEnabled ?? false;
+  const effectiveBusinessHoursStart = businessHoursStart ?? settings?.businessHoursStart ?? '08:00';
+  const effectiveBusinessHoursEnd = businessHoursEnd ?? settings?.businessHoursEnd ?? '17:00';
+  const effectiveBusinessDays = businessDays ?? settings?.businessDays ?? '1,2,3,4,5';
+
+  const selectedDays = effectiveBusinessDays.split(',').map(Number).filter(n => !isNaN(n));
+
+  const toggleDay = (dayNum: number) => {
+    const current = new Set(selectedDays);
+    if (current.has(dayNum)) {
+      current.delete(dayNum);
+    } else {
+      current.add(dayNum);
+    }
+    setBusinessDays(Array.from(current).sort((a, b) => a - b).join(','));
+  };
 
   const updateMutation = trpc.phone.updateSettings.useMutation({
     onSuccess: () => {
@@ -59,6 +89,10 @@ export default function PhoneSettings() {
       greeting: effectiveGreeting,
       callRecording: effectiveCallRecording,
       transcribeVoicemail: effectiveTranscribeVoicemail,
+      afterHoursEnabled: effectiveAfterHoursEnabled,
+      businessHoursStart: effectiveBusinessHoursStart,
+      businessHoursEnd: effectiveBusinessHoursEnd,
+      businessDays: effectiveBusinessDays,
     });
   };
 
@@ -212,6 +246,71 @@ export default function PhoneSettings() {
               checked={effectiveTranscribeVoicemail}
               onCheckedChange={v => setTranscribeVoicemail(v)}
             />
+          </div>
+        )}
+      </div>
+
+      {/* After-hours routing */}
+      <div className="border border-border rounded-lg p-4 space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Clock size={15} className="text-muted-foreground" />
+            <div>
+              <p className="text-sm font-semibold text-foreground">After-Hours Voicemail</p>
+              <p className="text-xs text-muted-foreground">Route calls to voicemail outside business hours</p>
+            </div>
+          </div>
+          <Switch
+            checked={effectiveAfterHoursEnabled}
+            onCheckedChange={v => setAfterHoursEnabled(v)}
+          />
+        </div>
+
+        {effectiveAfterHoursEnabled && (
+          <div className="space-y-4 pt-2 border-t border-border">
+            {/* Business days */}
+            <div className="space-y-2">
+              <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Business Days</Label>
+              <div className="flex gap-1.5 flex-wrap">
+                {DAYS.map(({ num, label }) => (
+                  <button
+                    key={num}
+                    type="button"
+                    onClick={() => toggleDay(num)}
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors border ${
+                      selectedDays.includes(num)
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-card text-muted-foreground border-border hover:border-primary/50'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Business hours */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="hours-start" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Opens</Label>
+                <Input
+                  id="hours-start"
+                  type="time"
+                  value={effectiveBusinessHoursStart}
+                  onChange={e => setBusinessHoursStart(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="hours-end" className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Closes</Label>
+                <Input
+                  id="hours-end"
+                  type="time"
+                  value={effectiveBusinessHoursEnd}
+                  onChange={e => setBusinessHoursEnd(e.target.value)}
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">Times are in Pacific Time (America/Los_Angeles).</p>
           </div>
         )}
       </div>
