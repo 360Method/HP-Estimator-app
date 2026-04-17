@@ -288,9 +288,24 @@ export default function PhoneSettings() {
   }
 
   const MODES: { id: ForwardingMode; label: string; desc: string; icon: React.ElementType }[] = [
-    { id: 'forward_to_number', label: 'Forward to personal cell', desc: 'Inbound calls are forwarded to your personal phone number.', icon: PhoneForwarded },
-    { id: 'forward_to_ai', label: 'Forward to AI answering service', desc: 'Inbound calls are forwarded to an AI answering service number.', icon: Bot },
-    { id: 'voicemail', label: 'Voicemail only (saved in app)', desc: 'Callers hear a prompt and leave a voicemail. Saved to their customer profile.', icon: Voicemail },
+    {
+      id: 'forward_to_number',
+      label: 'Ring cell first, then AI / voicemail',
+      desc: 'Rings your personal cell for ~2 rings (10 s). If unanswered, the call falls through to your AI service or system voicemail — no voicemail ever goes to your personal cell.',
+      icon: PhoneForwarded,
+    },
+    {
+      id: 'forward_to_ai',
+      label: 'Forward directly to AI answering service',
+      desc: 'Skips the personal cell entirely. All calls go straight to your AI answering service number.',
+      icon: Bot,
+    },
+    {
+      id: 'voicemail',
+      label: 'System voicemail only (saved in app)',
+      desc: 'Callers hear your voicemail prompt and leave a message. Recordings are saved to their customer profile — never to a personal phone.',
+      icon: Voicemail,
+    },
   ];
 
   const isForwardingMode = effectiveMode === 'forward_to_number' || effectiveMode === 'forward_to_ai';
@@ -339,19 +354,36 @@ export default function PhoneSettings() {
 
       {/* Forwarding number */}
       {effectiveMode === 'forward_to_number' && (
-        <div className="space-y-2">
-          <Label htmlFor="forwarding-number">Forwarding Number</Label>
-          <Input id="forwarding-number" placeholder="+18157933243" value={effectiveForwardingNumber} onChange={e => setForwardingNumber(e.target.value)} />
-          <p className="text-xs text-muted-foreground">E.164 format (e.g. +18157933243)</p>
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <Label htmlFor="forwarding-number">Personal Cell Number</Label>
+            <Input id="forwarding-number" placeholder="+18157933243" value={effectiveForwardingNumber} onChange={e => setForwardingNumber(e.target.value)} />
+            <p className="text-xs text-muted-foreground">E.164 format (e.g. +18157933243). Rings for ~2 rings (10 s) then falls through.</p>
+          </div>
+          {/* Stage-2 fallback info */}
+          <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-1">
+            <p className="text-xs font-semibold text-foreground">Stage 2 — if cell doesn't answer</p>
+            <p className="text-xs text-muted-foreground">
+              {effectiveAiServiceNumber
+                ? `Forwards to AI service: ${effectiveAiServiceNumber}`
+                : 'Routes to system voicemail (recording saved in app). Set an AI Service Number below to forward to AI instead.'}
+            </p>
+          </div>
+          {/* AI service number (optional stage-2 override) */}
+          <div className="space-y-2">
+            <Label htmlFor="ai-number-fallback">AI Service Number <span className="text-muted-foreground font-normal">(optional — stage 2 fallback)</span></Label>
+            <Input id="ai-number-fallback" placeholder="+18157939999" value={effectiveAiServiceNumber} onChange={e => setAiServiceNumber(e.target.value)} />
+            <p className="text-xs text-muted-foreground">If set, unanswered calls go to this AI service instead of system voicemail.</p>
+          </div>
         </div>
       )}
 
-      {/* AI service number */}
+      {/* AI service number (direct mode) */}
       {effectiveMode === 'forward_to_ai' && (
         <div className="space-y-2">
           <Label htmlFor="ai-number">AI Service Number</Label>
           <Input id="ai-number" placeholder="+18157939999" value={effectiveAiServiceNumber} onChange={e => setAiServiceNumber(e.target.value)} />
-          <p className="text-xs text-muted-foreground">Phone number of your AI answering service</p>
+          <p className="text-xs text-muted-foreground">All inbound calls go directly to this number. No personal cell involved.</p>
         </div>
       )}
 
@@ -485,7 +517,7 @@ export default function PhoneSettings() {
       <div className="border border-amber-500/30 bg-amber-500/5 rounded-lg p-4 space-y-2">
         <p className="text-sm font-semibold text-amber-600 dark:text-amber-400">Twilio Console Setup Required</p>
         <p className="text-xs text-muted-foreground">
-          For inbound calls to route correctly, set the Voice webhook on your Twilio number to:
+          Set the Voice webhook on your Twilio number to:
         </p>
         <code className="block text-xs bg-muted rounded px-3 py-2 font-mono break-all">
           https://pro.handypioneers.com/api/twilio/voice/inbound
@@ -495,6 +527,10 @@ export default function PhoneSettings() {
           <a href="https://console.twilio.com/us1/develop/phone-numbers/manage/incoming" target="_blank" rel="noopener noreferrer" className="text-primary underline">
             Twilio Console → Phone Numbers → Manage → Active Numbers
           </a>.
+        </p>
+        <p className="text-xs text-muted-foreground mt-1">
+          <strong>Important:</strong> Voicemails are always saved to the app — never to your personal cell.
+          The fallback route <code className="text-[10px] bg-muted px-1 rounded">/api/twilio/voice/fallback</code> is handled automatically.
         </p>
       </div>
     </div>

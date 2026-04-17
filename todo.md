@@ -1915,3 +1915,21 @@
 - [x] Update PhoneSettings UI: separate "Call Greeting" and "Voicemail Prompt" editors with own example sets
 - [x] Confirm voicemails save to app DB (callLogs table via /api/twilio/voice/voicemail callback), not to personal cell
 - [x] Fix voicemail callback in index.ts to call handleCallStatusUpdate so recording URL is persisted to callLogs
+
+## Outbound Call Fix (VoiceCallPanel)
+
+- [ ] Diagnose why the call button in VoiceCallPanel fails
+- [ ] Fix Twilio Device initialization / token fetch
+- [ ] Fix /api/twilio/voice/connect TwiML endpoint if needed
+- [ ] Fix /api/twilio/token endpoint if missing or broken
+- [ ] Verify TwiML App SID is configured in Twilio Console
+- [ ] Test outbound call end-to-end
+
+## Two-Stage Inbound Call Routing
+
+- [x] Update buildInboundCallTwiml: business hours → <Dial timeout=10 action=/fallback> to cell (~2 rings), then fallback
+- [x] After hours → skip cell entirely, go straight to AI service or system voicemail
+- [x] Add /api/twilio/voice/fallback route: reads DialCallStatus, routes to AI or system voicemail
+- [x] Voicemail NEVER goes to personal cell — all recordings saved to app DB (callLogs)
+- [x] buildFallbackTwiml exported for reuse by both fallback route and after-hours path
+- [x] PhoneSettings UI updated: new mode labels, stage-2 info panel, AI fallback number field in cell mode

@@ -18,7 +18,7 @@ import { getPortalInvoiceByStripePaymentIntentId, updatePortalInvoicePaid, getPo
 import { create360MembershipFromWebhook, create360PortfolioMembershipsFromWebhook, releaseDeferredLaborBankCredits } from "../threeSixtyWebhook.ts";
 import { sendEmail } from "../gmail";
 import { notifyOwner } from "../_core/notification";
-import { buildInboundCallTwiml } from "../phone";
+import { buildInboundCallTwiml, buildFallbackTwiml, getPhoneSettings } from "../phone";
 import { randomUUID } from "crypto";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -252,6 +252,39 @@ async function startServer() {
     }
   });
 
+  // ── Twilio Voice — stage-2 fallback (cell didn't answer) ─────────────────
+  // POST /api/twilio/voice/fallback — Twilio POSTs here when the <Dial> to the
+  // personal cell completes without being answered (no-answer, busy, failed).
+  // Routes to AI service or system voicemail — NEVER to personal cell voicemail.
+  app.post("/api/twilio/voice/fallback", express.urlencoded({ extended: false }), async (req, res) => {
+    try {
+      const forwardedProto = (req.headers["x-forwarded-proto"] as string) || req.protocol;
+      const forwardedHost = (req.headers["x-forwarded-host"] as string) || req.get("host") || "localhost";
+      const proto = forwardedProto.split(",")[0].trim();
+      const host = forwardedHost.split(",")[0].trim();
+      const callbackBaseUrl = `${proto}://${host}`;
+      const dialCallStatus = req.body.DialCallStatus as string | undefined;
+      console.log(`[Voice Fallback] DialCallStatus=${dialCallStatus}`);
+      // If the cell actually answered and completed, return empty TwiML
+      if (dialCallStatus === "completed") {
+        res.set("Content-Type", "text/xml");
+        res.send("<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response></Response>");
+        return;
+      }
+      // Cell didn't answer — route to AI service or system voicemail
+      const settings = await getPhoneSettings();
+      const twimlXml = buildFallbackTwiml(settings, callbackBaseUrl, false);
+      res.set("Content-Type", "text/xml");
+      res.send(twimlXml);
+    } catch (err) {
+      console.error("[Voice Fallback] Error:", err);
+      const VoiceResponse = twilio.twiml.VoiceResponse;
+      const twiml = new VoiceResponse();
+      twiml.say({ voice: "Polly.Joanna" }, "We're sorry, we're unable to take your call right now. Please try again later.");
+      res.set("Content-Type", "text/xml");
+      res.send(twiml.toString());
+    }
+  });
   // ── Twilio Voice — voicemail recording callback ────────────────────────────
   // POST /api/twilio/voice/voicemail — called after voicemail is recorded
   // Persists the recording to the app DB (callLogs) AND notifies the owner.
