@@ -222,6 +222,11 @@ export default function PortalHome() {
   const { data, isLoading, refetch } = trpc.portal.getDashboard.useQuery(undefined, {
     refetchOnWindowFocus: true,
   });
+  // Must be declared before any early returns to avoid React error #310 (hooks order)
+  const { data: membershipData } = trpc.portal.getMembership360.useQuery(undefined, {
+    refetchOnWindowFocus: false,
+  });
+  const { data: teamInfo } = trpc.portal.getTeamInfo.useQuery();
 
   if (isLoading) {
     return (
@@ -238,14 +243,6 @@ export default function PortalHome() {
   const invoices = data?.invoices ?? [];
   const appointments = data?.appointments ?? [];
   const unreadMessages = data?.unreadMessages ?? 0;
-
-  // 360° membership
-  const { data: membershipData } = trpc.portal.getMembership360.useQuery(undefined, {
-    refetchOnWindowFocus: false,
-  });
-
-  // Your Team card
-  const { data: teamInfo } = trpc.portal.getTeamInfo.useQuery();
 
   const pendingEstimates = estimates.filter((e) => e.status === "sent" || e.status === "viewed");
   const openInvoices = invoices.filter((i) => i.status !== "paid");
