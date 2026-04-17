@@ -1977,3 +1977,10 @@
 - [x] Unified feed in profile: show channel icon, direction badge, body preview, timestamp, and audio player for call recordings
 - [x] Unified feed: auto-refresh on SSE new_message event so profile stays live without manual reload
 - [x] Unified feed: show empty state with quick-action prompt when no activity yet
+
+## Communication Interconnect Upgrade (Apr 17 — Round 2)
+
+- [x] Add unified activity feed to Lead/Estimate/Job detail views (PipelineBoard opportunity detail panel) — shows all customer messages filtered to that customer, with channel icons and timestamps
+- [x] Add "Open in Inbox" arrow button on each feed item in the profile Activity Feed — navigates to the Inbox tab and opens that conversation
+- [x] Add unread message badge (red dot + count) on customer profile header avatar/name area
+- [x] Add unread badge on customer list rows in CustomersListPage

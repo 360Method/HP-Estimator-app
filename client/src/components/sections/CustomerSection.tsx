@@ -41,6 +41,7 @@ import AddressMapPreview from '@/components/AddressMapPreview';
 import InvoiceSection from '@/components/sections/InvoiceSection';
 import CustomerExpensesTab from '@/components/CustomerExpensesTab';
 import VoiceCallPanel from '@/components/VoiceCallPanel';
+import CustomerActivityFeed from '@/components/CustomerActivityFeed';
 import ManualMergeFlow from '@/components/ManualMergeFlow';
 import { useInboxSSE } from '@/hooks/useInboxSSE';
 import DuplicateSuggestionBanner from '@/components/DuplicateSuggestionBanner';
@@ -756,6 +757,8 @@ export default function CustomerSection() {
   const feedConversationId = unifiedFeedData?.conversationId ?? null;
   const feedContactPhone = unifiedFeedData?.contactPhone ?? null;
   const feedContactEmail = unifiedFeedData?.contactEmail ?? null;
+  // Unread count for the badge in the profile header
+  const unreadBadgeCount = unifiedFeedData?.unreadCount ?? 0;
 
   // Auto-refresh unified feed on SSE new_message events
   useInboxSSE({
@@ -1629,78 +1632,9 @@ export default function CustomerSection() {
               ><Phone size={13} /></button>
             </div>
 
-            {/* Feed */}
-            {feedLoading ? (
-              <div className="text-center py-8 text-muted-foreground text-sm">
-                <RefreshCw size={16} className="mx-auto mb-2 animate-spin opacity-50" />
-                Loading activity…
-              </div>
-            ) : unifiedFeed.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground text-sm border-2 border-dashed border-border rounded-xl">
-                <Inbox size={24} className="mx-auto mb-2 opacity-30" />
-                No activity yet. SMS, calls, emails, and notes will all appear here.
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {[...unifiedFeed].reverse().map(item => {
-                  const isInbound = item.direction === 'inbound';
-                  const channelIcon = item.channel === 'sms' ? <MessageSquare size={13} className="text-primary" /> :
-                    item.channel === 'email' ? <Mail size={13} className="text-sky-500" /> :
-                    item.channel === 'call' ? <PhoneCall size={13} className="text-emerald-500" /> :
-                    item.channel === 'portal' ? <AtSign size={13} className="text-violet-500" /> :
-                    item.channel === 'note' ? <StickyNote size={13} className="text-amber-500" /> :
-                    <MessageSquare size={13} className="text-muted-foreground" />;
-                  const channelLabel = item.channel === 'sms' ? 'SMS' :
-                    item.channel === 'email' ? 'Email' :
-                    item.channel === 'call' ? 'Call' :
-                    item.channel === 'portal' ? 'Portal' :
-                    item.channel === 'note' ? 'Note' : item.channel;
-                  return (
-                    <div key={item.id} className="flex items-start gap-3 p-3 rounded-xl border bg-card hover:bg-muted/30 transition-colors">
-                      <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center shrink-0 mt-0.5">
-                        {channelIcon}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{channelLabel}</span>
-                          <span className={`inline-flex items-center gap-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
-                            isInbound ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-                          }`}>
-                            {isInbound ? <ArrowDownLeft size={9} /> : <ArrowUpRight size={9} />}
-                            {isInbound ? 'In' : 'Out'}
-                          </span>
-                          {item.isInternal && (
-                            <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">Internal</span>
-                          )}
-                          {item.subject && (
-                            <span className="text-xs text-muted-foreground truncate max-w-[200px]" title={item.subject}>{item.subject}</span>
-                          )}
-                        </div>
-                        <p className="text-sm text-foreground line-clamp-2">{item.body || '(no content)'}</p>
-                        {/* Recording player for call items */}
-                        {item.channel === 'call' && (item as any).recordingAppUrl && (
-                          <audio
-                            controls
-                            src={(item as any).recordingAppUrl}
-                            className="mt-2 h-8 w-full max-w-xs"
-                            preload="none"
-                          />
-                        )}
-                        {/* Attachment */}
-                        {item.attachmentUrl && (
-                          <a href={item.attachmentUrl} target="_blank" rel="noreferrer"
-                            className="inline-flex items-center gap-1 mt-1 text-xs text-primary hover:underline">
-                            <Paperclip size={11} /> Attachment
-                          </a>
-                        )}
-                      </div>
-                      <div className="text-[10px] text-muted-foreground shrink-0 mt-0.5">
-                        {fmtRelative(new Date(item.sentAt).toISOString())}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+            {/* Feed — shared CustomerActivityFeed component */}
+            {activeCustomerId && (
+              <CustomerActivityFeed customerId={activeCustomerId} />
             )}
           </div>
         </div>
@@ -1792,7 +1726,15 @@ export default function CustomerSection() {
           </div>
           {/* Name + actions */}
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <h1 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">{displayName}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">{displayName}</h1>
+              {/* Unread badge */}
+              {unreadBadgeCount > 0 && (
+                <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none" title={`${unreadBadgeCount} unread message${unreadBadgeCount > 1 ? 's' : ''}`}>
+                  {unreadBadgeCount > 99 ? '99+' : unreadBadgeCount}
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-2 shrink-0 flex-wrap">
               {/* 360° Health Score badge */}
               {latestScan && latestScan.healthScore !== null && (

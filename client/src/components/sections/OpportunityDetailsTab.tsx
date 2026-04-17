@@ -12,13 +12,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import {
-  User, Phone, Mail, MapPin, FileText, Briefcase,
+  User, Phone, Mail, MapPin, FileText, Briefcase, MessageSquare,
   Star, ChevronRight, Lock, ExternalLink, Calendar, DollarSign, ArrowLeft, ArrowRight, Pencil, Check, X, RefreshCw,
 } from 'lucide-react';
 import type { Opportunity } from '@/lib/types';
 import LeadNurturingPanel from '@/components/sections/LeadNurturingPanel';
 import EstimateDetailsPanel from '@/components/sections/EstimateDetailsPanel';
 import { ConvertToEstimateModal } from '@/components/ConversionModal';
+import CustomerActivityFeed from '@/components/CustomerActivityFeed';
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -447,6 +448,18 @@ export default function OpportunityDetailsTab() {
             })}
           </CardContent>
         </Card>
+      )}
+
+      {/* Customer Activity Feed — all comms for this customer */}
+      {state.activeCustomerId && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            <MessageSquare size={13} />
+            <span>Customer Activity</span>
+            <span className="ml-auto font-normal normal-case">All channels — live</span>
+          </div>
+          <CustomerActivityFeed customerId={state.activeCustomerId} compact />
+        </div>
       )}
 
       {/* Convert to Estimate modal */}

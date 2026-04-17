@@ -266,6 +266,19 @@ export default function CustomersListPage() {
     { enabled: visibleCols.has('healthScore') && customerIds.length > 0 }
   );
 
+  // ── Unread message counts per customer (for badge in list rows) ──
+  const { data: customerActivity } = trpc.inbox.customerList.listWithActivity.useQuery(
+    undefined,
+    { staleTime: 30_000 }
+  );
+  const unreadByCustomer = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const a of customerActivity ?? []) {
+      if (a.unreadCount > 0) map.set(a.customerId, a.unreadCount);
+    }
+    return map;
+  }, [customerActivity]);
+
   const hasActiveFilters = !!(filterType || filterLeadSource || filterTags.length || filterCity || filterDateCreatedFrom || filterDateCreatedTo || filterLifetimeMin || filterLifetimeMax);
 
   const filtered = useMemo(() => {
@@ -606,10 +619,20 @@ export default function CustomersListPage() {
                         <Checkbox checked={isSelected} onCheckedChange={() => toggleSelect(c.id)} />
                       </td>
                       <td className="py-2.5 pr-4">
-                        <span className="font-medium text-foreground hover:text-primary">{displayName}</span>
-                        {(c as any).addresses?.length > 1 && (
-                          <Badge variant="secondary" className="ml-2 text-[10px] py-0">{(c as any).addresses.length} props</Badge>
-                        )}
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="font-medium text-foreground hover:text-primary">{displayName}</span>
+                          {(unreadByCustomer.get(c.id) ?? 0) > 0 && (
+                            <span
+                              className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold leading-none"
+                              title={`${unreadByCustomer.get(c.id)} unread`}
+                            >
+                              {(unreadByCustomer.get(c.id) ?? 0) > 99 ? '99+' : unreadByCustomer.get(c.id)}
+                            </span>
+                          )}
+                          {(c as any).addresses?.length > 1 && (
+                            <Badge variant="secondary" className="text-[10px] py-0">{(c as any).addresses.length} props</Badge>
+                          )}
+                        </span>
                       </td>
                       {visibleCols.has('company') && (
                         <td className="py-2.5 pr-4 text-muted-foreground">{c.company || '—'}</td>
