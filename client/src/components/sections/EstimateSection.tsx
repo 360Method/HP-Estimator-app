@@ -9,7 +9,7 @@ import { useMemo, useState, useCallback } from 'react';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { calcPhase, calcCustomItem, calcTotals, fmtDollar, fmtPct, getMarginFlag } from '@/lib/calc';
 import { ALL_PHASES } from '@/lib/phases';
-import { LineItem, PhaseGroup, EstimatePhaseOverride } from '@/lib/types';
+import { LineItem, PhaseGroup, EstimatePhaseOverride, CustomLineItem } from '@/lib/types';
 import {
   Copy, Printer, ChevronDown, ChevronUp, AlertTriangle,
   CheckCircle2, XCircle, Mail, Presentation, X, FileText, Send,
@@ -302,7 +302,7 @@ function EstimateHeader({ jobInfo, estimateNumber, today }: {
 
 // ─── Main component ───────────────────────────────────────────
 export default function EstimateSection() {
-  const { state, setSummaryNotes, setClientNote, setSection, updateOpportunity, upsertPhaseOverride, removePhaseOverride, setGlobal } = useEstimator();
+  const { state, setSummaryNotes, setClientNote, setSection, updateOpportunity, upsertPhaseOverride, removePhaseOverride, setGlobal, updateCustomItem } = useEstimator();
   const [showMatLabor, setShowMatLabor] = useState(false);
   const [expandedPhases, setExpandedPhases] = useState<Set<number>>(new Set());
   const [showTC, setShowTC] = useState(false);
@@ -316,6 +316,13 @@ export default function EstimateSection() {
   const [aiRewriting, setAiRewriting] = useState(false);
 
   const rewritePhaseMutation = trpc.estimate.rewritePhase.useMutation();
+  const rewriteCustomItemMutation = trpc.estimate.rewriteCustomItem.useMutation();
+
+  // Custom item inline editing state
+  const [editingCustomItemId, setEditingCustomItemId] = useState<string | null>(null);
+  const [draftCustomTitle, setDraftCustomTitle] = useState('');
+  const [draftCustomDescription, setDraftCustomDescription] = useState('');
+  const [aiRewritingCustom, setAiRewritingCustom] = useState(false);
 
   // Portal approval status — polls every 30s when estimate has been sent
   const portalApprovalQuery = trpc.portal.getPortalApprovalStatus.useQuery(
@@ -385,6 +392,42 @@ export default function EstimateSection() {
     if (editingPhaseId === phase.id) setEditingPhaseId(null);
     toast.success('Section reset to original');
   }, [removePhaseOverride, editingPhaseId]);
+
+  // ── Custom item inline editing ───────────────────────────────
+  const startEditCustomItem = useCallback((ci: CustomLineItem) => {
+    setDraftCustomTitle(ci.description);
+    setDraftCustomDescription(ci.notes ?? '');
+    setEditingCustomItemId(ci.id);
+  }, []);
+
+  const saveCustomItemEdit = useCallback((id: string) => {
+    updateCustomItem(id, { description: draftCustomTitle, notes: draftCustomDescription });
+    setEditingCustomItemId(null);
+    toast.success('Custom item updated');
+  }, [draftCustomTitle, draftCustomDescription, updateCustomItem]);
+
+  const cancelCustomItemEdit = useCallback(() => {
+    setEditingCustomItemId(null);
+  }, []);
+
+  const handleAiRewriteCustomItem = useCallback(async (id: string) => {
+    setAiRewritingCustom(true);
+    try {
+      const result = await rewriteCustomItemMutation.mutateAsync({
+        title: draftCustomTitle,
+        description: draftCustomDescription,
+        jobTitle: state.jobInfo.scope || state.jobInfo.jobNumber || 'Home Improvement Project',
+        customerName: state.jobInfo.client || 'Valued Customer',
+      });
+      setDraftCustomTitle(result.title);
+      setDraftCustomDescription(result.description);
+      toast.success('AI rewrite complete');
+    } catch {
+      toast.error('AI rewrite failed — try again');
+    } finally {
+      setAiRewritingCustom(false);
+    }
+  }, [draftCustomTitle, draftCustomDescription, state.jobInfo, rewriteCustomItemMutation]);
 
   const { phaseResults, customResults, totals } = useMemo(() => {
     const phaseResults = state.phases.map(p => calcPhase(p, state.global));
@@ -907,32 +950,102 @@ export default function EstimateSection() {
           )}
         </div>
 
-        {/* Custom items */}
+        {/* Custom Request Items — rich cards with inline editing + AI rewrite */}
         {customResults.length > 0 && (
           <div className="px-6 py-5 border-t border-border">
-            <div className="flex items-center gap-2 mb-3">
+            <div className="flex items-center gap-2 mb-4">
               <span className="text-lg">⚙️</span>
-              <h3 className="font-bold text-base text-foreground">Additional Items</h3>
+              <h3 className="font-bold text-base text-foreground">Custom Requests</h3>
+              <span className="text-[10px] font-semibold text-orange-600 bg-orange-50 border border-orange-200 rounded px-1.5 py-0.5 no-print">{customResults.length} item{customResults.length !== 1 ? 's' : ''}</span>
             </div>
-            <ul className="space-y-2">
+            <div className="space-y-3">
               {customResults.map(cr => {
                 const ci = state.customItems.find(c => c.id === cr.id)!;
+                const isEditing = editingCustomItemId === ci.id;
                 const phaseName = ALL_PHASES.find(p => p.id === ci.phaseId)?.name;
                 return (
-                  <li key={cr.id} className="flex items-start justify-between gap-4">
-                    <div className="flex items-start gap-2 text-sm">
-                      <span className="text-amber-500 mt-0.5 shrink-0 font-bold">•</span>
-                      <div>
-                        <span className="font-medium">{ci.description}</span>
-                        {phaseName && <span className="text-xs text-muted-foreground ml-1.5">({phaseName})</span>}
-                        {ci.notes && <div className="text-xs text-muted-foreground mt-0.5">{ci.notes}</div>}
+                  <div key={cr.id} className="rounded-xl border border-border bg-muted/30 overflow-hidden">
+                    {!isEditing ? (
+                      /* View mode */
+                      <div className="px-4 py-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <span className="font-bold text-sm text-foreground">{ci.description}</span>
+                              {phaseName && <span className="text-[10px] text-muted-foreground bg-muted border border-border rounded px-1.5 py-0.5">{phaseName}</span>}
+                            </div>
+                            {ci.notes && <p className="text-xs text-muted-foreground leading-relaxed">{ci.notes}</p>}
+                          </div>
+                          <div className="flex items-start gap-2 shrink-0">
+                            <div className="text-right">
+                              <div className="text-base font-black text-foreground mono">{fmtDollar(cr.price)}</div>
+                              <div className="text-[10px] text-muted-foreground">Cost: {fmtDollar(ci.matCostPerUnit)} · {Math.round((ci.markupPct ?? 0) * 100)}% margin</div>
+                            </div>
+                            <button
+                              onClick={() => startEditCustomItem(ci)}
+                              title="Edit item"
+                              className="no-print mt-0.5 p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                    <div className="text-sm font-bold shrink-0 mono">{fmtDollar(cr.price)}</div>
-                  </li>
+                    ) : (
+                      /* Edit mode */
+                      <div className="px-4 py-3 space-y-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Editing custom request</span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleAiRewriteCustomItem(ci.id)}
+                              disabled={aiRewritingCustom}
+                              className="no-print flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 text-white rounded-lg text-xs font-semibold hover:bg-violet-700 disabled:opacity-60 transition-colors"
+                            >
+                              <Sparkles className="w-3.5 h-3.5" />
+                              {aiRewritingCustom ? 'Rewriting…' : 'AI Rewrite'}
+                            </button>
+                            <button
+                              onClick={() => saveCustomItemEdit(ci.id)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-semibold hover:bg-emerald-700 transition-colors"
+                            >
+                              <Check className="w-3.5 h-3.5" />Save
+                            </button>
+                            <button
+                              onClick={cancelCustomItemEdit}
+                              className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-semibold hover:bg-muted transition-colors"
+                            >
+                              <X className="w-3.5 h-3.5" />Cancel
+                            </button>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground mb-1 block">Title (shown to customer)</label>
+                          <input
+                            type="text"
+                            value={draftCustomTitle}
+                            onChange={e => setDraftCustomTitle(e.target.value)}
+                            className="w-full text-sm font-bold border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring bg-background text-foreground"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] uppercase tracking-widest font-bold text-muted-foreground mb-1 block">Description / Scope Note</label>
+                          <textarea
+                            value={draftCustomDescription}
+                            onChange={e => setDraftCustomDescription(e.target.value)}
+                            rows={3}
+                            className="w-full text-xs border border-border rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-ring bg-background text-foreground"
+                          />
+                        </div>
+                        <div className="text-[11px] text-muted-foreground">
+                          Sell price: <span className="font-bold text-foreground mono">{fmtDollar(cr.price)}</span> · Cost: {fmtDollar(ci.matCostPerUnit)} · {Math.round((ci.markupPct ?? 0) * 100)}% margin
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 );
               })}
-            </ul>
+            </div>
           </div>
         )}
 

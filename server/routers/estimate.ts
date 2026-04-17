@@ -534,6 +534,45 @@ export const estimateRouter = router({
       return await aiRewritePhase(input);
     }),
 
+  // ─── AI rewrite a custom request item ────────────────────────────────────
+  rewriteCustomItem: protectedProcedure
+    .input(
+      z.object({
+        title: z.string(),
+        description: z.string(),
+        jobTitle: z.string(),
+        customerName: z.string(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const response = await invokeLLM({
+        messages: [
+          { role: 'system', content: 'You are a licensed contractor writing customer-facing estimates. Return JSON only with keys "title" (string) and "description" (string). No markdown, no filler words.' },
+          { role: 'user', content: `Improve this custom request line item for a customer-facing estimate.\n\nRules:\n- Title: concise, professional, 3-8 words\n- Description: 1-2 sentences, plain contractor language, state what will be done\n- No filler words (no "ensure", "seamless", "high-quality", "professional", "exceptional")\n\nJob: ${input.jobTitle}\nCustomer: ${input.customerName}\n\nCurrent title: ${input.title}\nCurrent description: ${input.description}\n\nReturn JSON: {"title": "...", "description": "..."}` },
+        ],
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'custom_item_rewrite',
+            strict: true,
+            schema: {
+              type: 'object',
+              properties: {
+                title: { type: 'string', description: 'Improved item title' },
+                description: { type: 'string', description: 'Improved item description' },
+              },
+              required: ['title', 'description'],
+              additionalProperties: false,
+            },
+          },
+        },
+      });
+      const raw = response.choices?.[0]?.message?.content;
+      if (!raw || typeof raw !== 'string') throw new Error('AI returned empty response');
+      const parsed = JSON.parse(raw) as { title: string; description: string };
+      return { title: parsed.title.trim(), description: parsed.description.trim() };
+    }),
+
   // ─── AI rewrite a single bullet ─────────────────────────────────────────
   rewriteBullet: protectedProcedure
     .input(

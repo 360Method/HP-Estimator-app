@@ -1850,3 +1850,11 @@
 - [x] Custom requests appear as line items in the estimate output (PresentSection — Additional Services section)
 - [x] Custom requests included in grand total calculation (phaseId=0 flows through calcCustomItem + calcTotals)
 - [x] Custom requests editable/deletable after adding (trash button on each card)
+
+## Custom Request Estimate Output (EstimateSection)
+
+- [x] Show custom request line items (phaseId=0) in EstimateSection with same output format as phase items
+- [x] Each custom request line item shows: title, description, cost, sell price, margin %
+- [x] Inline editing of title and description on each custom request line item in EstimateSection
+- [x] AI button on each custom request line item to improve/rewrite title and description (estimate.rewriteCustomItem)
+- [x] Custom request edits persist via updateCustomItem (description + notes fields)
