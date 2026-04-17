@@ -296,7 +296,11 @@ export default function MembershipEnrollDialog({
                             📅 {t.visits}
                           </Badge>
                           {t.laborBank > 0 && (
-                            <Badge variant="secondary" className="text-xs text-green-700 bg-green-50">
+                            <Badge
+                              variant="secondary"
+                              className="text-xs text-green-700 bg-green-50 cursor-help"
+                              title="This credit accrues after the first 90 days"
+                            >
                               ⏳ ${t.laborBank} labor bank credit
                             </Badge>
                           )}
