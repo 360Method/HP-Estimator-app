@@ -1151,6 +1151,187 @@ function PhasePanel({ phaseId }: { phaseId: number }) {
   );
 }
 
+// ─── CUSTOM REQUESTS PANEL ───────────────────────────────────
+// Items with phaseId=0 are "out-of-scope" custom requests not tied to any trade phase.
+// They flow through to PresentSection as "Additional Services".
+function CustomRequestsPanel() {
+  const { state, addCustomItem, removeCustomItem } = useEstimator();
+  const customRequests = state.customItems.filter(ci => ci.phaseId === 0);
+
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({
+    title: '',
+    description: '',
+    cost: 0,
+    marginPct: state.global.markupPct * 100, // default to global markup
+  });
+
+  const sellPrice = form.cost > 0 && form.marginPct < 100
+    ? form.cost / (1 - form.marginPct / 100)
+    : 0;
+
+  const handleAdd = () => {
+    if (!form.title.trim() || form.cost <= 0) {
+      toast.error('Title and cost are required');
+      return;
+    }
+    addCustomItem({
+      phaseId: 0,
+      description: form.description.trim()
+        ? `${form.title.trim()} — ${form.description.trim()}`
+        : form.title.trim(),
+      unitType: 'unit',
+      qty: 1,
+      matCostPerUnit: form.cost,
+      laborHrsPerUnit: 0,
+      laborRate: 0,
+      notes: '',
+      markupPct: form.marginPct / 100,
+    });
+    setForm({ title: '', description: '', cost: 0, marginPct: state.global.markupPct * 100 });
+    setOpen(false);
+    toast.success('Custom request added');
+  };
+
+  return (
+    <div className="mt-8 mb-4">
+      {/* Section header */}
+      <div className="flex items-center gap-3 mb-4">
+        <div className="flex-1 h-px bg-orange-200 dark:bg-orange-800" />
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold uppercase tracking-wider text-orange-700 dark:text-orange-400">
+            Custom Requests
+          </span>
+          {customRequests.length > 0 && (
+            <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1 rounded-full bg-orange-600 text-white text-[10px] font-bold">
+              {customRequests.length}
+            </span>
+          )}
+        </div>
+        <div className="flex-1 h-px bg-orange-200 dark:bg-orange-800" />
+      </div>
+
+      <p className="text-xs text-muted-foreground text-center mb-3">
+        Out-of-scope work not covered by standard trade phases — e.g. specialty fabrication, subcontractor pass-through, or unique one-off tasks.
+      </p>
+
+      {/* Existing custom requests */}
+      {customRequests.length > 0 && (
+        <div className="space-y-2 mb-3">
+          {customRequests.map(cr => {
+            const effectiveMarkup = cr.markupPct ?? state.global.markupPct;
+            const sell = effectiveMarkup < 1 ? cr.matCostPerUnit / (1 - effectiveMarkup) : cr.matCostPerUnit;
+            return (
+              <div key={cr.id} className="flex items-start gap-3 rounded-xl border border-orange-200 bg-orange-50/30 px-4 py-3">
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-sm text-foreground leading-snug">{cr.description}</div>
+                  <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                    <span>Cost: <span className="font-mono font-semibold text-slate-700">{fmtDollar(cr.matCostPerUnit)}</span></span>
+                    <span>Margin: <span className="font-mono font-semibold text-emerald-700">{Math.round((effectiveMarkup) * 100)}%</span></span>
+                    <span>Sell: <span className="font-mono font-bold text-primary">{fmtDollar(sell)}</span></span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => removeCustomItem(cr.id)}
+                  className="text-muted-foreground hover:text-red-500 transition-colors mt-0.5"
+                  title="Remove"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Add form */}
+      {!open ? (
+        <button
+          onClick={() => setOpen(true)}
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-dashed border-orange-300 text-orange-600 hover:border-orange-400 hover:bg-orange-50/50 transition-all text-sm font-semibold"
+        >
+          <Plus size={15} />
+          Add Custom Request
+        </button>
+      ) : (
+        <div className="border-2 border-dashed border-orange-300 rounded-xl p-4 bg-orange-50/20">
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-xs font-bold text-orange-700 uppercase tracking-wider">New Custom Request</div>
+            <button onClick={() => setOpen(false)} className="text-xs text-muted-foreground hover:text-foreground">Cancel</button>
+          </div>
+
+          {/* Title */}
+          <div className="mb-3">
+            <label className="field-label">Title <span className="text-red-500">*</span></label>
+            <input
+              type="text"
+              value={form.title}
+              onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+              placeholder="e.g. Custom steel beam fabrication"
+              className="field-input w-full"
+              autoFocus
+            />
+          </div>
+
+          {/* Description */}
+          <div className="mb-3">
+            <label className="field-label">Description (optional — shown on estimate)</label>
+            <textarea
+              value={form.description}
+              onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+              placeholder="Describe the scope of work, materials, or special requirements..."
+              rows={3}
+              className="field-input w-full resize-none"
+            />
+          </div>
+
+          {/* Cost + Margin + Sell price */}
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            <div>
+              <label className="field-label">Actual Cost ($) <span className="text-red-500">*</span></label>
+              <input
+                type="number"
+                min={0}
+                step={0.01}
+                value={form.cost || ''}
+                onChange={e => setForm(f => ({ ...f, cost: parseFloat(e.target.value) || 0 }))}
+                placeholder="0.00"
+                className="field-input w-full"
+              />
+            </div>
+            <div>
+              <label className="field-label">Margin (%)</label>
+              <input
+                type="number"
+                min={0}
+                max={99}
+                step={1}
+                value={form.marginPct || ''}
+                onChange={e => setForm(f => ({ ...f, marginPct: parseFloat(e.target.value) || 0 }))}
+                placeholder={String(Math.round(state.global.markupPct * 100))}
+                className="field-input w-full"
+              />
+            </div>
+            <div>
+              <label className="field-label">Customer Price</label>
+              <div className="field-input w-full font-mono font-bold text-primary bg-slate-50">
+                {sellPrice > 0 ? fmtDollar(sellPrice) : '—'}
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={handleAdd}
+            className="w-full py-2 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-sm font-semibold transition-colors"
+          >
+            Add to Estimate
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── MAIN CALCULATOR SECTION ──────────────────────────────────
 export default function CalculatorSection() {
   const { state, updateOpportunity } = useEstimator();
@@ -1233,6 +1414,8 @@ export default function CalculatorSection() {
         phaseResults={phaseResults}
       />
       <PhasePanel phaseId={activePhaseId} />
+
+      <CustomRequestsPanel />
 
       {/* Sticky total cost summary bar */}
       {grandTotals.hasData && (

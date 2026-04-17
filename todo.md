@@ -1843,3 +1843,10 @@
 - [x] Add photoUrls column to portalServiceRequests schema (migration 0040 applied)
 - [x] Add portal.uploadPhoto tRPC procedure — accepts base64 dataUrl, uploads to S3, returns CDN URL
 - [x] Update submitServiceRequest to accept photoUrls: string[] and persist as JSON
+
+## Custom Request Line Item (CalculatorSection)
+
+- [x] Add custom request form in CalculatorSection: title, description, cost (actual), margin % → computed sell price
+- [x] Custom requests appear as line items in the estimate output (PresentSection — Additional Services section)
+- [x] Custom requests included in grand total calculation (phaseId=0 flows through calcCustomItem + calcTotals)
+- [x] Custom requests editable/deletable after adding (trash button on each card)
