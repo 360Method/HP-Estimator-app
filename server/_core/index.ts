@@ -9,7 +9,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import Stripe from "stripe";
-import { handleInboundSms, handleCallStatusUpdate, generateVoiceToken, isTwilioConfigured } from "../twilio";
+import { handleInboundSms, handleCallStatusUpdate, generateVoiceToken, isTwilioConfigured, downloadAndStoreRecording } from "../twilio";
 import twilio from "twilio";
 import { exchangeGmailCode, pollInboundEmails, sendOverdueReminderEmail } from "../gmail";
 import { getFirstGmailToken, listOpportunities, updateOpportunity } from "../db";
@@ -309,6 +309,18 @@ async function startServer() {
           Direction: "inbound",
           RecordingUrl: RecordingUrl || undefined,
         }).catch(dbErr => console.warn("[Voicemail DB persist] Failed:", dbErr));
+        // Download recording from Twilio and store in app S3 for inline playback
+        if (RecordingUrl) {
+          downloadAndStoreRecording(RecordingUrl, CallSid)
+            .then(async appUrl => {
+              if (!appUrl) return;
+              // Find the call log we just created and update it with the app URL
+              const { getCallLogByTwilioSid, updateCallLog } = await import("../db");
+              const log = await getCallLogByTwilioSid(CallSid).catch(() => null);
+              if (log?.id) await updateCallLog(log.id, { recordingAppUrl: appUrl }).catch(console.warn);
+            })
+            .catch(console.warn);
+        }
       }
 
       // ── Notify owner ─────────────────────────────────────────────────────────

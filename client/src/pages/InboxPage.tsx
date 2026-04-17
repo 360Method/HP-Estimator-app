@@ -610,27 +610,34 @@ export default function InboxPage() {
                           {log.callerPhone && (
                             <p className="text-xs text-muted-foreground">{log.callerPhone}</p>
                           )}
-                          {(log.recordingUrl || log.voicemailUrl) && (
-                            <div className="mt-2 flex gap-2">
-                              {log.recordingUrl && (
-                                <a
-                                  href={log.recordingUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-xs text-primary underline flex items-center gap-1"
-                                >
-                                  <Phone size={10} /> Recording
-                                </a>
+                          {/* Inline audio player — uses app S3 URL so no Twilio login needed */}
+                          {((log as any).recordingAppUrl || log.recordingUrl || log.voicemailUrl) && (
+                            <div className="mt-2 space-y-1.5">
+                              {((log as any).recordingAppUrl || log.recordingUrl) && (
+                                <div>
+                                  <p className="text-[10px] text-muted-foreground mb-0.5 flex items-center gap-1">
+                                    <Phone size={9} /> Recording
+                                  </p>
+                                  <audio
+                                    controls
+                                    src={(log as any).recordingAppUrl || log.recordingUrl!}
+                                    className="w-full h-8"
+                                    preload="none"
+                                  />
+                                </div>
                               )}
                               {log.voicemailUrl && (
-                                <a
-                                  href={log.voicemailUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-xs text-primary underline flex items-center gap-1"
-                                >
-                                  <MessageSquare size={10} /> Voicemail
-                                </a>
+                                <div>
+                                  <p className="text-[10px] text-muted-foreground mb-0.5 flex items-center gap-1">
+                                    <MessageSquare size={9} /> Voicemail
+                                  </p>
+                                  <audio
+                                    controls
+                                    src={log.voicemailUrl}
+                                    className="w-full h-8"
+                                    preload="none"
+                                  />
+                                </div>
                               )}
                             </div>
                           )}

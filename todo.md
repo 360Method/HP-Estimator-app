@@ -1933,3 +1933,22 @@
 - [x] Voicemail NEVER goes to personal cell — all recordings saved to app DB (callLogs)
 - [x] buildFallbackTwiml exported for reuse by both fallback route and after-hours path
 - [x] PhoneSettings UI updated: new mode labels, stage-2 info panel, AI fallback number field in cell mode
+
+## Call Recordings — Inline in App (S3 Upload)
+
+- [ ] Add recordingAppUrl column to callLogs schema (stores app S3 URL after download from Twilio)
+- [ ] Run db:push for new column
+- [ ] Add downloadAndStoreRecording() helper in server/twilio.ts: fetch from Twilio with auth, upload to S3, return app URL
+- [ ] Call downloadAndStoreRecording() in voicemail callback and call status handler; save to recordingAppUrl
+- [ ] Add inline <audio> player to Inbox Calls tab call cards using recordingAppUrl
+- [ ] Add inline <audio> player to feed items of type 'call' in the All tab thread view
+
+## Call Recordings — Inline Playback (Apr 17)
+
+- [x] Add recordingAppUrl column to callLogs schema
+- [x] Run db:push for new column
+- [x] Add updateCallLog() helper to db.ts
+- [x] Add downloadAndStoreRecording() to twilio.ts: downloads from Twilio with Basic Auth, re-uploads to app S3
+- [x] handleCallStatusUpdate: async download + store after insertCallLog, updates callLog.recordingAppUrl
+- [x] Voicemail callback in index.ts: async download + store after handleCallStatusUpdate
+- [x] Inbox Calls tab: replace external recording links with inline <audio> players using recordingAppUrl (falls back to recordingUrl)

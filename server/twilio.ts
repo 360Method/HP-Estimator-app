@@ -13,7 +13,43 @@
  */
 
 import twilio from "twilio";
-import { findOrCreateConversation, findOrCreateCustomerFromCall, incrementUnread, insertCallLog, insertMessage, updateConversationLastMessage, updateConversation } from "./db";
+import { findOrCreateConversation, findOrCreateCustomerFromCall, getCallLogByTwilioSid, incrementUnread, insertCallLog, insertMessage, updateCallLog, updateConversationLastMessage, updateConversation } from "./db";
+import { storagePut } from "./storage";
+
+/**
+ * Downloads a Twilio recording (requires Basic Auth) and re-uploads it to app S3.
+ * Returns the public app S3 URL, or null if download fails.
+ */
+export async function downloadAndStoreRecording(
+  twilioRecordingUrl: string,
+  callSid: string,
+): Promise<string | null> {
+  try {
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    if (!accountSid || !authToken) return null;
+
+    // Twilio recordings require Basic Auth
+    const mp3Url = twilioRecordingUrl.endsWith(".mp3") ? twilioRecordingUrl : `${twilioRecordingUrl}.mp3`;
+    const response = await fetch(mp3Url, {
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString("base64")}`,
+      },
+    });
+    if (!response.ok) {
+      console.warn(`[Recording] Failed to download from Twilio (${response.status}): ${mp3Url}`);
+      return null;
+    }
+    const buffer = Buffer.from(await response.arrayBuffer());
+    const key = `call-recordings/${callSid}-${Date.now()}.mp3`;
+    const { url } = await storagePut(key, buffer, "audio/mpeg");
+    console.log(`[Recording] Stored to app S3: ${url}`);
+    return url;
+  } catch (err) {
+    console.warn("[Recording] downloadAndStoreRecording failed:", err);
+    return null;
+  }
+}
 
 function getTwilioClient() {
   const sid = process.env.TWILIO_ACCOUNT_SID;
@@ -125,7 +161,7 @@ export async function handleCallStatusUpdate(params: {
   const isMissed = statusMap[CallStatus] === "missed";
 
   // Insert call log
-  await insertCallLog({
+  const callLog = await insertCallLog({
     conversationId: conv.id,
     twilioCallSid: CallSid,
     direction: Direction === "inbound" ? "inbound" : "outbound",
@@ -136,6 +172,14 @@ export async function handleCallStatusUpdate(params: {
     startedAt: new Date(),
     endedAt: new Date(),
   });
+  // Async: download recording from Twilio and store in app S3 so it plays inline
+  if (RecordingUrl && callLog?.id) {
+    downloadAndStoreRecording(RecordingUrl, CallSid)
+      .then(appUrl => {
+        if (appUrl) updateCallLog(callLog.id, { recordingAppUrl: appUrl }).catch(console.warn);
+      })
+      .catch(console.warn);
+  }
 
   // Insert a call-type message into the thread
   const preview = isMissed

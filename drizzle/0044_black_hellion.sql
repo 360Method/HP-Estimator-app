@@ -1,0 +1,1 @@
+ALTER TABLE `callLogs` ADD `recordingAppUrl` text;

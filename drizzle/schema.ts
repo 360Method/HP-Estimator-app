@@ -104,6 +104,8 @@ export const callLogs = mysqlTable("callLogs", {
   /** Duration in seconds */
   durationSecs: int("durationSecs").default(0).notNull(),
   recordingUrl: text("recordingUrl"),
+  /** App S3 URL — downloaded from Twilio and re-uploaded so it plays inline without Twilio auth */
+  recordingAppUrl: text("recordingAppUrl"),
   voicemailUrl: text("voicemailUrl"),
   callerPhone: varchar("callerPhone", { length: 32 }),
   startedAt: timestamp("startedAt").defaultNow().notNull(),

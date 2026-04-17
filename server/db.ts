@@ -259,6 +259,12 @@ export async function insertCallLog(log: InsertCallLog) {
   return created[0];
 }
 
+export async function updateCallLog(id: number, patch: Partial<InsertCallLog>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(callLogs).set(patch).where(eq(callLogs.id, id));
+}
+
 export async function getCallLogByTwilioSid(sid: string) {
   const db = await getDb();
   if (!db) return null;
