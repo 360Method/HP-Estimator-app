@@ -635,6 +635,8 @@ export const portalServiceRequests = mysqlTable("portalServiceRequests", {
   requestType: varchar("requestType", { length: 32 }).notNull().default("service_request"),
   /** Preferred date range for off-cycle visits */
   preferredDateRange: varchar("preferredDateRange", { length: 64 }),
+  /** JSON array of S3 photo URLs attached to the request */
+  photoUrls: text("photoUrls"),
   /** Set when HP staff views/reads this request */
   readAt: timestamp("readAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),

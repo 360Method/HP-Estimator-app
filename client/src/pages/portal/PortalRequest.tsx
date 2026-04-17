@@ -3,7 +3,7 @@
  * Submits a service request to HP team, who then creates a lead.
  * Mobile-first, HP brand colors.
  */
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import PortalLayout from "@/components/PortalLayout";
@@ -17,6 +17,9 @@ import {
   Clock,
   Zap,
   CalendarDays,
+  Camera,
+  X,
+  ImagePlus,
 } from "lucide-react";
 
 type Timeline = "asap" | "within_week" | "flexible";
@@ -27,6 +30,9 @@ const TIMELINE_OPTIONS: { value: Timeline; label: string; desc: string; icon: Re
   { value: "flexible", label: "I'm Flexible", desc: "No rush — schedule at your convenience", icon: <CalendarDays className="w-5 h-5" /> },
 ];
 
+const MAX_PHOTOS = 8;
+const MAX_FILE_MB = 10;
+
 export default function PortalRequest() {
   const [, navigate] = useLocation();
   const [description, setDescription] = useState("");
@@ -34,8 +40,15 @@ export default function PortalRequest() {
   const [address, setAddress] = useState("");
   const [submitted, setSubmitted] = useState(false);
 
+  // Photo state
+  const [photos, setPhotos] = useState<{ dataUrl: string; mimeType: string; name: string }[]>([]);
+  const [uploadingPhotos, setUploadingPhotos] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const meQuery = trpc.portal.me.useQuery();
   const customer = meQuery.data?.customer;
+
+  const uploadPhotoMutation = trpc.portal.uploadPhoto.useMutation();
 
   const submitMutation = trpc.portal.submitServiceRequest.useMutation({
     onSuccess: () => {
@@ -44,14 +57,72 @@ export default function PortalRequest() {
     onError: (err) => toast.error(err.message),
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+
+    const remaining = MAX_PHOTOS - photos.length;
+    const toProcess = files.slice(0, remaining);
+
+    toProcess.forEach((file) => {
+      if (file.size > MAX_FILE_MB * 1024 * 1024) {
+        toast.error(`${file.name} is too large (max ${MAX_FILE_MB}MB)`);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const dataUrl = ev.target?.result as string;
+        setPhotos((prev) => [
+          ...prev,
+          { dataUrl, mimeType: file.type as any, name: file.name },
+        ]);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // Reset input so same file can be re-selected
+    e.target.value = "";
+  };
+
+  const removePhoto = (idx: number) => {
+    setPhotos((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (description.trim().length < 10) {
       toast.error("Please describe the work needed (at least 10 characters).");
       return;
     }
-    submitMutation.mutate({ description: description.trim(), timeline, address: address.trim() || undefined });
+
+    let photoUrls: string[] = [];
+
+    if (photos.length > 0) {
+      setUploadingPhotos(true);
+      try {
+        const results = await Promise.all(
+          photos.map((p) =>
+            uploadPhotoMutation.mutateAsync({ dataUrl: p.dataUrl, mimeType: p.mimeType as any })
+          )
+        );
+        photoUrls = results.map((r) => r.url);
+      } catch (err: any) {
+        toast.error("Photo upload failed: " + (err?.message ?? "Unknown error"));
+        setUploadingPhotos(false);
+        return;
+      }
+      setUploadingPhotos(false);
+    }
+
+    submitMutation.mutate({
+      description: description.trim(),
+      timeline,
+      address: address.trim() || undefined,
+      photoUrls: photoUrls.length ? photoUrls : undefined,
+    });
   };
+
+  const isPending = uploadingPhotos || submitMutation.isPending;
 
   if (submitted) {
     return (
@@ -119,6 +190,76 @@ export default function PortalRequest() {
             <p className="text-xs text-gray-400 mt-1 text-right">{description.length}/2000</p>
           </div>
 
+          {/* Photos */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <div className="flex items-center justify-between mb-3">
+              <label className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
+                <Camera className="w-4 h-4 text-gray-500" />
+                Photos
+                <span className="text-xs font-normal text-gray-400">(optional, up to {MAX_PHOTOS})</span>
+              </label>
+              {photos.length < MAX_PHOTOS && (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center gap-1.5 text-xs font-medium text-[#c8922a] hover:text-[#b07d24] transition-colors"
+                >
+                  <ImagePlus className="w-4 h-4" />
+                  Add Photo
+                </button>
+              )}
+            </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              multiple
+              className="hidden"
+              onChange={handleFileChange}
+            />
+
+            {photos.length === 0 ? (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full border-2 border-dashed border-gray-200 rounded-lg p-6 flex flex-col items-center gap-2 text-gray-400 hover:border-[#c8922a] hover:text-[#c8922a] transition-colors"
+              >
+                <Camera className="w-8 h-8" />
+                <span className="text-sm">Tap to add photos</span>
+                <span className="text-xs">JPEG, PNG, WebP — max {MAX_FILE_MB}MB each</span>
+              </button>
+            ) : (
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                {photos.map((photo, idx) => (
+                  <div key={idx} className="relative aspect-square rounded-lg overflow-hidden border border-gray-200 group">
+                    <img
+                      src={photo.dataUrl}
+                      alt={photo.name}
+                      className="w-full h-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removePhoto(idx)}
+                      className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+                {photos.length < MAX_PHOTOS && (
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="aspect-square rounded-lg border-2 border-dashed border-gray-200 flex items-center justify-center text-gray-400 hover:border-[#c8922a] hover:text-[#c8922a] transition-colors"
+                  >
+                    <ImagePlus className="w-6 h-6" />
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Timeline */}
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <label className="block text-sm font-semibold text-gray-900 mb-3">
@@ -177,10 +318,15 @@ export default function PortalRequest() {
           {/* Submit */}
           <Button
             type="submit"
-            disabled={submitMutation.isPending || description.trim().length < 10}
+            disabled={isPending || description.trim().length < 10}
             className="w-full bg-[#c8922a] hover:bg-[#b07d24] text-white font-semibold py-3 text-base"
           >
-            {submitMutation.isPending ? (
+            {uploadingPhotos ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Uploading photos...
+              </>
+            ) : submitMutation.isPending ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 Submitting...

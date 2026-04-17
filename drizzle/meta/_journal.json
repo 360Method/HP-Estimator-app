@@ -281,6 +281,13 @@
       "when": 1776387660641,
       "tag": "0039_easy_talos",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "5",
+      "when": 1776389753759,
+      "tag": "0040_many_beast",
+      "breakpoints": true
     }
   ]
 }

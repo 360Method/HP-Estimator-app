@@ -983,6 +983,7 @@ export const portalRouter = router({
       description: z.string().min(10),
       timeline: z.enum(['asap', 'within_week', 'flexible']).default('flexible'),
       address: z.string().optional(),
+      photoUrls: z.array(z.string().url()).max(10).optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const req = await createPortalServiceRequest({
@@ -990,6 +991,7 @@ export const portalRouter = router({
         description: input.description,
         timeline: input.timeline,
         address: input.address ?? ctx.portalCustomer.address ?? undefined,
+        photoUrls: input.photoUrls?.length ? JSON.stringify(input.photoUrls) : undefined,
       });
 
       // Auto-create CRM lead opportunity
@@ -1835,6 +1837,20 @@ export const portalRouter = router({
         })
         .where(eq(portalCustomers.id, ctx.portalCustomer.id));
       return { ok: true };
+    }),
+
+  uploadPhoto: portalProcedure
+    .input(z.object({
+      dataUrl: z.string().min(10),
+      mimeType: z.enum(['image/jpeg', 'image/png', 'image/webp', 'image/gif']).default('image/jpeg'),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const base64 = input.dataUrl.replace(/^data:image\/\w+;base64,/, '');
+      const buffer = Buffer.from(base64, 'base64');
+      const ext = input.mimeType.split('/')[1];
+      const key = `service-requests/portal-${ctx.portalCustomer.id}-${Date.now()}.${ext}`;
+      const { url } = await storagePut(key, buffer, input.mimeType);
+      return { url };
     }),
 });
 // ─── EMAIL TEMPLATES ──────────────────────────────────────────────────────────

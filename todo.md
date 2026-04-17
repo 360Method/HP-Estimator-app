@@ -1835,3 +1835,11 @@
 ## Bug Fix — React Error #310
 
 - [x] Fix React error #310: getMembership360 and getTeamInfo hooks were declared after early isLoading return in PortalHome — moved before the return
+
+## Bug Fix — PortalRequest Form
+
+- [x] Fix broken submit button on PortalRequest.tsx — rewrote form with explicit e.preventDefault() + mutation wiring
+- [x] Add photo attachment area (up to 8 photos, JPEG/PNG/WebP/GIF, max 10MB each, S3 upload via portal.uploadPhoto)
+- [x] Add photoUrls column to portalServiceRequests schema (migration 0040 applied)
+- [x] Add portal.uploadPhoto tRPC procedure — accepts base64 dataUrl, uploads to S3, returns CDN URL
+- [x] Update submitServiceRequest to accept photoUrls: string[] and persist as JSON
