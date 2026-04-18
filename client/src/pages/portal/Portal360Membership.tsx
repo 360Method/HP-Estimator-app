@@ -570,6 +570,16 @@ function NonMemberFunnel() {
                 <div className="mb-4">
                   <span className="text-2xl font-black text-gray-900">${getPrice(t.key).toFixed(0)}</span>
                   <span className="text-xs text-muted-foreground">/{cadenceLabel[cadence]}</span>
+                  {cadence !== "monthly" && (() => {
+                    const def = TIER_DEFINITIONS[t.key as keyof typeof TIER_DEFINITIONS];
+                    if (!def) return null;
+                    const moEquiv = Math.round(def.pricing[cadence] / 100 / (cadence === "quarterly" ? 3 : 12));
+                    return (
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        ~${moEquiv}/mo billed {cadence}
+                      </p>
+                    );
+                  })()}
                 </div>
                 <ul className="space-y-1.5 mb-3">
                   {t.features.map((f, i) => (
@@ -583,13 +593,13 @@ function NonMemberFunnel() {
                   className="text-[11px] text-[#1a2e1a] font-semibold underline underline-offset-2 mb-4 hover:text-[#c8922a] transition-colors flex items-center gap-1"
                   onClick={(e) => { e.stopPropagation(); setTaskPopupTier(t.key); }}
                 >
-                  <ClipboardList className="w-3 h-3" /> See all included tasks
+                  <ClipboardList className="w-3 h-3" /> Included tasks
                 </button>
                 <Button
                   className={`w-full text-white font-bold text-sm ${t.cta}`}
                   onClick={(e) => { e.stopPropagation(); goToCheckout(t.key); }}
                 >
-                  Enroll in {t.label} <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                  <span className="truncate">Enroll — {t.label}</span> <ArrowRight className="w-3.5 h-3.5 ml-1 shrink-0" />
                 </Button>
               </div>
             ))}
