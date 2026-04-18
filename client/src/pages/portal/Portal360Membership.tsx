@@ -405,7 +405,7 @@ const FAQ_ITEMS = [
 ];
 
 function NonMemberFunnel() {
-  const [cadence, setCadence] = useState<"monthly" | "quarterly" | "annual">("annual");
+  const [cadence, setCadence] = useState<"monthly" | "quarterly" | "annual">("monthly");
   const [selectedTier, setSelectedTier] = useState("silver");
   const [spendSlider, setSpendSlider] = useState(5000);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
