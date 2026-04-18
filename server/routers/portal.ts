@@ -1880,10 +1880,11 @@ export const portalRouter = router({
 
   /** Portal: returns HP team contact info for the "Your Team" card */
   getTeamInfo: portalPublicProcedure.query(async () => {
+    const settings = await getOrCreateAppSettings().catch(() => null);
     return {
-      name: process.env.OWNER_NAME ?? 'Handy Pioneers Team',
-      phone: process.env.OWNER_PHONE ?? '',
-      email: 'help@handypioneers.com',
+      name: settings?.companyName ?? process.env.OWNER_NAME ?? 'Handy Pioneers Team',
+      phone: settings?.supportPhone ?? process.env.OWNER_PHONE ?? '',
+      email: settings?.supportEmail ?? 'help@handypioneers.com',
     };
   }),
 
