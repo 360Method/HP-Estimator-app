@@ -1005,10 +1005,19 @@ async function startServer() {
         return res.status(400).json({ error: `Unknown type: ${type}` });
       }
 
-      const successPath = `/360/confirmation?session_id={CHECKOUT_SESSION_ID}`;
-      const cancelPath = type === "portfolio"
-        ? `/360/multifamily?cancelled=1`
-        : `/360/checkout?tier=${tier}&cadence=${cadence}&cancelled=1`;
+      // Detect portal origin (client.handypioneers.com, handyfield manus.space, or localhost)
+      const isPortalOrigin = typeof origin === "string" && (
+        origin.includes("client.handypioneers") ||
+        origin.includes("handyfield")
+      );
+      const successPath = isPortalOrigin
+        ? `/portal/360-confirmation?session_id={CHECKOUT_SESSION_ID}`
+        : `/360/confirmation?session_id={CHECKOUT_SESSION_ID}`;
+      const cancelPath = isPortalOrigin
+        ? `/portal/360-membership?cancelled=1`
+        : type === "portfolio"
+          ? `/360/multifamily?cancelled=1`
+          : `/360/checkout?tier=${tier}&cadence=${cadence}&cancelled=1`;
 
       const session = await stripe.checkout.sessions.create({
         mode: "subscription",

@@ -2081,3 +2081,8 @@
 - [x] Build EnrollModal: tier display, cadence selector, address confirmation, Stripe redirect
 - [x] Replace all external funnel links in Portal360Membership with EnrollModal trigger
 - [x] Wire EnrollModal to POST /api/360/checkout with portal customer data pre-filled
+
+## Portal Stripe 404 Fix
+- [x] Fix success_url in /api/360/checkout to detect portal origin and route to /portal/360-confirmation
+- [x] Build PortalEnrollmentConfirmation page at /portal/360-confirmation
+- [x] Register /portal/360-confirmation route in App.tsx

@@ -34,6 +34,7 @@ import PortalJobs from "./pages/portal/PortalJobs";
 import PortalReports from "./pages/portal/PortalReports";
 import PortalReportDetail from "./pages/portal/PortalReportDetail";
 import Portal360Membership from "./pages/portal/Portal360Membership";
+import PortalEnrollmentConfirmation from "./pages/portal/PortalEnrollmentConfirmation";
 import WorkOrderDetail from "./pages/WorkOrderDetail";
 
 // Domains that should serve only the customer portal (no admin app)
@@ -86,6 +87,7 @@ function Router() {
       <Route path="/portal/reports/:id" component={PortalReportDetail} />
       <Route path="/portal/reports" component={PortalReports} />
       <Route path="/portal/360-membership" component={Portal360Membership} />
+      <Route path="/portal/360-confirmation" component={PortalEnrollmentConfirmation} />
 
       {/* Internal 360° work order completion wizard */}
       <Route path="/360/work-orders/:id">{() => <WorkOrderDetail />}</Route>
