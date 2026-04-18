@@ -156,7 +156,7 @@ export async function create360MembershipFromWebhook(
       membershipId,
       type: "credit",
       amountCents: tierDef.laborBankCreditCents,
-      description: `Initial ${tier.charAt(0).toUpperCase() + tier.slice(1)} tier enrollment credit`,
+      description: `Initial ${tierDef.label} plan enrollment credit`,
       createdAt: new Date(),
     });
   } else if (deferCredit) {
@@ -200,7 +200,7 @@ export async function create360MembershipFromWebhook(
         : "";
 
     const priorityNote = tierDef.priorityScheduling
-      ? `<p>As a Gold member, you have <strong>priority scheduling</strong> — your calls go to the front of the queue.</p>`
+      ? `<p>As a ${tierDef.label} member, you have <strong>priority scheduling</strong> — your calls go to the front of the queue.</p>`
       : "";
 
     const welcomeHtml = `<!DOCTYPE html><html><body style="font-family:Helvetica,Arial,sans-serif;background:#f4f5f7;padding:32px 16px;">
@@ -212,7 +212,7 @@ export async function create360MembershipFromWebhook(
 </td></tr>
 <tr><td style="padding:36px 40px;color:#1a1a1a;font-size:15px;line-height:1.7;">
   <p>Hi ${customerName.split(" ")[0]},</p>
-  <p>You're officially enrolled in the <strong>${tier.charAt(0).toUpperCase() + tier.slice(1)} tier</strong> of the 360° Method. Your home is now on a proactive maintenance plan — no more reactive emergencies.</p>
+  <p>You're officially enrolled in the <strong>${tierDef.label} plan</strong> of the 360° Method. Your home is now on a proactive maintenance plan — no more reactive emergencies.</p>
   <p><strong>What happens next:</strong></p>
   <ul style="padding-left:20px;color:#333;">
     <li>Our team will reach out within 48 hours to schedule your <strong>Annual 360° Home Scan</strong></li>

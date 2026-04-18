@@ -38,9 +38,9 @@ function fmtDate(ts: number | Date | null | undefined) {
 }
 
 const TIER_LABELS: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  bronze: { label: "Bronze", color: "text-amber-700", bg: "bg-amber-50", border: "border-amber-200" },
-  silver: { label: "Silver", color: "text-slate-600", bg: "bg-slate-50", border: "border-slate-200" },
-  gold:   { label: "Gold",   color: "text-yellow-700", bg: "bg-yellow-50", border: "border-yellow-200" },
+  bronze: { label: "Essential",           color: "text-amber-700", bg: "bg-amber-50", border: "border-amber-200" },
+  silver: { label: "Full Coverage",       color: "text-slate-600", bg: "bg-slate-50", border: "border-slate-200" },
+  gold:   { label: "Maximum Protection",  color: "text-yellow-700", bg: "bg-yellow-50", border: "border-yellow-200" },
 };
 
 const WO_TYPE_META: Record<string, { label: string; icon: React.ReactNode; color: string; season: string }> = {
@@ -321,18 +321,18 @@ const TIER_TASKS: Record<string, { category: string; tasks: string[] }[]> = {
 const TIERS = [
   {
     key: "bronze",
-    label: "Bronze",
-    tagline: "Essential protection for proactive homeowners",
+    label: "Essential",
+    tagline: "Protect the basics. Catch problems early.",
     visits: 2,
     seasons: ["Spring", "Fall"],
     laborBank: 0,
-    discount: "8%",
+    discount: "5%",
     features: [
-      "Annual 360° Home Scan ($350 value)",
+      "Annual 360° Home Scan (2–3 hr documented assessment)",
       "2 seasonal visits — Spring & Fall",
-      "8% member discount on all jobs",
-      "Documented property health report",
-      "Priority email support",
+      "5% off jobs under $1,000 · 3% off $1k–$5k · 1.5% off $5k+",
+      "Prioritized repair report with cost estimates",
+      "HP direct line — no hold queues",
     ],
     color: "border-amber-300 bg-amber-50",
     badge: "text-amber-700 bg-amber-100",
@@ -340,20 +340,19 @@ const TIERS = [
   },
   {
     key: "silver",
-    label: "Silver",
-    tagline: "More visits, a labor bank, and bigger savings",
-    visits: 3,
-    seasons: ["Spring", "Summer", "Fall"],
-    laborBank: 250,
-    discount: "10%",
+    label: "Full Coverage",
+    tagline: "Four seasons of protection + pre-paid labor.",
+    visits: 4,
+    seasons: ["Spring", "Summer", "Fall", "Winter"],
+    laborBank: 300,
+    discount: "8%",
     popular: true,
     features: [
-      "Annual 360° Home Scan ($350 value)",
-      "3 seasonal visits — Spring, Summer & Fall",
-      "$250 labor bank credit",
-      "10% member discount on jobs up to $2,500",
-      "Documented property health report",
-      "Priority scheduling",
+      "Everything in Essential, plus:",
+      "4 seasonal visits — all 4 seasons",
+      "$300 labor bank credit (use on any handyman task)",
+      "8% off jobs under $1,000 · 5% off $1k–$5k · 2.5% off $5k+",
+      "Annual maintenance report for home equity documentation",
     ],
     color: "border-[#1a2e1a] bg-white ring-2 ring-[#1a2e1a]/20",
     badge: "text-[#1a2e1a] bg-[#1a2e1a]/10",
@@ -361,19 +360,19 @@ const TIERS = [
   },
   {
     key: "gold",
-    label: "Gold",
-    tagline: "Maximum coverage, priority service, biggest savings",
+    label: "Maximum Protection",
+    tagline: "The full system. Priority access. Maximum savings.",
     visits: 4,
     seasons: ["Spring", "Summer", "Fall", "Winter"],
-    laborBank: 500,
-    discount: "15%",
+    laborBank: 600,
+    discount: "12%",
     features: [
-      "Annual 360° Home Scan ($350 value)",
-      "4 seasonal visits — all seasons",
-      "$500 labor bank credit",
-      "15% member discount on jobs up to $2,500",
-      "Priority scheduling — front of the queue",
-      "Documented property health report",
+      "Everything in Full Coverage, plus:",
+      "4 seasonal visits — all 4 seasons + priority",
+      "$600 labor bank credit — you're ahead after month 5",
+      "12% off jobs under $1,000 · 8% off $1k–$5k · 4% off $5k+",
+      "Priority scheduling — your calls go first",
+      "Dedicated HP account manager",
     ],
     color: "border-yellow-400 bg-yellow-50",
     badge: "text-yellow-700 bg-yellow-100",
@@ -383,8 +382,8 @@ const TIERS = [
 
 const FAQ_ITEMS = [
   {
-    q: "What is a labor bank?",
-    a: "A labor bank is a pre-loaded credit that covers labor costs on eligible repairs. Silver members start with $250, Gold members start with $500. It renews each membership year and can be applied to any covered repair — no paperwork, no claims.",
+    q: "How does the labor bank work?",
+    a: "The labor bank is a pre-loaded credit that covers labor on any handyman task. Full Coverage members get $300 and Maximum Protection members get $600. On Monthly billing, the credit becomes available after your first 90 days. Switch to Quarterly or Annual to unlock the full credit on day one. It renews each membership year.",
   },
   {
     q: "What happens during a seasonal visit?",
@@ -400,7 +399,7 @@ const FAQ_ITEMS = [
   },
   {
     q: "How does the member discount work on repairs?",
-    a: "Your discount applies automatically to all jobs booked through your portal. Bronze members save 8% on every job. Silver saves 10% on the first $2,500. Gold saves 15% on the first $2,500, 8% on $2,501–$10,000, and 3% above that. Discounts stack with labor bank credits.",
+    a: "Your discount applies automatically to all jobs booked through your portal. Essential members save 5% on jobs under $1,000, 3% on $1k–$5k, and 1.5% above $5k. Full Coverage saves 8% / 5% / 2.5%. Maximum Protection saves 12% / 8% / 4%. Larger jobs already include negotiated sub-contractor pricing — your total cost is lower either way. Discounts stack with labor bank credits.",
   },
 ];
 

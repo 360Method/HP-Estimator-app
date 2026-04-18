@@ -2,15 +2,16 @@
  * 360° Method — Membership Tier Definitions & Discount Calculator
  * Delivered by Handy Pioneers
  *
- * Pricing uses clean round monthly equivalents when billed annually:
- *   Bronze  → $588/yr  = $49/mo equivalent
- *   Silver  → $948/yr  = $79/mo equivalent
- *   Gold    → $1,428/yr = $119/mo equivalent
+ * DB keys stay as bronze / silver / gold to avoid a destructive migration.
+ * Display labels match 360.handypioneers.com:
+ *   bronze  → "Essential"           $59/mo  | $169/quarter | $588/yr ($49/mo equiv)
+ *   silver  → "Full Coverage"       $99/mo  | $279/quarter | $948/yr ($79/mo equiv)
+ *   gold    → "Maximum Protection"  $149/mo | $419/quarter | $1,428/yr ($119/mo equiv)
  *
- * Monthly and quarterly options carry a small premium that makes
- * the annual rate feel like the obvious choice.
- *
- * Discount structure uses a step-ladder cap to protect margin on large jobs.
+ * Discount brackets match 360.handypioneers.com (step-ladder, by job size):
+ *   Essential:          5% / 3% / 1.5%
+ *   Full Coverage:      8% / 5% / 2.5%
+ *   Maximum Protection: 12% / 8% / 4%
  */
 
 export type MemberTier = "bronze" | "silver" | "gold";
@@ -42,6 +43,8 @@ export interface TierDefinition {
   pricing: TierPricing;
   /** Included seasonal visits per year */
   seasonalVisits: number;
+  /** Which seasons are included */
+  seasons: string[];
   /** Whether the annual 360 Home Scan is included */
   includesAnnualScan: boolean;
   /** Labor bank credit added at enrollment and renewal, in cents */
@@ -67,7 +70,7 @@ export interface TierDefinition {
 export interface DiscountBracket {
   /** Upper bound of this bracket in cents. Use Infinity for the final bracket. */
   ceilingCents: number;
-  /** Discount rate as a decimal (e.g. 0.15 = 15%) */
+  /** Discount rate as a decimal (e.g. 0.12 = 12%) */
   rate: number;
 }
 
@@ -104,105 +107,109 @@ function buildPricing(
 // ─── TIER DEFINITIONS ────────────────────────────────────────────────────────
 
 export const TIER_DEFINITIONS: Record<MemberTier, TierDefinition> = {
+  // DB key: "bronze" → display: "Essential"
   bronze: {
     id: "bronze",
-    label: "Bronze",
-    tagline: "Essential protection for the proactive homeowner",
+    label: "Essential",
+    tagline: "Protect the basics. Catch problems early.",
     pricing: buildPricing(
-      59,    // $59/mo
-      169,   // $169/quarter  (saves $48/yr vs monthly)
-      588,   // $588/yr = $49/mo equivalent (saves $120/yr vs monthly)
+      59,   // $59/mo
+      169,  // $169/quarter (~5% savings vs monthly)
+      588,  // $588/yr = $49/mo equivalent (~17% savings vs monthly)
     ),
     seasonalVisits: 2,
+    seasons: ["Spring", "Fall"],
     includesAnnualScan: true,
     laborBankCreditCents: 0,
     priorityScheduling: false,
     features: [
-      "Annual 360° Home Scan ($350 value)",
+      "Annual 360° Home Scan (2–3 hr documented assessment)",
       "2 seasonal visits — Spring & Fall",
-      "5% off jobs up to $2,500",
-      "3% off jobs $2,501–$10,000",
-      "Documented property health report",
+      "Prioritized repair report with cost estimates",
+      "Member discount on all out-of-scope jobs",
+      "HP direct line — no hold queues",
     ],
     discountBrackets: [
-      { ceilingCents: 250000, rate: 0.05 },   // 5% on first $2,500
-      { ceilingCents: 1000000, rate: 0.03 },  // 3% on $2,501–$10,000
-      { ceilingCents: Infinity, rate: 0.00 }, // 0% above $10,000
+      { ceilingCents: 100000, rate: 0.05 },    // 5% on jobs under $1,000
+      { ceilingCents: 500000, rate: 0.03 },    // 3% on $1,000–$5,000
+      { ceilingCents: Infinity, rate: 0.015 }, // 1.5% on jobs over $5,000
     ],
     stripePriceIds: {
       monthly: "",
       quarterly: "",
       annual: "",
-    },  // IDs resolved server-side via STRIPE_PRICE_360_BRONZE_* env vars
+    },
   },
 
+  // DB key: "silver" → display: "Full Coverage"
   silver: {
     id: "silver",
-    label: "Silver",
-    tagline: "Full-season coverage with a labor credit cushion",
+    label: "Full Coverage",
+    tagline: "Four seasons of protection + pre-paid labor.",
     pricing: buildPricing(
-      99,    // $99/mo
-      279,   // $279/quarter  (saves $48/yr vs monthly)
-      948,   // $948/yr = $79/mo equivalent (saves $240/yr vs monthly)
+      99,   // $99/mo
+      279,  // $279/quarter (~5% savings vs monthly)
+      948,  // $948/yr = $79/mo equivalent (~20% savings vs monthly)
     ),
     seasonalVisits: 4,
+    seasons: ["Spring", "Summer", "Fall", "Winter"],
     includesAnnualScan: true,
-    laborBankCreditCents: 20000, // $200
+    laborBankCreditCents: 30000, // $300
     priorityScheduling: false,
     features: [
-      "Annual 360° Home Scan ($350 value)",
-      "4 seasonal visits — all seasons",
-      "$200 labor bank credit",
-      "10% off jobs up to $2,500",
-      "5% off jobs $2,501–$10,000",
-      "2% off jobs above $10,000",
-      "Documented property health report",
+      "Everything in Essential, plus:",
+      "4 seasonal visits — all 4 seasons",
+      "$300 labor bank credit (use on any handyman task)",
+      "Summer visit — dry-season exterior + HVAC prep",
+      "Winter visit — freeze protection + moisture inspection",
+      "Annual maintenance report for home equity documentation",
     ],
     discountBrackets: [
-      { ceilingCents: 250000, rate: 0.10 },   // 10% on first $2,500
-      { ceilingCents: 1000000, rate: 0.05 },  // 5% on $2,501–$10,000
-      { ceilingCents: Infinity, rate: 0.02 }, // 2% above $10,000
+      { ceilingCents: 100000, rate: 0.08 },    // 8% on jobs under $1,000
+      { ceilingCents: 500000, rate: 0.05 },    // 5% on $1,000–$5,000
+      { ceilingCents: Infinity, rate: 0.025 }, // 2.5% on jobs over $5,000
     ],
     stripePriceIds: {
       monthly: "",
       quarterly: "",
       annual: "",
-    },  // IDs resolved server-side via STRIPE_PRICE_360_SILVER_* env vars
+    },
   },
 
+  // DB key: "gold" → display: "Maximum Protection"
   gold: {
     id: "gold",
-    label: "Gold",
-    tagline: "Maximum coverage, priority service, and the biggest savings",
+    label: "Maximum Protection",
+    tagline: "The full system. Priority access. Maximum savings.",
     pricing: buildPricing(
-      149,   // $149/mo
-      419,   // $419/quarter  (saves $48/yr vs monthly)
-      1428,  // $1,428/yr = $119/mo equivalent (saves $360/yr vs monthly)
+      149,  // $149/mo
+      419,  // $419/quarter (~6% savings vs monthly)
+      1428, // $1,428/yr = $119/mo equivalent (~20% savings vs monthly)
     ),
     seasonalVisits: 4,
+    seasons: ["Spring", "Summer", "Fall", "Winter"],
     includesAnnualScan: true,
-    laborBankCreditCents: 50000, // $500
+    laborBankCreditCents: 60000, // $600
     priorityScheduling: true,
     features: [
-      "Annual 360° Home Scan ($350 value)",
-      "4 seasonal visits — all seasons",
-      "$500 labor bank credit",
-      "Priority scheduling",
-      "15% off jobs up to $2,500",
-      "8% off jobs $2,501–$10,000",
-      "3% off jobs above $10,000",
-      "Documented property health report",
+      "Everything in Full Coverage, plus:",
+      "4 seasonal visits — all 4 seasons + priority",
+      "$600 labor bank credit — you're ahead after month 5",
+      "Priority scheduling — your calls go first",
+      "Dedicated HP account manager",
+      "Pre-negotiated sub-contractor rates on major work",
+      "Home equity maintenance log for refinancing or sale",
     ],
     discountBrackets: [
-      { ceilingCents: 250000, rate: 0.15 },   // 15% on first $2,500
-      { ceilingCents: 1000000, rate: 0.08 },  // 8% on $2,501–$10,000
-      { ceilingCents: Infinity, rate: 0.03 }, // 3% above $10,000
+      { ceilingCents: 100000, rate: 0.12 },   // 12% on jobs under $1,000
+      { ceilingCents: 500000, rate: 0.08 },   // 8% on $1,000–$5,000
+      { ceilingCents: Infinity, rate: 0.04 }, // 4% on jobs over $5,000
     ],
     stripePriceIds: {
       monthly: "",
       quarterly: "",
       annual: "",
-    },  // IDs resolved server-side via STRIPE_PRICE_360_GOLD_* env vars
+    },
   },
 };
 
@@ -240,14 +247,14 @@ export function getSavingsVsMonthly(tier: MemberTier, cadence: BillingCadence): 
 /**
  * Calculate the total member discount for a job.
  *
- * @param tier - The member's tier
+ * @param tier - The member's tier (DB key: bronze / silver / gold)
  * @param jobTotalCents - The job total in cents (before discount)
  * @returns The discount amount in cents
  *
  * @example
- * // Gold member, $15,000 job
- * calcMemberDiscount("gold", 1500000)
- * // => 112500 ($1,125 — effective rate 7.5%, not flat 15%)
+ * // gold (Maximum Protection) member, $6,000 job
+ * calcMemberDiscount("gold", 600000)
+ * // => $80 (12% on first $1k) + $320 (8% on $1k–$5k) + $40 (4% on $5k–$6k) = $440
  */
 export function calcMemberDiscount(tier: MemberTier, jobTotalCents: number): number {
   const brackets = TIER_DEFINITIONS[tier].discountBrackets;
@@ -276,7 +283,7 @@ export function calcMemberDiscount(tier: MemberTier, jobTotalCents: number): num
 
 /**
  * Returns the effective discount rate as a percentage string for display.
- * e.g. "7.5%" for a $15,000 Gold job.
+ * e.g. "7.5%" for a $15,000 gold job.
  */
 export function effectiveDiscountRate(tier: MemberTier, jobTotalCents: number): string {
   if (jobTotalCents === 0) return "0%";

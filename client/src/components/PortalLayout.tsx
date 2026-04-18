@@ -71,25 +71,24 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   const isActive = (path: string) => location === path || location.startsWith(path + "/");
 
   const NavLink = ({ item }: { item: NavItem }) => (
-    <Link href={item.path}>
-      <a
-        className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors cursor-pointer ${
-          isActive(item.path)
-            ? "bg-blue-50 text-blue-700 font-semibold border-l-2 border-blue-600"
-            : "text-gray-700 hover:bg-gray-100"
-        }`}
-        onClick={() => setMobileMenuOpen(false)}
-      >
-        {item.icon}
-        {(sidebarOpen || mobileMenuOpen) && (
-          <span className="flex-1">{item.label}</span>
-        )}
-        {item.badge && item.badge > 0 && (sidebarOpen || mobileMenuOpen) && (
-          <Badge variant="destructive" className="text-xs h-5 min-w-5 flex items-center justify-center">
-            {item.badge}
-          </Badge>
-        )}
-      </a>
+    <Link
+      href={item.path}
+      className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors cursor-pointer ${
+        isActive(item.path)
+          ? "bg-blue-50 text-blue-700 font-semibold border-l-2 border-blue-600"
+          : "text-gray-700 hover:bg-gray-100"
+      }`}
+      onClick={() => setMobileMenuOpen(false)}
+    >
+      {item.icon}
+      {(sidebarOpen || mobileMenuOpen) && (
+        <span className="flex-1">{item.label}</span>
+      )}
+      {item.badge && item.badge > 0 && (sidebarOpen || mobileMenuOpen) && (
+        <Badge variant="destructive" className="text-xs h-5 min-w-5 flex items-center justify-center">
+          {item.badge}
+        </Badge>
+      )}
     </Link>
   );
 
@@ -150,8 +149,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
-            <Link href="/portal/home">
-              <a className="flex items-center gap-2 cursor-pointer">
+            <Link href="/portal/home" className="flex items-center gap-2 cursor-pointer">
                 <img
                   src={HP_LOGO}
                   alt="Handy Pioneers"
@@ -161,26 +159,21 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
                   }}
                 />
                 <span className="font-bold text-gray-900 text-base hidden sm:block">Handy Pioneers</span>
-              </a>
             </Link>
           </div>
 
           {/* Right: CTAs + user */}
           <div className="flex items-center gap-2">
             <Link href="/portal/messages">
-              <a>
-                <Button variant="outline" size="sm" className="hidden sm:flex items-center gap-1.5 text-xs">
-                  <MessageSquare className="w-3.5 h-3.5" />
-                  Send a message
-                </Button>
-              </a>
+              <Button variant="outline" size="sm" className="hidden sm:flex items-center gap-1.5 text-xs">
+                <MessageSquare className="w-3.5 h-3.5" />
+                Send a message
+              </Button>
             </Link>
             <Link href="/portal/request">
-              <a>
-                <Button size="sm" className="hidden sm:flex text-xs" style={{ background: '#c8922a', color: '#fff' }}>
-                  Book online
-                </Button>
-              </a>
+              <Button size="sm" className="hidden sm:flex text-xs" style={{ background: '#c8922a', color: '#fff' }}>
+                Book online
+              </Button>
             </Link>
             {customer && (
               <span className="text-xs text-gray-500 hidden md:block ml-2">

@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ArrowLeft, Search, Crown, Star, Shield, User, MapPin, ExternalLink } from 'lucide-react';
-import { formatDollars, type MemberTier } from '../../../shared/threeSixtyTiers';
+import { formatDollars, TIER_DEFINITIONS, type MemberTier } from '../../../shared/threeSixtyTiers';
 import ThreeSixtyMemberDetail from './ThreeSixtyMemberDetail';
 import { useEstimator } from '@/contexts/EstimatorContext';
 
@@ -148,7 +148,7 @@ export default function ThreeSixtyMemberList({ onBack }: Props) {
                           <span className="text-sm font-medium text-muted-foreground">Membership #{m.id}</span>
                         )}
                         <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border ${TIER_BADGE[m.tier as MemberTier]}`}>
-                          {m.tier.charAt(0).toUpperCase() + m.tier.slice(1)}
+                          {TIER_DEFINITIONS[m.tier as MemberTier]?.label ?? m.tier}
                         </span>
                         <Badge
                           variant={m.status === 'active' ? 'default' : 'secondary'}

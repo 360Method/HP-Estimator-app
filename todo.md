@@ -2092,3 +2092,14 @@
 - [x] PortalReports: non-member sees 360° sales page (hero, stats, example baseline report, system scores, seasonal visit preview, feature grid, CTA to /portal/360-membership)
 - [x] PortalReports: member with real reports sees existing list view (unchanged)
 - [x] PortalReports: route already registered in App.tsx (/portal/reports)
+
+## Tier Rename & Data Correction (360° Plans)
+- [x] Rename Bronze→Essential, Silver→Full Coverage, Gold→Maximum Protection in all display labels
+- [x] Correct visits: Essential=2 (Spring+Fall), Full Coverage=4, Maximum Protection=4
+- [x] Correct labor bank: Essential=$0, Full Coverage=$300, Maximum Protection=$600
+- [x] Correct discount brackets: Essential 5%/3%/1.5%, Full Coverage 8%/5%/2.5%, Max 12%/8%/4%
+- [x] Update shared/threeSixtyTiers.ts with correct data
+- [x] Update funnel360.ts with correct data
+- [x] Update PropertyCard, EnrollModal, ThreeSixtyMemberList display labels
+- [x] Update server welcome email to use tierDef.label instead of raw tier key
+- [x] Fix nested anchor inside Link in PortalLayout (console error)
