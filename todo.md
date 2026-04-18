@@ -2086,3 +2086,9 @@
 - [x] Fix success_url in /api/360/checkout to detect portal origin and route to /portal/360-confirmation
 - [x] Build PortalEnrollmentConfirmation page at /portal/360-confirmation
 - [x] Register /portal/360-confirmation route in App.tsx
+
+## Portal Reports — 360° Sales Page
+
+- [x] PortalReports: non-member sees 360° sales page (hero, stats, example baseline report, system scores, seasonal visit preview, feature grid, CTA to /portal/360-membership)
+- [x] PortalReports: member with real reports sees existing list view (unchanged)
+- [x] PortalReports: route already registered in App.tsx (/portal/reports)
