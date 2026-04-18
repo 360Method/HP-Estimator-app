@@ -898,11 +898,7 @@ export default function CustomerSection() {
   // ── Auto-save profile changes to DB (debounced 1.5s) ─────────────────────
   // Watches: tags, leadSource, customerNotes, sendNotifications, sendMarketingOptIn, defaultTaxCode
   // These are the fields that setCustomerProfile updates but don't have their own save button.
-  // NOTE: tags is an array — we compare by JSON string to avoid infinite loops from new array
-  // references created in onSuccess (JSON.parse always returns a new array ref).
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const activeTagsKey = JSON.stringify(activeCustomer?.tags ?? []);
-  const profileTagsKey = JSON.stringify(customerProfile.tags ?? []);
   useEffect(() => {
     if (!activeCustomerId || !activeCustomer) return;
     if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
@@ -932,12 +928,12 @@ export default function CustomerSection() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     activeCustomerId,
-    activeTagsKey,
+    activeCustomer?.tags,
     activeCustomer?.leadSource,
     activeCustomer?.customerNotes,
     activeCustomer?.sendNotifications,
     activeCustomer?.sendMarketingOptIn,
-    profileTagsKey,
+    customerProfile.tags,
     customerProfile.leadSource,
     customerProfile.privateNotes,
     customerProfile.notificationsEnabled,
