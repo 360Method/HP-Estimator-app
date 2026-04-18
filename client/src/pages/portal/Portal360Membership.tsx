@@ -9,7 +9,7 @@
  *
  * HP brand: forest green #1a2e1a / warm gold #c8922a
  */
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import PortalLayout from "@/components/PortalLayout";
@@ -25,7 +25,7 @@ import {
   Loader2, ArrowLeft, Star, Coins, CalendarCheck, ClipboardList,
   ChevronRight, CheckCircle2, Clock, AlertTriangle, Wrench, DollarSign,
   ChevronDown, ChevronUp, Home, Leaf, Sun, Snowflake, Wind, CalendarPlus,
-  TrendingUp, Shield, Zap, Users, ArrowRight, Gift,
+  TrendingUp, Shield, Zap, Users, ArrowRight, Gift, ExternalLink, Info,
 } from "lucide-react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -173,6 +173,151 @@ function RecRow({ rec, onRequest }: {
 
 // ─── NON-MEMBER FUNNEL ────────────────────────────────────────────────────────
 
+// ─── Per-tier task lists (for popup) ────────────────────────────────────────
+const TIER_TASKS: Record<string, { category: string; tasks: string[] }[]> = {
+  bronze: [
+    {
+      category: "Annual 360° Home Scan",
+      tasks: [
+        "Full interior & exterior walkthrough",
+        "Roof condition & gutter inspection",
+        "Foundation & drainage assessment",
+        "HVAC filter check & visual inspection",
+        "Plumbing supply & drain visual",
+        "Electrical panel & GFCI check",
+        "Attic & crawlspace moisture check",
+        "Window & door seal inspection",
+        "Smoke & CO detector test",
+        "Written health report with photos",
+      ],
+    },
+    {
+      category: "Spring Visit",
+      tasks: [
+        "Post-winter exterior inspection",
+        "Gutter cleaning & downspout flush",
+        "Deck/patio condition check",
+        "AC pre-season filter & coil check",
+        "Caulking & weatherstripping review",
+      ],
+    },
+    {
+      category: "Fall Visit",
+      tasks: [
+        "Pre-winter exterior prep",
+        "Gutter leaf clearing",
+        "Heating system pre-season check",
+        "Exterior faucet & hose bib winterize",
+        "Door & window seal touch-up",
+      ],
+    },
+  ],
+  silver: [
+    {
+      category: "Annual 360° Home Scan",
+      tasks: [
+        "Full interior & exterior walkthrough",
+        "Roof condition & gutter inspection",
+        "Foundation & drainage assessment",
+        "HVAC filter check & visual inspection",
+        "Plumbing supply & drain visual",
+        "Electrical panel & GFCI check",
+        "Attic & crawlspace moisture check",
+        "Window & door seal inspection",
+        "Smoke & CO detector test",
+        "Written health report with photos",
+      ],
+    },
+    {
+      category: "Spring Visit",
+      tasks: [
+        "Post-winter exterior inspection",
+        "Gutter cleaning & downspout flush",
+        "Deck/patio condition check",
+        "AC pre-season filter & coil check",
+        "Caulking & weatherstripping review",
+      ],
+    },
+    {
+      category: "Summer Visit",
+      tasks: [
+        "Mid-season roof & attic heat check",
+        "Irrigation & exterior water features",
+        "Deck/fence stain & seal assessment",
+        "Pest entry point inspection",
+        "Dryer vent cleaning",
+      ],
+    },
+    {
+      category: "Fall Visit",
+      tasks: [
+        "Pre-winter exterior prep",
+        "Gutter leaf clearing",
+        "Heating system pre-season check",
+        "Exterior faucet & hose bib winterize",
+        "Door & window seal touch-up",
+      ],
+    },
+  ],
+  gold: [
+    {
+      category: "Annual 360° Home Scan",
+      tasks: [
+        "Full interior & exterior walkthrough",
+        "Roof condition & gutter inspection",
+        "Foundation & drainage assessment",
+        "HVAC filter check & visual inspection",
+        "Plumbing supply & drain visual",
+        "Electrical panel & GFCI check",
+        "Attic & crawlspace moisture check",
+        "Window & door seal inspection",
+        "Smoke & CO detector test",
+        "Written health report with photos",
+      ],
+    },
+    {
+      category: "Spring Visit",
+      tasks: [
+        "Post-winter exterior inspection",
+        "Gutter cleaning & downspout flush",
+        "Deck/patio condition check",
+        "AC pre-season filter & coil check",
+        "Caulking & weatherstripping review",
+      ],
+    },
+    {
+      category: "Summer Visit",
+      tasks: [
+        "Mid-season roof & attic heat check",
+        "Irrigation & exterior water features",
+        "Deck/fence stain & seal assessment",
+        "Pest entry point inspection",
+        "Dryer vent cleaning",
+      ],
+    },
+    {
+      category: "Fall Visit",
+      tasks: [
+        "Pre-winter exterior prep",
+        "Gutter leaf clearing",
+        "Heating system pre-season check",
+        "Exterior faucet & hose bib winterize",
+        "Door & window seal touch-up",
+      ],
+    },
+    {
+      category: "Winter Visit",
+      tasks: [
+        "Pipe freeze risk assessment",
+        "Attic insulation & ventilation check",
+        "Fireplace & chimney visual",
+        "Garage door & weatherstripping",
+        "Emergency shut-off location review",
+      ],
+    },
+  ],
+};
+
 const TIERS = [
   {
     key: "bronze",
@@ -264,6 +409,7 @@ function NonMemberFunnel() {
   const [selectedTier, setSelectedTier] = useState("silver");
   const [spendSlider, setSpendSlider] = useState(5000);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [taskPopupTier, setTaskPopupTier] = useState<string | null>(null);
 
   const cadenceLabel = { monthly: "mo", quarterly: "quarter", annual: "yr" };
 
@@ -325,6 +471,15 @@ function NonMemberFunnel() {
             >
               Calculate My Savings
             </Button>
+            <a
+              href="https://360.handypioneers.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-sm text-white/60 hover:text-white/90 transition-colors underline-offset-4 hover:underline mt-1"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              Full details at 360.handypioneers.com
+            </a>
           </div>
         </div>
       </div>
@@ -417,7 +572,7 @@ function NonMemberFunnel() {
                   <span className="text-2xl font-black text-gray-900">${getPrice(t.key).toFixed(0)}</span>
                   <span className="text-xs text-muted-foreground">/{cadenceLabel[cadence]}</span>
                 </div>
-                <ul className="space-y-1.5 mb-5">
+                <ul className="space-y-1.5 mb-3">
                   {t.features.map((f, i) => (
                     <li key={i} className="flex items-start gap-1.5 text-xs text-gray-700">
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
@@ -425,6 +580,12 @@ function NonMemberFunnel() {
                     </li>
                   ))}
                 </ul>
+                <button
+                  className="text-[11px] text-[#1a2e1a] font-semibold underline underline-offset-2 mb-4 hover:text-[#c8922a] transition-colors flex items-center gap-1"
+                  onClick={(e) => { e.stopPropagation(); setTaskPopupTier(t.key); }}
+                >
+                  <ClipboardList className="w-3 h-3" /> See all included tasks
+                </button>
                 <Button
                   className={`w-full text-white font-bold text-sm ${t.cta}`}
                   onClick={(e) => { e.stopPropagation(); goToCheckout(t.key); }}
@@ -461,60 +622,61 @@ function NonMemberFunnel() {
               </div>
             </div>
             <div className="grid grid-cols-3 gap-3">
-              {savingsPerTier.map(t => (
-                <div key={t.key} className={`rounded-xl border-2 p-3 text-center ${t.key === "silver" ? "border-[#1a2e1a] bg-[#1a2e1a]/5" : "border-gray-200"}`}>
-                  <p className={`text-xs font-bold mb-1 ${TIER_LABELS[t.key]?.color}`}>{t.label}</p>
-                  <p className="text-lg font-black text-emerald-700">${Math.round(t.totalValue).toLocaleString()}</p>
-                  <p className="text-[10px] text-muted-foreground">total value</p>
-                  <div className="mt-2 pt-2 border-t border-gray-100">
-                    <p className="text-[10px] text-gray-500">Discounts saved</p>
-                    <p className="text-sm font-bold text-gray-800">${Math.round(t.discount).toLocaleString()}</p>
-                  </div>
-                  {t.laborBank > 0 && (
-                    <div className="mt-1">
-                      <p className="text-[10px] text-gray-500">Labor bank</p>
-                      <p className="text-sm font-bold text-emerald-700">${t.laborBank}</p>
+              {savingsPerTier.map(t => {
+                const scanValue = 350;
+                const visitValue = t.visits * 120;
+                const laborBankVal = t.laborBank;
+                const discountVal = Math.round(t.discount);
+                const totalVal = Math.round(t.totalValue);
+                return (
+                  <div key={t.key} className={`rounded-xl border-2 p-3 ${t.key === "silver" ? "border-[#1a2e1a] bg-[#1a2e1a]/5" : "border-gray-200"}`}>
+                    <p className={`text-xs font-bold mb-2 text-center ${TIER_LABELS[t.key]?.color}`}>{t.label}</p>
+                    {/* Itemized breakdown */}
+                    <div className="space-y-1 mb-2">
+                      <div className="flex justify-between text-[10px] text-gray-600">
+                        <span>Home Scan</span>
+                        <span className="font-medium">${scanValue}</span>
+                      </div>
+                      <div className="flex justify-between text-[10px] text-gray-600">
+                        <span>{t.visits} seasonal visit{t.visits > 1 ? "s" : ""}</span>
+                        <span className="font-medium">${visitValue}</span>
+                      </div>
+                      {laborBankVal > 0 && (
+                        <div className="flex justify-between text-[10px] text-gray-600">
+                          <span>Labor bank</span>
+                          <span className="font-medium text-emerald-700">${laborBankVal}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-[10px] text-gray-600">
+                        <span>Repair discounts</span>
+                        <span className="font-medium text-emerald-700">${discountVal}</span>
+                      </div>
                     </div>
-                  )}
-                </div>
-              ))}
+                    <div className="border-t border-gray-200 pt-2 text-center">
+                      <p className="text-[10px] text-gray-500 mb-0.5">Total value</p>
+                      <p className="text-lg font-black text-emerald-700">${totalVal.toLocaleString()}</p>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-            <p className="text-[10px] text-muted-foreground text-center mt-3">
-              * Includes discount savings, labor bank credit, and Annual Home Scan value ($350). Actual savings vary.
-            </p>
+            <div className="mt-3 bg-gray-50 rounded-lg p-3">
+              <p className="text-[10px] text-gray-500 font-semibold mb-1 flex items-center gap-1">
+                <Info className="w-3 h-3" /> How we calculate this
+              </p>
+              <ul className="space-y-0.5 text-[10px] text-gray-500">
+                <li>• <strong>Home Scan ($350):</strong> Comparable to a home inspection — documented, photographed, prioritized.</li>
+                <li>• <strong>Seasonal visits ($120 each):</strong> Based on average handyman visit cost in the Portland/Vancouver area.</li>
+                <li>• <strong>Labor bank:</strong> Pre-loaded credit applied directly to repair invoices — no claims, no paperwork.</li>
+                <li>• <strong>Repair discounts:</strong> Calculated on your estimated spend of ${spendSlider.toLocaleString()} using each tier's discount brackets.</li>
+              </ul>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* ── Testimonials ─────────────────────────────────────────────────── */}
-      <div className="bg-white py-10">
-        <div className="container max-w-3xl">
-          <h2 className="text-xl font-black text-[#1a2e1a] text-center mb-6">What members say</h2>
-          <div className="grid sm:grid-cols-3 gap-4">
-            {[
-              { name: "Sarah M.", location: "Vancouver, WA", tier: "Gold", quote: "They caught a slow roof leak before it became a $15,000 problem. The labor bank paid for the repair. Best investment I've made in this house." },
-              { name: "James T.", location: "Camas, WA", tier: "Silver", quote: "I used to dread home repairs. Now I get a full report every season and know exactly what's coming. No more surprises." },
-              { name: "Linda K.", location: "Ridgefield, WA", tier: "Bronze", quote: "The annual scan alone is worth it. They found three things I had no idea about. The discount on the repairs more than covered the membership." },
-            ].map((t, i) => (
-              <div key={i} className="bg-gray-50 border rounded-xl p-4">
-                <div className="flex items-center gap-1 mb-2">
-                  {[...Array(5)].map((_, j) => <Star key={j} className="w-3 h-3 fill-[#c8922a] text-[#c8922a]" />)}
-                </div>
-                <p className="text-xs text-gray-700 leading-relaxed mb-3">"{t.quote}"</p>
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-full bg-[#1a2e1a] flex items-center justify-center text-white text-[10px] font-bold">
-                    {t.name.charAt(0)}
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-gray-900">{t.name}</p>
-                    <p className="text-[10px] text-muted-foreground">{t.location} · {t.tier} Member</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
+      {/* ── Testimonials (Elfsight Google Reviews) ──────────────────────── */}
+      <ElfsightReviews />
 
       {/* ── FAQ ──────────────────────────────────────────────────────────── */}
       <div className="bg-gray-50 py-10 border-t">
@@ -557,6 +719,43 @@ function NonMemberFunnel() {
         </div>
       </div>
 
+      {/* ── Task Popup ───────────────────────────────────────────────────── */}
+      {taskPopupTier && (
+        <Dialog open={!!taskPopupTier} onOpenChange={() => setTaskPopupTier(null)}>
+          <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <ClipboardList className="w-4 h-4 text-[#c8922a]" />
+                {TIERS.find(t => t.key === taskPopupTier)?.label} — Included Tasks
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-5 pt-2">
+              {(TIER_TASKS[taskPopupTier] ?? []).map((group, gi) => (
+                <div key={gi}>
+                  <p className="text-xs font-bold text-[#1a2e1a] uppercase tracking-wide mb-2 border-b pb-1">{group.category}</p>
+                  <ul className="space-y-1.5">
+                    {group.tasks.map((task, ti) => (
+                      <li key={ti} className="flex items-start gap-2 text-sm text-gray-700">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
+                        {task}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+            <div className="pt-4 border-t">
+              <Button
+                className="w-full bg-[#1a2e1a] hover:bg-[#2d4a2d] text-white font-bold"
+                onClick={() => { setTaskPopupTier(null); goToCheckout(taskPopupTier); }}
+              >
+                Enroll in {TIERS.find(t => t.key === taskPopupTier)?.label} <ArrowRight className="w-3.5 h-3.5 ml-1" />
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
       {/* ── Enroll Modal ─────────────────────────────────────────────────── */}
       {enrollTier && portalCustomer && (
         <EnrollModal
@@ -569,6 +768,30 @@ function NonMemberFunnel() {
     </PortalLayout>
   );
 }
+// ─── Elfsight Google Reviews Widget ──────────────────────────────────────────
+function ElfsightReviews() {
+  useEffect(() => {
+    if (document.querySelector('script[src="https://static.elfsight.com/platform/platform.js"]') ||
+        document.querySelector('script[src="https://elfsightcdn.com/platform.js"]')) return;
+    const script = document.createElement("script");
+    script.src = "https://elfsightcdn.com/platform.js";
+    script.async = true;
+    document.head.appendChild(script);
+  }, []);
+
+  return (
+    <div className="bg-white py-10">
+      <div className="container max-w-3xl">
+        <h2 className="text-xl font-black text-[#1a2e1a] text-center mb-6">What our customers say</h2>
+        <div
+          className="elfsight-app-3439582a-5f81-4ddb-ab1a-54f99c9da7af"
+          data-elfsight-app-lazy
+        />
+      </div>
+    </div>
+  );
+}
+
 // ─── MEMBER DASHBOARD ──────────────────────────────────────────────────────────
 
 export default function Portal360Membership() {

@@ -2057,19 +2057,19 @@
 - [x] Verified all 9 homeowner price IDs resolve correctly after normalization
 
 ## Portal 360° Upgrade — Non-member funnel + member dashboard
-- [ ] Non-member: hero section (forest green bg, gold CTA, proactive vs reactive headline)
-- [ ] Non-member: problem stats row (emergency repair cost, deferred maintenance, % without plan)
-- [ ] Non-member: tier comparison cards with cadence toggle (monthly/quarterly/annual)
-- [ ] Non-member: savings calculator (slider → projected savings per tier)
-- [ ] Non-member: testimonial cards (3 placeholder)
-- [ ] Non-member: FAQ accordion (5 questions)
-- [ ] Non-member: sticky bottom CTA bar
-- [ ] Member: savings counter (total member discounts applied to completed jobs)
-- [ ] Member: seasonal visit year-at-a-glance timeline
-- [ ] Member: upgrade nudge card (Bronze/Silver only → one-click to checkout)
-- [ ] Member: referral shortcut link
-- [ ] PortalHome: non-member teaser banner → /portal/360-membership
-- [ ] PortalHome: member card savings badge
+- [x] Non-member: hero section (forest green bg, gold CTA, proactive vs reactive headline)
+- [x] Non-member: problem stats row (emergency repair cost, deferred maintenance, % without plan)
+- [x] Non-member: tier comparison cards with cadence toggle (monthly/quarterly/annual)
+- [x] Non-member: savings calculator (slider → projected savings per tier)
+- [x] Non-member: testimonial cards (3 placeholder)
+- [x] Non-member: FAQ accordion (5 questions)
+- [x] Non-member: sticky bottom CTA bar
+- [x] Member: savings counter (total member discounts applied to completed jobs)
+- [x] Member: seasonal visit year-at-a-glance timeline
+- [x] Member: upgrade nudge card (Bronze/Silver only → one-click to checkout)
+- [x] Member: referral shortcut link
+- [x] PortalHome: non-member teaser banner → /portal/360-membership
+- [x] PortalHome: member card savings badge
 
 ## Portal 360° Upgrade — 2026-04-17
 - [x] Non-member funnel: hero, problem stats, tier cards, cadence toggle, savings calculator, testimonials, FAQ, sticky CTA
