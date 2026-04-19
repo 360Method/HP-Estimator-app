@@ -2103,3 +2103,14 @@
 - [x] Update PropertyCard, EnrollModal, ThreeSixtyMemberList display labels
 - [x] Update server welcome email to use tierDef.label instead of raw tier key
 - [x] Fix nested anchor inside Link in PortalLayout (console error)
+
+## PWA (Progressive Web App)
+- [x] Generate 192x192, 512x512, 180x180, 32x32, 16x16 icons from HP logo
+- [x] Upload icons to CDN
+- [x] Create web app manifest (manifest.webmanifest) with name, icons, shortcuts
+- [x] Add iOS meta tags (apple-mobile-web-app-capable, apple-touch-icon)
+- [x] Add theme-color and favicon links to index.html
+- [x] Create service worker (sw.js) with cache-first shell, network-first API
+- [x] Register service worker in main.tsx
+- [x] Create PwaInstallBanner component (Android prompt + iOS manual hint)
+- [x] Add PwaInstallBanner to App.tsx
