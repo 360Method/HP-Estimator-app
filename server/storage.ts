@@ -1,70 +1,26 @@
-// Preconfigured storage helpers for Manus WebDev templates
-// Uses the Biz-provided storage proxy (Authorization: Bearer <token>)
+import { v2 as cloudinary } from "cloudinary";
+import { ENV } from "./_core/env";
 
-import { ENV } from './_core/env';
-
-type StorageConfig = { baseUrl: string; apiKey: string };
-
-function getStorageConfig(): StorageConfig {
-  const baseUrl = ENV.forgeApiUrl;
-  const apiKey = ENV.forgeApiKey;
-
-  if (!baseUrl || !apiKey) {
+function getCloudinary() {
+  if (!ENV.cloudinaryCloudName || !ENV.cloudinaryApiKey || !ENV.cloudinaryApiSecret) {
     throw new Error(
-      "Storage proxy credentials missing: set BUILT_IN_FORGE_API_URL and BUILT_IN_FORGE_API_KEY"
+      "Cloudinary credentials missing: set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET"
     );
   }
-
-  return { baseUrl: baseUrl.replace(/\/+$/, ""), apiKey };
-}
-
-function buildUploadUrl(baseUrl: string, relKey: string): URL {
-  const url = new URL("v1/storage/upload", ensureTrailingSlash(baseUrl));
-  url.searchParams.set("path", normalizeKey(relKey));
-  return url;
-}
-
-async function buildDownloadUrl(
-  baseUrl: string,
-  relKey: string,
-  apiKey: string
-): Promise<string> {
-  const downloadApiUrl = new URL(
-    "v1/storage/downloadUrl",
-    ensureTrailingSlash(baseUrl)
-  );
-  downloadApiUrl.searchParams.set("path", normalizeKey(relKey));
-  const response = await fetch(downloadApiUrl, {
-    method: "GET",
-    headers: buildAuthHeaders(apiKey),
+  cloudinary.config({
+    cloud_name: ENV.cloudinaryCloudName,
+    api_key: ENV.cloudinaryApiKey,
+    api_secret: ENV.cloudinaryApiSecret,
+    secure: true,
   });
-  return (await response.json()).url;
+  return cloudinary;
 }
 
-function ensureTrailingSlash(value: string): string {
-  return value.endsWith("/") ? value : `${value}/`;
-}
-
-function normalizeKey(relKey: string): string {
-  return relKey.replace(/^\/+/, "");
-}
-
-function toFormData(
-  data: Buffer | Uint8Array | string,
-  contentType: string,
-  fileName: string
-): FormData {
-  const blob =
-    typeof data === "string"
-      ? new Blob([data], { type: contentType })
-      : new Blob([data as any], { type: contentType });
-  const form = new FormData();
-  form.append("file", blob, fileName || "file");
-  return form;
-}
-
-function buildAuthHeaders(apiKey: string): HeadersInit {
-  return { Authorization: `Bearer ${apiKey}` };
+function keyToPublicId(relKey: string): string {
+  // Strip leading slashes and remove file extension for Cloudinary public_id
+  const stripped = relKey.replace(/^\/+/, "");
+  const dotIndex = stripped.lastIndexOf(".");
+  return dotIndex > 0 ? stripped.slice(0, dotIndex) : stripped;
 }
 
 export async function storagePut(
@@ -72,31 +28,41 @@ export async function storagePut(
   data: Buffer | Uint8Array | string,
   contentType = "application/octet-stream"
 ): Promise<{ key: string; url: string }> {
-  const { baseUrl, apiKey } = getStorageConfig();
-  const key = normalizeKey(relKey);
-  const uploadUrl = buildUploadUrl(baseUrl, key);
-  const formData = toFormData(data, contentType, key.split("/").pop() ?? key);
-  const response = await fetch(uploadUrl, {
-    method: "POST",
-    headers: buildAuthHeaders(apiKey),
-    body: formData,
+  const cld = getCloudinary();
+  const key = relKey.replace(/^\/+/, "");
+  const publicId = keyToPublicId(key);
+
+  // Determine resource type from content type
+  const resourceType: "image" | "video" | "raw" =
+    contentType.startsWith("image/") ? "image" :
+    contentType.startsWith("video/") ? "video" : "raw";
+
+  // Convert to base64 data URI for upload
+  const buf = typeof data === "string" ? Buffer.from(data, "utf-8") : Buffer.from(data as any);
+  const base64 = buf.toString("base64");
+  const dataUri = `data:${contentType};base64,${base64}`;
+
+  const result = await cld.uploader.upload(dataUri, {
+    public_id: publicId,
+    resource_type: resourceType,
+    overwrite: true,
   });
 
-  if (!response.ok) {
-    const message = await response.text().catch(() => response.statusText);
-    throw new Error(
-      `Storage upload failed (${response.status} ${response.statusText}): ${message}`
-    );
-  }
-  const url = (await response.json()).url;
-  return { key, url };
+  return { key, url: result.secure_url };
 }
 
-export async function storageGet(relKey: string): Promise<{ key: string; url: string; }> {
-  const { baseUrl, apiKey } = getStorageConfig();
-  const key = normalizeKey(relKey);
-  return {
-    key,
-    url: await buildDownloadUrl(baseUrl, key, apiKey),
-  };
+export async function storageGet(relKey: string): Promise<{ key: string; url: string }> {
+  const cld = getCloudinary();
+  const key = relKey.replace(/^\/+/, "");
+  const publicId = keyToPublicId(key);
+
+  // Generate a signed URL valid for 1 hour
+  const url = cld.url(publicId, {
+    sign_url: true,
+    expires_at: Math.floor(Date.now() / 1000) + 3600,
+    resource_type: "auto",
+    secure: true,
+  });
+
+  return { key, url };
 }
