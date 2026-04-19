@@ -54,6 +54,9 @@ async function startServer() {
     credentials: true,
   }));
 
+  // ── Health check (Railway probes this before marking deploy live) ──
+  app.get("/api/health", (_, res) => res.json({ ok: true }));
+
   // ── Stripe webhook: MUST be registered BEFORE express.json() ──
   app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async (req, res) => {
     const sig = req.headers["stripe-signature"] as string;
