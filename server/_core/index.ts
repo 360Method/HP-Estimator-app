@@ -637,6 +637,26 @@ async function startServer() {
     res.json({ ok: true });
   });
 
+  // ── 360° session lookup — used by /360-welcome page to show tier/name ──────────
+  app.get("/api/360/session", async (req, res) => {
+    const sessionId = req.query.session_id as string | undefined;
+    if (!sessionId) { res.status(400).json({ error: "session_id required" }); return; }
+    const stripeKey = process.env.STRIPE_SECRET_KEY;
+    if (!stripeKey) { res.status(503).json({ error: "Stripe not configured" }); return; }
+    try {
+      const stripe = new Stripe(stripeKey, { apiVersion: "2025-03-31.basil" });
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+      res.json({
+        tier: session.metadata?.tier ?? null,
+        cadence: session.metadata?.cadence ?? null,
+        customerName: session.metadata?.customerName ?? session.customer_details?.name ?? null,
+      });
+    } catch (err) {
+      console.error("[360 Session]", err);
+      res.status(500).json({ error: "Could not retrieve session" });
+    }
+  });
+
   // ── Gmail poll schedule (every 2 minutes) ────────────────────────────────────────────────────
   setInterval(async () => {
     const email = process.env.GMAIL_CONNECTED_EMAIL;

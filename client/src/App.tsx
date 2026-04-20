@@ -35,6 +35,7 @@ import PortalReports from "./pages/portal/PortalReports";
 import PortalReportDetail from "./pages/portal/PortalReportDetail";
 import Portal360Membership from "./pages/portal/Portal360Membership";
 import WorkOrderDetail from "./pages/WorkOrderDetail";
+import Welcome360Page from "./pages/Welcome360Page";
 
 // Domains that should serve only the customer portal (no admin app)
 const PORTAL_HOSTNAMES = ["client.handypioneers.com"];
@@ -86,6 +87,9 @@ function Router() {
       <Route path="/portal/reports/:id" component={PortalReportDetail} />
       <Route path="/portal/reports" component={PortalReports} />
       <Route path="/portal/360-membership" component={Portal360Membership} />
+
+      {/* 360° Method post-checkout confirmation (public) */}
+      <Route path="/360-welcome" component={Welcome360Page} />
 
       {/* Internal 360° work order completion wizard */}
       <Route path="/360/work-orders/:id">{() => <WorkOrderDetail />}</Route>
