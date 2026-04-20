@@ -1323,8 +1323,9 @@ const portfolioAbandonedLeadRouter = router({
       z.object({
         cadence: z.enum(["monthly", "quarterly", "annual"]),
         properties: z.array(portfolioPropertySchema).min(1),
-        customerName: z.string().min(1),
-        customerEmail: z.string().email(),
+        // Optional: the pre-checkout fire-and-forget call has no customer info yet
+        customerName: z.string().min(1).optional(),
+        customerEmail: z.string().email().optional(),
         customerPhone: z.string().optional(),
         billingAddress: z.string().optional(),
         billingCity: z.string().optional(),
@@ -1335,16 +1336,20 @@ const portfolioAbandonedLeadRouter = router({
     .mutation(async ({ input }) => {
       const { cadence, properties, customerName, customerEmail, customerPhone } = input;
       try {
+        // Skip CRM write if no email — happens when the pre-checkout capture fires
+        // before the customer fills in their contact info
+        if (!customerEmail) return { captured: false };
+
         let customer = await findCustomerByEmail(customerEmail);
         if (!customer) {
-          const nameParts = customerName.trim().split(" ");
+          const nameParts = (customerName ?? customerEmail).trim().split(" ");
           const firstName = nameParts[0] ?? "";
           const lastName = nameParts.slice(1).join(" ") || "";
           customer = await createCustomer({
             id: nanoid(),
             firstName,
             lastName,
-            displayName: customerName.trim(),
+            displayName: (customerName ?? customerEmail).trim(),
             email: customerEmail.toLowerCase().trim(),
             mobilePhone: customerPhone || "",
             street: input.billingAddress || "",
@@ -1370,7 +1375,7 @@ const portfolioAbandonedLeadRouter = router({
           notes: [
             `Cadence: ${cadence} | Properties: ${properties.length}`,
             `Portfolio: ${propSummary}`,
-            `Contact: ${customerName} <${customerEmail}>${customerPhone ? ` | ${customerPhone}` : ""}`,
+            `Contact: ${customerName ?? "(unknown)"} <${customerEmail}>${customerPhone ? ` | ${customerPhone}` : ""}`,
             `Source: 360° Portfolio Funnel — cart abandonment capture`,
           ].join("\n"),
           archived: false,
