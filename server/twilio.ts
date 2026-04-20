@@ -183,7 +183,7 @@ export async function handleCallStatusUpdate(params: {
   if (RecordingUrl && callLog?.id) {
     downloadAndStoreRecording(RecordingUrl, CallSid)
       .then(appUrl => {
-        if (appUrl) updateCallLog(callLog.id, { recordingAppUrl: appUrl }).catch(console.warn);
+        if (appUrl) updateCallLog(callLog.id, { recordingUrl: appUrl }).catch(console.warn);
       })
       .catch(console.warn);
   }

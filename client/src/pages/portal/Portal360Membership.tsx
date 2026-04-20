@@ -427,7 +427,7 @@ function NonMemberFunnel() {
       const scanValue = 350;
       const visitValue = t.visits * 120;
       const totalValue = discount / 100 + laborBank + scanValue + visitValue;
-      const annualCost = TIER_DEFINITIONS[t.key as keyof typeof TIER_DEFINITIONS]?.pricing.annual / 100 ?? 0;
+      const annualCost = (TIER_DEFINITIONS[t.key as keyof typeof TIER_DEFINITIONS]?.pricing.annual ?? 0) / 100;
       return { ...t, discount: discount / 100, totalValue, annualCost, net: totalValue - annualCost };
     });
   }, [spendSlider]);

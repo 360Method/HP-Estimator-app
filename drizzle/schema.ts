@@ -3,29 +3,50 @@ import {
   boolean,
   date,
   decimal,
-  double,
-  int,
-  mysqlEnum,
-  mysqlTable,
+  doublePrecision,
+  integer,
+  pgEnum,
+  pgTable,
+  serial,
+  smallint,
   text,
   timestamp,
-  tinyint,
   uniqueIndex,
   varchar,
-} from "drizzle-orm/mysql-core";
+} from "drizzle-orm/pg-core";
+
+// ─── pgEnum declarations ────────────────────────────────────────────────────
+export const userRoleEnum = pgEnum('user_role', ['user', 'admin']);
+export const messageChannelEnum = pgEnum('message_channel', ['sms', 'email', 'call', 'note']);
+export const messageDirectionEnum = pgEnum('message_direction', ['inbound', 'outbound']);
+export const portalSenderRoleEnum = pgEnum('portal_sender_role', ['customer', 'hp_team']);
+export const milestoneStatusEnum = pgEnum('milestone_status', ['pending', 'in_progress', 'complete']);
+export const membershipTierEnum = pgEnum('membership_tier', ['bronze', 'silver', 'gold']);
+export const membershipStatusEnum = pgEnum('membership_status', ['active', 'paused', 'cancelled']);
+export const billingCadenceEnum = pgEnum('billing_cadence', ['monthly', 'quarterly', 'annual']);
+export const planTypeEnum = pgEnum('plan_type', ['single', 'portfolio']);
+export const seasonEnum = pgEnum('season', ['spring', 'summer', 'fall', 'winter']);
+export const visitStatusEnum = pgEnum('visit_status', ['scheduled', 'completed', 'skipped']);
+export const checklistCategoryEnum = pgEnum('checklist_category', ['inspect', 'service']);
+export const laborBankTxTypeEnum = pgEnum('labor_bank_tx_type', ['credit', 'debit', 'adjustment']);
+export const scanStatusEnum = pgEnum('scan_status', ['draft', 'completed', 'delivered']);
+export const systemTypeEnum = pgEnum('system_type', ['hvac', 'roof', 'plumbing', 'electrical', 'foundation', 'exterior_siding', 'interior', 'appliances']);
+export const systemConditionEnum = pgEnum('system_condition', ['good', 'fair', 'poor', 'critical']);
+export const lifeCycleStageEnum = pgEnum('life_cycle_stage', ['prospect', 'active', 'member', 'at_risk', 'churned']);
+export const automationTriggerEnum = pgEnum('automation_trigger', ['review_request', 'enrollment_offer', 'estimate_followup_d3', 'estimate_followup_d7', 'winback', 'labor_bank_low']);
 
 /**
  * Core user table backing auth flow.
  */
-export const users = mysqlTable("users", {
-  id: int("id").autoincrement().primaryKey(),
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
   openId: varchar("openId", { length: 64 }).notNull().unique(),
   name: text("name"),
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
-  role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+  role: userRoleEnum("role").default("user").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
 });
 
@@ -34,12 +55,12 @@ export type InsertUser = typeof users.$inferInsert;
 
 // ─── INBOX: CONVERSATIONS ─────────────────────────────────────────────────────
 // One row per contact. Aggregates all channels into a single thread.
-export const conversations = mysqlTable("conversations", {
-  id: int("id").autoincrement().primaryKey(),
+export const conversations = pgTable("conversations", {
+  id: serial("id").primaryKey(),
   /** Link to the HP customer record (optional — may be unknown contact) */
   customerId: varchar("customerId", { length: 64 }),
   /** Link to the portal customer record (optional — set when portal message is bridged) */
-  portalCustomerId: int("portalCustomerId"),
+  portalCustomerId: integer("portalCustomerId"),
   contactName: varchar("contactName", { length: 255 }),
   contactPhone: varchar("contactPhone", { length: 32 }),
   contactEmail: varchar("contactEmail", { length: 320 }),
@@ -47,13 +68,13 @@ export const conversations = mysqlTable("conversations", {
   channels: varchar("channels", { length: 64 }).default("note").notNull(),
   lastMessageAt: timestamp("lastMessageAt").defaultNow().notNull(),
   lastMessagePreview: varchar("lastMessagePreview", { length: 255 }),
-  unreadCount: int("unreadCount").default(0).notNull(),
+  unreadCount: integer("unreadCount").default(0).notNull(),
   /** Twilio conversation SID if using Twilio Conversations API */
   twilioConversationSid: varchar("twilioConversationSid", { length: 64 }),
   /** Gmail thread ID for email threading */
   gmailThreadId: varchar("gmailThreadId", { length: 128 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 export type Conversation = typeof conversations.$inferSelect;
@@ -61,13 +82,13 @@ export type InsertConversation = typeof conversations.$inferInsert;
 
 // ─── INBOX: MESSAGES ─────────────────────────────────────────────────────────
 // Every message in a conversation thread, regardless of channel.
-export const messages = mysqlTable("messages", {
-  id: int("id").autoincrement().primaryKey(),
-  conversationId: int("conversationId").notNull(),
+export const messages = pgTable("messages", {
+  id: serial("id").primaryKey(),
+  conversationId: integer("conversationId").notNull(),
   /** Channel this message was sent/received on */
-  channel: mysqlEnum("channel", ["sms", "email", "call", "note"]).notNull(),
+  channel: messageChannelEnum("channel").notNull(),
   /** inbound = from contact, outbound = from HP team */
-  direction: mysqlEnum("direction", ["inbound", "outbound"]).notNull(),
+  direction: messageDirectionEnum("direction").notNull(),
   body: text("body"),
   subject: varchar("subject", { length: 512 }),
   /** sent / delivered / failed / read */
@@ -84,7 +105,7 @@ export const messages = mysqlTable("messages", {
   sentAt: timestamp("sentAt").defaultNow().notNull(),
   readAt: timestamp("readAt"),
   /** HP user who sent this (null for inbound) */
-  sentByUserId: int("sentByUserId"),
+  sentByUserId: integer("sentByUserId"),
 });
 
 export type Message = typeof messages.$inferSelect;
@@ -92,20 +113,18 @@ export type InsertMessage = typeof messages.$inferInsert;
 
 // ─── INBOX: CALL LOGS ────────────────────────────────────────────────────────
 // Extended metadata for call-type messages.
-export const callLogs = mysqlTable("callLogs", {
-  id: int("id").autoincrement().primaryKey(),
-  conversationId: int("conversationId").notNull(),
+export const callLogs = pgTable("callLogs", {
+  id: serial("id").primaryKey(),
+  conversationId: integer("conversationId").notNull(),
   /** References the messages row of channel='call' */
-  messageId: int("messageId"),
+  messageId: integer("messageId"),
   twilioCallSid: varchar("twilioCallSid", { length: 64 }),
-  direction: mysqlEnum("direction", ["inbound", "outbound"]).notNull(),
+  direction: messageDirectionEnum("direction").notNull(),
   /** answered / missed / voicemail / busy / no-answer */
   status: varchar("status", { length: 32 }).default("answered").notNull(),
   /** Duration in seconds */
-  durationSecs: int("durationSecs").default(0).notNull(),
+  durationSecs: integer("durationSecs").default(0).notNull(),
   recordingUrl: text("recordingUrl"),
-  /** App S3 URL — downloaded from Twilio and re-uploaded so it plays inline without Twilio auth */
-  recordingAppUrl: text("recordingAppUrl"),
   voicemailUrl: text("voicemailUrl"),
   callerPhone: varchar("callerPhone", { length: 32 }),
   startedAt: timestamp("startedAt").defaultNow().notNull(),
@@ -117,14 +136,14 @@ export type InsertCallLog = typeof callLogs.$inferInsert;
 
 // ─── INBOX: GMAIL OAUTH TOKENS ───────────────────────────────────────────────
 // Stores the Gmail OAuth refresh token for the connected workspace account.
-export const gmailTokens = mysqlTable("gmailTokens", {
-  id: int("id").autoincrement().primaryKey(),
+export const gmailTokens = pgTable("gmailTokens", {
+  id: serial("id").primaryKey(),
   email: varchar("email", { length: 320 }).notNull().unique(),
   accessToken: text("accessToken"),
   refreshToken: text("refreshToken"),
   expiresAt: bigint("expiresAt", { mode: "number" }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 export type GmailToken = typeof gmailTokens.$inferSelect;
@@ -135,8 +154,8 @@ export type GmailToken = typeof gmailTokens.$inferSelect;
 
 // ─── PORTAL: CUSTOMERS ───────────────────────────────────────────────────────
 // One row per customer who has portal access. Created when HP sends first estimate.
-export const portalCustomers = mysqlTable("portalCustomers", {
-  id: int("id").autoincrement().primaryKey(),
+export const portalCustomers = pgTable("portalCustomers", {
+  id: serial("id").primaryKey(),
   /** Matches the HP CRM customerId (from EstimatorContext) */
   hpCustomerId: varchar("hpCustomerId", { length: 64 }).unique(),
   name: varchar("name", { length: 255 }).notNull(),
@@ -149,10 +168,8 @@ export const portalCustomers = mysqlTable("portalCustomers", {
   referralCode: varchar("referralCode", { length: 32 }).unique(),
   /** hpCustomerId of who referred this customer */
   referredBy: varchar("referredBy", { length: 64 }),
-  /** Set when customer completes the welcome onboarding flow */
-  onboardingCompletedAt: timestamp("onboardingCompletedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 export type PortalCustomer = typeof portalCustomers.$inferSelect;
@@ -160,9 +177,9 @@ export type InsertPortalCustomer = typeof portalCustomers.$inferInsert;
 
 // ─── PORTAL: MAGIC LINK TOKENS ───────────────────────────────────────────────
 // Short-lived tokens emailed to customers for passwordless login.
-export const portalTokens = mysqlTable("portalTokens", {
-  id: int("id").autoincrement().primaryKey(),
-  customerId: int("customerId").notNull(),
+export const portalTokens = pgTable("portalTokens", {
+  id: serial("id").primaryKey(),
+  customerId: integer("customerId").notNull(),
   /** Cryptographically random token (64 hex chars) */
   token: varchar("token", { length: 128 }).notNull().unique(),
   expiresAt: timestamp("expiresAt").notNull(),
@@ -175,9 +192,9 @@ export type InsertPortalToken = typeof portalTokens.$inferInsert;
 
 // ─── PORTAL: SESSIONS ────────────────────────────────────────────────────────
 // Session tokens set as cookies after magic link verification.
-export const portalSessions = mysqlTable("portalSessions", {
-  id: int("id").autoincrement().primaryKey(),
-  customerId: int("customerId").notNull(),
+export const portalSessions = pgTable("portalSessions", {
+  id: serial("id").primaryKey(),
+  customerId: integer("customerId").notNull(),
   /** Cryptographically random session token (64 hex chars) */
   sessionToken: varchar("sessionToken", { length: 128 }).notNull().unique(),
   expiresAt: timestamp("expiresAt").notNull(),
@@ -189,11 +206,11 @@ export type InsertPortalSession = typeof portalSessions.$inferInsert;
 
 // ─── PORTAL: ESTIMATES ────────────────────────────────────────────────────────────────
 // Customer-facing estimates sent from the HP estimator.
-export const portalEstimates = mysqlTable(
+export const portalEstimates = pgTable(
   "portalEstimates",
   {
-    id: int("id").autoincrement().primaryKey(),
-    customerId: int("customerId").notNull(),
+    id: serial("id").primaryKey(),
+    customerId: integer("customerId").notNull(),
     /** e.g. "HP-2026-042" */
     estimateNumber: varchar("estimateNumber", { length: 64 }).notNull(),
     /** Pro-side opportunity ID (from local state) — used to mark won on approval */
@@ -201,9 +218,9 @@ export const portalEstimates = mysqlTable(
     title: varchar("title", { length: 255 }).notNull(),
     /** pending | sent | viewed | approved | declined | expired */
     status: varchar("status", { length: 32 }).default("sent").notNull(),
-    totalAmount: int("totalAmount").notNull().default(0), // cents
-    depositAmount: int("depositAmount").notNull().default(0), // cents
-    depositPercent: int("depositPercent").notNull().default(50),
+    totalAmount: integer("totalAmount").notNull().default(0), // cents
+    depositAmount: integer("depositAmount").notNull().default(0), // cents
+    depositPercent: integer("depositPercent").notNull().default(50),
     /** JSON array of line items */
     lineItemsJson: text("lineItemsJson"),
     /** Full scope of work text */
@@ -214,17 +231,17 @@ export const portalEstimates = mysqlTable(
     viewedAt: timestamp("viewedAt"),
     approvedAt: timestamp("approvedAt"),
     /** Tax snapshot at time of sending */
-    taxEnabled: tinyint("taxEnabled").default(0).notNull(),
+    taxEnabled: smallint("taxEnabled").default(0).notNull(),
     taxRateCode: varchar("taxRateCode", { length: 32 }).default('0603').notNull(),
-    customTaxPct: int("customTaxPct").default(890).notNull(), // stored as basis points (890 = 8.90%)
-    taxAmount: int("taxAmount").default(0).notNull(), // cents
+    customTaxPct: integer("customTaxPct").default(890).notNull(), // stored as basis points (890 = 8.90%)
+    taxAmount: integer("taxAmount").default(0).notNull(), // cents
     /** Base64 PNG of customer signature */
     signatureDataUrl: text("signatureDataUrl"),
     signerName: varchar("signerName", { length: 255 }),
     declinedAt: timestamp("declinedAt"),
     declineReason: text("declineReason"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
-    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   },
   (t) => ({
     uniqCustomerEstimate: uniqueIndex("portalEstimates_customer_estimate_uidx").on(
@@ -239,20 +256,20 @@ export type InsertPortalEstimate = typeof portalEstimates.$inferInsert;
 
 // ─── PORTAL: INVOICES ────────────────────────────────────────────────────────
 // Customer-facing invoices sent from the HP estimator.
-export const portalInvoices = mysqlTable("portalInvoices", {
-  id: int("id").autoincrement().primaryKey(),
-  customerId: int("customerId").notNull(),
+export const portalInvoices = pgTable("portalInvoices", {
+  id: serial("id").primaryKey(),
+  customerId: integer("customerId").notNull(),
   /** References portal_estimates.id if this invoice came from an estimate */
-  estimateId: int("estimateId"),
+  estimateId: integer("estimateId"),
   /** e.g. "INV-2026-001" */
   invoiceNumber: varchar("invoiceNumber", { length: 64 }).notNull(),
   /** deposit | final | balance */
   type: varchar("type", { length: 32 }).default("final").notNull(),
   /** draft | sent | due | paid | void | partial */
   status: varchar("status", { length: 32 }).default("sent").notNull(),
-  amountDue: int("amountDue").notNull().default(0), // cents
-  amountPaid: int("amountPaid").notNull().default(0), // cents
-  tipAmount: int("tipAmount").notNull().default(0), // cents
+  amountDue: integer("amountDue").notNull().default(0), // cents
+  amountPaid: integer("amountPaid").notNull().default(0), // cents
+  tipAmount: integer("tipAmount").notNull().default(0), // cents
   dueDate: timestamp("dueDate"),
   /** Stripe PaymentIntent ID for tracking */
   stripePaymentIntentId: varchar("stripePaymentIntentId", { length: 64 }),
@@ -268,7 +285,7 @@ export const portalInvoices = mysqlTable("portalInvoices", {
   /** Last time an overdue reminder email was sent for this invoice */
   lastReminderSentAt: timestamp("lastReminderSentAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 export type PortalInvoice = typeof portalInvoices.$inferSelect;
@@ -276,9 +293,9 @@ export type InsertPortalInvoice = typeof portalInvoices.$inferInsert;
 
 // ─── PORTAL: APPOINTMENTS ────────────────────────────────────────────────────
 // Scheduled appointments visible to the customer.
-export const portalAppointments = mysqlTable("portalAppointments", {
-  id: int("id").autoincrement().primaryKey(),
-  customerId: int("customerId").notNull(),
+export const portalAppointments = pgTable("portalAppointments", {
+  id: serial("id").primaryKey(),
+  customerId: integer("customerId").notNull(),
   title: varchar("title", { length: 255 }).notNull(),
   /** estimate | job | follow_up | consultation */
   type: varchar("type", { length: 64 }).default("job").notNull(),
@@ -290,7 +307,7 @@ export const portalAppointments = mysqlTable("portalAppointments", {
   status: varchar("status", { length: 32 }).default("scheduled").notNull(),
   notes: text("notes"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 export type PortalAppointment = typeof portalAppointments.$inferSelect;
@@ -298,11 +315,11 @@ export type InsertPortalAppointment = typeof portalAppointments.$inferInsert;
 
 // ─── PORTAL: MESSAGES ────────────────────────────────────────────────────────
 // In-portal messaging between customer and HP team.
-export const portalMessages = mysqlTable("portalMessages", {
-  id: int("id").autoincrement().primaryKey(),
-  customerId: int("customerId").notNull(),
+export const portalMessages = pgTable("portalMessages", {
+  id: serial("id").primaryKey(),
+  customerId: integer("customerId").notNull(),
   /** customer | hp_team */
-  senderRole: mysqlEnum("senderRole", ["customer", "hp_team"]).notNull(),
+  senderRole: portalSenderRoleEnum("senderRole").notNull(),
   senderName: varchar("senderName", { length: 255 }),
   body: text("body").notNull(),
   readAt: timestamp("readAt"),
@@ -314,9 +331,9 @@ export type InsertPortalMessage = typeof portalMessages.$inferInsert;
 
 // ─── PORTAL: GALLERY ─────────────────────────────────────────────────────────
 // Project photos shared with the customer.
-export const portalGallery = mysqlTable("portalGallery", {
-  id: int("id").autoincrement().primaryKey(),
-  customerId: int("customerId").notNull(),
+export const portalGallery = pgTable("portalGallery", {
+  id: serial("id").primaryKey(),
+  customerId: integer("customerId").notNull(),
   /** Optional job reference */
   jobId: varchar("jobId", { length: 64 }),
   jobTitle: varchar("jobTitle", { length: 255 }),
@@ -332,18 +349,18 @@ export type InsertPortalGalleryItem = typeof portalGallery.$inferInsert;
 
 // ─── PORTAL: REFERRALS ───────────────────────────────────────────────────────
 // Referral program tracking.
-export const portalReferrals = mysqlTable("portalReferrals", {
-  id: int("id").autoincrement().primaryKey(),
+export const portalReferrals = pgTable("portalReferrals", {
+  id: serial("id").primaryKey(),
   /** customerId of the referrer */
-  referrerId: int("referrerId").notNull(),
+  referrerId: integer("referrerId").notNull(),
   /** Email of the referred person */
   referredEmail: varchar("referredEmail", { length: 320 }).notNull(),
   /** customerId once they sign up */
-  referredCustomerId: int("referredCustomerId"),
+  referredCustomerId: integer("referredCustomerId"),
   /** pending | signed_up | job_completed | rewarded */
   status: varchar("status", { length: 32 }).default("pending").notNull(),
   /** Reward amount in cents */
-  rewardAmount: int("rewardAmount").default(0).notNull(),
+  rewardAmount: integer("rewardAmount").default(0).notNull(),
   rewardedAt: timestamp("rewardedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
@@ -356,13 +373,13 @@ export type InsertPortalReferral = typeof portalReferrals.$inferInsert;
 // They are NOT the source of truth — EstimatorContext is. They exist solely
 // to power the Reporting page with DB-backed queries.
 
-export const snapshotOpportunities = mysqlTable("snapshotOpportunities", {
+export const snapshotOpportunities = pgTable("snapshotOpportunities", {
   /** Matches Opportunity.id from local state */
   id: varchar("id", { length: 64 }).primaryKey(),
   area: varchar("area", { length: 16 }).notNull(), // lead | estimate | job
   stage: varchar("stage", { length: 64 }).notNull(),
   title: varchar("title", { length: 255 }).notNull(),
-  value: int("value").default(0).notNull(), // cents
+  value: integer("value").default(0).notNull(), // cents
   archived: boolean("archived").default(false).notNull(),
   /** ISO string — when the estimate/job was won */
   wonAt: varchar("wonAt", { length: 32 }),
@@ -372,10 +389,10 @@ export const snapshotOpportunities = mysqlTable("snapshotOpportunities", {
   customerId: varchar("customerId", { length: 64 }),
   customerName: varchar("customerName", { length: 255 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
-export const snapshotInvoices = mysqlTable("snapshotInvoices", {
+export const snapshotInvoices = pgTable("snapshotInvoices", {
   /** Matches Invoice.id from local state */
   id: varchar("id", { length: 64 }).primaryKey(),
   opportunityId: varchar("opportunityId", { length: 64 }),
@@ -383,15 +400,15 @@ export const snapshotInvoices = mysqlTable("snapshotInvoices", {
   customerName: varchar("customerName", { length: 255 }),
   status: varchar("status", { length: 32 }).notNull(), // draft | unpaid | partial | paid | void
   /** Total amount in cents */
-  total: int("total").default(0).notNull(),
+  total: integer("total").default(0).notNull(),
   /** Amount paid in cents */
-  amountPaid: int("amountPaid").default(0).notNull(),
+  amountPaid: integer("amountPaid").default(0).notNull(),
   /** Due date ISO string */
   dueDate: varchar("dueDate", { length: 32 }),
   /** Issued date ISO string */
   issuedAt: varchar("issuedAt", { length: 32 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 
 export type SnapshotOpportunity = typeof snapshotOpportunities.$inferSelect;
@@ -400,8 +417,8 @@ export type SnapshotInvoice = typeof snapshotInvoices.$inferSelect;
 // ─── ADMIN ALLOWLIST ─────────────────────────────────────────────────────────
 // Emails allowed to access the admin app (pro.handypioneers.com).
 // If the table is empty, all authenticated users are allowed (open mode).
-export const adminAllowlist = mysqlTable("adminAllowlist", {
-  id: int("id").autoincrement().primaryKey(),
+export const adminAllowlist = pgTable("adminAllowlist", {
+  id: serial("id").primaryKey(),
   email: varchar("email", { length: 320 }).notNull().unique(),
   addedBy: varchar("addedBy", { length: 64 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -413,8 +430,8 @@ export type InsertAdminAllowlistEntry = typeof adminAllowlist.$inferInsert;
 // ─── SERVICE ZIP CODES ────────────────────────────────────────────────────────
 // Zip codes where Handy Pioneers operates. Managed in Settings → Service Area.
 // If the table is empty, all zip codes are accepted (open mode).
-export const serviceZipCodes = mysqlTable("serviceZipCodes", {
-  id: int("id").autoincrement().primaryKey(),
+export const serviceZipCodes = pgTable("serviceZipCodes", {
+  id: serial("id").primaryKey(),
   zip: varchar("zip", { length: 10 }).notNull().unique(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
@@ -424,8 +441,8 @@ export type InsertServiceZipCode = typeof serviceZipCodes.$inferInsert;
 // ─── ONLINE REQUESTS ──────────────────────────────────────────────────────────
 // Submitted via the public booking wizard at /book.
 // On submit, a customer record and a lead are created automatically.
-export const onlineRequests = mysqlTable("onlineRequests", {
-  id: int("id").autoincrement().primaryKey(),
+export const onlineRequests = pgTable("onlineRequests", {
+  id: serial("id").primaryKey(),
   /** Zip code entered at step 1 */
   zip: varchar("zip", { length: 10 }).notNull(),
   /** Always "general" for now */
@@ -461,7 +478,7 @@ export type InsertOnlineRequest = typeof onlineRequests.$inferInsert;
 
 // ─── CUSTOMERS ────────────────────────────────────────────────────────────────
 // Core CRM customer record. Mirrors the Client-side Customer interface.
-export const customers = mysqlTable("customers", {
+export const customers = pgTable("customers", {
   id: varchar("id", { length: 64 }).primaryKey(), // nanoid
   firstName: varchar("firstName", { length: 128 }).notNull().default(""),
   lastName: varchar("lastName", { length: 128 }).notNull().default(""),
@@ -493,17 +510,20 @@ export const customers = mysqlTable("customers", {
   additionalPhones: text("additionalPhones"), // JSON: [{label, number}]
   additionalEmails: text("additionalEmails"), // JSON: [{label, address}]
   // Financials (computed/cached)
-  lifetimeValue: int("lifetimeValue").default(0).notNull(),
-  outstandingBalance: int("outstandingBalance").default(0).notNull(),
+  lifetimeValue: integer("lifetimeValue").default(0).notNull(),
+  outstandingBalance: integer("outstandingBalance").default(0).notNull(),
   // Source tracking
   /** If created from an online request, link to it */
-  onlineRequestId: int("onlineRequestId"),
+  onlineRequestId: integer("onlineRequestId"),
   /** If this customer was merged into another, store the surviving customer id (soft-delete) */
   mergedIntoId: varchar("mergedIntoId", { length: 64 }),
   // QuickBooks sync
   qbCustomerId: varchar("qbCustomerId", { length: 64 }),
+  // ── Lifecycle & retention ──────────────────────────────────────────────────
+  lifeCycleStage: lifeCycleStageEnum("lifeCycleStage").default('prospect').notNull(),
+  lastJobArchivedAt: timestamp("lastJobArchivedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 export type DbCustomer = typeof customers.$inferSelect;
 export type InsertDbCustomer = typeof customers.$inferInsert;
@@ -512,7 +532,7 @@ export type InsertDbCustomer = typeof customers.$inferInsert;
 // First-class property records. Each customer can have one or many properties.
 // The primary property mirrors the customer's flat street/city/state/zip fields.
 // membershipId links to an active threeSixtyMembership for this property.
-export const properties = mysqlTable("properties", {
+export const properties = pgTable("properties", {
   id: varchar("id", { length: 64 }).primaryKey(), // nanoid
   customerId: varchar("customerId", { length: 64 }).notNull(),
   label: varchar("label", { length: 64 }).notNull().default("Home"),
@@ -528,18 +548,18 @@ export const properties = mysqlTable("properties", {
   lat: text("lat"),
   lng: text("lng"),
   /** FK to threeSixtyMemberships — null means no active membership */
-  membershipId: int("membershipId"),
+  membershipId: integer("membershipId"),
   /** Source of this record: manual | auto-migrated (from flat address fields) */
   source: varchar("source", { length: 32 }).default("manual"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 export type DbProperty = typeof properties.$inferSelect;
 export type InsertDbProperty = typeof properties.$inferInsert;
 
 // ─── CUSTOMER ADDRESSES ───────────────────────────────────────────────────────
 // Additional service addresses for a customer (beyond the primary flat fields).
-export const customerAddresses = mysqlTable("customerAddresses", {
+export const customerAddresses = pgTable("customerAddresses", {
   id: varchar("id", { length: 64 }).primaryKey(),
   customerId: varchar("customerId", { length: 64 }).notNull(),
   label: varchar("label", { length: 64 }).notNull().default("Home"),
@@ -561,13 +581,13 @@ export type InsertDbCustomerAddress = typeof customerAddresses.$inferInsert;
 
 // ─── OPPORTUNITIES ────────────────────────────────────────────────────────────
 // Leads, estimates, and jobs — unified pipeline record.
-export const opportunities = mysqlTable("opportunities", {
+export const opportunities = pgTable("opportunities", {
   id: varchar("id", { length: 64 }).primaryKey(),
   customerId: varchar("customerId", { length: 64 }).notNull(),
   area: varchar("area", { length: 16 }).notNull().default("lead"), // lead | estimate | job
   stage: varchar("stage", { length: 64 }).notNull().default("New Lead"),
   title: varchar("title", { length: 255 }).notNull().default(""),
-  value: int("value").default(0).notNull(), // cents
+  value: integer("value").default(0).notNull(), // cents
   jobNumber: varchar("jobNumber", { length: 64 }),
   notes: text("notes"),
   archived: boolean("archived").default(false).notNull(),
@@ -584,7 +604,7 @@ export const opportunities = mysqlTable("opportunities", {
   // Schedule
   scheduledDate: varchar("scheduledDate", { length: 32 }),
   scheduledEndDate: varchar("scheduledEndDate", { length: 32 }),
-  scheduledDuration: int("scheduledDuration"),
+  scheduledDuration: integer("scheduledDuration"),
   assignedTo: text("assignedTo"),
   scheduleNotes: text("scheduleNotes"),
   // Large JSON blobs stored as text
@@ -603,15 +623,15 @@ export const opportunities = mysqlTable("opportunities", {
   sowGeneratedAt: varchar("sowGeneratedAt", { length: 32 }),
   // Source tracking
   /** If created from an online request */
-  onlineRequestId: int("onlineRequestId"),
+  onlineRequestId: integer("onlineRequestId"),
   /** Property this opportunity is linked to (null = not yet linked) */
   propertyId: varchar("propertyId", { length: 64 }),
   /** How propertyId was set: 'manual' | 'auto-migrated' | null */
   propertyIdSource: varchar("propertyIdSource", { length: 32 }),
   /** FK to threeSixtyMemberships.id — set when job is created from a 360° work order */
-  membershipId: int("membershipId"),
+  membershipId: integer("membershipId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 export type DbOpportunity = typeof opportunities.$inferSelect;
 export type InsertDbOpportunity = typeof opportunities.$inferInsert;
@@ -619,10 +639,10 @@ export type InsertDbOpportunity = typeof opportunities.$inferInsert;
 // ─── PORTAL: SERVICE REQUESTS ─────────────────────────────────────────────────
 // Customer-initiated booking requests from the portal.
 // On submit, a lead is created on the pro side.
-export const portalServiceRequests = mysqlTable("portalServiceRequests", {
-  id: int("id").autoincrement().primaryKey(),
+export const portalServiceRequests = pgTable("portalServiceRequests", {
+  id: serial("id").primaryKey(),
   /** Portal customer who submitted the request */
-  customerId: int("customerId").notNull(),
+  customerId: integer("customerId").notNull(),
   /** Free-text description of work needed */
   description: text("description").notNull(),
   /** ASAP | within_week | flexible */
@@ -633,12 +653,6 @@ export const portalServiceRequests = mysqlTable("portalServiceRequests", {
   status: varchar("status", { length: 32 }).notNull().default("pending"),
   /** HP lead ID created from this request */
   leadId: varchar("leadId", { length: 64 }),
-  /** service_request | off_cycle_visit */
-  requestType: varchar("requestType", { length: 32 }).notNull().default("service_request"),
-  /** Preferred date range for off-cycle visits */
-  preferredDateRange: varchar("preferredDateRange", { length: 64 }),
-  /** JSON array of S3 photo URLs attached to the request */
-  photoUrls: text("photoUrls"),
   /** Set when HP staff views/reads this request */
   readAt: timestamp("readAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -648,29 +662,29 @@ export type InsertPortalServiceRequest = typeof portalServiceRequests.$inferInse
 
 // ─── PORTAL: JOB MILESTONES ───────────────────────────────────────────────────
 // HP team manages milestones per job; customers see them in the portal.
-export const portalJobMilestones = mysqlTable("portalJobMilestones", {
-  id: int("id").autoincrement().primaryKey(),
+export const portalJobMilestones = pgTable("portalJobMilestones", {
+  id: serial("id").primaryKey(),
   /** Pro-side opportunity ID (area='job') */
   hpOpportunityId: varchar("hpOpportunityId", { length: 64 }).notNull(),
   title: varchar("title", { length: 255 }).notNull(),
   description: text("description"),
   /** pending | in_progress | complete */
-  status: mysqlEnum("status", ["pending", "in_progress", "complete"]).default("pending").notNull(),
+  status: milestoneStatusEnum("status").default("pending").notNull(),
   /** ISO date string for when this milestone is expected */
   scheduledDate: varchar("scheduledDate", { length: 32 }),
   completedAt: timestamp("completedAt"),
   /** Controls display order */
-  sortOrder: int("sortOrder").default(0).notNull(),
+  sortOrder: integer("sortOrder").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 export type PortalJobMilestone = typeof portalJobMilestones.$inferSelect;
 export type InsertPortalJobMilestone = typeof portalJobMilestones.$inferInsert;
 
 // ─── PORTAL: JOB UPDATES ─────────────────────────────────────────────────────
 // Progress notes/photos posted by the HP team, visible to the customer in portal.
-export const portalJobUpdates = mysqlTable("portalJobUpdates", {
-  id: int("id").autoincrement().primaryKey(),
+export const portalJobUpdates = pgTable("portalJobUpdates", {
+  id: serial("id").primaryKey(),
   /** Pro-side opportunity ID (area='job') */
   hpOpportunityId: varchar("hpOpportunityId", { length: 64 }).notNull(),
   /** Short progress note */
@@ -686,12 +700,12 @@ export type InsertPortalJobUpdate = typeof portalJobUpdates.$inferInsert;
 
 // ─── PORTAL: JOB SIGN-OFFS ───────────────────────────────────────────────────
 // Customer e-signature confirming job completion, collected via the portal.
-export const portalJobSignOffs = mysqlTable("portalJobSignOffs", {
-  id: int("id").autoincrement().primaryKey(),
+export const portalJobSignOffs = pgTable("portalJobSignOffs", {
+  id: serial("id").primaryKey(),
   /** Pro-side opportunity ID (area='job') — unique: one sign-off per job */
   hpOpportunityId: varchar("hpOpportunityId", { length: 64 }).notNull().unique(),
   /** Portal customer who signed */
-  customerId: int("customerId").notNull(),
+  customerId: integer("customerId").notNull(),
   /** Base64 PNG data URL of the drawn/adopted signature */
   signatureDataUrl: text("signatureDataUrl").notNull(),
   /** Name typed/adopted by the signer */
@@ -701,7 +715,7 @@ export const portalJobSignOffs = mysqlTable("portalJobSignOffs", {
   /** Optional notes / work summary from the customer at sign-off */
   workSummary: text("workSummary"),
   /** Portal invoice ID of the final/balance invoice linked to this job */
-  finalInvoiceId: int("finalInvoiceId"),
+  finalInvoiceId: integer("finalInvoiceId"),
   /** Timestamp when the first review request email was sent */
   reviewRequestSentAt: timestamp("reviewRequestSentAt"),
   /** Timestamp when the 48h reminder review request email was sent */
@@ -715,9 +729,9 @@ export type InsertPortalJobSignOff = typeof portalJobSignOffs.$inferInsert;
 
 // ─── PORTAL: CHANGE ORDERS ───────────────────────────────────────────────
 // Change orders sent from the HP estimator to the customer portal for approval.
-export const portalChangeOrders = mysqlTable("portalChangeOrders", {
-  id: int("id").autoincrement().primaryKey(),
-  customerId: int("customerId").notNull(),
+export const portalChangeOrders = pgTable("portalChangeOrders", {
+  id: serial("id").primaryKey(),
+  customerId: integer("customerId").notNull(),
   /** Pro-side opportunity ID (area='job') this CO belongs to */
   hpOpportunityId: varchar("hpOpportunityId", { length: 64 }).notNull(),
   /** e.g. "CO-HP-2026-042-01" */
@@ -728,7 +742,7 @@ export const portalChangeOrders = mysqlTable("portalChangeOrders", {
   /** JSON array of line items */
   lineItemsJson: text("lineItemsJson"),
   /** Total amount in cents */
-  totalAmount: int("totalAmount").notNull().default(0),
+  totalAmount: integer("totalAmount").notNull().default(0),
   /** pending | sent | viewed | approved | declined | void */
   status: varchar("status", { length: 32 }).default("sent").notNull(),
   sentAt: timestamp("sentAt").defaultNow().notNull(),
@@ -740,19 +754,19 @@ export const portalChangeOrders = mysqlTable("portalChangeOrders", {
   declinedAt: timestamp("declinedAt"),
   declineReason: text("declineReason"),
   /** Portal invoice ID linked to this CO (auto-created on approval) */
-  invoiceId: int("invoiceId"),
+  invoiceId: integer("invoiceId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 export type PortalChangeOrder = typeof portalChangeOrders.$inferSelect;
 export type InsertPortalChangeOrder = typeof portalChangeOrders.$inferInsert;
 
 // ─── PORTAL: DOCUMENTS ───────────────────────────────────────────────────────
 // Files shared by the pro team with a portal customer.
-export const portalDocuments = mysqlTable("portalDocuments", {
-  id: int("id").autoincrement().primaryKey(),
+export const portalDocuments = pgTable("portalDocuments", {
+  id: serial("id").primaryKey(),
   /** portalCustomers.id */
-  portalCustomerId: int("portalCustomerId").notNull(),
+  portalCustomerId: integer("portalCustomerId").notNull(),
   name: varchar("name", { length: 255 }).notNull(),
   /** Public S3 URL */
   url: text("url").notNull(),
@@ -766,99 +780,99 @@ export type PortalDocument = typeof portalDocuments.$inferSelect;
 export type InsertPortalDocument = typeof portalDocuments.$inferInsert;
 
 // ─── 360 METHOD: MEMBERSHIPS ─────────────────────────────────────────────────
-export const threeSixtyMemberships = mysqlTable("threeSixtyMemberships", {
-  id: int("id").autoincrement().primaryKey(),
+export const threeSixtyMemberships = pgTable("threeSixtyMemberships", {
+  id: serial("id").primaryKey(),
   /** customers.id (varchar nanoid) */
   customerId: varchar("customerId", { length: 64 }).notNull(),
   /** customerAddresses.id — the enrolled property */
-  propertyAddressId: int("propertyAddressId"),
-  tier: mysqlEnum("tier", ["bronze", "silver", "gold"]).notNull().default("bronze"),
-  status: mysqlEnum("status", ["active", "paused", "cancelled"]).notNull().default("active"),
+  propertyAddressId: integer("propertyAddressId"),
+  tier: membershipTierEnum("tier").notNull().default("bronze"),
+  status: membershipStatusEnum("status").notNull().default("active"),
   /** Unix ms */
   startDate: bigint("startDate", { mode: "number" }).notNull(),
   /** Unix ms — next renewal date */
   renewalDate: bigint("renewalDate", { mode: "number" }).notNull(),
   /** Labor bank balance in cents */
-  laborBankBalance: int("laborBankBalance").notNull().default(0),
+  laborBankBalance: integer("laborBankBalance").notNull().default(0),
   /** Stripe subscription ID for recurring billing */
   stripeSubscriptionId: varchar("stripeSubscriptionId", { length: 255 }),
   /** Stripe customer ID — mirrors portalCustomers.stripeCustomerId */
   stripeCustomerId: varchar("stripeCustomerId", { length: 64 }),
   /** Billing cadence selected at enrollment */
-  billingCadence: mysqlEnum("billingCadence", ["monthly", "quarterly", "annual"]).notNull().default("annual"),
+  billingCadence: billingCadenceEnum("billingCadence").notNull().default("annual"),
   /** Whether the annual 360 scan has been completed this cycle */
   annualScanCompleted: boolean("annualScanCompleted").notNull().default(false),
   /** Unix ms — date of last completed annual scan */
   annualScanDate: bigint("annualScanDate", { mode: "number" }),
   notes: text("notes"),
   /** 'single' for homeowner plan, 'portfolio' for landlord multi-property plan */
-  planType: mysqlEnum("planType", ["single", "portfolio"]).notNull().default("single"),
+  planType: planTypeEnum("planType").notNull().default("single"),
   /** JSON array of portfolio properties — only populated when planType='portfolio' */
   portfolioProperties: text("portfolioProperties"),
   /** Total number of interior add-on doors enrolled */
-  interiorAddonDoors: int("interiorAddonDoors").notNull().default(0),
+  interiorAddonDoors: integer("interiorAddonDoors").notNull().default(0),
   /** Stripe subscription quantity (portfolio unit multiplier) */
-  stripeQuantity: int("stripeQuantity").notNull().default(1),
+  stripeQuantity: integer("stripeQuantity").notNull().default(1),
   /** Unix ms — when the deferred labor bank credit should be released (monthly full_coverage/max only) */
   scheduledCreditAt: bigint("scheduledCreditAt", { mode: "number" }),
   /** Cents — amount of the deferred credit to release at scheduledCreditAt */
-  scheduledCreditCents: int("scheduledCreditCents").notNull().default(0),
+  scheduledCreditCents: integer("scheduledCreditCents").notNull().default(0),
   /** HP CRM customer ID (nanoid string) — links to customers table */
   hpCustomerId: varchar("hpCustomerId", { length: 64 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 export type ThreeSixtyMembership = typeof threeSixtyMemberships.$inferSelect;
 export type InsertThreeSixtyMembership = typeof threeSixtyMemberships.$inferInsert;
 
 // ─── 360 METHOD: SEASONAL VISITS ─────────────────────────────────────────────
-export const threeSixtyVisits = mysqlTable("threeSixtyVisits", {
-  id: int("id").autoincrement().primaryKey(),
-  membershipId: int("membershipId").notNull(),
+export const threeSixtyVisits = pgTable("threeSixtyVisits", {
+  id: serial("id").primaryKey(),
+  membershipId: integer("membershipId").notNull(),
   customerId: varchar("customerId", { length: 64 }).notNull(),
-  season: mysqlEnum("season", ["spring", "summer", "fall", "winter"]).notNull(),
+  season: seasonEnum("season").notNull(),
   /** Unix ms */
   scheduledDate: bigint("scheduledDate", { mode: "number" }),
   /** Unix ms */
   completedDate: bigint("completedDate", { mode: "number" }),
-  status: mysqlEnum("status", ["scheduled", "completed", "skipped"]).notNull().default("scheduled"),
+  status: visitStatusEnum("status").notNull().default("scheduled"),
   technicianNotes: text("technicianNotes"),
   /** JSON snapshot of checklist completion state: { taskId: boolean } */
   checklistSnapshot: text("checklistSnapshot"),
   /** Labor bank deducted in cents for this visit */
-  laborBankUsed: int("laborBankUsed").notNull().default(0),
+  laborBankUsed: integer("laborBankUsed").notNull().default(0),
   /** If visit generated an upsell estimate */
   linkedOpportunityId: varchar("linkedOpportunityId", { length: 64 }),
   /** Year this visit belongs to (for grouping) */
-  visitYear: int("visitYear").notNull(),
+  visitYear: integer("visitYear").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 export type ThreeSixtyVisit = typeof threeSixtyVisits.$inferSelect;
 export type InsertThreeSixtyVisit = typeof threeSixtyVisits.$inferInsert;
 
 // ─── 360 METHOD: MASTER CHECKLIST LIBRARY ────────────────────────────────────
-export const threeSixtyChecklist = mysqlTable("threeSixtyChecklist", {
-  id: int("id").autoincrement().primaryKey(),
-  season: mysqlEnum("season", ["spring", "summer", "fall", "winter"]).notNull(),
+export const threeSixtyChecklist = pgTable("threeSixtyChecklist", {
+  id: serial("id").primaryKey(),
+  season: seasonEnum("season").notNull(),
   /** inspect | service */
-  category: mysqlEnum("category", ["inspect", "service"]).notNull(),
+  category: checklistCategoryEnum("category").notNull(),
   /** e.g. "PNW" — for future regional expansion */
   region: varchar("region", { length: 32 }).notNull().default("PNW"),
   taskName: varchar("taskName", { length: 255 }).notNull(),
   description: text("description"),
   /** Estimated minutes to complete */
-  estimatedMinutes: int("estimatedMinutes").notNull().default(15),
+  estimatedMinutes: integer("estimatedMinutes").notNull().default(15),
   /** Whether flagging this item should prompt an upsell estimate */
   isUpsellTrigger: boolean("isUpsellTrigger").notNull().default(false),
-  sortOrder: int("sortOrder").notNull().default(0),
+  sortOrder: integer("sortOrder").notNull().default(0),
   active: boolean("active").notNull().default(true),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   // ── 360 Inspection additions ──────────────────────────────────────────────
   /** Which home system this item belongs to (for cascade risk scoring) */
   systemType: varchar("systemType", { length: 64 }),
   /** Base cascade risk score 1-10 for this item type */
-  cascadeRiskBase: int("cascadeRiskBase").default(3),
+  cascadeRiskBase: integer("cascadeRiskBase").default(3),
   /** Default estimated repair cost low (USD) */
   defaultCostLow: decimal("defaultCostLow", { precision: 10, scale: 2 }),
   /** Default estimated repair cost high (USD) */
@@ -868,27 +882,27 @@ export type ThreeSixtyChecklistItem = typeof threeSixtyChecklist.$inferSelect;
 export type InsertThreeSixtyChecklistItem = typeof threeSixtyChecklist.$inferInsert;
 
 // ─── 360 METHOD: LABOR BANK LEDGER ───────────────────────────────────────────
-export const threeSixtyLaborBankTransactions = mysqlTable("threeSixtyLaborBankTransactions", {
-  id: int("id").autoincrement().primaryKey(),
-  membershipId: int("membershipId").notNull(),
+export const threeSixtyLaborBankTransactions = pgTable("threeSixtyLaborBankTransactions", {
+  id: serial("id").primaryKey(),
+  membershipId: integer("membershipId").notNull(),
   /** credit | debit | adjustment */
-  type: mysqlEnum("type", ["credit", "debit", "adjustment"]).notNull(),
+  type: laborBankTxTypeEnum("type").notNull(),
   /** Amount in cents — always positive; type determines direction */
-  amountCents: int("amountCents").notNull(),
+  amountCents: integer("amountCents").notNull(),
   description: varchar("description", { length: 512 }).notNull(),
-  linkedVisitId: int("linkedVisitId"),
+  linkedVisitId: integer("linkedVisitId"),
   linkedOpportunityId: varchar("linkedOpportunityId", { length: 64 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   /** User ID of the staff member who created this transaction */
-  createdBy: int("createdBy"),
+  createdBy: integer("createdBy"),
 });
 export type ThreeSixtyLaborBankTransaction = typeof threeSixtyLaborBankTransactions.$inferSelect;
 export type InsertThreeSixtyLaborBankTransaction = typeof threeSixtyLaborBankTransactions.$inferInsert;
 
 // ─── 360 METHOD: ANNUAL HOME SCANS ───────────────────────────────────────────
-export const threeSixtyScans = mysqlTable("threeSixtyScans", {
-  id: int("id").autoincrement().primaryKey(),
-  membershipId: int("membershipId").notNull(),
+export const threeSixtyScans = pgTable("threeSixtyScans", {
+  id: serial("id").primaryKey(),
+  membershipId: integer("membershipId").notNull(),
   customerId: varchar("customerId", { length: 64 }).notNull(),
   /** Unix ms */
   scanDate: bigint("scanDate", { mode: "number" }).notNull(),
@@ -898,12 +912,12 @@ export const threeSixtyScans = mysqlTable("threeSixtyScans", {
   reportUrl: text("reportUrl"),
   reportFileKey: varchar("reportFileKey", { length: 512 }),
   technicianNotes: text("technicianNotes"),
-  status: mysqlEnum("status", ["draft", "completed", "delivered"]).notNull().default("draft"),
+  status: scanStatusEnum("status").notNull().default("draft"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
   // ── 360 Inspection additions ──────────────────────────────────────────────
   /** Computed property health score 0-100 */
-  healthScore: int("healthScore"),
+  healthScore: integer("healthScore"),
   /** JSON array of structured inspection findings */
   inspectionItemsJson: text("inspectionItemsJson"),
   /** JSON array of prioritized repair recommendations */
@@ -916,52 +930,43 @@ export const threeSixtyScans = mysqlTable("threeSixtyScans", {
   pdfUrl: text("pdfUrl"),
   pdfFileKey: varchar("pdfFileKey", { length: 512 }),
   /** visitId that produced this scan's findings (for visit-linked scans) */
-  linkedVisitId: int("linkedVisitId"),
+  linkedVisitId: integer("linkedVisitId"),
 });
 export type ThreeSixtyScan = typeof threeSixtyScans.$inferSelect;
 export type InsertThreeSixtyScan = typeof threeSixtyScans.$inferInsert;
 
 // ─── 360 METHOD: PROPERTY SYSTEM BASELINES ───────────────────────────────────
-export const threeSixtyPropertySystems = mysqlTable("threeSixtyPropertySystems", {
-  id: int("id").autoincrement().primaryKey(),
-  membershipId: int("membershipId").notNull(),
+export const threeSixtyPropertySystems = pgTable("threeSixtyPropertySystems", {
+  id: serial("id").primaryKey(),
+  membershipId: integer("membershipId").notNull(),
   customerId: varchar("customerId", { length: 64 }).notNull(),
   /** hvac | roof | plumbing | electrical | foundation | exterior_siding | interior | appliances */
-  systemType: mysqlEnum("systemType", [
-    "hvac",
-    "roof",
-    "plumbing",
-    "electrical",
-    "foundation",
-    "exterior_siding",
-    "interior",
-    "appliances",
-  ]).notNull(),
+  systemType: systemTypeEnum("systemType").notNull(),
   brandModel: varchar("brandModel", { length: 255 }),
-  installYear: int("installYear"),
+  installYear: integer("installYear"),
   /** good | fair | poor | critical */
-  condition: mysqlEnum("condition", ["good", "fair", "poor", "critical"]).notNull().default("good"),
+  condition: systemConditionEnum("condition").notNull().default("good"),
   conditionNotes: text("conditionNotes"),
   lastServiceDate: date("lastServiceDate"),
   nextServiceDate: date("nextServiceDate"),
-  estimatedLifespanYears: int("estimatedLifespanYears"),
+  estimatedLifespanYears: integer("estimatedLifespanYears"),
   replacementCostEstimate: decimal("replacementCostEstimate", { precision: 10, scale: 2 }),
   /** JSON array of S3 photo URLs */
   photoUrls: text("photoUrls"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 export type ThreeSixtyPropertySystem = typeof threeSixtyPropertySystems.$inferSelect;
 export type InsertThreeSixtyPropertySystem = typeof threeSixtyPropertySystems.$inferInsert;
 
 // ─── PORTAL REPORTS ──────────────────────────────────────────────────────────
-export const portalReports = mysqlTable("portalReports", {
-  id: int("id").autoincrement().primaryKey(),
-  portalCustomerId: int("portalCustomerId").notNull(),
-  scanId: int("scanId").notNull(),
-  membershipId: int("membershipId").notNull(),
-  hpCustomerId: int("hpCustomerId").notNull(),
-  healthScore: int("healthScore"),
+export const portalReports = pgTable("portalReports", {
+  id: serial("id").primaryKey(),
+  portalCustomerId: integer("portalCustomerId").notNull(),
+  scanId: integer("scanId").notNull(),
+  membershipId: integer("membershipId").notNull(),
+  hpCustomerId: integer("hpCustomerId").notNull(),
+  healthScore: integer("healthScore"),
   /** Full report JSON snapshot at time of delivery */
   reportJson: text("reportJson").notNull(),
   pdfUrl: text("pdfUrl"),
@@ -977,7 +982,7 @@ export type InsertPortalReport = typeof portalReports.$inferInsert;
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ─── INVOICES ────────────────────────────────────────────────────────────────
-export const invoices = mysqlTable("invoices", {
+export const invoices = pgTable("invoices", {
   id: varchar("id", { length: 64 }).primaryKey(),
   /** 'deposit' | 'final' */
   type: varchar("type", { length: 16 }).notNull().default("deposit"),
@@ -989,13 +994,13 @@ export const invoices = mysqlTable("invoices", {
   opportunityId: varchar("opportunityId", { length: 64 }).notNull(),
   sourceEstimateId: varchar("sourceEstimateId", { length: 64 }),
   // Amounts — stored as integers (cents) for precision
-  subtotal: int("subtotal").notNull().default(0),
-  taxRate: int("taxRate").notNull().default(0),    // basis points e.g. 890 = 8.90%
-  taxAmount: int("taxAmount").notNull().default(0),
-  total: int("total").notNull().default(0),
-  depositPercent: int("depositPercent"),
-  amountPaid: int("amountPaid").notNull().default(0),
-  balance: int("balance").notNull().default(0),
+  subtotal: integer("subtotal").notNull().default(0),
+  taxRate: integer("taxRate").notNull().default(0),    // basis points e.g. 890 = 8.90%
+  taxAmount: integer("taxAmount").notNull().default(0),
+  total: integer("total").notNull().default(0),
+  depositPercent: integer("depositPercent"),
+  amountPaid: integer("amountPaid").notNull().default(0),
+  balance: integer("balance").notNull().default(0),
   // Dates (ISO strings)
   issuedAt: varchar("issuedAt", { length: 32 }).notNull(),
   dueDate: varchar("dueDate", { length: 32 }).notNull(),
@@ -1018,33 +1023,33 @@ export const invoices = mysqlTable("invoices", {
   qbEntityId: varchar("qbEntityId", { length: 64 }),
   qbSyncedAt: varchar("qbSyncedAt", { length: 32 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 export type DbInvoice = typeof invoices.$inferSelect;
 export type InsertDbInvoice = typeof invoices.$inferInsert;
 
 // ─── INVOICE LINE ITEMS ───────────────────────────────────────────────────────
-export const invoiceLineItems = mysqlTable("invoiceLineItems", {
+export const invoiceLineItems = pgTable("invoiceLineItems", {
   id: varchar("id", { length: 64 }).primaryKey(),
   invoiceId: varchar("invoiceId", { length: 64 }).notNull(),
   description: text("description").notNull(),
-  qty: double("qty").notNull().default(1),
-  unitPrice: int("unitPrice").notNull().default(0), // cents
-  total: int("total").notNull().default(0),         // cents
+  qty: doublePrecision("qty").notNull().default(1),
+  unitPrice: integer("unitPrice").notNull().default(0), // cents
+  total: integer("total").notNull().default(0),         // cents
   notes: text("notes"),
-  sortOrder: int("sortOrder").notNull().default(0),
+  sortOrder: integer("sortOrder").notNull().default(0),
 });
 export type DbInvoiceLineItem = typeof invoiceLineItems.$inferSelect;
 export type InsertDbInvoiceLineItem = typeof invoiceLineItems.$inferInsert;
 
 // ─── INVOICE PAYMENTS ────────────────────────────────────────────────────────
-export const invoicePayments = mysqlTable("invoicePayments", {
+export const invoicePayments = pgTable("invoicePayments", {
   id: varchar("id", { length: 64 }).primaryKey(),
   invoiceId: varchar("invoiceId", { length: 64 }).notNull(),
   /** stripe | paypal | cash | check | zelle | venmo | other */
   method: varchar("method", { length: 32 }).notNull(),
   /** cents */
-  amount: int("amount").notNull(),
+  amount: integer("amount").notNull(),
   paidAt: varchar("paidAt", { length: 32 }).notNull(),
   /** Stripe PaymentIntent ID, PayPal order ID, or manual note */
   reference: varchar("reference", { length: 255 }).notNull().default(""),
@@ -1058,7 +1063,7 @@ export type InsertDbInvoicePayment = typeof invoicePayments.$inferInsert;
 // PRO-SIDE SCHEDULE EVENTS  (source of truth — replaces localStorage)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-export const scheduleEvents = mysqlTable("scheduleEvents", {
+export const scheduleEvents = pgTable("scheduleEvents", {
   id: varchar("id", { length: 64 }).primaryKey(),
   /** estimate | job | recurring | task | follow_up | three_sixty */
   type: varchar("type", { length: 32 }).notNull().default("task"),
@@ -1083,24 +1088,24 @@ export const scheduleEvents = mysqlTable("scheduleEvents", {
   completed: boolean("completed").default(false).notNull(),
   completedAt: varchar("completedAt", { length: 32 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 export type DbScheduleEvent = typeof scheduleEvents.$inferSelect;
 export type InsertDbScheduleEvent = typeof scheduleEvents.$inferInsert;
 
 // ─── EXPENSES ─────────────────────────────────────────────────────────────────
 // Job-level and general business expenses for P&L tracking.
-export const expenses = mysqlTable("expenses", {
+export const expenses = pgTable("expenses", {
   id: varchar("id", { length: 64 }).primaryKey(),
   /** Owner user ID */
-  userId: int("userId").notNull(),
+  userId: integer("userId").notNull(),
   /** Link to job/estimate opportunity (optional) */
   opportunityId: varchar("opportunityId", { length: 64 }),
   /** Link to customer (optional) */
   customerId: varchar("customerId", { length: 64 }),
   vendor: varchar("vendor", { length: 255 }),
   /** Amount in cents */
-  amount: int("amount").notNull().default(0),
+  amount: integer("amount").notNull().default(0),
   /** materials | labor | subcontractor | equipment | fuel | permits | other */
   category: varchar("category", { length: 32 }).notNull().default("other"),
   description: text("description"),
@@ -1112,16 +1117,16 @@ export const expenses = mysqlTable("expenses", {
   qbEntityId: varchar("qbEntityId", { length: 64 }),
   qbSyncedAt: varchar("qbSyncedAt", { length: 32 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 export type DbExpense = typeof expenses.$inferSelect;
 export type InsertDbExpense = typeof expenses.$inferInsert;
 
 // ─── QUICKBOOKS TOKENS ────────────────────────────────────────────────────────
 // Stores OAuth 2.0 tokens for QuickBooks Online per user.
-export const qbTokens = mysqlTable("qbTokens", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull().unique(),
+export const qbTokens = pgTable("qbTokens", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull().unique(),
   accessToken: text("accessToken").notNull(),
   refreshToken: text("refreshToken").notNull(),
   /** QuickBooks company/realm ID */
@@ -1129,7 +1134,7 @@ export const qbTokens = mysqlTable("qbTokens", {
   /** ISO datetime when access token expires */
   expiresAt: varchar("expiresAt", { length: 32 }).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 export type DbQbToken = typeof qbTokens.$inferSelect;
 export type InsertDbQbToken = typeof qbTokens.$inferInsert;
@@ -1137,9 +1142,9 @@ export type InsertDbQbToken = typeof qbTokens.$inferInsert;
 // ─── 360° WORK ORDERS ─────────────────────────────────────────────────────────
 // Central record for every 360° service event (baseline scan + seasonal visits).
 // Created automatically on enrollment and after baseline completion.
-export const threeSixtyWorkOrders = mysqlTable("threeSixtyWorkOrders", {
-  id: int("id").autoincrement().primaryKey(),
-  membershipId: int("membershipId").notNull(),
+export const threeSixtyWorkOrders = pgTable("threeSixtyWorkOrders", {
+  id: serial("id").primaryKey(),
+  membershipId: integer("membershipId").notNull(),
   /** CRM customer ID (nanoid string) */
   customerId: varchar("customerId", { length: 64 }).notNull(),
   /** baseline_scan | spring | summer | fall | winter */
@@ -1147,7 +1152,7 @@ export const threeSixtyWorkOrders = mysqlTable("threeSixtyWorkOrders", {
   /** open | scheduled | in_progress | completed | skipped */
   status: varchar("status", { length: 32 }).notNull().default("open"),
   /** Year this work order belongs to (e.g. 2026) */
-  visitYear: int("visitYear").notNull(),
+  visitYear: integer("visitYear").notNull(),
   /** Unix ms of scheduled appointment */
   scheduledDate: bigint("scheduledDate", { mode: "number" }),
   /** Unix ms of completion */
@@ -1158,45 +1163,57 @@ export const threeSixtyWorkOrders = mysqlTable("threeSixtyWorkOrders", {
   /** JSON array of structured inspection items with photos */
   inspectionItemsJson: text("inspectionItemsJson"),
   /** Labor bank draw in cents */
-  laborBankUsed: int("laborBankUsed").notNull().default(0),
+  laborBankUsed: integer("laborBankUsed").notNull().default(0),
   /** FK to portalReports.id once report is sent */
-  portalReportId: int("portalReportId"),
+  portalReportId: integer("portalReportId"),
   /** FK to scheduleEvents.id */
   scheduleEventId: varchar("scheduleEventId", { length: 64 }),
   /** FK to threeSixtyVisits.id (legacy link) */
-  visitId: int("visitId"),
+  visitId: integer("visitId"),
   /** 0-100 home health score set on completion */
-  healthScore: int("healthScore"),
+  healthScore: integer("healthScore"),
   /** Reason for skipping (if status=skipped) */
   skipReason: varchar("skipReason", { length: 255 }),
   /** FK to opportunities.id — set when completion creates or links a job/estimate */
   hpOpportunityId: varchar("hpOpportunityId", { length: 64 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 export type DbThreeSixtyWorkOrder = typeof threeSixtyWorkOrders.$inferSelect;
 export type InsertDbThreeSixtyWorkOrder = typeof threeSixtyWorkOrders.$inferInsert;
 
-// ─── Phone Settings ───────────────────────────────────────────────────────────
-/**
- * Single-row table storing inbound call routing configuration.
- * id is always 1 (singleton pattern — upsert on id=1).
- */
-export const phoneSettings = mysqlTable("phoneSettings", {
-  id: int("id").primaryKey().default(1),
+// ─── AUTOMATION LOGS ──────────────────────────────────────────────────────────
+// Tracks every automation trigger fired per customer, preventing duplicate sends.
+export const automationLogs = pgTable("automationLogs", {
+  id: serial("id").primaryKey(),
+  customerId: varchar("customerId", { length: 64 }).notNull(),
+  trigger: automationTriggerEnum("trigger").notNull(),
+  /** tRPC opportunity or membership ID that caused this fire */
+  referenceId: varchar("referenceId", { length: 64 }),
+  channel: varchar("channel", { length: 16 }).notNull().default("sms"), // sms | email
+  status: varchar("status", { length: 16 }).notNull().default("sent"),  // sent | failed | skipped
+  error: text("error"),
+  firedAt: timestamp("firedAt").defaultNow().notNull(),
+});
+export type DbAutomationLog = typeof automationLogs.$inferSelect;
+export type InsertDbAutomationLog = typeof automationLogs.$inferInsert;
+
+// ─── pgEnum declarations for new tables ─────────────────────────────────────
+export const forwardingModeEnum = pgEnum('forwarding_mode', ['forward_to_number', 'forward_to_ai', 'voicemail']);
+export const notificationChannelEnum = pgEnum('notification_channel', ['email', 'sms', 'in_app']);
+export const automationActionTypeEnum = pgEnum('automation_action_type', ['send_sms', 'send_email', 'notify_owner', 'create_note']);
+export const automationRuleLogStatusEnum = pgEnum('automation_rule_log_status', ['success', 'failed', 'skipped']);
+
+// ─── PHONE SETTINGS (singleton, id=1) ───────────────────────────────────────
+export const phoneSettings = pgTable("phoneSettings", {
+  id: integer("id").primaryKey().default(1),
   /**
    * How to route inbound calls:
    *   forward_to_number — dial forwardingNumber
    *   forward_to_ai     — dial aiServiceNumber
    *   voicemail         — record a voicemail and notify owner
    */
-  forwardingMode: mysqlEnum("forwardingMode", [
-    "forward_to_number",
-    "forward_to_ai",
-    "voicemail",
-  ])
-    .notNull()
-    .default("forward_to_number"),
+  forwardingMode: forwardingModeEnum("forwardingMode").notNull().default("forward_to_number"),
   /** E.164 number to forward calls to (personal cell) */
   forwardingNumber: varchar("forwardingNumber", { length: 20 }).default(""),
   /** E.164 number of the AI answering service */
@@ -1217,15 +1234,15 @@ export const phoneSettings = mysqlTable("phoneSettings", {
   businessHoursEnd: varchar("businessHoursEnd", { length: 5 }).default("17:00"),
   /** Comma-separated days of week (0=Sun,1=Mon,...,6=Sat) e.g. "1,2,3,4,5" */
   businessDays: varchar("businessDays", { length: 20 }).default("1,2,3,4,5"),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 export type DbPhoneSettings = typeof phoneSettings.$inferSelect;
 export type InsertDbPhoneSettings = typeof phoneSettings.$inferInsert;
 
 // ─── App Settings (singleton, id=1) ─────────────────────────────────────────
 // White-label foundation: every workspace-level config lives here.
-export const appSettings = mysqlTable("appSettings", {
-  id: int("id").primaryKey().default(1),
+export const appSettings = pgTable("appSettings", {
+  id: integer("id").primaryKey().default(1),
   /** Company display name */
   companyName: varchar("companyName", { length: 120 }).default("Handy Pioneers"),
   /** Public logo URL (CDN) */
@@ -1253,9 +1270,9 @@ export const appSettings = mysqlTable("appSettings", {
   /** City, State ZIP */
   addressLine2: varchar("addressLine2", { length: 200 }).default(""),
   /** Default tax rate (basis points, e.g. 875 = 8.75%) */
-  defaultTaxBps: int("defaultTaxBps").default(875),
+  defaultTaxBps: integer("defaultTaxBps").default(875),
   /** Default deposit percentage (0–100) */
-  defaultDepositPct: int("defaultDepositPct").default(50),
+  defaultDepositPct: integer("defaultDepositPct").default(50),
   /** Footer text shown on estimates and invoices */
   documentFooter: text("documentFooter"),
   /** Terms & conditions text shown on estimates */
@@ -1263,9 +1280,9 @@ export const appSettings = mysqlTable("appSettings", {
   /** Google Business review link (used in review-request automations) */
   googleReviewLink: varchar("googleReviewLink", { length: 500 }).default(""),
   /** Internal labor rate in cents per hour (e.g. 15000 = $150/hr) */
-  internalLaborRateCents: int("internalLaborRateCents").default(15000),
+  internalLaborRateCents: integer("internalLaborRateCents").default(15000),
   /** Default markup percentage applied to material costs (0–200) */
-  defaultMarkupPct: int("defaultMarkupPct").default(20),
+  defaultMarkupPct: integer("defaultMarkupPct").default(20),
   /** SMS sender name shown to customers (max 11 chars for alphanumeric sender) */
   smsFromName: varchar("smsFromName", { length: 30 }).default("HandyPioneers"),
   // ── Transactional email templates (editable from Settings → Company) ──────
@@ -1285,28 +1302,28 @@ export const appSettings = mysqlTable("appSettings", {
   emailMagicLinkSubject: varchar("emailMagicLinkSubject", { length: 300 }).default("Your Handy Pioneers Customer Portal Login"),
   /** Body for the magic link login email (HTML allowed) */
   emailMagicLinkBody: text("emailMagicLinkBody"),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 export type DbAppSettings = typeof appSettings.$inferSelect;
 
 // ─── Notification Preferences ────────────────────────────────────────────────
 // One row per event type + channel combination. Checked before any notification fires.
-export const notificationPreferences = mysqlTable("notificationPreferences", {
-  id: int("id").autoincrement().primaryKey(),
+export const notificationPreferences = pgTable("notificationPreferences", {
+  id: serial("id").primaryKey(),
   /** Stable event key, e.g. 'new_lead', 'estimate_sent', 'invoice_paid' */
   eventKey: varchar("eventKey", { length: 60 }).notNull(),
   /** Channel: email | sms | in_app */
-  channel: mysqlEnum("channel", ["email", "sms", "in_app"]).notNull(),
+  channel: notificationChannelEnum("channel").notNull(),
   /** Whether this channel is enabled for this event */
   enabled: boolean("enabled").notNull().default(true),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 export type DbNotificationPreference = typeof notificationPreferences.$inferSelect;
 
 // ─── Automation Rules ─────────────────────────────────────────────────────────
 // User-created if-this-then-that rules. Evaluated by the automation engine.
-export const automationRules = mysqlTable("automationRules", {
-  id: int("id").autoincrement().primaryKey(),
+export const automationRules = pgTable("automationRules", {
+  id: serial("id").primaryKey(),
   /** Human-readable rule name */
   name: varchar("name", { length: 120 }).notNull(),
   /** Trigger event key, e.g. 'lead_created', 'estimate_sent', 'missed_call' */
@@ -1317,12 +1334,7 @@ export const automationRules = mysqlTable("automationRules", {
    */
   conditions: text("conditions"),
   /** Action type: send_sms | send_email | notify_owner | create_note */
-  actionType: mysqlEnum("actionType", [
-    "send_sms",
-    "send_email",
-    "notify_owner",
-    "create_note",
-  ]).notNull(),
+  actionType: automationActionTypeEnum("actionType").notNull(),
   /**
    * Action payload as JSON. Shape depends on actionType:
    *   send_sms:      { messageTemplate: string }
@@ -1332,29 +1344,29 @@ export const automationRules = mysqlTable("automationRules", {
    */
   actionPayload: text("actionPayload").notNull(),
   /** Minutes to wait before executing the action (0 = immediate) */
-  delayMinutes: int("delayMinutes").notNull().default(0),
+  delayMinutes: integer("delayMinutes").notNull().default(0),
   /** Whether this rule is active */
   enabled: boolean("enabled").notNull().default(true),
   /** Display order */
-  sortOrder: int("sortOrder").notNull().default(0),
+  sortOrder: integer("sortOrder").notNull().default(0),
   /** Lifecycle stage for grouping: lead | estimate | job | invoice | review */
   stage: varchar("stage", { length: 30 }).notNull().default("lead"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
 export type DbAutomationRule = typeof automationRules.$inferSelect;
 
 // ─── Automation Rule Logs ─────────────────────────────────────────────────────
 // Execution history for each rule run. Used for debugging and audit.
-export const automationRuleLogs = mysqlTable("automationRuleLogs", {
-  id: int("id").autoincrement().primaryKey(),
-  ruleId: int("ruleId").notNull(),
+export const automationRuleLogs = pgTable("automationRuleLogs", {
+  id: serial("id").primaryKey(),
+  ruleId: integer("ruleId").notNull(),
   /** Trigger event key */
   trigger: varchar("trigger", { length: 60 }).notNull(),
   /** JSON snapshot of the trigger payload */
   triggerPayload: text("triggerPayload"),
   /** Execution result */
-  status: mysqlEnum("status", ["success", "failed", "skipped"]).notNull(),
+  status: automationRuleLogStatusEnum("status").notNull(),
   /** Error message if status = failed */
   errorMessage: text("errorMessage"),
   executedAt: timestamp("executedAt").defaultNow().notNull(),

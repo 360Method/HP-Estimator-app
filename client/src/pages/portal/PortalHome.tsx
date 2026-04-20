@@ -290,7 +290,7 @@ export default function PortalHome() {
   return (
     <PortalLayout>
       {/* Onboarding modal — shown only on first login */}
-      {customer && !customer.onboardingCompletedAt && (
+      {customer && !(customer as any).onboardingCompletedAt && (
         <OnboardingModal customer={customer} onComplete={() => refetch()} />
       )}
       <div className="p-4 sm:p-6 max-w-5xl mx-auto space-y-6">

@@ -1,6 +1,6 @@
 /**
  * Portal router — all tRPC procedures for the customer portal.
- * Uses portal session cookies (hp_portal_session) for auth, NOT Manus OAuth.
+ * Uses portal session cookies (hp_portal_session) for auth, NOT admin OAuth.
  */
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
@@ -141,7 +141,7 @@ const portalProcedure = publicProcedure.use(async ({ ctx, next }) => {
   return next({ ctx: { ...ctx, portalCustomer: customer } });
 });
 
-// HP staff procedure (requires Manus auth)
+// HP staff procedure (requires admin auth)
 const hpProcedure = protectedProcedure;
 
 // ─── ROUTER ───────────────────────────────────────────────────────────────────
@@ -160,7 +160,7 @@ export const portalRouter = router({
       }
 
       const token = randomBytes(32).toString("hex");
-      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+      const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
 
       await createPortalToken({
         customerId: customer.id,
@@ -521,7 +521,7 @@ export const portalRouter = router({
         phone: (ctx.portalCustomer as any).phone ?? undefined,
         referenceNumber: inv.invoiceNumber,
         amount: `$${(input.amountPaid / 100).toFixed(2)}`,
-        description: inv.title ?? undefined,
+        description: inv.jobTitle ?? undefined,
       }).catch(() => null);
       return { ok: true };
     }),
@@ -656,7 +656,7 @@ export const portalRouter = router({
       z.object({
         customerEmail: z.string().email(),
         customerName: z.string(),
-        customerPhone: z.string().optional(),
+        customerPhone: z.string().refine((val) => val === "" || /^\+[1-9]\d{1,14}$/.test(val), { message: "Phone number must be in E.164 format (e.g. +15551234567)" }).optional(),
         customerAddress: z.string().optional(),
         hpCustomerId: z.string().optional(),
         hpOpportunityId: z.string().optional(), // link back to pro-side opportunity for auto-sync
@@ -703,7 +703,7 @@ export const portalRouter = router({
 
       // Send magic link email
       const token = randomBytes(32).toString("hex");
-      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
       await createPortalToken({ customerId: customer.id, token, expiresAt });
 
       const baseUrl = process.env.PORTAL_BASE_URL ?? "https://client.handypioneers.com";
@@ -765,7 +765,7 @@ export const portalRouter = router({
 
       // Send magic link email
       const token = randomBytes(32).toString("hex");
-      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
       await createPortalToken({ customerId: customer.id, token, expiresAt });
 
       const baseUrl = process.env.PORTAL_BASE_URL ?? "https://client.handypioneers.com";
@@ -871,7 +871,7 @@ export const portalRouter = router({
       z.object({
         customerEmail: z.string().email(),
         customerName: z.string(),
-        customerPhone: z.string().optional(),
+        customerPhone: z.string().refine((val) => val === "" || /^\+[1-9]\d{1,14}$/.test(val), { message: "Phone number must be in E.164 format (e.g. +15551234567)" }).optional(),
         hpCustomerId: z.string().optional(),
         origin: z.string().optional(),
       })
@@ -887,7 +887,7 @@ export const portalRouter = router({
       if (!customer) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR' });
 
       const token = randomBytes(32).toString('hex');
-      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
       await createPortalToken({ customerId: customer.id, token, expiresAt });
 
       const baseUrl = process.env.PORTAL_BASE_URL ?? 'https://client.handypioneers.com';
@@ -934,7 +934,7 @@ export const portalRouter = router({
   updateProfile: portalProcedure
     .input(z.object({
       name: z.string().min(1).optional(),
-      phone: z.string().optional(),
+      phone: z.string().refine((val) => val === "" || /^\+[1-9]\d{1,14}$/.test(val), { message: "Phone number must be in E.164 format (e.g. +15551234567)" }).optional(),
       address: z.string().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
@@ -958,7 +958,7 @@ export const portalRouter = router({
       const customer = await findPortalCustomerById(est.customerId);
       if (!customer) throw new TRPCError({ code: 'NOT_FOUND' });
       const token = randomBytes(32).toString('hex');
-      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
       await createPortalToken({ customerId: customer.id, token, expiresAt });
       const baseUrl = process.env.PORTAL_BASE_URL ?? 'https://client.handypioneers.com';
       const estimateUrl = `${baseUrl}/portal/auth?token=${token}&redirect=/portal/estimates/${est.id}`;
@@ -979,7 +979,7 @@ export const portalRouter = router({
       const customer = await findPortalCustomerById(inv.customerId);
       if (!customer) throw new TRPCError({ code: 'NOT_FOUND' });
       const token = randomBytes(32).toString('hex');
-      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
       await createPortalToken({ customerId: customer.id, token, expiresAt });
       const baseUrl = process.env.PORTAL_BASE_URL ?? 'https://client.handypioneers.com';
       const invoiceUrl = `${baseUrl}/portal/auth?token=${token}&redirect=/portal/invoices/${inv.id}`;
@@ -1050,12 +1050,14 @@ export const portalRouter = router({
       photoUrls: z.array(z.string().url()).max(10).optional(),
     }))
     .mutation(async ({ input, ctx }) => {
+      const descriptionWithPhotos = input.photoUrls?.length
+        ? `${input.description}\n\nAttached photos: ${input.photoUrls.join(", ")}`
+        : input.description;
       const req = await createPortalServiceRequest({
         customerId: ctx.portalCustomer.id,
-        description: input.description,
+        description: descriptionWithPhotos,
         timeline: input.timeline,
         address: input.address ?? ctx.portalCustomer.address ?? undefined,
-        photoUrls: input.photoUrls?.length ? JSON.stringify(input.photoUrls) : undefined,
       });
 
       // Auto-create CRM lead opportunity
@@ -1898,11 +1900,9 @@ export const portalRouter = router({
     .mutation(async ({ input, ctx }) => {
       const req = await createPortalServiceRequest({
         customerId: ctx.portalCustomer.id,
-        description: `Off-cycle visit request\n\nReason: ${input.reason}\nUrgency: ${input.urgency}${input.preferredDateRange ? `\nPreferred dates: ${input.preferredDateRange}` : ''}`,
+        description: `Off-cycle visit request (Type: off_cycle_visit)\n\nReason: ${input.reason}\nUrgency: ${input.urgency}${input.preferredDateRange ? `\nPreferred dates: ${input.preferredDateRange}` : ''}`,
         timeline: input.urgency,
         address: ctx.portalCustomer.address ?? undefined,
-        requestType: 'off_cycle_visit',
-        preferredDateRange: input.preferredDateRange,
       });
 
       // Notify HP team
@@ -1954,7 +1954,7 @@ export const portalRouter = router({
           ...(input.name ? { name: input.name } : {}),
           ...(input.phone !== undefined ? { phone: input.phone } : {}),
           ...(input.address !== undefined ? { address: input.address } : {}),
-          onboardingCompletedAt: new Date(),
+          updatedAt: new Date(),
         })
         .where(eq(portalCustomers.id, ctx.portalCustomer.id));
       // Fire portal_onboarding_complete automation (non-blocking)

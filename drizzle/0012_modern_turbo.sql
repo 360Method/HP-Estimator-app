@@ -1,1 +1,0 @@
-ALTER TABLE `portalInvoices` ADD `lastReminderSentAt` timestamp;

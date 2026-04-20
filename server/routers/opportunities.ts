@@ -14,6 +14,7 @@ import {
   findOrCreateConversation,
   insertMessage,
   updateConversationLastMessage,
+  recomputeLifecycleStage,
 } from "../db";
 import { sendSms, isTwilioConfigured } from "../twilio";
 import { nanoid } from "nanoid";
@@ -117,10 +118,15 @@ export const opportunitiesRouter = router({
   archive: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ input }) => {
+      const opp = await getOpportunityById(input.id);
       await updateOpportunity(input.id, {
         archived: true,
         archivedAt: new Date().toISOString(),
       });
+      // Recompute lifecycle stage whenever a job is archived
+      if (opp?.customerId) {
+        recomputeLifecycleStage(opp.customerId).catch(console.error);
+      }
       return { success: true };
     }),
 

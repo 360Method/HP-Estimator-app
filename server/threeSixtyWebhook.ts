@@ -114,15 +114,15 @@ export async function create360MembershipFromWebhook(
         .where(eq(portalCustomers.id, existing.id));
     } else {
       // Create new portal customer
-      const result = await db.insert(portalCustomers).values({
+      const [result] = await db.insert(portalCustomers).values({
         name: customerName,
         email: customerEmail,
         phone: customerPhone || undefined,
         address: serviceAddress ? `${serviceAddress}, ${serviceCity}, ${serviceState} ${serviceZip}`.trim() : undefined,
         hpCustomerId: hpCustomerId ?? undefined,
         stripeCustomerId: session.customer as string | undefined,
-      });
-      portalCustomerId = (result as any).insertId as number;
+      }).returning({ id: portalCustomers.id });
+      portalCustomerId = result.id;
     }
   }
 
@@ -133,7 +133,7 @@ export async function create360MembershipFromWebhook(
   const scheduledCreditCents = deferCredit ? tierDef.laborBankCreditCents : 0;
   const initialBalance = deferCredit ? 0 : tierDef.laborBankCreditCents;
 
-  const membershipResult = await db.insert(threeSixtyMemberships).values({
+  const [membershipResult] = await db.insert(threeSixtyMemberships).values({
     customerId: String(portalCustomerId ?? ''), // CRM customer ID (string nanoid) — linked later
     propertyAddressId: propertyAddressId ?? undefined,
     tier,
@@ -147,8 +147,8 @@ export async function create360MembershipFromWebhook(
     annualScanCompleted: false,
     scheduledCreditAt: scheduledCreditAt ?? undefined,
     scheduledCreditCents,
-  });
-  const membershipId = (membershipResult as any).insertId as number;
+  }).returning({ id: threeSixtyMemberships.id });
+  const membershipId = membershipResult.id;
 
   // ── 3. Add initial labor bank credit (immediate; deferred for monthly silver/gold) ─
   if (tierDef.laborBankCreditCents > 0 && !deferCredit) {
@@ -404,18 +404,18 @@ export async function create360PortfolioMembershipsFromWebhook(
         await db.update(portalCustomers).set({ stripeCustomerId: session.customer as string }).where(eq(portalCustomers.id, existing.id));
       }
     } else {
-      const result = await db.insert(portalCustomers).values({
+      const [result] = await db.insert(portalCustomers).values({
         name: customerName,
         email: customerEmail,
         phone: customerPhone || undefined,
         stripeCustomerId: session.customer as string | undefined,
-      });
-      portalCustomerId = (result as any).insertId as number;
+      }).returning({ id: portalCustomers.id });
+      portalCustomerId = result.id;
     }
   }
 
   // Create portfolio membership record
-  const membershipResult = await db.insert(threeSixtyMemberships).values({
+  const [membershipResult] = await db.insert(threeSixtyMemberships).values({
     customerId: String(portalCustomerId ?? ''),
     tier: "bronze",
     status: "active",
@@ -428,8 +428,8 @@ export async function create360PortfolioMembershipsFromWebhook(
     annualScanCompleted: false,
     scheduledCreditAt: undefined,
     scheduledCreditCents: 0,
-  });
-  const membershipId = (membershipResult as any).insertId as number;
+  }).returning({ id: threeSixtyMemberships.id });
+  const membershipId = membershipResult.id;
 
   // CRM customer
   let crmCustomerId: string | null = null;

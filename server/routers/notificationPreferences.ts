@@ -38,6 +38,7 @@ export async function isNotificationEnabled(
   channel: "email" | "sms" | "in_app"
 ): Promise<boolean> {
   const db = await getDb();
+  if (!db) throw new Error("Database not available");
   const rows = await db
     .select()
     .from(notificationPreferences)
@@ -60,6 +61,7 @@ export async function isNotificationEnabled(
 export const notificationPreferencesRouter = router({
   getAll: protectedProcedure.query(async () => {
     const db = await getDb();
+    if (!db) throw new Error("Database not available");
     const dbRows = await db.select().from(notificationPreferences);
 
     return DEFAULT_NOTIFICATION_PREFS.map((def) => {
@@ -91,6 +93,7 @@ export const notificationPreferencesRouter = router({
     )
     .mutation(async ({ input }) => {
       const db = await getDb();
+      if (!db) throw new Error("Database not available");
       await db
         .insert(notificationPreferences)
         .values({
@@ -98,7 +101,10 @@ export const notificationPreferencesRouter = router({
           channel: input.channel,
           enabled: input.enabled,
         })
-        .onDuplicateKeyUpdate({ set: { enabled: input.enabled } });
+        .onConflictDoUpdate({
+          target: [notificationPreferences.eventKey, notificationPreferences.channel],
+          set: { enabled: input.enabled },
+        });
       return { ok: true };
     }),
 });

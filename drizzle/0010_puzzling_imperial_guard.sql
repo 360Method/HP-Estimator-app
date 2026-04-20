@@ -1,1 +1,0 @@
-ALTER TABLE `portalEstimates` ADD `hpOpportunityId` varchar(64);

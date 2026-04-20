@@ -38,6 +38,7 @@ const DEFAULT_AFTER_HOURS_PROMPT =
 
 export async function getPhoneSettings() {
   const db = await getDb();
+  if (!db) throw new Error("Database not available");
   const rows = await db.select().from(phoneSettings).where(eq(phoneSettings.id, 1)).limit(1);
   if (rows.length > 0) return rows[0];
   // Seed default row on first access
@@ -55,7 +56,8 @@ export async function getPhoneSettings() {
     businessHoursEnd: "17:00",
     businessDays: "1,2,3,4,5",
   };
-  await db.insert(phoneSettings).values(defaultSettings).onDuplicateKeyUpdate({
+  await db.insert(phoneSettings).values(defaultSettings).onConflictDoUpdate({
+    target: phoneSettings.id,
     set: { updatedAt: new Date() },
   });
   const fresh = await db.select().from(phoneSettings).where(eq(phoneSettings.id, 1)).limit(1);
@@ -67,6 +69,7 @@ export async function updatePhoneSettings(
 ) {
   await getPhoneSettings();
   const db = await getDb();
+  if (!db) throw new Error("Database not available");
   await db.update(phoneSettings).set(patch).where(eq(phoneSettings.id, 1));
   return getPhoneSettings();
 }

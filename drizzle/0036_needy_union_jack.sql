@@ -1,1 +1,0 @@
-ALTER TABLE `threeSixtyWorkOrders` ADD `healthScore` int;

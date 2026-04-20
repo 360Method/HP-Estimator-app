@@ -1,1 +1,0 @@
-ALTER TABLE `portalEstimates` ADD CONSTRAINT `portalEstimates_customer_estimate_uidx` UNIQUE(`customerId`,`estimateNumber`);

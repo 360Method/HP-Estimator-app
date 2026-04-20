@@ -1,6 +1,6 @@
 /**
  * PortalContext — manages portal customer session state.
- * Separate from Manus OAuth; uses hp_portal_session cookie.
+ * Separate from admin OAuth; uses hp_portal_session cookie.
  */
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";

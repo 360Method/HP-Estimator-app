@@ -1,1 +1,0 @@
-ALTER TABLE `onlineRequests` ADD `readAt` timestamp;

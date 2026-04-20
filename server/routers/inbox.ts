@@ -76,7 +76,7 @@ const conversationsRouter = router({
   findOrCreateByCustomer: protectedProcedure
     .input(z.object({
       customerId: z.string(),
-      phone: z.string().nullable().optional(),
+      phone: z.string().refine((val) => val === "" || /^\+[1-9]\d{1,14}$/.test(val), { message: "Phone number must be in E.164 format (e.g. +15551234567)" }).nullable().optional(),
       email: z.string().nullable().optional(),
       name: z.string().nullable().optional(),
       channel: z.enum(["sms", "email", "note"]).optional(),
