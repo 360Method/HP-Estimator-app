@@ -553,6 +553,90 @@ async function startServer() {
     }
   });
 
+  // ── 360° funnel checkout endpoint (called by hp-360-funnel frontend) ──────────────
+  // Accepts the funnel's payload shape and maps it to Stripe checkout.
+  app.post("/api/360/checkout", async (req, res) => {
+    const { tier: funnelTier, cadence, customer, type: checkoutType } = req.body ?? {};
+    if (!funnelTier || !cadence || !customer?.email) {
+      res.status(400).json({ error: "tier, cadence, and customer.email are required" });
+      return;
+    }
+
+    // Map funnel tier names → HP internal names
+    const TIER_MAP: Record<string, string> = {
+      exterior_shield: "bronze",
+      full_coverage:   "silver",
+      max:             "gold",
+    };
+    const tier = TIER_MAP[funnelTier];
+    if (!tier) {
+      res.status(400).json({ error: `Unknown tier: ${funnelTier}` });
+      return;
+    }
+
+    const validCadences = ["monthly", "quarterly", "annual"];
+    if (!validCadences.includes(cadence)) {
+      res.status(400).json({ error: `Invalid cadence: ${cadence}` });
+      return;
+    }
+
+    try {
+      const stripeKey = process.env.STRIPE_SECRET_KEY;
+      if (!stripeKey) { res.status(503).json({ error: "Stripe not configured" }); return; }
+      const stripe = new Stripe(stripeKey, { apiVersion: "2025-03-31.basil" });
+
+      const priceEnvKey = `STRIPE_PRICE_360_${tier.toUpperCase()}_${cadence.toUpperCase()}`;
+      const priceId = process.env[priceEnvKey];
+      if (!priceId) {
+        res.status(503).json({ error: `Stripe price not configured (${priceEnvKey})` });
+        return;
+      }
+
+      // Split "First Last" into parts; everything after first space is lastName
+      const nameParts = (customer.name ?? "").trim().split(/\s+/);
+      const firstName = nameParts[0] ?? "";
+      const lastName  = nameParts.slice(1).join(" ");
+      const customerName = customer.name || customer.email;
+
+      const successUrl = `${process.env.PORTAL_BASE_URL ?? "https://client.handypioneers.com"}/360-welcome?session_id={CHECKOUT_SESSION_ID}`;
+      const cancelUrl  = `${process.env.FUNNEL_ORIGIN ?? "https://360.handypioneers.com"}/?canceled=1`;
+
+      const session = await stripe.checkout.sessions.create({
+        mode: "subscription",
+        line_items: [{ price: priceId, quantity: 1 }],
+        customer_email: customer.email,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        metadata: {
+          tier,
+          cadence,
+          checkoutType: checkoutType ?? "homeowner",
+          customerName,
+          customerEmail: customer.email,
+          customerPhone: customer.phone ?? "",
+          serviceAddress: customer.address ?? "",
+          serviceCity: customer.city ?? "",
+          serviceState: customer.state ?? "",
+          serviceZip: customer.zip ?? "",
+          firstName,
+          lastName,
+        },
+      });
+
+      res.json({ url: session.url });
+    } catch (err) {
+      console.error("[360 Checkout]", err);
+      res.status(500).json({ error: "Failed to create checkout session" });
+    }
+  });
+
+  // ── 360° analytics event stub ───────────────────────────────────────────────
+  app.post("/api/360/event", express.json(), (req, res) => {
+    // Analytics only — log and acknowledge; no business logic
+    console.log("[360 Event]", JSON.stringify(req.body));
+    res.json({ ok: true });
+  });
+
   // ── Gmail poll schedule (every 2 minutes) ────────────────────────────────────────────────────
   setInterval(async () => {
     const email = process.env.GMAIL_CONNECTED_EMAIL;
