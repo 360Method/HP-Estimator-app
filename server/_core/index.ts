@@ -630,6 +630,108 @@ async function startServer() {
     }
   });
 
+  // ── 360° portfolio checkout — multi-property subscription ──────────────────
+  // Uses inline price_data so no per-tier Stripe products need to be pre-created.
+  app.post("/api/360/portfolio-checkout", async (req, res) => {
+    const { cadence, properties, customer } = req.body ?? {};
+    if (!cadence || !Array.isArray(properties) || properties.length === 0 || !customer?.email) {
+      res.status(400).json({ error: "cadence, properties[], and customer.email are required" });
+      return;
+    }
+    const validCadences = ["monthly", "quarterly", "annual"];
+    if (!validCadences.includes(cadence)) {
+      res.status(400).json({ error: `Invalid cadence: ${cadence}` });
+      return;
+    }
+
+    // Cents per property per billing period, matching threeSixtyTiers.ts pricing
+    const TIER_PRICES: Record<string, Record<string, number>> = {
+      exterior_shield: { monthly: 5900,  quarterly: 16900, annual: 58800  },
+      full_coverage:   { monthly: 9900,  quarterly: 27900, annual: 94800  },
+      max:             { monthly: 14900, quarterly: 41900, annual: 142800 },
+    };
+
+    let totalCents = 0;
+    for (const prop of properties) {
+      const tierPrices = TIER_PRICES[prop.tier as string];
+      if (!tierPrices) {
+        res.status(400).json({ error: `Unknown tier: ${prop.tier}` });
+        return;
+      }
+      totalCents += tierPrices[cadence];
+    }
+
+    const INTERVAL: Record<string, { interval: "month" | "year"; interval_count: number }> = {
+      monthly:   { interval: "month", interval_count: 1 },
+      quarterly: { interval: "month", interval_count: 3 },
+      annual:    { interval: "year",  interval_count: 1 },
+    };
+
+    try {
+      const stripeKey = process.env.STRIPE_SECRET_KEY;
+      if (!stripeKey) { res.status(503).json({ error: "Stripe not configured" }); return; }
+      const stripe = new Stripe(stripeKey, { apiVersion: "2025-03-31.basil" });
+
+      const nameParts = (customer.name ?? "").trim().split(/\s+/);
+      const firstName = nameParts[0] ?? "";
+      const lastName  = nameParts.slice(1).join(" ");
+      const customerName = customer.name || customer.email;
+      const interiorAddonCount = (properties as any[]).filter(p => p.interiorAddon).length;
+      const { interval, interval_count } = INTERVAL[cadence];
+      const propCount = properties.length;
+
+      const successUrl = `${process.env.PORTAL_BASE_URL ?? "https://client.handypioneers.com"}/360-welcome?session_id={CHECKOUT_SESSION_ID}`;
+      const cancelUrl  = `${process.env.FUNNEL_ORIGIN ?? "https://360.handypioneers.com"}/?canceled=1`;
+
+      const session = await stripe.checkout.sessions.create({
+        mode: "subscription",
+        line_items: [{
+          price_data: {
+            currency: "usd",
+            recurring: { interval, interval_count },
+            product_data: {
+              name: `360° Portfolio Plan — ${propCount} ${propCount === 1 ? "property" : "properties"}`,
+              description: (properties as any[]).map((p: any) => `${p.address ?? "Property"} (${p.tier})`).join("; "),
+            },
+            unit_amount: totalCents,
+          },
+          quantity: 1,
+        }],
+        customer_email: customer.email,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        metadata: {
+          planType: "portfolio",
+          cadence,
+          customerName,
+          customerEmail: customer.email,
+          customerPhone: customer.phone ?? "",
+          interiorAddonDoors: String(interiorAddonCount),
+          firstName,
+          lastName,
+          // JSON-encode properties for the webhook handler (max 500 chars per value)
+          properties: JSON.stringify(
+            (properties as any[]).map((p: any) => ({
+              address: p.address ?? "",
+              city: p.city ?? "",
+              state: p.state ?? "",
+              zip: p.zip ?? "",
+              tier: p.tier ?? "",
+              units: p.units ?? 1,
+              interiorAddon: !!p.interiorAddon,
+              interiorDoors: p.interiorDoors ?? 0,
+            }))
+          ).slice(0, 490),
+        },
+      });
+
+      res.json({ url: session.url });
+    } catch (err) {
+      console.error("[360 Portfolio Checkout]", err);
+      res.status(500).json({ error: "Failed to create portfolio checkout session" });
+    }
+  });
+
   // ── 360° analytics event stub ───────────────────────────────────────────────
   app.post("/api/360/event", express.json(), (req, res) => {
     // Analytics only — log and acknowledge; no business logic
