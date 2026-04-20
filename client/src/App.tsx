@@ -38,6 +38,11 @@ import Portal360Membership from "./pages/portal/Portal360Membership";
 import PortalEnrollmentConfirmation from "./pages/portal/PortalEnrollmentConfirmation";
 import WorkOrderDetail from "./pages/WorkOrderDetail";
 
+// Field tech PWA pages
+import TechLogin from "./pages/TechLogin";
+import TechDashboard from "./pages/TechDashboard";
+import TechJobDetail from "./pages/TechJobDetail";
+
 // Domains that should serve only the customer portal (no admin app)
 const PORTAL_HOSTNAMES = ["client.handypioneers.com"];
 
@@ -96,6 +101,11 @@ function Router() {
       {/* Data migration onboarding wizard */}
       <Route path="/onboarding" component={() => <DataMigrationPage />} />
 
+      {/* Field tech PWA */}
+      <Route path="/tech" component={TechLogin} />
+      <Route path="/tech/dashboard" component={TechDashboard} />
+      <Route path="/tech/job/:jobType/:jobId" component={TechJobDetail} />
+
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
@@ -108,16 +118,4 @@ function App() {
       <ThemeProvider defaultTheme="light">
         <EstimatorProvider>
           <PortalProvider>
-            <TooltipProvider>
-              <Toaster />
-              <PwaInstallBanner />
-              <Router />
-            </TooltipProvider>
-          </PortalProvider>
-        </EstimatorProvider>
-      </ThemeProvider>
-    </ErrorBoundary>
-  );
-}
-
-export default App;
+       

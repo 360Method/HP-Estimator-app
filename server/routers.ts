@@ -27,6 +27,7 @@ import { appSettingsRouter } from "./routers/appSettings";
 import { notificationPreferencesRouter } from "./routers/notificationPreferences";
 import { automationRulesRouter } from "./routers/automationRules";
 import { automationsRouter } from "./routers/automations";
+import { techRouter } from "./routers/tech";
 import {
   getAdminAllowlist,
   addAdminAllowlistEmail,
@@ -59,6 +60,7 @@ export const appRouter = router({
   notificationPreferences: notificationPreferencesRouter,
   automationRules: automationRulesRouter,
   automations: automationsRouter,
+  tech: techRouter,
 
   auth: router({
     /**
@@ -95,14 +97,4 @@ export const appRouter = router({
         const list = await getAdminAllowlist();
         if (list.length === 1 && list[0].email === input.email.toLowerCase().trim()) {
           throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: "Cannot remove the last allowed email — the list would become empty (open mode).",
-          });
-        }
-        await removeAdminAllowlistEmail(input.email);
-        return { success: true };
-      }),
-  }),
-});
-
-export type AppRouter = typeof appRouter;
+  

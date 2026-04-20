@@ -1,1 +1,0 @@
-ALTER TABLE `automationRules` ADD `stage` varchar(30) DEFAULT 'lead' NOT NULL;
