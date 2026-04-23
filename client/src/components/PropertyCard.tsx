@@ -37,9 +37,9 @@ import { Property } from "@/lib/types";
 
 // ─── Tier badge config ────────────────────────────────────────────────────────
 const TIER_CONFIG = {
-  bronze: { label: "Essential", className: "bg-amber-700 text-white" },
-  silver: { label: "Full Coverage", className: "bg-slate-400 text-white" },
-  gold: { label: "Maximum Protection", className: "bg-yellow-500 text-white" },
+  bronze: { label: "Bronze", className: "bg-amber-700 text-white" },
+  silver: { label: "Silver", className: "bg-slate-400 text-white" },
+  gold: { label: "Gold", className: "bg-yellow-500 text-white" },
 } as const;
 
 // ─── Health dot ───────────────────────────────────────────────────────────────

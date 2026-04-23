@@ -30,9 +30,9 @@ const CADENCE_OPTIONS: { value: BillingCadence; label: string; badge?: string }[
 ];
 
 const TIER_LABELS: Record<string, string> = {
-  bronze: "Essential",
-  silver: "Full Coverage",
-  gold: "Maximum Protection",
+  bronze: "Bronze",
+  silver: "Silver",
+  gold: "Gold",
 };
 
 const TIER_COLORS: Record<string, string> = {

@@ -2,16 +2,15 @@
  * 360° Method — Membership Tier Definitions & Discount Calculator
  * Delivered by Handy Pioneers
  *
- * DB keys stay as bronze / silver / gold to avoid a destructive migration.
- * Display labels match 360.handypioneers.com:
- *   bronze  → "Essential"           $59/mo  | $169/quarter | $588/yr ($49/mo equiv)
- *   silver  → "Full Coverage"       $99/mo  | $279/quarter | $948/yr ($79/mo equiv)
- *   gold    → "Maximum Protection"  $149/mo | $419/quarter | $1,428/yr ($119/mo equiv)
+ * Canonical tier keys + labels:
+ *   bronze → "Bronze"  $59/mo  | $169/quarter | $588/yr ($49/mo equiv)
+ *   silver → "Silver"  $99/mo  | $279/quarter | $948/yr ($79/mo equiv)
+ *   gold   → "Gold"    $149/mo | $419/quarter | $1,428/yr ($119/mo equiv)
  *
- * Discount brackets match 360.handypioneers.com (step-ladder, by job size):
- *   Essential:          5% / 3% / 1.5%
- *   Full Coverage:      8% / 5% / 2.5%
- *   Maximum Protection: 12% / 8% / 4%
+ * Discount brackets (step-ladder, by job size):
+ *   Bronze: 5% / 3% / 1.5%
+ *   Silver: 8% / 5% / 2.5%
+ *   Gold:   12% / 8% / 4%
  */
 
 export type MemberTier = "bronze" | "silver" | "gold";
@@ -107,10 +106,10 @@ function buildPricing(
 // ─── TIER DEFINITIONS ────────────────────────────────────────────────────────
 
 export const TIER_DEFINITIONS: Record<MemberTier, TierDefinition> = {
-  // DB key: "bronze" → display: "Essential"
+  // DB key: "bronze" → display: "Bronze"
   bronze: {
     id: "bronze",
-    label: "Essential",
+    label: "Bronze",
     tagline: "Protect the basics. Catch problems early.",
     pricing: buildPricing(
       59,   // $59/mo
@@ -141,10 +140,10 @@ export const TIER_DEFINITIONS: Record<MemberTier, TierDefinition> = {
     },
   },
 
-  // DB key: "silver" → display: "Full Coverage"
+  // DB key: "silver" → display: "Silver"
   silver: {
     id: "silver",
-    label: "Full Coverage",
+    label: "Silver",
     tagline: "Four seasons of protection + pre-paid labor.",
     pricing: buildPricing(
       99,   // $99/mo
@@ -157,7 +156,7 @@ export const TIER_DEFINITIONS: Record<MemberTier, TierDefinition> = {
     laborBankCreditCents: 30000, // $300
     priorityScheduling: false,
     features: [
-      "Everything in Essential, plus:",
+      "Everything in Bronze, plus:",
       "4 seasonal visits — all 4 seasons",
       "$300 labor bank credit (use on any handyman task)",
       "Summer visit — dry-season exterior + HVAC prep",
@@ -176,10 +175,10 @@ export const TIER_DEFINITIONS: Record<MemberTier, TierDefinition> = {
     },
   },
 
-  // DB key: "gold" → display: "Maximum Protection"
+  // DB key: "gold" → display: "Gold"
   gold: {
     id: "gold",
-    label: "Maximum Protection",
+    label: "Gold",
     tagline: "The full system. Priority access. Maximum savings.",
     pricing: buildPricing(
       149,  // $149/mo
@@ -192,7 +191,7 @@ export const TIER_DEFINITIONS: Record<MemberTier, TierDefinition> = {
     laborBankCreditCents: 60000, // $600
     priorityScheduling: true,
     features: [
-      "Everything in Full Coverage, plus:",
+      "Everything in Silver, plus:",
       "4 seasonal visits — all 4 seasons + priority",
       "$600 labor bank credit — you're ahead after month 5",
       "Priority scheduling — your calls go first",
@@ -252,7 +251,7 @@ export function getSavingsVsMonthly(tier: MemberTier, cadence: BillingCadence): 
  * @returns The discount amount in cents
  *
  * @example
- * // gold (Maximum Protection) member, $6,000 job
+ * // gold member, $6,000 job
  * calcMemberDiscount("gold", 600000)
  * // => $80 (12% on first $1k) + $320 (8% on $1k–$5k) + $40 (4% on $5k–$6k) = $440
  */

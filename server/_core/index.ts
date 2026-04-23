@@ -770,7 +770,7 @@ async function startServer() {
         if (!emailMatch) continue;
         const to        = emailMatch[1].trim();
         const firstName = nameMatch ? nameMatch[1].trim().split(" ")[0] : "there";
-        const tier      = tierMatch  ? tierMatch[1] : "Essential";
+        const tier      = tierMatch  ? tierMatch[1] : "Bronze";
         const tierLabel = tier.charAt(0).toUpperCase() + tier.slice(1);
         const createdAt = new Date((lead as any).createdAt ?? 0).getTime();
         const age  = now - createdAt;

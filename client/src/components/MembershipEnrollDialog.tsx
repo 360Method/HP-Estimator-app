@@ -50,8 +50,8 @@ interface TierDef {
 const TIERS: TierDef[] = [
   {
     id: "bronze",
-    homeLabel: "Essential",
-    portfolioLabel: "Exterior Shield",
+    homeLabel: "Bronze",
+    portfolioLabel: "Bronze",
     tagline: "Protect the basics. Catch problems early.",
     monthlyPrice: 59,
     quarterlyPrice: 56,
@@ -74,8 +74,8 @@ const TIERS: TierDef[] = [
   },
   {
     id: "silver",
-    homeLabel: "Full Coverage",
-    portfolioLabel: "Full Coverage",
+    homeLabel: "Silver",
+    portfolioLabel: "Silver",
     tagline: "Four seasons of protection + pre-paid labor.",
     monthlyPrice: 99,
     quarterlyPrice: 94,
@@ -84,7 +84,7 @@ const TIERS: TierDef[] = [
     laborBank: 300,
     popular: true,
     features: [
-      "Everything in Essential, plus:",
+      "Everything in Bronze, plus:",
       "$300 labor bank credit (use on any handyman task)",
       "Summer visit — dry-season exterior + HVAC prep",
       "Winter visit — freeze protection + moisture inspection",
@@ -99,8 +99,8 @@ const TIERS: TierDef[] = [
   },
   {
     id: "gold",
-    homeLabel: "Maximum Protection",
-    portfolioLabel: "Portfolio Max",
+    homeLabel: "Gold",
+    portfolioLabel: "Gold",
     tagline: "The full system. Priority access. Maximum savings.",
     monthlyPrice: 149,
     quarterlyPrice: 141,
@@ -108,7 +108,7 @@ const TIERS: TierDef[] = [
     visits: "4 visits/yr — All 4 Seasons + Priority",
     laborBank: 600,
     features: [
-      "Everything in Full Coverage, plus:",
+      "Everything in Silver, plus:",
       "$600 labor bank credit — you're ahead after month 5",
       "Priority scheduling — your calls go first",
       "Dedicated HP account manager",

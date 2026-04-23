@@ -51,7 +51,7 @@ export interface TierInfo {
 export const TIERS: TierInfo[] = [
   {
     id: "bronze",
-    label: "Essential",
+    label: "Bronze",
     tagline: "Protect the basics. Catch problems early.",
     monthlyPrice: 5900,
     quarterlyPrice: 16900,
@@ -73,7 +73,7 @@ export const TIERS: TierInfo[] = [
   },
   {
     id: "silver",
-    label: "Full Coverage",
+    label: "Silver",
     tagline: "Four seasons of protection + pre-paid labor.",
     monthlyPrice: 9900,
     quarterlyPrice: 27900,
@@ -85,7 +85,7 @@ export const TIERS: TierInfo[] = [
     priorityScheduling: false,
     headlineDiscount: "8%",
     features: [
-      "Everything in Essential, plus:",
+      "Everything in Bronze, plus:",
       "4 seasonal visits — all 4 seasons",
       "$300 labor bank credit (use on any handyman task)",
       "8% off jobs under $1,000 · 5% off $1k–$5k · 2.5% off $5k+",
@@ -96,7 +96,7 @@ export const TIERS: TierInfo[] = [
   },
   {
     id: "gold",
-    label: "Maximum Protection",
+    label: "Gold",
     tagline: "The full system. Priority access. Maximum savings.",
     monthlyPrice: 14900,
     quarterlyPrice: 41900,
@@ -108,7 +108,7 @@ export const TIERS: TierInfo[] = [
     priorityScheduling: true,
     headlineDiscount: "12%",
     features: [
-      "Everything in Full Coverage, plus:",
+      "Everything in Silver, plus:",
       "4 seasonal visits — all 4 seasons + priority",
       "$600 labor bank credit — you're ahead after month 5",
       "12% off jobs under $1,000 · 8% off $1k–$5k · 4% off $5k+",
