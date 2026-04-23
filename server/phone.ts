@@ -176,7 +176,6 @@ export async function buildInboundCallTwiml(callbackBaseUrl: string): Promise<st
   const settings = await getPhoneSettings();
   const {
     forwardingMode,
-    forwardingNumber,
     greeting,
     callRecording,
     afterHoursEnabled,
@@ -184,6 +183,12 @@ export async function buildInboundCallTwiml(callbackBaseUrl: string): Promise<st
     businessHoursEnd,
     businessDays,
   } = settings;
+  // Env override: FORWARD_TO_NUMBER / OWNER_PHONE take precedence over a stale
+  // DB row so ops can change the forwarding target without a DB write.
+  const forwardingNumber =
+    (process.env.FORWARD_TO_NUMBER && process.env.FORWARD_TO_NUMBER.trim()) ||
+    (process.env.OWNER_PHONE && process.env.OWNER_PHONE.trim()) ||
+    settings.forwardingNumber;
 
   // Determine if we're within business hours
   const withinHours = afterHoursEnabled
