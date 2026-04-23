@@ -11,7 +11,7 @@
  * canonical schema.ts.
  */
 
-import { jsonb, pgTable, text, timestamp, varchar } from "drizzle-orm/pg-core";
+import { integer, jsonb, pgTable, text, timestamp, varchar } from "drizzle-orm/pg-core";
 
 // ─── portal_accounts ────────────────────────────────────────────────────────
 export const portalAccounts = pgTable("portal_accounts", {
@@ -83,10 +83,23 @@ export type DbHomeHealthRecord = typeof homeHealthRecords.$inferSelect;
 export type InsertDbHomeHealthRecord = typeof homeHealthRecords.$inferInsert;
 
 // ─── priority_translations ────────────────────────────────────────────────
+//
+// Human checkpoint pipeline (see migration 0051):
+//
+//   draft_awaiting_claude   freshly submitted; worker has not yet called Claude
+//   draft_awaiting_review   Claude parsed the report; Marcin needs to edit/approve
+//   ready_to_send           Marcin clicked "ready" but send has not fired yet
+//   sent                    PDF emailed + magic link issued + nurture triggered
+//   failed                  terminal error (check failureReason)
+//
+// Legacy values ("submitted", "processing", "completed") remain readable for
+// rows that pre-date 0051; the migration backfills existing rows to the new
+// names so the admin UI does not have to branch on legacy values.
 export type PriorityTranslationStatus =
-  | "submitted"
-  | "processing"
-  | "completed"
+  | "draft_awaiting_claude"
+  | "draft_awaiting_review"
+  | "ready_to_send"
+  | "sent"
   | "failed";
 
 export type ClaudePriorityTranslationResponse = {
@@ -109,11 +122,17 @@ export const priorityTranslations = pgTable("priority_translations", {
   pdfStoragePath: text("pdf_storage_path"),
   reportUrl: text("report_url"),
   notes: text("notes"),
-  status: varchar("status", { length: 32 }).notNull().default("submitted").$type<PriorityTranslationStatus>(),
+  status: varchar("status", { length: 32 }).notNull().default("draft_awaiting_claude").$type<PriorityTranslationStatus>(),
   claudeResponse: jsonb("claude_response").$type<ClaudePriorityTranslationResponse>(),
   outputPdfPath: text("output_pdf_path"),
   deliveredAt: timestamp("delivered_at", { mode: "date" }),
   failureReason: text("failure_reason"),
+  // Human checkpoint metadata — populated by admin review procedures.
+  reviewedByUserId: integer("reviewed_by_user_id"),
+  reviewedAt: timestamp("reviewed_at", { mode: "date" }),
+  sentAt: timestamp("sent_at", { mode: "date" }),
+  reviewNotes: text("review_notes"),
+  reminderSentAt: timestamp("reminder_sent_at", { mode: "date" }),
   createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { mode: "date" }).notNull().defaultNow(),
 });

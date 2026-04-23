@@ -1388,3 +1388,8 @@ export const automationRuleLogs = pgTable("automationRuleLogs", {
   executedAt: timestamp("executedAt").defaultNow().notNull(),
 });
 export type DbAutomationRuleLog = typeof automationRuleLogs.$inferSelect;
+
+// ─── Priority Translation + portal subsystem ──────────────────────────────
+// Tables defined in drizzle/schema.priorityTranslation.ts (kept in a separate
+// file for clearer history since they were added as a lead-magnet pipeline).
+export * from "./schema.priorityTranslation";
