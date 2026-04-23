@@ -1,0 +1,43 @@
+# Nixpacks config for Railway deployment
+# Installs Chromium system dependencies required by Puppeteer
+
+[phases.setup]
+nixPkgs = [
+  "nodejs_22",
+  "nodePackages.pnpm",
+  "chromium",
+  "nss",
+  "nspr",
+  "atk",
+  "at-spi2-atk",
+  "xorg.libX11",
+  "xorg.libXcomposite",
+  "xorg.libXdamage",
+  "xorg.libXext",
+  "xorg.libXfixes",
+  "xorg.libXrandr",
+  "xorg.libxcb",
+  "libdrm",
+  "libxkbcommon",
+  "mesa",
+  "pango",
+  "cairo",
+  "alsa-lib",
+  "cups",
+  "expat",
+  "libuuid",
+  "xorg.libxshmfence"
+]
+
+[variables]
+PUPPETEER_EXECUTABLE_PATH = "/run/current-system/sw/bin/chromium"
+PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = "true"
+
+[phases.install]
+cmds = ["pnpm install"]
+
+[phases.build]
+cmds = ["pnpm build"]
+
+[start]
+cmd = "node dist/index.js"

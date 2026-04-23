@@ -4,7 +4,7 @@ import cors from "cors";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
-import { registerOAuthRoutes } from "./oauth";
+import { registerAuthRoutes, seedDefaultAdminIfNeeded } from "./auth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
@@ -15,7 +15,7 @@ import { exchangeGmailCode, pollInboundEmails, sendOverdueReminderEmail } from "
 import { getFirstGmailToken, listOpportunities, updateOpportunity } from "../db";
 import { addSSEClient, broadcastNewMessage } from "../sse";
 import { getPortalInvoiceByStripePaymentIntentId, updatePortalInvoicePaid, getPortalInvoiceByCheckoutSessionId, findPortalCustomerById, getOverdueInvoicesForReminder, markPortalInvoiceReminderSent, getSignOffsEligibleForReviewRequest, getSignOffsEligibleForReviewReminder, markReviewRequestSent, markReviewReminderSent } from "../portalDb";
-import { create360MembershipFromWebhook, create360PortfolioMembershipsFromWebhook, releaseDeferredLaborBankCredits } from "../threeSixtyWebhook.ts";
+import { create360MembershipFromWebhook, create360PortfolioMembershipsFromWebhook, releaseDeferredLaborBankCredits, handle360SubscriptionDeleted, handle360SubscriptionUpdated, handle360InvoicePaymentFailed } from "../threeSixtyWebhook.ts";
 import { sendEmail } from "../gmail";
 import { notifyOwner } from "../_core/notification";
 import { buildInboundCallTwiml, buildFallbackTwiml, getPhoneSettings } from "../phone";
@@ -55,6 +55,9 @@ async function startServer() {
     ],
     credentials: true,
   }));
+
+  // ── Health check (Railway probes this before marking deploy live) ──
+  app.get("/api/health", (_, res) => res.json({ ok: true }));
 
   // ── Stripe webhook: MUST be registered BEFORE express.json() ──
   app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async (req, res) => {
@@ -195,6 +198,30 @@ async function startServer() {
       case "payment_intent.payment_failed": {
         const pi = event.data.object as Stripe.PaymentIntent;
         console.log(`[Webhook] PaymentIntent failed: ${pi.id}`);
+        break;
+      }
+      case "customer.subscription.deleted": {
+        const sub = event.data.object as Stripe.Subscription;
+        console.log(`[Webhook] Subscription deleted: ${sub.id}`);
+        await handle360SubscriptionDeleted(sub).catch(err =>
+          console.error("[Webhook] subscription.deleted handler error:", err)
+        );
+        break;
+      }
+      case "customer.subscription.updated": {
+        const sub = event.data.object as Stripe.Subscription;
+        console.log(`[Webhook] Subscription updated: ${sub.id} status=${sub.status}`);
+        await handle360SubscriptionUpdated(sub).catch(err =>
+          console.error("[Webhook] subscription.updated handler error:", err)
+        );
+        break;
+      }
+      case "invoice.payment_failed": {
+        const inv = event.data.object as Stripe.Invoice;
+        console.log(`[Webhook] Invoice payment failed: ${inv.id}`);
+        await handle360InvoicePaymentFailed(inv).catch(err =>
+          console.error("[Webhook] invoice.payment_failed handler error:", err)
+        );
         break;
       }
       default:
@@ -476,26 +503,18 @@ async function startServer() {
   });
 
   // ── Google Maps JS SDK proxy ─────────────────────────────────────────────────────────────────
-  // The Manus forge proxy requires Authorization: Bearer header which <script> tags can't send.
-  // This route fetches the SDK server-side (with auth) and streams it back to the browser.
+  // Proxies the Google Maps SDK server-side to avoid exposing the API key in the browser.
   app.get("/api/maps/sdk", async (req, res) => {
-    const forgeUrl = (process.env.BUILT_IN_FORGE_API_URL || "https://forge.manus.ai").replace(/\/+$/, "");
-    const forgeKey = process.env.VITE_FRONTEND_FORGE_API_KEY || process.env.BUILT_IN_FORGE_API_KEY || "";
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY || "";
+    if (!apiKey) {
+      res.status(503).send("Google Maps API key not configured");
+      return;
+    }
     const libraries = (req.query.libraries as string) || "places,geocoding,geometry";
     const v = (req.query.v as string) || "weekly";
-    // Determine origin from Referer or X-Forwarded headers
-    const referer = req.headers.referer || "";
-    const forwardedProto = (req.headers["x-forwarded-proto"] as string || req.protocol).split(",")[0].trim();
-    const forwardedHost = (req.headers["x-forwarded-host"] as string || req.get("host") || "localhost").split(",")[0].trim();
-    const origin = referer ? new URL(referer).origin : `${forwardedProto}://${forwardedHost}`;
-    const sdkUrl = `${forgeUrl}/v1/maps/proxy/maps/api/js?key=${forgeKey}&v=${v}&libraries=${libraries}`;
+    const sdkUrl = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&v=${v}&libraries=${libraries}`;
     try {
-      const upstream = await fetch(sdkUrl, {
-        headers: {
-          Authorization: `Bearer ${forgeKey}`,
-          Origin: origin,
-        },
-      });
+      const upstream = await fetch(sdkUrl);
       if (!upstream.ok) {
         const body = await upstream.text();
         console.error(`[Maps SDK proxy] Upstream error ${upstream.status}: ${body}`);
@@ -516,12 +535,6 @@ async function startServer() {
   // GET /api/portal/estimate-pdf/:id — returns a PDF of the estimate
   // Requires a valid portal session cookie (same as tRPC portal procedures)
   app.get("/api/portal/estimate-pdf/:id", async (req, res) => {
-    const { exec } = await import("child_process");
-    const { promisify } = await import("util");
-    const { readFile, writeFile, unlink, mkdtemp } = await import("fs/promises");
-    const { join } = await import("path");
-    const { tmpdir } = await import("os");
-    const execAsync = promisify(exec);
     try {
       // Validate portal session
       const { getPortalEstimateById, findValidPortalSession, findPortalCustomerById } = await import("../portalDb");
@@ -639,15 +652,17 @@ async function startServer() {
         </div>
       </body></html>`;
 
-      // Write HTML to temp file and convert to PDF
-      const tmpDir = await mkdtemp(join(tmpdir(), "hp-est-"));
-      const htmlPath = join(tmpDir, "estimate.html");
-      const pdfPath = join(tmpDir, "estimate.pdf");
-      await writeFile(htmlPath, html, "utf-8");
-      await execAsync(`manus-md-to-pdf "${htmlPath}" "${pdfPath}"`);
-      const pdfBuffer = await readFile(pdfPath);
-      await unlink(htmlPath).catch(() => null);
-      await unlink(pdfPath).catch(() => null);
+      // Convert HTML to PDF using Puppeteer
+      const puppeteer = await import("puppeteer");
+      const browser = await puppeteer.default.launch({
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+        args: ["--no-sandbox", "--disable-setuid-sandbox"],
+        headless: true,
+      });
+      const page = await browser.newPage();
+      await page.setContent(html, { waitUntil: "networkidle0" });
+      const pdfBuffer = await page.pdf({ format: "A4", printBackground: true });
+      await browser.close();
 
       res.set("Content-Type", "application/pdf");
       res.set("Content-Disposition", `attachment; filename="Estimate-${est.estimateNumber}.pdf"`);
@@ -661,8 +676,272 @@ async function startServer() {
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
-  // OAuth callback under /api/oauth/callback
-  registerOAuthRoutes(app);
+
+  // Auth endpoints: POST /api/auth/login, POST /api/auth/logout, GET /api/auth/me
+  registerAuthRoutes(app);
+
+  // Seed default admin user if no staff users exist yet
+  await seedDefaultAdminIfNeeded();
+
+  // ── 360° REST enrollment endpoint (called by external funnel at 360.handypioneers.com) ──
+  app.post("/api/360/enroll", async (req, res) => {
+    const { tier, cadence, firstName, lastName, email, phone, address, city, state, zip } = req.body ?? {};
+    if (!tier || !cadence || !email) {
+      res.status(400).json({ error: "tier, cadence, and email are required" });
+      return;
+    }
+    const validTiers = ["bronze", "silver", "gold"];
+    const validCadences = ["monthly", "quarterly", "annual"];
+    if (!validTiers.includes(tier) || !validCadences.includes(cadence)) {
+      res.status(400).json({ error: "Invalid tier or cadence" });
+      return;
+    }
+    try {
+      const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2025-03-31.basil" });
+
+      // Resolve Stripe price ID from env vars
+      const priceEnvKey = `STRIPE_PRICE_360_${tier.toUpperCase()}_${cadence.toUpperCase()}`;
+      const priceId = process.env[priceEnvKey];
+      if (!priceId) {
+        res.status(503).json({ error: `Stripe price not configured (${priceEnvKey})` });
+        return;
+      }
+
+      const customerName = [firstName, lastName].filter(Boolean).join(" ") || email;
+      const successUrl = `${process.env.PORTAL_BASE_URL ?? "https://client.handypioneers.com"}/360-welcome?session_id={CHECKOUT_SESSION_ID}`;
+      const cancelUrl = `${process.env.FUNNEL_ORIGIN ?? "https://360.handypioneers.com"}/?canceled=1`;
+
+      const session = await stripe.checkout.sessions.create({
+        mode: "subscription",
+        line_items: [{ price: priceId, quantity: 1 }],
+        customer_email: email,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        metadata: {
+          tier,
+          cadence,
+          customerName,
+          customerEmail: email,
+          customerPhone: phone ?? "",
+          serviceAddress: address ?? "",
+          serviceCity: city ?? "",
+          serviceState: state ?? "",
+          serviceZip: zip ?? "",
+        },
+      });
+
+      res.json({ checkoutUrl: session.url });
+    } catch (err) {
+      console.error("[360 Enroll]", err);
+      res.status(500).json({ error: "Failed to create checkout session" });
+    }
+  });
+
+  // ── 360° funnel checkout endpoint (called by hp-360-funnel frontend) ──────────────
+  // Accepts the funnel's payload shape and maps it to Stripe checkout.
+  app.post("/api/360/checkout", async (req, res) => {
+    const { tier: funnelTier, cadence, customer, type: checkoutType } = req.body ?? {};
+    if (!funnelTier || !cadence || !customer?.email) {
+      res.status(400).json({ error: "tier, cadence, and customer.email are required" });
+      return;
+    }
+
+    // Map funnel tier names → HP internal names
+    const TIER_MAP: Record<string, string> = {
+      exterior_shield: "bronze",
+      full_coverage:   "silver",
+      max:             "gold",
+    };
+    const tier = TIER_MAP[funnelTier];
+    if (!tier) {
+      res.status(400).json({ error: `Unknown tier: ${funnelTier}` });
+      return;
+    }
+
+    const validCadences = ["monthly", "quarterly", "annual"];
+    if (!validCadences.includes(cadence)) {
+      res.status(400).json({ error: `Invalid cadence: ${cadence}` });
+      return;
+    }
+
+    try {
+      const stripeKey = process.env.STRIPE_SECRET_KEY;
+      if (!stripeKey) { res.status(503).json({ error: "Stripe not configured" }); return; }
+      const stripe = new Stripe(stripeKey, { apiVersion: "2025-03-31.basil" });
+
+      const priceEnvKey = `STRIPE_PRICE_360_${tier.toUpperCase()}_${cadence.toUpperCase()}`;
+      const priceId = process.env[priceEnvKey];
+      if (!priceId) {
+        res.status(503).json({ error: `Stripe price not configured (${priceEnvKey})` });
+        return;
+      }
+
+      // Split "First Last" into parts; everything after first space is lastName
+      const nameParts = (customer.name ?? "").trim().split(/\s+/);
+      const firstName = nameParts[0] ?? "";
+      const lastName  = nameParts.slice(1).join(" ");
+      const customerName = customer.name || customer.email;
+
+      const successUrl = `${process.env.PORTAL_BASE_URL ?? "https://client.handypioneers.com"}/360-welcome?session_id={CHECKOUT_SESSION_ID}`;
+      const cancelUrl  = `${process.env.FUNNEL_ORIGIN ?? "https://360.handypioneers.com"}/?canceled=1`;
+
+      const session = await stripe.checkout.sessions.create({
+        mode: "subscription",
+        line_items: [{ price: priceId, quantity: 1 }],
+        customer_email: customer.email,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        metadata: {
+          tier,
+          cadence,
+          checkoutType: checkoutType ?? "homeowner",
+          customerName,
+          customerEmail: customer.email,
+          customerPhone: customer.phone ?? "",
+          serviceAddress: customer.address ?? "",
+          serviceCity: customer.city ?? "",
+          serviceState: customer.state ?? "",
+          serviceZip: customer.zip ?? "",
+          firstName,
+          lastName,
+        },
+      });
+
+      res.json({ url: session.url });
+    } catch (err) {
+      console.error("[360 Checkout]", err);
+      res.status(500).json({ error: "Failed to create checkout session" });
+    }
+  });
+
+  // ── 360° portfolio checkout — multi-property subscription ──────────────────
+  // Uses inline price_data so no per-tier Stripe products need to be pre-created.
+  app.post("/api/360/portfolio-checkout", async (req, res) => {
+    const { cadence, properties, customer } = req.body ?? {};
+    if (!cadence || !Array.isArray(properties) || properties.length === 0 || !customer?.email) {
+      res.status(400).json({ error: "cadence, properties[], and customer.email are required" });
+      return;
+    }
+    const validCadences = ["monthly", "quarterly", "annual"];
+    if (!validCadences.includes(cadence)) {
+      res.status(400).json({ error: `Invalid cadence: ${cadence}` });
+      return;
+    }
+
+    // Cents per property per billing period, matching threeSixtyTiers.ts pricing
+    const TIER_PRICES: Record<string, Record<string, number>> = {
+      exterior_shield: { monthly: 5900,  quarterly: 16900, annual: 58800  },
+      full_coverage:   { monthly: 9900,  quarterly: 27900, annual: 94800  },
+      max:             { monthly: 14900, quarterly: 41900, annual: 142800 },
+    };
+
+    let totalCents = 0;
+    for (const prop of properties) {
+      const tierPrices = TIER_PRICES[prop.tier as string];
+      if (!tierPrices) {
+        res.status(400).json({ error: `Unknown tier: ${prop.tier}` });
+        return;
+      }
+      totalCents += tierPrices[cadence];
+    }
+
+    const INTERVAL: Record<string, { interval: "month" | "year"; interval_count: number }> = {
+      monthly:   { interval: "month", interval_count: 1 },
+      quarterly: { interval: "month", interval_count: 3 },
+      annual:    { interval: "year",  interval_count: 1 },
+    };
+
+    try {
+      const stripeKey = process.env.STRIPE_SECRET_KEY;
+      if (!stripeKey) { res.status(503).json({ error: "Stripe not configured" }); return; }
+      const stripe = new Stripe(stripeKey, { apiVersion: "2025-03-31.basil" });
+
+      const nameParts = (customer.name ?? "").trim().split(/\s+/);
+      const firstName = nameParts[0] ?? "";
+      const lastName  = nameParts.slice(1).join(" ");
+      const customerName = customer.name || customer.email;
+      const interiorAddonCount = (properties as any[]).filter(p => p.interiorAddon).length;
+      const { interval, interval_count } = INTERVAL[cadence];
+      const propCount = properties.length;
+
+      const successUrl = `${process.env.PORTAL_BASE_URL ?? "https://client.handypioneers.com"}/360-welcome?session_id={CHECKOUT_SESSION_ID}`;
+      const cancelUrl  = `${process.env.FUNNEL_ORIGIN ?? "https://360.handypioneers.com"}/?canceled=1`;
+
+      const session = await stripe.checkout.sessions.create({
+        mode: "subscription",
+        line_items: [{
+          price_data: {
+            currency: "usd",
+            recurring: { interval, interval_count },
+            product_data: {
+              name: `360° Portfolio Plan — ${propCount} ${propCount === 1 ? "property" : "properties"}`,
+              description: (properties as any[]).map((p: any) => `${p.address ?? "Property"} (${p.tier})`).join("; "),
+            },
+            unit_amount: totalCents,
+          },
+          quantity: 1,
+        }],
+        customer_email: customer.email,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        metadata: {
+          planType: "portfolio",
+          cadence,
+          customerName,
+          customerEmail: customer.email,
+          customerPhone: customer.phone ?? "",
+          interiorAddonDoors: String(interiorAddonCount),
+          firstName,
+          lastName,
+          // JSON-encode properties for the webhook handler (max 500 chars per value)
+          properties: JSON.stringify(
+            (properties as any[]).map((p: any) => ({
+              address: p.address ?? "",
+              city: p.city ?? "",
+              state: p.state ?? "",
+              zip: p.zip ?? "",
+              tier: p.tier ?? "",
+              units: p.units ?? 1,
+              interiorAddon: !!p.interiorAddon,
+              interiorDoors: p.interiorDoors ?? 0,
+            }))
+          ).slice(0, 490),
+        },
+      });
+
+      res.json({ url: session.url });
+    } catch (err) {
+      console.error("[360 Portfolio Checkout]", err);
+      res.status(500).json({ error: "Failed to create portfolio checkout session" });
+    }
+  });
+
+  // ── 360° analytics event stub ───────────────────────────────────────────────
+  app.post("/api/360/event", express.json(), (req, res) => {
+    // Analytics only — log and acknowledge; no business logic
+    console.log("[360 Event]", JSON.stringify(req.body));
+    res.json({ ok: true });
+  });
+
+  // ── 360° session lookup — used by /360-welcome page to show tier/name ──────────
+  app.get("/api/360/session", async (req, res) => {
+    const sessionId = req.query.session_id as string | undefined;
+    if (!sessionId) { res.status(400).json({ error: "session_id required" }); return; }
+    const stripeKey = process.env.STRIPE_SECRET_KEY;
+    if (!stripeKey) { res.status(503).json({ error: "Stripe not configured" }); return; }
+    try {
+      const stripe = new Stripe(stripeKey, { apiVersion: "2025-03-31.basil" });
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+      res.json({
+        tier: session.metadata?.tier ?? null,
+        cadence: session.metadata?.cadence ?? null,
+        customerName: session.metadata?.customerName ?? session.customer_details?.name ?? null,
+      });
+    } catch (err) {
+      console.error("[360 Session]", err);
+      res.status(500).json({ error: "Could not retrieve session" });
+    }
+  });
 
   // ── Gmail poll schedule (every 2 minutes) ────────────────────────────────────────────────────
   setInterval(async () => {

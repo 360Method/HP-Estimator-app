@@ -1360,3 +1360,16 @@ export const automationRuleLogs = mysqlTable("automationRuleLogs", {
   executedAt: timestamp("executedAt").defaultNow().notNull(),
 });
 export type DbAutomationRuleLog = typeof automationRuleLogs.$inferSelect;
+
+// ─── STAFF USERS (self-hosted auth) ──────────────────────────────────────────
+// Replaces Manus OAuth. Staff log in with email + bcrypt password.
+export const staffUsers = mysqlTable("staffUsers", {
+  id: int("id").autoincrement().primaryKey(),
+  email: varchar("email", { length: 320 }).notNull().unique(),
+  passwordHash: text("passwordHash").notNull(),
+  name: varchar("name", { length: 255 }),
+  role: mysqlEnum("role", ["admin", "staff"]).default("staff").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type StaffUser = typeof staffUsers.$inferSelect;
+export type InsertStaffUser = typeof staffUsers.$inferInsert;

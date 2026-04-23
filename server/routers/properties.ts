@@ -17,7 +17,11 @@ import {
 import { eq, and, desc, count, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import Stripe from "stripe";
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? "", { apiVersion: "2025-02-24.acacia" });
+function getStripe() {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Stripe not configured" });
+  return new Stripe(key, { apiVersion: "2025-02-24.acacia" });
+}
 
 // ─── Input schemas ────────────────────────────────────────────────────────────
 
@@ -648,8 +652,8 @@ export const propertiesRouter = router({
         .from(threeSixtyMemberships).where(eq(threeSixtyMemberships.id, prop.membershipId)).limit(1);
       if (!mem?.stripeSubscriptionId) return { subscription: null, invoices: [] };
       try {
-        const sub = await stripe.subscriptions.retrieve(mem.stripeSubscriptionId);
-        const invList = await stripe.invoices.list({ subscription: mem.stripeSubscriptionId, limit: 5 });
+        const sub = await getStripe().subscriptions.retrieve(mem.stripeSubscriptionId);
+        const invList = await getStripe().invoices.list({ subscription: mem.stripeSubscriptionId, limit: 5 });
         return {
           subscription: {
             id: sub.id,

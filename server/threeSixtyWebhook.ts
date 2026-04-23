@@ -560,3 +560,110 @@ export async function releaseDeferredLaborBankCredits(): Promise<number> {
   }
   return credited;
 }
+
+// ─── SUBSCRIPTION LIFECYCLE WEBHOOK HANDLERS ─────────────────────────────────
+
+export async function handle360SubscriptionDeleted(
+  subscription: Stripe.Subscription
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+
+  const [membership] = await db
+    .select({ id: threeSixtyMemberships.id })
+    .from(threeSixtyMemberships)
+    .where(eq(threeSixtyMemberships.stripeSubscriptionId, subscription.id))
+    .limit(1);
+
+  if (!membership) {
+    console.log(`[Webhook] No membership found for subscription ${subscription.id}`);
+    return;
+  }
+
+  await db
+    .update(threeSixtyMemberships)
+    .set({ status: "cancelled" })
+    .where(eq(threeSixtyMemberships.id, membership.id));
+
+  console.log(`[Webhook] Membership ${membership.id} cancelled (sub ${subscription.id})`);
+
+  await notifyOwner({
+    title: "360° Subscription Cancelled",
+    content: `Membership #${membership.id} subscription ${subscription.id} was cancelled via Stripe.`,
+  }).catch(() => {});
+}
+
+export async function handle360SubscriptionUpdated(
+  subscription: Stripe.Subscription
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+
+  const [membership] = await db
+    .select()
+    .from(threeSixtyMemberships)
+    .where(eq(threeSixtyMemberships.stripeSubscriptionId, subscription.id))
+    .limit(1);
+
+  if (!membership) return;
+
+  // Map Stripe subscription status to our status
+  const statusMap: Record<string, string> = {
+    active: "active",
+    past_due: "paused",
+    unpaid: "paused",
+    canceled: "cancelled",
+    incomplete: "paused",
+    incomplete_expired: "cancelled",
+    trialing: "active",
+    paused: "paused",
+  };
+  const newStatus = (statusMap[subscription.status] ?? "paused") as "active" | "paused" | "cancelled";
+
+  // Detect tier change from subscription metadata
+  const meta = subscription.metadata ?? {};
+  const updates: Partial<typeof threeSixtyMemberships.$inferInsert> = { status: newStatus };
+  if (meta.tier && ["bronze", "silver", "gold"].includes(meta.tier)) {
+    updates.tier = meta.tier as "bronze" | "silver" | "gold";
+  }
+
+  await db
+    .update(threeSixtyMemberships)
+    .set(updates)
+    .where(eq(threeSixtyMemberships.id, membership.id));
+
+  console.log(`[Webhook] Membership ${membership.id} updated: status=${newStatus}${updates.tier ? ` tier=${updates.tier}` : ""}`);
+}
+
+export async function handle360InvoicePaymentFailed(
+  invoice: Stripe.Invoice
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+
+  const stripeCustomerId = typeof invoice.customer === "string"
+    ? invoice.customer
+    : invoice.customer?.id ?? null;
+
+  if (!stripeCustomerId) return;
+
+  const [membership] = await db
+    .select({ id: threeSixtyMemberships.id, tier: threeSixtyMemberships.tier })
+    .from(threeSixtyMemberships)
+    .where(eq(threeSixtyMemberships.stripeCustomerId, stripeCustomerId))
+    .limit(1);
+
+  if (!membership) return;
+
+  await db
+    .update(threeSixtyMemberships)
+    .set({ status: "paused" })
+    .where(eq(threeSixtyMemberships.id, membership.id));
+
+  console.log(`[Webhook] Membership ${membership.id} set to paused due to invoice payment failure`);
+
+  await notifyOwner({
+    title: "360° Payment Failed",
+    content: `Membership #${membership.id} (${membership.tier}) invoice payment failed. Subscription paused. Invoice: ${invoice.id}`,
+  }).catch(() => {});
+}
