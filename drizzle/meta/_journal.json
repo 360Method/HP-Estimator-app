@@ -414,6 +414,13 @@
       "when": 1776445347318,
       "tag": "0058_priority_translations",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "5",
+      "when": 1776445347319,
+      "tag": "0059_repair_phone_tables",
+      "breakpoints": true
     }
   ]
 }

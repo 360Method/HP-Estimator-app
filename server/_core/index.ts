@@ -335,10 +335,26 @@ async function startServer() {
       res.set("Content-Type", "text/xml");
       res.send(twimlXml);
     } catch (err) {
-      console.error("[Voice Fallback] Error:", err);
+      console.error("[Voice Fallback] Error — using env-only voicemail fallback:", err);
+      const forwardedProto = (req.headers["x-forwarded-proto"] as string) || req.protocol;
+      const forwardedHost = (req.headers["x-forwarded-host"] as string) || req.get("host") || "localhost";
+      const proto = forwardedProto.split(",")[0].trim();
+      const host = forwardedHost.split(",")[0].trim();
+      const callbackBaseUrl = `${proto}://${host}`;
       const VoiceResponse = twilio.twiml.VoiceResponse;
       const twiml2 = new VoiceResponse();
-      twiml2.say({ voice: "Polly.Joanna" }, "We're sorry, we're unable to take your call right now. Please try again later.");
+      twiml2.say(
+        { voice: "Polly.Joanna" },
+        "You've reached Handy Pioneers. We're unable to take your call right now. Please leave a message and we'll return it within one business day.",
+      );
+      twiml2.record({
+        maxLength: 120,
+        transcribe: true,
+        transcribeCallback: `${callbackBaseUrl}/api/twilio/voice/voicemail`,
+        action: `${callbackBaseUrl}/api/twilio/voice/voicemail`,
+        playBeep: true,
+      });
+      twiml2.say({ voice: "Polly.Joanna" }, "Thank you. Goodbye.");
       res.set("Content-Type", "text/xml");
       res.send(twiml2.toString());
     }
