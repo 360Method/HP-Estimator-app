@@ -1,6 +1,5 @@
 import { and, asc, desc, eq, gte, like, lte, or, sql, sum } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { drizzle } from "drizzle-orm/mysql2";
 import {
   adminAllowlist,
   callLogs,
@@ -42,18 +41,15 @@ import {
   threeSixtyWorkOrders,
   DbThreeSixtyWorkOrder,
   InsertDbThreeSixtyWorkOrder,
-  automationLogs,
-  DbAutomationLog,
-  InsertDbAutomationLog,
-  threeSixtyMemberships,
 } from "../drizzle/schema";
+import { ENV } from './_core/env';
+
 let _db: ReturnType<typeof drizzle> | null = null;
 
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      const client = postgres(process.env.DATABASE_URL);
-      _db = drizzle(client);
+      _db = drizzle(process.env.DATABASE_URL);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
@@ -84,10 +80,10 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     textFields.forEach(assignNullable);
     if (user.lastSignedIn !== undefined) { values.lastSignedIn = user.lastSignedIn; updateSet.lastSignedIn = user.lastSignedIn; }
     if (user.role !== undefined) { values.role = user.role; updateSet.role = user.role; }
-    else if (user.email && user.email === (process.env.OWNER_EMAIL ?? "admin@handypioneers.com")) { values.role = 'admin'; updateSet.role = 'admin'; }
+    else if (user.openId === ENV.ownerOpenId) { values.role = 'admin'; updateSet.role = 'admin'; }
     if (!values.lastSignedIn) values.lastSignedIn = new Date();
     if (Object.keys(updateSet).length === 0) updateSet.lastSignedIn = new Date();
-    await db.insert(users).values(values).onConflictDoUpdate({ target: users.openId, set: updateSet });
+    await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
   } catch (error) {
     console.error("[Database] Failed to upsert user:", error);
     throw error;
@@ -247,6 +243,13 @@ export async function listCallLogs(limit = 100, offset = 0) {
   return db.select().from(callLogs).orderBy(desc(callLogs.startedAt)).limit(limit).offset(offset);
 }
 
+export async function listCallLogsByConversation(conversationId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(callLogs)
+    .where(eq(callLogs.conversationId, conversationId))
+    .orderBy(desc(callLogs.startedAt));
+}
 export async function insertCallLog(log: InsertCallLog) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -254,14 +257,6 @@ export async function insertCallLog(log: InsertCallLog) {
   const created = await db.select().from(callLogs)
     .orderBy(desc(callLogs.id)).limit(1);
   return created[0];
-}
-
-export async function listCallLogsByConversation(conversationId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(callLogs)
-    .where(eq(callLogs.conversationId, conversationId))
-    .orderBy(desc(callLogs.startedAt));
 }
 
 export async function updateCallLog(id: number, patch: Partial<InsertCallLog>) {
@@ -313,7 +308,7 @@ export async function upsertGmailToken(
   if (!db) return;
   await db.insert(gmailTokens)
     .values({ email, accessToken, refreshToken: refreshToken ?? undefined, expiresAt })
-    .onConflictDoUpdate({ target: gmailTokens.email, set: { accessToken, refreshToken: refreshToken ?? undefined, expiresAt } });
+    .onDuplicateKeyUpdate({ set: { accessToken, refreshToken: refreshToken ?? undefined, expiresAt } });
 }
 
 // ─── ADMIN ALLOWLIST ─────────────────────────────────────────────────────────
@@ -347,7 +342,7 @@ export async function addAdminAllowlistEmail(email: string, addedBy?: string) {
   await db
     .insert(adminAllowlist)
     .values({ email: email.toLowerCase().trim(), addedBy })
-    .onConflictDoUpdate({ target: adminAllowlist.email, set: { addedBy } });
+    .onDuplicateKeyUpdate({ set: { addedBy } });
 }
 
 export async function removeAdminAllowlistEmail(email: string) {
@@ -397,6 +392,10 @@ export async function findCustomerByEmail(email: string): Promise<DbCustomer | n
   return rows[0] ?? null;
 }
 
+/**
+ * Find a CRM customer by phone number (normalised to last-10-digit match).
+ * Checks mobilePhone, homePhone, and workPhone columns.
+ */
 export async function findCustomerByPhone(phone: string): Promise<DbCustomer | null> {
   const db = await getDb();
   if (!db) return null;
@@ -494,108 +493,7 @@ export async function mergeStubIntoCustomer(
   await db.delete(customers).where(eq(customers.id, stubId));
 }
 
-// ─── LIFECYCLE STAGE ──────────────────────────────────────────────────────────
-/**
- * Recompute and persist a customer's lifecycle stage.
- *
- * Rules (in priority order):
- *  member    — has an active 360° membership
- *  active    — has at least one archived job, last job < 90 days ago
- *  at_risk   — had a job, last job 90–180 days ago, no membership
- *  churned   — had a job, last job > 180 days ago, no membership
- *  prospect  — no archived jobs ever
- */
-export async function recomputeLifecycleStage(customerId: string): Promise<void> {
-  const db = await getDb();
-  if (!db) return;
-
-  // 1. Check for active membership
-  const [activeMembership] = await db
-    .select({ id: threeSixtyMemberships.id })
-    .from(threeSixtyMemberships)
-    .where(and(
-      eq(threeSixtyMemberships.hpCustomerId, customerId),
-      eq(threeSixtyMemberships.status, 'active'),
-    ))
-    .limit(1);
-
-  if (activeMembership) {
-    await db.update(customers)
-      .set({ lifeCycleStage: 'member', updatedAt: new Date() })
-      .where(eq(customers.id, customerId));
-    return;
-  }
-
-  // 2. Most recent archived job
-  const [lastJob] = await db
-    .select({ archivedAt: opportunities.archivedAt })
-    .from(opportunities)
-    .where(and(
-      eq(opportunities.customerId, customerId),
-      eq(opportunities.area, 'job'),
-      eq(opportunities.archived, true),
-    ))
-    .orderBy(desc(opportunities.archivedAt))
-    .limit(1);
-
-  if (!lastJob?.archivedAt) {
-    await db.update(customers)
-      .set({ lifeCycleStage: 'prospect', updatedAt: new Date() })
-      .where(eq(customers.id, customerId));
-    return;
-  }
-
-  const lastJobDate = new Date(lastJob.archivedAt);
-  const now = new Date();
-  const daysSince = (now.getTime() - lastJobDate.getTime()) / (1000 * 60 * 60 * 24);
-
-  let stage: 'active' | 'at_risk' | 'churned';
-  if (daysSince < 90)       stage = 'active';
-  else if (daysSince < 180) stage = 'at_risk';
-  else                       stage = 'churned';
-
-  await db.update(customers)
-    .set({ lifeCycleStage: stage, lastJobArchivedAt: lastJobDate, updatedAt: new Date() })
-    .where(eq(customers.id, customerId));
-}
-
-// ─── AUTOMATION LOG HELPERS ───────────────────────────────────────────────────
-
-export async function logAutomation(data: InsertDbAutomationLog): Promise<void> {
-  const db = await getDb();
-  if (!db) return;
-  await db.insert(automationLogs).values(data);
-}
-
-/** Returns true if this trigger has already been fired for this referenceId */
-export async function automationAlreadyFired(
-  customerId: string,
-  trigger: DbAutomationLog['trigger'],
-  referenceId: string,
-): Promise<boolean> {
-  const db = await getDb();
-  if (!db) return false;
-  const [row] = await db
-    .select({ id: automationLogs.id })
-    .from(automationLogs)
-    .where(and(
-      eq(automationLogs.customerId, customerId),
-      eq(automationLogs.trigger, trigger),
-      eq(automationLogs.referenceId, referenceId),
-    ))
-    .limit(1);
-  return !!row;
-}
-
-export async function listAutomationLogs(customerId?: string): Promise<DbAutomationLog[]> {
-  const db = await getDb();
-  if (!db) return [];
-  const q = db.select().from(automationLogs).orderBy(desc(automationLogs.firedAt));
-  if (customerId) return q.where(eq(automationLogs.customerId, customerId));
-  return q.limit(200);
-}
-
-// ─── CUSTOMER ADDRESS HELPERS ─────────────────────────────────────────────────
+// ─── CUSTOMER ADDRESS HELPERSS ─────────────────────────────────────────────────
 
 export async function listCustomerAddresses(customerId: string): Promise<DbCustomerAddress[]> {
   const db = await getDb();
@@ -695,7 +593,7 @@ export async function addServiceZipCode(zip: string) {
   const db = await getDb();
   if (!db) return;
   const { serviceZipCodes } = await import("../drizzle/schema");
-  await db.insert(serviceZipCodes).values({ zip: zip.trim() }).onConflictDoUpdate({ target: serviceZipCodes.zip, set: { zip: zip.trim() } });
+  await db.insert(serviceZipCodes).values({ zip: zip.trim() }).onDuplicateKeyUpdate({ set: { zip: zip.trim() } });
 }
 
 export async function removeServiceZipCode(zip: string) {
@@ -1287,13 +1185,13 @@ export async function getQbToken(userId: number): Promise<DbQbToken | null> {
 export async function upsertQbToken(data: InsertDbQbToken): Promise<void> {
   const db = await getDb();
   if (!db) return;
-  await db.insert(qbTokens).values(data).onConflictDoUpdate({
-    target: qbTokens.userId,
+  await db.insert(qbTokens).values(data).onDuplicateKeyUpdate({
     set: {
       accessToken: data.accessToken,
       refreshToken: data.refreshToken,
       realmId: data.realmId,
       expiresAt: data.expiresAt,
+      updatedAt: new Date(),
     },
   });
 }
@@ -1311,8 +1209,8 @@ export async function createWorkOrder(
 ): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const [result] = await db.insert(threeSixtyWorkOrders).values(data).returning({ id: threeSixtyWorkOrders.id });
-  return result.id;
+  const [result] = await db.insert(threeSixtyWorkOrders).values(data);
+  return (result as any).insertId as number;
 }
 
 export async function getWorkOrder(id: number): Promise<DbThreeSixtyWorkOrder | null> {

@@ -126,9 +126,6 @@ export interface PhaseGroup {
   items: LineItem[];
 }
 
-// ── Lifecycle stage ──────────────────────────────────────
-export type LifeCycleStage = 'prospect' | 'active' | 'member' | 'at_risk' | 'churned';
-
 // ── Customer Profile (extended) ──────────────────────────
 export type LeadSource =
   | 'Google'

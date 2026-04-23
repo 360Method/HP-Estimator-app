@@ -48,7 +48,7 @@ export const bookingRouter = router({
       // Step 3
       firstName: z.string().min(1),
       lastName: z.string().min(1),
-      phone: z.string().regex(/^\+[1-9]\d{1,14}$/, "Phone number must be in E.164 format (e.g. +15551234567)"),
+      phone: z.string().min(7),
       email: z.string().email(),
       street: z.string().min(1),
       unit: z.string().default(""),

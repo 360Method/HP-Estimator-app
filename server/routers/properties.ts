@@ -17,9 +17,7 @@ import {
 import { eq, and, desc, count, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import Stripe from "stripe";
-function getStripe() {
-  return new Stripe(process.env.STRIPE_SECRET_KEY ?? "", { apiVersion: "2025-02-24.acacia" });
-}
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY ?? "", { apiVersion: "2025-02-24.acacia" });
 
 // ─── Input schemas ────────────────────────────────────────────────────────────
 
@@ -430,10 +428,9 @@ export const propertiesRouter = router({
           scheduledCreditAt: scheduledCreditAt ?? undefined,
           scheduledCreditCents,
           notes: input.notes ?? null,
-        })
-        .returning({ id: threeSixtyMemberships.id });
+        });
 
-      const membershipId = result.id;
+      const membershipId = Number(result.insertId);
 
       // Link membership to property
       await db
@@ -651,7 +648,6 @@ export const propertiesRouter = router({
         .from(threeSixtyMemberships).where(eq(threeSixtyMemberships.id, prop.membershipId)).limit(1);
       if (!mem?.stripeSubscriptionId) return { subscription: null, invoices: [] };
       try {
-        const stripe = getStripe();
         const sub = await stripe.subscriptions.retrieve(mem.stripeSubscriptionId);
         const invList = await stripe.invoices.list({ subscription: mem.stripeSubscriptionId, limit: 5 });
         return {

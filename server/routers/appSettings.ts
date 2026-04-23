@@ -37,7 +37,6 @@ const DEFAULT_SETTINGS = {
 
 async function getOrCreateAppSettings() {
   const db = await getDb();
-  if (!db) throw new Error("Database not available");
   const rows = await db
     .select()
     .from(appSettings)
@@ -66,8 +65,7 @@ async function getOrCreateAppSettings() {
     return row;
   }
 
-  await db.insert(appSettings).values(DEFAULT_SETTINGS).onConflictDoUpdate({
-    target: appSettings.id,
+  await db.insert(appSettings).values(DEFAULT_SETTINGS).onDuplicateKeyUpdate({
     set: { updatedAt: new Date() },
   });
   const fresh = await db
@@ -117,7 +115,6 @@ export const appSettingsRouter = router({
     )
     .mutation(async ({ input }) => {
       const db = await getDb();
-      if (!db) throw new Error("Database not available");
       // Ensure row exists first
       await getOrCreateAppSettings();
       await db

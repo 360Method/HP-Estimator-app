@@ -1,0 +1,1 @@
+ALTER TABLE `customers` ADD `qbCustomerId` varchar(64);

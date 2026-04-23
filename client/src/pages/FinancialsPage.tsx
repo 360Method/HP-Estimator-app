@@ -152,8 +152,11 @@ function SendReminderDialog({
 }) {
   const [channels, setChannels] = useState<string[]>(["email"]);
   const sendMutation = trpc.financials.sendReminder.useMutation({
-    onSuccess: () => {
-      toast.success("Reminder queued successfully");
+    onSuccess: (data) => {
+      const ok = data.results.filter(r => r.success).map(r => r.channel).join(", ");
+      const fail = data.results.filter(r => !r.success);
+      if (ok) toast.success(`Reminder sent via ${ok}`);
+      if (fail.length) toast.error(`Failed: ${fail.map(r => `${r.channel}: ${r.error}`).join("; ")}`);
       onClose();
     },
     onError: (e) => {

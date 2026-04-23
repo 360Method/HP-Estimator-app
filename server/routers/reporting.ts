@@ -75,8 +75,7 @@ export const reportingRouter = router({
               customerId: opp.customerId ?? null,
               customerName: opp.customerName ?? null,
             })
-            .onConflictDoUpdate({
-              target: snapshotOpportunities.id,
+            .onDuplicateKeyUpdate({
               set: {
                 area: opp.area,
                 stage: opp.stage,
@@ -108,8 +107,7 @@ export const reportingRouter = router({
               dueDate: inv.dueDate ?? null,
               issuedAt: inv.issuedAt ?? null,
             })
-            .onConflictDoUpdate({
-              target: snapshotInvoices.id,
+            .onDuplicateKeyUpdate({
               set: {
                 opportunityId: inv.opportunityId ?? null,
                 customerId: inv.customerId ?? null,

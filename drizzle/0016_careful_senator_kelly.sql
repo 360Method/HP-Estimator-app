@@ -1,0 +1,1 @@
+ALTER TABLE `opportunities` ADD `portalApprovedAt` varchar(32);

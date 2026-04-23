@@ -26,8 +26,6 @@ import { phoneRouter } from "./routers/phone";
 import { appSettingsRouter } from "./routers/appSettings";
 import { notificationPreferencesRouter } from "./routers/notificationPreferences";
 import { automationRulesRouter } from "./routers/automationRules";
-import { automationsRouter } from "./routers/automations";
-import { techRouter } from "./routers/tech";
 import {
   getAdminAllowlist,
   addAdminAllowlistEmail,
@@ -59,12 +57,10 @@ export const appRouter = router({
   appSettings: appSettingsRouter,
   notificationPreferences: notificationPreferencesRouter,
   automationRules: automationRulesRouter,
-  automations: automationsRouter,
-  tech: techRouter,
 
   auth: router({
     /**
-     * Returns the current user plus an `isAllowed` flag.
+     * Returns the current Manus user plus an `isAllowed` flag.
      * isAllowed=false means authenticated but not on the admin allowlist.
      * If the allowlist table is empty, all authenticated users are allowed.
      */

@@ -941,7 +941,6 @@ function CreateInvoiceDialog({
   onCreate,
   defaultTotal,
   defaultType,
-  defaultDepositPct,
   invoiceNumber,
   defaultTaxCode,
   opportunitySnapshot,

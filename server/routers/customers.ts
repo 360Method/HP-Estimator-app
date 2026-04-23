@@ -22,25 +22,17 @@ import {
   mergeCustomers,
   mergeStubIntoCustomer,
   bulkAddTag,
-  recomputeLifecycleStage,
 } from "../db";
 import { nanoid } from "nanoid";
-
-const e164Phone = z.string()
-  .refine(
-    (val) => val === "" || /^\+[1-9]\d{1,14}$/.test(val),
-    { message: "Phone number must be in E.164 format (e.g. +15551234567)" },
-  )
-  .default("");
 
 const CustomerInput = z.object({
   firstName: z.string().default(""),
   lastName: z.string().default(""),
   displayName: z.string().default(""),
   company: z.string().default(""),
-  mobilePhone: e164Phone,
-  homePhone: e164Phone,
-  workPhone: e164Phone,
+  mobilePhone: z.string().default(""),
+  homePhone: z.string().default(""),
+  workPhone: z.string().default(""),
   email: z.string().default(""),
   role: z.string().default(""),
   customerType: z.enum(["homeowner", "business"]).default("homeowner"),
@@ -500,23 +492,5 @@ export const customersRouter = router({
           reason,
           score,
         }));
-    }),
-
-  /** Recompute lifecycle stage for a single customer */
-  recomputeLifecycle: protectedProcedure
-    .input(z.object({ customerId: z.string() }))
-    .mutation(async ({ input }) => {
-      await recomputeLifecycleStage(input.customerId);
-      return { success: true };
-    }),
-
-  /** Recompute lifecycle stage for ALL customers (admin backfill) */
-  recomputeAllLifecycles: protectedProcedure
-    .mutation(async () => {
-      const all = await listCustomers();
-      for (const c of all) {
-        await recomputeLifecycleStage((c as any).id);
-      }
-      return { updated: all.length };
     }),
 });

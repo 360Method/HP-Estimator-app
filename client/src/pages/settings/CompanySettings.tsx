@@ -149,7 +149,7 @@ export default function CompanySettings() {
   // Seed draft once when settings load for the first time
   useEffect(() => {
     if (settings && !initialized) {
-      setDraft({ ...settings } as unknown as Record<string, string | number>);
+      setDraft({ ...settings } as Record<string, string | number>);
       setInitialized(true);
     }
   }, [settings, initialized]);

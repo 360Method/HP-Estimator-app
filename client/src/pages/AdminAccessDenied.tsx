@@ -1,5 +1,5 @@
 /**
- * AdminAccessDenied — shown when a user is authenticated via OAuth
+ * AdminAccessDenied — shown when a user is authenticated via Manus OAuth
  * but their email is not on the admin allowlist.
  */
 import { trpc } from "@/lib/trpc";

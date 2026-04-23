@@ -428,7 +428,7 @@ export const estimateRouter = router({
               taxAmount: taxAmountCents,
             });
             const token = randomBytes(32).toString('hex');
-            const expiresAt = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+            const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
             await createPortalToken({ customerId: portalCustomer.id, token, expiresAt });
             const portalBase = process.env.PORTAL_BASE_URL ?? 'https://client.handypioneers.com';
             portalUrl = `${portalBase}/portal/auth?token=${token}&redirect=/portal/estimates/${portalEst?.id}`;

@@ -20,7 +20,6 @@ const actionPayloadSchema = z.union([
 export const automationRulesRouter = router({
   list: protectedProcedure.query(async () => {
     const db = await getDb();
-    if (!db) throw new Error("Database not available");
     const rules = await db
       .select()
       .from(automationRules)
@@ -46,8 +45,7 @@ export const automationRulesRouter = router({
     )
     .mutation(async ({ input }) => {
       const db = await getDb();
-      if (!db) throw new Error("Database not available");
-      const [result] = await db.insert(automationRules).values({
+      const result = await db.insert(automationRules).values({
         name: input.name,
         trigger: input.trigger,
         conditions: JSON.stringify(input.conditions),
@@ -56,8 +54,8 @@ export const automationRulesRouter = router({
         delayMinutes: input.delayMinutes,
         enabled: input.enabled,
         sortOrder: 0,
-      }).returning({ id: automationRules.id });
-      return { id: result.id };
+      });
+      return { id: (result as any).insertId };
     }),
 
   update: protectedProcedure
@@ -75,7 +73,6 @@ export const automationRulesRouter = router({
     )
     .mutation(async ({ input }) => {
       const db = await getDb();
-      if (!db) throw new Error("Database not available");
       const { id, conditions, actionPayload, ...rest } = input;
       const patch: Record<string, unknown> = { ...rest };
       if (conditions !== undefined) patch.conditions = JSON.stringify(conditions);
@@ -88,7 +85,6 @@ export const automationRulesRouter = router({
     .input(z.object({ id: z.number().int(), enabled: z.boolean() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
-      if (!db) throw new Error("Database not available");
       await db.update(automationRules).set({ enabled: input.enabled }).where(eq(automationRules.id, input.id));
       return { ok: true };
     }),
@@ -97,7 +93,6 @@ export const automationRulesRouter = router({
     .input(z.object({ id: z.number().int() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
-      if (!db) throw new Error("Database not available");
       await db.delete(automationRules).where(eq(automationRules.id, input.id));
       return { ok: true };
     }),
@@ -106,7 +101,6 @@ export const automationRulesRouter = router({
     .input(z.object({ ruleId: z.number().int(), limit: z.number().int().max(50).default(20) }))
     .query(async ({ input }) => {
       const db = await getDb();
-      if (!db) throw new Error("Database not available");
       return db
         .select()
         .from(automationRuleLogs)

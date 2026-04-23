@@ -20,7 +20,7 @@ const STATIC_INTEGRATIONS: StaticIntegration[] = [
     id: 'quickbooks', name: 'QuickBooks Online', category: 'Accounting',
     description: 'Sync invoices, payments, and customers with QuickBooks Online.',
     connected: false, logoText: 'QB', logoColor: 'bg-green-600',
-    // connectUrl removed — integration not production-ready (hardcoded account IDs)
+    connectUrl: 'https://quickbooks.intuit.com',
   },
   {
     id: 'stripe', name: 'Stripe', category: 'Payments',

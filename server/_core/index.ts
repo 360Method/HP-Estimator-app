@@ -1,8 +1,6 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import helmet from "helmet";
-import rateLimit from "express-rate-limit";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
@@ -22,7 +20,6 @@ import { sendEmail } from "../gmail";
 import { notifyOwner } from "../_core/notification";
 import { buildInboundCallTwiml, buildFallbackTwiml, getPhoneSettings } from "../phone";
 import { randomUUID } from "crypto";
-import { sdk } from "./sdk";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -47,38 +44,15 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
 
-  // ── Security headers (Helmet) ──
-  app.use(helmet({
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'", "https://maps.googleapis.com", "https://js.stripe.com"],
-        frameSrc: ["https://js.stripe.com", "https://hooks.stripe.com"],
-        connectSrc: ["'self'", "https://api.stripe.com", "https://maps.googleapis.com"],
-        imgSrc: ["'self'", "data:", "blob:", "https:", "http:"],
-        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-        fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      },
-    },
-    crossOriginEmbedderPolicy: false,
-  }));
-
-  // ── Rate limiting ──
-  const globalLimiter = rateLimit({ windowMs: 60 * 1000, max: 100, standardHeaders: true, legacyHeaders: false });
-  const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, message: "Too many login attempts, try again later" });
-  app.use("/api/", globalLimiter);
-  app.use("/api/oauth/", authLimiter);
-
   // ── CORS: allow 360 funnel and portal to call the pro API ──
-  const allowedOrigins = [
-    "https://360.handypioneers.com",
-    "https://client.handypioneers.com",
-  ];
-  if (process.env.NODE_ENV === "development") {
-    allowedOrigins.push("http://localhost:3001", "http://localhost:5173");
-  }
   app.use(cors({
-    origin: allowedOrigins,
+    origin: [
+      "https://360.handypioneers.com",
+      "https://hp360funnel-pdnj394m.manus.space",
+      "https://client.handypioneers.com",
+      "http://localhost:3001",
+      "http://localhost:5173",
+    ],
     credentials: true,
   }));
 
@@ -91,7 +65,7 @@ async function startServer() {
       res.status(400).json({ error: "Webhook secret not configured" });
       return;
     }
-    let event!: Stripe.Event;
+    let event: Stripe.Event;
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2025-03-31.basil" });
     // Try primary secret first, then fallback (supports dual-endpoint setup)
     let verified = false;
@@ -235,7 +209,7 @@ async function startServer() {
     try {
       // Validate Twilio signature in production
       // Use x-forwarded-host and x-forwarded-proto to get the real public URL
-      // behind a reverse proxy — Twilio signs with the public URL
+      // behind the Manus reverse proxy — Twilio signs with the public URL
       const authToken = process.env.TWILIO_AUTH_TOKEN;
       if (authToken) {
         const sig = req.headers["x-twilio-signature"] as string;
@@ -248,8 +222,9 @@ async function startServer() {
         const valid = twilio.validateRequest(authToken, sig, url, req.body);
         if (!valid && process.env.NODE_ENV === "production") {
           console.warn(`[Twilio SMS] Signature validation failed for URL: ${url}`);
-          res.status(403).send("Forbidden");
-          return;
+          // Log but don't block — allow through so we can debug
+          // res.status(403).send("Forbidden");
+          // return;
         }
       }
       const inboundMsg = await handleInboundSms(req.body);
@@ -278,6 +253,123 @@ async function startServer() {
     }
   });
 
+  // ── Twilio Voice — inbound call routing ──────────────────────────────────────
+  // POST /api/twilio/voice/inbound — Twilio calls this for every inbound call
+  app.post("/api/twilio/voice/inbound", express.urlencoded({ extended: false }), async (req, res) => {
+    try {
+      const forwardedProto = (req.headers["x-forwarded-proto"] as string) || req.protocol;
+      const forwardedHost = (req.headers["x-forwarded-host"] as string) || req.get("host") || "localhost";
+      const proto = forwardedProto.split(",")[0].trim();
+      const host = forwardedHost.split(",")[0].trim();
+      const callbackBaseUrl = `${proto}://${host}`;
+      const twimlXml = await buildInboundCallTwiml(callbackBaseUrl);
+      res.set("Content-Type", "text/xml");
+      res.send(twimlXml);
+    } catch (err) {
+      console.error("[Twilio Voice inbound]", err);
+      const VoiceResponse = twilio.twiml.VoiceResponse;
+      const twiml = new VoiceResponse();
+      twiml.say("We're sorry, we're unable to take your call right now. Please try again later.");
+      res.set("Content-Type", "text/xml");
+      res.send(twiml.toString());
+    }
+  });
+
+  // ── Twilio Voice — stage-2 fallback (cell didn't answer) ─────────────────
+  // POST /api/twilio/voice/fallback — Twilio POSTs here when the <Dial> to the
+  // personal cell completes without being answered (no-answer, busy, failed).
+  // Routes to AI service or system voicemail — NEVER to personal cell voicemail.
+  app.post("/api/twilio/voice/fallback", express.urlencoded({ extended: false }), async (req, res) => {
+    try {
+      const forwardedProto = (req.headers["x-forwarded-proto"] as string) || req.protocol;
+      const forwardedHost = (req.headers["x-forwarded-host"] as string) || req.get("host") || "localhost";
+      const proto = forwardedProto.split(",")[0].trim();
+      const host = forwardedHost.split(",")[0].trim();
+      const callbackBaseUrl = `${proto}://${host}`;
+      const dialCallStatus = req.body.DialCallStatus as string | undefined;
+      console.log(`[Voice Fallback] DialCallStatus=${dialCallStatus}`);
+      // If the cell actually answered and completed, return empty TwiML
+      if (dialCallStatus === "completed") {
+        res.set("Content-Type", "text/xml");
+        res.send("<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response></Response>");
+        return;
+      }
+      // Cell didn't answer — route to AI service or system voicemail
+      const settings = await getPhoneSettings();
+      const twimlXml = buildFallbackTwiml(settings, callbackBaseUrl, false);
+      res.set("Content-Type", "text/xml");
+      res.send(twimlXml);
+    } catch (err) {
+      console.error("[Voice Fallback] Error:", err);
+      const VoiceResponse = twilio.twiml.VoiceResponse;
+      const twiml = new VoiceResponse();
+      twiml.say({ voice: "Polly.Joanna" }, "We're sorry, we're unable to take your call right now. Please try again later.");
+      res.set("Content-Type", "text/xml");
+      res.send(twiml.toString());
+    }
+  });
+  // ── Twilio Voice — voicemail recording callback ────────────────────────────
+  // POST /api/twilio/voice/voicemail — called after voicemail is recorded
+  // Persists the recording to the app DB (callLogs) AND notifies the owner.
+  app.post("/api/twilio/voice/voicemail", express.urlencoded({ extended: false }), async (req, res) => {
+    try {
+      const { CallSid, From, To, RecordingUrl, TranscriptionText, RecordingDuration } = req.body;
+      const callerNumber = From || "Unknown";
+      const durationSecs = RecordingDuration ? parseInt(RecordingDuration, 10) : 0;
+      const duration = durationSecs ? `${durationSecs}s` : "unknown duration";
+      const transcription = TranscriptionText ? `\n\nTranscription: ${TranscriptionText}` : "";
+
+      // ── Persist voicemail to app DB ──────────────────────────────────────────
+      // Call handleCallStatusUpdate so the voicemail is saved in callLogs and
+      // linked to the customer profile (creates stub customer if unknown).
+      if (CallSid) {
+        await handleCallStatusUpdate({
+          CallSid,
+          From: From || "",
+          To: To || "",
+          CallStatus: "completed",
+          CallDuration: RecordingDuration || "0",
+          Direction: "inbound",
+          RecordingUrl: RecordingUrl || undefined,
+        }).catch(dbErr => console.warn("[Voicemail DB persist] Failed:", dbErr));
+        // Download recording from Twilio and store in app S3 for inline playback
+        if (RecordingUrl) {
+          downloadAndStoreRecording(RecordingUrl, CallSid)
+            .then(async appUrl => {
+              if (!appUrl) return;
+              // Find the call log we just created and update it with the app URL
+              const { getCallLogByTwilioSid, updateCallLog } = await import("../db");
+              const log = await getCallLogByTwilioSid(CallSid).catch(() => null);
+              if (log?.id) await updateCallLog(log.id, { recordingAppUrl: appUrl }).catch(console.warn);
+            })
+            .catch(console.warn);
+        }
+      }
+
+      // ── Notify owner ─────────────────────────────────────────────────────────
+      await notifyOwner({
+        title: `📞 New Voicemail from ${callerNumber}`,
+        content: `Voicemail received from ${callerNumber} (${duration}).${transcription}${RecordingUrl ? `\n\nRecording: ${RecordingUrl}` : ""}`,
+      });
+      if (process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_ACCOUNT_SID && process.env.OWNER_PHONE && process.env.TWILIO_PHONE_NUMBER) {
+        try {
+          const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+          await twilioClient.messages.create({
+            to: process.env.OWNER_PHONE,
+            from: process.env.TWILIO_PHONE_NUMBER,
+            body: `📞 New voicemail from ${callerNumber} (${duration}).${TranscriptionText ? ` "${TranscriptionText.slice(0, 100)}"` : ""}`,
+          });
+        } catch (smsErr) {
+          console.warn("[Voicemail SMS notify] Failed:", smsErr);
+        }
+      }
+      res.sendStatus(204);
+    } catch (err) {
+      console.error("[Twilio Voice voicemail]", err);
+      res.sendStatus(204);
+    }
+  });
+
   // ── Twilio Voice TwiML — outbound call instructions ──────────────────────────
   // POST /api/twilio/voice/connect — returns TwiML to connect a browser call
   app.post("/api/twilio/voice/connect", express.urlencoded({ extended: false }), (req, res) => {
@@ -294,112 +386,10 @@ async function startServer() {
     res.send(twiml.toString());
   });
 
-  // ── Twilio Voice — inbound call routing ──────────────────────────────────────
-  // POST /api/twilio/voice/inbound — Twilio calls this for every inbound call
-  app.post("/api/twilio/voice/inbound", express.urlencoded({ extended: false }), async (req, res) => {
-    try {
-      const forwardedProto = (req.headers["x-forwarded-proto"] as string) || req.protocol;
-      const forwardedHost = (req.headers["x-forwarded-host"] as string) || req.get("host") || "localhost";
-      const proto = forwardedProto.split(",")[0].trim();
-      const host = forwardedHost.split(",")[0].trim();
-      const callbackBaseUrl = `${proto}://${host}`;
-      const twimlXml = await buildInboundCallTwiml(callbackBaseUrl);
-      res.set("Content-Type", "text/xml");
-      res.send(twimlXml);
-    } catch (err) {
-      console.error("[Twilio Voice inbound]", err);
-      const VoiceResponse = twilio.twiml.VoiceResponse;
-      const twiml2 = new VoiceResponse();
-      twiml2.say("We're sorry, we're unable to take your call right now. Please try again later.");
-      res.set("Content-Type", "text/xml");
-      res.send(twiml2.toString());
-    }
-  });
-
-  // ── Twilio Voice — stage-2 fallback (cell didn't answer) ─────────────────
-  app.post("/api/twilio/voice/fallback", express.urlencoded({ extended: false }), async (req, res) => {
-    try {
-      const forwardedProto = (req.headers["x-forwarded-proto"] as string) || req.protocol;
-      const forwardedHost = (req.headers["x-forwarded-host"] as string) || req.get("host") || "localhost";
-      const proto = forwardedProto.split(",")[0].trim();
-      const host = forwardedHost.split(",")[0].trim();
-      const callbackBaseUrl = `${proto}://${host}`;
-      const dialCallStatus = req.body.DialCallStatus as string | undefined;
-      console.log(`[Voice Fallback] DialCallStatus=${dialCallStatus}`);
-      if (dialCallStatus === "completed") {
-        res.set("Content-Type", "text/xml");
-        res.send("<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response></Response>");
-        return;
-      }
-      const settings = await getPhoneSettings();
-      const twimlXml = buildFallbackTwiml(settings, callbackBaseUrl, false);
-      res.set("Content-Type", "text/xml");
-      res.send(twimlXml);
-    } catch (err) {
-      console.error("[Voice Fallback] Error:", err);
-      const VoiceResponse = twilio.twiml.VoiceResponse;
-      const twiml2 = new VoiceResponse();
-      twiml2.say({ voice: "Polly.Joanna" }, "We're sorry, we're unable to take your call right now. Please try again later.");
-      res.set("Content-Type", "text/xml");
-      res.send(twiml2.toString());
-    }
-  });
-
-  // ── Twilio Voice — voicemail recording callback ────────────────────────────
-  app.post("/api/twilio/voice/voicemail", express.urlencoded({ extended: false }), async (req, res) => {
-    try {
-      const { CallSid, From, To, RecordingUrl, TranscriptionText, RecordingDuration } = req.body;
-      const callerNumber = From || "Unknown";
-      const durationSecs = RecordingDuration ? parseInt(RecordingDuration, 10) : 0;
-      const duration = durationSecs ? `${durationSecs}s` : "unknown duration";
-      const transcription = TranscriptionText ? `\n\nTranscription: ${TranscriptionText}` : "";
-
-      if (CallSid) {
-        await handleCallStatusUpdate({
-          CallSid,
-          From: From || "",
-          To: To || "",
-          CallStatus: "completed",
-          CallDuration: RecordingDuration || "0",
-          Direction: "inbound",
-          RecordingUrl: RecordingUrl || undefined,
-        }).catch(dbErr => console.warn("[Voicemail DB persist] Failed:", dbErr));
-        if (RecordingUrl) {
-          downloadAndStoreRecording(RecordingUrl, CallSid)
-            .then(async appUrl => {
-              if (!appUrl) return;
-              const { getCallLogByTwilioSid, updateCallLog } = await import("../db");
-              const log = await getCallLogByTwilioSid(CallSid).catch(() => null);
-              if (log?.id) await updateCallLog(log.id, { recordingUrl: appUrl }).catch(console.warn);
-            })
-            .catch(console.warn);
-        }
-      }
-
-      await notifyOwner({
-        title: `New Voicemail from ${callerNumber}`,
-        content: `Voicemail received from ${callerNumber} (${duration}).${transcription}${RecordingUrl ? `\n\nRecording: ${RecordingUrl}` : ""}`,
-      });
-      if (process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_ACCOUNT_SID && process.env.OWNER_PHONE && process.env.TWILIO_PHONE_NUMBER) {
-        try {
-          const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-          await twilioClient.messages.create({
-            to: process.env.OWNER_PHONE,
-            from: process.env.TWILIO_PHONE_NUMBER,
-            body: `New voicemail from ${callerNumber} (${duration}).${TranscriptionText ? ` "${TranscriptionText.slice(0, 100)}"` : ""}`,
-          });
-        } catch (smsErr) {
-          console.warn("[Voicemail SMS notify] Failed:", smsErr);
-        }
-      }
-      res.sendStatus(204);
-    } catch (err) {
-      console.error("[Twilio Voice voicemail]", err);
-      res.sendStatus(204);
-    }
-  });
-
   // ── Twilio Recording Proxy ─────────────────────────────────────────────────
+  // GET /api/twilio/recording/:sid — fetches recording from Twilio with Basic Auth
+  // and streams it to the authenticated browser. Avoids exposing Twilio credentials
+  // to the frontend and prevents the browser from prompting for Twilio login.
   app.get("/api/twilio/recording/:sid", async (req, res) => {
     try {
       const accountSid = process.env.TWILIO_ACCOUNT_SID;
@@ -409,6 +399,7 @@ async function startServer() {
         return;
       }
       const recordingSid = req.params.sid;
+      // Validate recording SID format (RE + 32 hex chars)
       if (!/^RE[0-9a-f]{32}$/i.test(recordingSid)) {
         res.status(400).json({ error: "Invalid recording SID" });
         return;
@@ -438,19 +429,13 @@ async function startServer() {
     }
   });
 
-  // ── SSE endpoint for real-time inbox updates (auth-gated) ────────────────────
-  app.get("/api/inbox/events", async (req, res) => {
-    try {
-      await sdk.authenticateRequest(req);
-    } catch {
-      res.status(401).json({ error: "Unauthorized" });
-      return;
-    }
+  // ── SSE endpoint for real-time inbox updates ─────────────────────────────────────────────
+  app.get("/api/inbox/events", (req, res) => {
     const clientId = randomUUID();
     addSSEClient(clientId, res);
   });
 
-  // ── Gmail diagnostic endpoint ─────────────────────────────────────────────────────────────
+  // ── Gmail diagnostic endpoint (temporary) ─────────────────────────────────────────────────
   app.get("/api/gmail/debug", (req, res) => {
     res.json({
       configured: !!(process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET),
@@ -490,20 +475,53 @@ async function startServer() {
     }
   });
 
-  // ── Google Maps JS SDK redirect ──────────────────────────────────────────────
-  // Redirects to the Google Maps JS API directly with our API key.
-  app.get("/api/maps/sdk", (req, res) => {
-    const apiKey = process.env.GOOGLE_MAPS_API_KEY || "";
+  // ── Google Maps JS SDK proxy ─────────────────────────────────────────────────────────────────
+  // The Manus forge proxy requires Authorization: Bearer header which <script> tags can't send.
+  // This route fetches the SDK server-side (with auth) and streams it back to the browser.
+  app.get("/api/maps/sdk", async (req, res) => {
+    const forgeUrl = (process.env.BUILT_IN_FORGE_API_URL || "https://forge.manus.ai").replace(/\/+$/, "");
+    const forgeKey = process.env.VITE_FRONTEND_FORGE_API_KEY || process.env.BUILT_IN_FORGE_API_KEY || "";
     const libraries = (req.query.libraries as string) || "places,geocoding,geometry";
     const v = (req.query.v as string) || "weekly";
-    const sdkUrl = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&v=${v}&libraries=${libraries}`;
-    res.redirect(302, sdkUrl);
+    // Determine origin from Referer or X-Forwarded headers
+    const referer = req.headers.referer || "";
+    const forwardedProto = (req.headers["x-forwarded-proto"] as string || req.protocol).split(",")[0].trim();
+    const forwardedHost = (req.headers["x-forwarded-host"] as string || req.get("host") || "localhost").split(",")[0].trim();
+    const origin = referer ? new URL(referer).origin : `${forwardedProto}://${forwardedHost}`;
+    const sdkUrl = `${forgeUrl}/v1/maps/proxy/maps/api/js?key=${forgeKey}&v=${v}&libraries=${libraries}`;
+    try {
+      const upstream = await fetch(sdkUrl, {
+        headers: {
+          Authorization: `Bearer ${forgeKey}`,
+          Origin: origin,
+        },
+      });
+      if (!upstream.ok) {
+        const body = await upstream.text();
+        console.error(`[Maps SDK proxy] Upstream error ${upstream.status}: ${body}`);
+        res.status(502).send("Maps SDK unavailable");
+        return;
+      }
+      res.set("Content-Type", "application/javascript; charset=utf-8");
+      res.set("Cache-Control", "public, max-age=3600");
+      const text = await upstream.text();
+      res.send(text);
+    } catch (err) {
+      console.error("[Maps SDK proxy] Error:", err);
+      res.status(502).send("Maps SDK proxy error");
+    }
   });
 
   // ── Portal estimate PDF download ─────────────────────────────────────────────
   // GET /api/portal/estimate-pdf/:id — returns a PDF of the estimate
   // Requires a valid portal session cookie (same as tRPC portal procedures)
   app.get("/api/portal/estimate-pdf/:id", async (req, res) => {
+    const { exec } = await import("child_process");
+    const { promisify } = await import("util");
+    const { readFile, writeFile, unlink, mkdtemp } = await import("fs/promises");
+    const { join } = await import("path");
+    const { tmpdir } = await import("os");
+    const execAsync = promisify(exec);
     try {
       // Validate portal session
       const { getPortalEstimateById, findValidPortalSession, findPortalCustomerById } = await import("../portalDb");
@@ -621,10 +639,19 @@ async function startServer() {
         </div>
       </body></html>`;
 
-      // Return HTML directly as a printable page (client uses browser print-to-PDF)
-      res.set("Content-Type", "text/html; charset=utf-8");
-      res.set("Content-Disposition", `inline; filename="Estimate-${est.estimateNumber}.html"`);
-      res.send(html);
+      // Write HTML to temp file and convert to PDF
+      const tmpDir = await mkdtemp(join(tmpdir(), "hp-est-"));
+      const htmlPath = join(tmpDir, "estimate.html");
+      const pdfPath = join(tmpDir, "estimate.pdf");
+      await writeFile(htmlPath, html, "utf-8");
+      await execAsync(`manus-md-to-pdf "${htmlPath}" "${pdfPath}"`);
+      const pdfBuffer = await readFile(pdfPath);
+      await unlink(htmlPath).catch(() => null);
+      await unlink(pdfPath).catch(() => null);
+
+      res.set("Content-Type", "application/pdf");
+      res.set("Content-Disposition", `attachment; filename="Estimate-${est.estimateNumber}.pdf"`);
+      res.send(pdfBuffer);
     } catch (err) {
       console.error("[Portal PDF]", err);
       res.status(500).json({ error: "PDF generation failed" });
@@ -648,49 +675,80 @@ async function startServer() {
   }, 2 * 60 * 1000); // every 2 minutes
 
   // ── Overdue invoice reminder (daily at 9 AM server time) ─────────────────────
-  const runOverdueReminders = async () => {
-    try {
-      const overdueRows = await getOverdueInvoicesForReminder();
-      const origin = process.env.PORTAL_ORIGIN ?? "https://client.handypioneers.com";
-      let sent = 0;
-      for (const { invoice, customer } of overdueRows) {
-        if (!customer.email) continue;
-        try {
-          await sendOverdueReminderEmail({
-            to: customer.email,
-            customerName: customer.name ?? "Valued Customer",
-            invoiceNumber: invoice.invoiceNumber,
-            amountDueCents: Math.max(0, invoice.amountDue - invoice.amountPaid),
-            dueDate: invoice.dueDate,
-            portalInvoiceId: invoice.id,
-            origin,
-          });
-          await markPortalInvoiceReminderSent(invoice.id);
-          sent++;
-        } catch (err) {
-          console.error(`[Overdue] Failed to send reminder for invoice ${invoice.id}:`, err);
-        }
-      }
-      if (sent > 0) {
-        console.log(`[Overdue] Sent ${sent} overdue reminder email(s)`);
-        await notifyOwner({
-          title: `Overdue reminders sent`,
-          content: `${sent} overdue invoice reminder email(s) sent to customers.`,
-        }).catch(() => {});
-      }
-    } catch (err) {
-      console.error("[Overdue] Reminder job error:", err);
-    }
-  };
   const scheduleOverdueReminders = () => {
     const now = new Date();
     const next9am = new Date(now);
     next9am.setHours(9, 0, 0, 0);
     if (next9am <= now) next9am.setDate(next9am.getDate() + 1);
     const msUntil9am = next9am.getTime() - now.getTime();
-    setTimeout(() => {
-      runOverdueReminders().catch(console.error);
-      setInterval(() => runOverdueReminders().catch(console.error), 24 * 60 * 60 * 1000);
+    setTimeout(async () => {
+      try {
+        const overdueRows = await getOverdueInvoicesForReminder();
+        const origin = process.env.PORTAL_ORIGIN ?? "https://client.handypioneers.com";
+        let sent = 0;
+        for (const { invoice, customer } of overdueRows) {
+          if (!customer.email) continue;
+          try {
+            await sendOverdueReminderEmail({
+              to: customer.email,
+              customerName: customer.name ?? "Valued Customer",
+              invoiceNumber: invoice.invoiceNumber,
+              amountDueCents: Math.max(0, invoice.amountDue - invoice.amountPaid),
+              dueDate: invoice.dueDate,
+              portalInvoiceId: invoice.id,
+              origin,
+            });
+            await markPortalInvoiceReminderSent(invoice.id);
+            sent++;
+          } catch (err) {
+            console.error(`[Overdue] Failed to send reminder for invoice ${invoice.id}:`, err);
+          }
+        }
+        if (sent > 0) {
+          console.log(`[Overdue] Sent ${sent} overdue reminder email(s)`);
+          await notifyOwner({
+            title: `Overdue reminders sent`,
+            content: `${sent} overdue invoice reminder email(s) sent to customers.`,
+          }).catch(() => {});
+        }
+      } catch (err) {
+        console.error("[Overdue] Reminder job error:", err);
+      }
+      // Schedule next run in 24 hours
+      setInterval(async () => {
+        try {
+          const overdueRows = await getOverdueInvoicesForReminder();
+          const origin = process.env.PORTAL_ORIGIN ?? "https://client.handypioneers.com";
+          let sent = 0;
+          for (const { invoice, customer } of overdueRows) {
+            if (!customer.email) continue;
+            try {
+              await sendOverdueReminderEmail({
+                to: customer.email,
+                customerName: customer.name ?? "Valued Customer",
+                invoiceNumber: invoice.invoiceNumber,
+                amountDueCents: Math.max(0, invoice.amountDue - invoice.amountPaid),
+                dueDate: invoice.dueDate,
+                portalInvoiceId: invoice.id,
+                origin,
+              });
+              await markPortalInvoiceReminderSent(invoice.id);
+              sent++;
+            } catch (err) {
+              console.error(`[Overdue] Failed to send reminder for invoice ${invoice.id}:`, err);
+            }
+          }
+          if (sent > 0) {
+            console.log(`[Overdue] Sent ${sent} overdue reminder email(s)`);
+            await notifyOwner({
+              title: `Overdue reminders sent`,
+              content: `${sent} overdue invoice reminder email(s) sent to customers.`,
+            }).catch(() => {});
+          }
+        } catch (err) {
+          console.error("[Overdue] Reminder job error:", err);
+        }
+      }, 24 * 60 * 60 * 1000); // repeat every 24 hours
     }, msUntil9am);
     console.log(`[Overdue] Next reminder run scheduled in ${Math.round(msUntil9am / 60000)} minutes`);
   };
@@ -828,46 +886,15 @@ async function startServer() {
   setInterval(runDeferredCreditRelease, 6 * 60 * 60 * 1000); // every 6 hours
   console.log("[360 Deferred Credit] Deferred labor bank credit scheduler started (runs every 6 hours)");
 
-  // ── Retention Automation Engine (hourly) ────────────────────────────────────
-  const { startAutomationEngine } = await import("../automations.js");
-  startAutomationEngine();
+  // ── 360 Funnel Gateway ────────────────────────────────────────────────────────────────
+  // POST /api/360/event  — fire-and-forget event capture (abandonment, page views, etc.)
+  // POST /api/360/checkout — create Stripe session, return URL
+  // Frontend knows nothing about Stripe price IDs or business logic.
 
-  // ── 360° Funnel REST endpoints (called from https://360.handypioneers.com) ──
-
-  // POST /api/360/checkout — creates a Stripe Checkout session for 360 enrollment
-  app.post("/api/360/checkout", express.json(), async (req, res) => {
-    try {
-      const caller = appRouter.createCaller({ req, res, user: null } as any);
-      const result = await caller.threeSixty.checkout.createSession(req.body);
-      res.json(result);
-    } catch (err: any) {
-      console.error("[360 REST] /api/360/checkout error:", err?.message ?? err);
-      res.status(err?.code === "BAD_REQUEST" ? 400 : 500).json({
-        error: err?.message ?? "Failed to create checkout session",
-      });
-    }
-  });
-
-  // POST /api/360/portfolio-checkout — creates a Stripe Checkout session for portfolio enrollment
-  app.post("/api/360/portfolio-checkout", express.json(), async (req, res) => {
-    try {
-      const caller = appRouter.createCaller({ req, res, user: null } as any);
-      const result = await caller.threeSixty.portfolioCheckout.createSession(req.body);
-      res.json(result);
-    } catch (err: any) {
-      console.error("[360 REST] /api/360/portfolio-checkout error:", err?.message ?? err);
-      res.status(err?.code === "BAD_REQUEST" ? 400 : 500).json({
-        error: err?.message ?? "Failed to create checkout session",
-      });
-    }
-  });
-
-  // POST /api/360/event — analytics event tracking + cart abandonment capture from funnel
-  app.post("/api/360/event", express.json(), async (req, res) => {
+  app.post("/api/360/event", async (req, res) => {
     const { event, type, data } = req.body ?? {};
     if (!event || !type || !data) {
-      res.status(400).json({ ok: false, error: "Missing event, type, or data" });
-      return;
+      return res.status(400).json({ ok: false, error: "Missing event, type, or data" });
     }
     // Async handlers — fire and forget so frontend gets instant 200
     setImmediate(async () => {
@@ -923,7 +950,109 @@ async function startServer() {
         }
       }
     });
-    res.json({ ok: true });
+    return res.json({ ok: true });
+  });
+
+  app.post("/api/360/checkout", async (req, res) => {
+    const { type, tier, cadence, properties, customer, origin } = req.body ?? {};
+    if (!type || !cadence || !customer || !origin) {
+      return res.status(400).json({ error: "Missing required fields: type, cadence, customer, origin" });
+    }
+    try {
+      const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2025-03-31.basil" });
+      let lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [];
+
+      if (type === "homeowner") {
+        if (!tier) return res.status(400).json({ error: "tier required for homeowner" });
+        // Normalize funnel tier names to internal Stripe product names
+        const HOMEOWNER_TIER_MAP: Record<string, string> = {
+          exterior_shield: "BRONZE", bronze: "BRONZE", essential: "BRONZE",
+          full_coverage: "SILVER", silver: "SILVER", full: "SILVER",
+          max: "GOLD", gold: "GOLD", maximum: "GOLD",
+        };
+        const normalizedTier = HOMEOWNER_TIER_MAP[(tier as string).toLowerCase()] ?? (tier as string).toUpperCase();
+        const key = `STRIPE_PRICE_${normalizedTier}_${(cadence as string).toUpperCase()}`;
+        const priceId = process.env[key];
+        if (!priceId) return res.status(400).json({ error: `Stripe price not configured: ${key} (raw tier: ${tier})` });
+        lineItems = [{ price: priceId, quantity: 1 }];
+      } else if (type === "portfolio") {
+        if (!Array.isArray(properties) || properties.length === 0) {
+          return res.status(400).json({ error: "properties array required for portfolio" });
+        }
+        const tierKeyMap: Record<string, string> = {
+          essential: "EXTERIOR", exterior_shield: "EXTERIOR",
+          full: "FULL", full_coverage: "FULL",
+          maximum: "MAX", max: "MAX",
+        };
+        lineItems = (properties as any[]).map((p) => {
+          const tierKey = tierKeyMap[(p.tier as string)?.toLowerCase()] ?? "EXTERIOR";
+          const priceKey = `STRIPE_PRICE_PORTFOLIO_${tierKey}_${(cadence as string).toUpperCase()}`;
+          const priceId = process.env[priceKey];
+          if (!priceId) throw new Error(`Stripe price not configured: ${priceKey}`);
+          return { price: priceId, quantity: 1 };
+        });
+        // Interior add-on: per-cadence pricing based on property type (door count)
+        // sfh=1 door, duplex=2, triplex=3, fourplex=4
+        const DOOR_COUNT: Record<string, number> = { sfh: 1, duplex: 2, triplex: 3, fourplex: 4 };
+        for (const prop of (properties as any[])) {
+          if (!prop.interiorAddon) continue;
+          const doors = DOOR_COUNT[(prop.type as string)?.toLowerCase()] ?? 1;
+          const addonKey = `STRIPE_PRICE_INTERIOR_ADDON_${(cadence as string).toUpperCase()}_PER_DOOR`;
+          const addonId = process.env[addonKey] ?? process.env.STRIPE_PRICE_INTERIOR_ADDON_ANNUAL_PER_DOOR;
+          if (addonId) lineItems.push({ price: addonId, quantity: doors });
+        }
+      } else {
+        return res.status(400).json({ error: `Unknown type: ${type}` });
+      }
+
+      // Detect portal origin (client.handypioneers.com, handyfield manus.space, or localhost)
+      const isPortalOrigin = typeof origin === "string" && (
+        origin.includes("client.handypioneers") ||
+        origin.includes("handyfield")
+      );
+      const successPath = isPortalOrigin
+        ? `/portal/360-confirmation?session_id={CHECKOUT_SESSION_ID}`
+        : `/360/confirmation?session_id={CHECKOUT_SESSION_ID}`;
+      const cancelPath = isPortalOrigin
+        ? `/portal/360-membership?cancelled=1`
+        : type === "portfolio"
+          ? `/360/multifamily?cancelled=1`
+          : `/360/checkout?tier=${tier}&cadence=${cadence}&cancelled=1`;
+
+      const session = await stripe.checkout.sessions.create({
+        mode: "subscription",
+        line_items: lineItems,
+        customer_email: (customer as any).email ?? undefined,
+        allow_promotion_codes: true,
+        success_url: `${origin}${successPath}`,
+        cancel_url: `${origin}${cancelPath}`,
+        metadata: {
+          planType: type as string,
+          tier: (tier as string) ?? "",
+          cadence: cadence as string,
+          customerName: (customer as any).name ?? "",
+          customerEmail: (customer as any).email ?? "",
+          customerPhone: (customer as any).phone ?? "",
+          serviceAddress: (customer as any).address ?? "",
+          serviceCity: (customer as any).city ?? "",
+          serviceState: (customer as any).state ?? "",
+          serviceZip: (customer as any).zip ?? "",
+          properties: type === "portfolio" ? JSON.stringify(properties) : "",
+        },
+        subscription_data: {
+          metadata: {
+            planType: type as string,
+            tier: (tier as string) ?? "",
+            cadence: cadence as string,
+            customerEmail: (customer as any).email ?? "",
+          },
+        },
+      });
+      return res.json({ url: session.url! });
+    } catch (err: any) {
+      console.error("[360 Gateway] checkout error:", err);
+      return res.status(500).json({ error: err.message });
+    }
   });
 
   // tRPC API

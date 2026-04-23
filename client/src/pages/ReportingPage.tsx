@@ -5,7 +5,7 @@
 import { useEffect, useRef } from 'react';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { trpc } from '@/lib/trpc';
-import { BarChart2, BarChart3, TrendingUp, DollarSign, Briefcase, Users, AlertCircle, CheckCircle2, Clock, RefreshCw } from 'lucide-react';
+import { BarChart2, TrendingUp, DollarSign, Briefcase, Users, AlertCircle, CheckCircle2, Clock, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 
 function fmtDollar(v: number) {
@@ -171,41 +171,6 @@ export default function ReportingPage() {
         <div className="text-center space-y-3">
           <RefreshCw className="w-8 h-8 text-muted-foreground animate-spin mx-auto" />
           <p className="text-sm text-muted-foreground">Syncing data…</p>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Empty state ─────────────────────────────────────────────
-  const isEmpty =
-    kpis.totalRevenue === 0 &&
-    kpis.totalJobs === 0 &&
-    kpis.avgJobValue === 0 &&
-    kpis.conversionRate === 0 &&
-    topCustomers.length === 0 &&
-    openSummary.count === 0;
-
-  if (isEmpty) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center px-4">
-        <div className="max-w-md w-full rounded-xl border bg-card p-8 text-center space-y-4">
-          <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto">
-            <BarChart3 className="w-7 h-7 text-primary" />
-          </div>
-          <h2 className="text-lg font-semibold text-foreground">No data yet</h2>
-          <p className="text-sm text-muted-foreground leading-relaxed">
-            Sync your pipeline to see reporting metrics here. Once you have
-            opportunities, invoices, and customers in the system, this page will
-            show revenue trends, funnel analytics, and top-customer breakdowns.
-          </p>
-          <button
-            onClick={handleRefresh}
-            disabled={syncMutation.isPending}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors disabled:opacity-50"
-          >
-            <RefreshCw size={14} className={syncMutation.isPending ? 'animate-spin' : ''} />
-            Refresh
-          </button>
         </div>
       </div>
     );

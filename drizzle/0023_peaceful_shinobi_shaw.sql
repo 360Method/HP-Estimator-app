@@ -1,0 +1,2 @@
+ALTER TABLE `threeSixtyMemberships` ADD `stripeCustomerId` varchar(64);--> statement-breakpoint
+ALTER TABLE `threeSixtyMemberships` ADD `billingCadence` enum('monthly','quarterly','annual') DEFAULT 'annual' NOT NULL;

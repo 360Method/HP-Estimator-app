@@ -97,7 +97,7 @@ async function executeAction(
       if (!isGmailConfigured()) throw new Error("Gmail not configured");
       const subject = interpolate(ap.subject ?? "", payload);
       const body = interpolate(ap.bodyTemplate ?? "", payload);
-      await sendEmail({ to: payload.email, subject, body });
+      await sendEmail({ to: payload.email, subject, body, isHtml: false });
       break;
     }
     case "notify_owner": {
@@ -110,28 +110,27 @@ async function executeAction(
     case "create_note": {
       if (!payload.customerId) throw new Error("No customerId in payload");
       const db = await getDb();
-      if (!db) throw new Error("Database not available");
       const { conversations, messages } = await import("../drizzle/schema");
-      const { eq: eqInner, and: andInner, sql: sqlInner } = await import("drizzle-orm");
+      const { eq: eqInner, and: andInner } = await import("drizzle-orm");
       const noteText = interpolate(ap.noteTemplate ?? "", payload);
       const convRows = await db
         .select()
         .from(conversations)
-        .where(andInner(eqInner(conversations.customerId, String(payload.customerId)), sqlInner`${conversations.channels} LIKE '%note%'`))
+        .where(andInner(eqInner(conversations.customerId, payload.customerId), eqInner(conversations.channel, "note")))
         .limit(1);
       let convId: number;
       if (convRows.length > 0) {
         convId = convRows[0].id;
       } else {
-        const [ins] = await db.insert(conversations).values({ customerId: String(payload.customerId), channels: "note" }).returning({ id: conversations.id });
-        convId = ins.id;
+        const ins = await db.insert(conversations).values({ customerId: payload.customerId, channel: "note", status: "open" });
+        convId = (ins as any).insertId;
       }
       await db.insert(messages).values({
         conversationId: convId,
         body: noteText,
         channel: "note",
         direction: "outbound",
-        isInternal: true,
+        senderRole: "hp_team",
         status: "sent",
       });
       break;
@@ -146,7 +145,6 @@ export async function runAutomationsForTrigger(
 ): Promise<void> {
   try {
     const db = await getDb();
-    if (!db) return;
 
     // Hydrate workspace-level variables from appSettings
     try {
@@ -220,7 +218,6 @@ async function logRuleExecution(
 ) {
   try {
     const db = await getDb();
-    if (!db) return;
     await db.insert(automationRuleLogs).values({
       ruleId,
       trigger,
