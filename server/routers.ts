@@ -28,6 +28,7 @@ import { notificationPreferencesRouter } from "./routers/notificationPreferences
 import { automationRulesRouter } from "./routers/automationRules";
 import { automationsRouter } from "./routers/automations";
 import { techRouter } from "./routers/tech";
+import { priorityTranslationRouter } from "./routers/priorityTranslation";
 import {
   getAdminAllowlist,
   addAdminAllowlistEmail,
@@ -61,6 +62,7 @@ export const appRouter = router({
   automationRules: automationRulesRouter,
   automations: automationsRouter,
   tech: techRouter,
+  priorityTranslation: priorityTranslationRouter,
 
   auth: router({
     /**
