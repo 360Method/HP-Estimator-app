@@ -114,7 +114,7 @@ export const emailTemplatesRouter = router({
       z.object({
         id: z.number().int().optional(),
         key: z.string().min(1).max(80).optional(),
-        mergeVars: z.record(z.union([z.string(), z.number()])).default({}),
+        mergeVars: z.record(z.string(), z.union([z.string(), z.number()])).default({}),
       })
     )
     .query(async ({ input }) => {

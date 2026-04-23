@@ -122,7 +122,7 @@ export const campaignsRouter = router({
             customerId: z.string().max(64).optional(),
             email: z.string().email().max(320).optional(),
             phone: z.string().max(32).optional(),
-            mergeVars: z.record(z.string()).optional(),
+            mergeVars: z.record(z.string(), z.string()).optional(),
           })
         ),
       })
