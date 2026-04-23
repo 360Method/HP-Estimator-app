@@ -23,6 +23,7 @@ import {
   userRoles,
   users,
   opportunities,
+  customers,
   type DbNotification,
   type InsertDbNotification,
   type InsertDbPipelineEvent,
@@ -246,6 +247,36 @@ function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 }
 
+// ─── Customer context resolution ──────────────────────────────────────────────
+// Customer profile is the source of truth. Every notification resolves the
+// customer display name and links primarily to the customer profile — the
+// opportunity deep-link is appended as a secondary affordance.
+
+export async function resolveCustomerName(customerId?: string | null): Promise<string> {
+  if (!customerId) return "(unknown customer)";
+  const db = await getDb();
+  if (!db) return "(unknown customer)";
+  const rows = await db.select().from(customers).where(eq(customers.id, customerId)).limit(1);
+  const c = rows[0];
+  if (!c) return "(unknown customer)";
+  return (
+    c.displayName?.trim() ||
+    [c.firstName, c.lastName].filter(Boolean).join(" ").trim() ||
+    c.company?.trim() ||
+    c.email?.trim() ||
+    "(unnamed customer)"
+  );
+}
+
+/** Build the primary link target for a notification/event — customer profile. */
+export function customerLinkUrl(customerId?: string | null, opportunityId?: string | null): string {
+  if (!customerId) {
+    return opportunityId ? `/?section=pipeline&opportunity=${opportunityId}` : "/?section=customers";
+  }
+  const base = `/?section=customer&customer=${customerId}`;
+  return opportunityId ? `${base}&opportunity=${opportunityId}` : base;
+}
+
 // ─── Pipeline event audit log ─────────────────────────────────────────────────
 
 export async function recordPipelineEvent(input: InsertDbPipelineEvent) {
@@ -291,13 +322,15 @@ export async function onLeadCreated(params: {
       payloadJson: JSON.stringify({ source: params.source }),
     });
 
+    const customerName = await resolveCustomerName(params.customerId);
+
     await createNotification({
       userId: nurturerId ?? null,
       role: "nurturer",
       eventType: "new_lead",
-      title: `New lead: ${params.title}`,
-      body: `A new lead came in from ${humanSource(params.source)}. Review, qualify, and nurture until they book a Baseline or Consultation appointment.`,
-      linkUrl: `/?section=pipeline&opportunity=${params.opportunityId}`,
+      title: `New lead about ${customerName}`,
+      body: `${params.title} — from ${humanSource(params.source)}. Review ${customerName}'s profile, qualify, and nurture until they book a Baseline or Consultation appointment.`,
+      linkUrl: customerLinkUrl(params.customerId, params.opportunityId),
       opportunityId: params.opportunityId,
       customerId: params.customerId,
       priority: params.priority ?? "high",
@@ -347,13 +380,16 @@ export async function onAppointmentBooked(params: {
       payloadJson: JSON.stringify({ when: params.when, appointmentType: params.appointmentType }),
     });
 
+    const customerName = await resolveCustomerName(params.customerId);
+    const kindLabel = params.appointmentType === "baseline" ? "Baseline Walkthrough" : "Consultation";
+
     await createNotification({
       userId: consultantId ?? null,
       role: "consultant",
       eventType: "appointment_booked",
-      title: `${params.appointmentType === "baseline" ? "Baseline Walkthrough" : "Consultation"} booked`,
-      body: `${params.title} — ${params.when}. Your expert prep sheet is ready. Walk the home, share what you see, and answer their questions — this is a conversation between experts, not a pitch.`,
-      linkUrl: `/?section=pipeline&opportunity=${params.opportunityId}&view=consultant`,
+      title: `${kindLabel} booked with ${customerName}`,
+      body: `${params.title} — ${params.when}. Your expert prep sheet is ready on ${customerName}'s profile. Walk the home, share what you see, and answer their questions — this is a conversation between experts, not a pitch.`,
+      linkUrl: `${customerLinkUrl(params.customerId, params.opportunityId)}&view=consultant`,
       opportunityId: params.opportunityId,
       customerId: params.customerId,
       priority: "high",
@@ -402,13 +438,15 @@ export async function onSaleSigned(params: {
       payloadJson: JSON.stringify({ value: params.value }),
     });
 
+    const customerName = await resolveCustomerName(params.customerId);
+
     await createNotification({
       userId: pmId ?? null,
       role: "project_manager",
       eventType: "job_created",
-      title: `New signed job: ${params.title}`,
-      body: "The handoff brief is ready — scope, timeline committed, crew required, and consultant notes are all linked. Schedule kickoff this week.",
-      linkUrl: `/?section=jobs&opportunity=${params.opportunityId}&view=handoff`,
+      title: `Signed job — handoff for ${customerName}`,
+      body: `${params.title}. The handoff brief is ready on ${customerName}'s profile — scope, timeline committed, crew required, and consultant notes are all linked. Schedule kickoff this week.`,
+      linkUrl: `${customerLinkUrl(params.customerId, params.opportunityId)}&view=handoff`,
       opportunityId: params.opportunityId,
       customerId: params.customerId,
       priority: "high",
@@ -450,13 +488,15 @@ export async function onReassign(params: {
       triggeredBy: params.triggeredByUserId ? String(params.triggeredByUserId) : "system",
     });
 
+    const customerName = await resolveCustomerName(current?.customerId ?? null);
+
     await createNotification({
       userId: params.toUserId,
       role: params.toRole,
       eventType: "lead_assigned",
-      title: `${humanRole(params.toRole)} assignment: ${current?.title ?? "Opportunity"}`,
-      body: `An opportunity was handed to you. Open it to see the full history and context.`,
-      linkUrl: `/?section=pipeline&opportunity=${params.opportunityId}`,
+      title: `${humanRole(params.toRole)} assignment — ${customerName}`,
+      body: `${current?.title ?? "An opportunity"} for ${customerName} was handed to you. Open ${customerName}'s profile to see the full history and context.`,
+      linkUrl: customerLinkUrl(current?.customerId ?? null, params.opportunityId),
       opportunityId: params.opportunityId,
       customerId: current?.customerId,
       priority: "normal",
@@ -490,26 +530,50 @@ function humanRole(role: TeamRole): string {
 
 // ─── Read helpers (used by routers) ───────────────────────────────────────────
 
+/**
+ * Enrich notification rows with the owning customer's display name so the
+ * UI can always show "about <customer>" and link back to the customer profile.
+ */
+async function enrichWithCustomer<T extends { customerId: string | null }>(rows: T[]): Promise<Array<T & { customerName: string | null }>> {
+  if (rows.length === 0) return [];
+  const db = await getDb();
+  if (!db) return rows.map((r) => ({ ...r, customerName: null }));
+  const ids = Array.from(new Set(rows.map((r) => r.customerId).filter(Boolean))) as string[];
+  if (ids.length === 0) return rows.map((r) => ({ ...r, customerName: null }));
+
+  const byId = new Map<string, string>();
+  for (const id of ids) {
+    const name = await resolveCustomerName(id);
+    byId.set(id, name);
+  }
+  return rows.map((r) => ({
+    ...r,
+    customerName: r.customerId ? byId.get(r.customerId) ?? null : null,
+  }));
+}
+
 export async function listNotificationsForUser(userId: number, limit = 20) {
   const db = await getDb();
   if (!db) return [];
-  return db
+  const rows = await db
     .select()
     .from(notifications)
     .where(eq(notifications.userId, userId))
     .orderBy(desc(notifications.createdAt))
     .limit(limit);
+  return enrichWithCustomer(rows);
 }
 
 export async function listNotificationsForRole(role: string, limit = 20) {
   const db = await getDb();
   if (!db) return [];
-  return db
+  const rows = await db
     .select()
     .from(notifications)
     .where(eq(notifications.role, role))
     .orderBy(desc(notifications.createdAt))
     .limit(limit);
+  return enrichWithCustomer(rows);
 }
 
 export async function countUnreadForUser(userId: number) {

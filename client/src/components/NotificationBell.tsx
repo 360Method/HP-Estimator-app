@@ -7,7 +7,7 @@
 // ============================================================
 
 import { useState } from 'react';
-import { Bell, Check, CheckCheck } from 'lucide-react';
+import { Bell, Check, CheckCheck, User } from 'lucide-react';
 import {
   Sheet,
   SheetContent,
@@ -82,11 +82,15 @@ export default function NotificationBell() {
     },
   });
 
-  const handleRowClick = (id: number, linkUrl: string | null | undefined, isUnread: boolean) => {
+  const handleRowClick = (id: number, customerId: string | null | undefined, linkUrl: string | null | undefined, isUnread: boolean) => {
     if (isUnread) markRead.mutate({ id });
-    if (linkUrl) {
-      window.location.href = linkUrl;
-    }
+    // Customer profile is the single source of truth — always prefer the
+    // customer detail page as the destination. Fall back to whatever linkUrl
+    // the server provided (which already targets customer first for new rows).
+    const target = customerId
+      ? `/?section=customer&customer=${customerId}`
+      : (linkUrl || '/');
+    window.location.href = target;
   };
 
   return (
@@ -142,10 +146,11 @@ export default function NotificationBell() {
             )}
             {items.map((n) => {
               const isUnread = !n.readAt;
+              const customerName = (n as any).customerName as string | null | undefined;
               return (
                 <button
                   key={n.id}
-                  onClick={() => handleRowClick(n.id, n.linkUrl, isUnread)}
+                  onClick={() => handleRowClick(n.id, n.customerId, n.linkUrl, isUnread)}
                   className={`w-full text-left px-4 py-3 border-b border-border border-l-4 hover:bg-muted/40 transition-colors ${priorityAccent(n.priority)} ${isUnread ? 'bg-blue-50/40' : 'bg-white'}`}
                 >
                   <div className="flex items-start gap-2 mb-1">
@@ -157,6 +162,13 @@ export default function NotificationBell() {
                       {formatRelative(n.createdAt)}
                     </span>
                   </div>
+                  {/* Customer name is the primary anchor — every notification is "about" a customer. */}
+                  {(customerName || n.customerId) && (
+                    <div className="flex items-center gap-1 text-[11px] text-primary/90 font-medium mb-0.5">
+                      <User className="w-3 h-3" />
+                      <span>About {customerName || 'customer'}</span>
+                    </div>
+                  )}
                   <div className={`text-sm ${isUnread ? 'font-semibold text-foreground' : 'text-foreground/90'}`}>
                     {n.title}
                   </div>
