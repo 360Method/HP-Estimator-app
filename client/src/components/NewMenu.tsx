@@ -1,0 +1,94 @@
+// ============================================================
+// NewMenu — "New" button dropdown
+// Design: Dark charcoal popover (matching the reference image)
+//         with 7 items: Job, Recurring Job, Estimate, Event,
+//         Customer, Intake, Lead. Closes on outside click or
+//         item selection.
+// ============================================================
+
+import { useEffect, useRef } from 'react';
+import {
+  Briefcase, RefreshCw, FileText, Calendar,
+  UserPlus, ClipboardList, Star, Sparkles,
+} from 'lucide-react';
+
+export type NewMenuAction =
+  | 'job'
+  | 'recurring-job'
+  | 'estimate'
+  | 'event'
+  | 'customer'
+  | 'intake'
+  | 'lead'
+  | 'ai-estimate';
+
+interface Props {
+  onSelect: (action: NewMenuAction) => void;
+  onClose: () => void;
+}
+
+const MENU_ITEMS: { action: NewMenuAction; icon: React.ElementType; label: string; highlight?: boolean }[] = [
+  { action: 'ai-estimate',   icon: Sparkles,      label: 'AI Estimate',   highlight: true },
+  { action: 'job',           icon: Briefcase,     label: 'Job'           },
+  { action: 'recurring-job', icon: RefreshCw,     label: 'Recurring Job' },
+  { action: 'estimate',      icon: FileText,      label: 'Estimate'      },
+  { action: 'event',         icon: Calendar,      label: 'Event'         },
+  { action: 'customer',      icon: UserPlus,      label: 'Customer'      },
+  { action: 'intake',        icon: ClipboardList, label: 'Intake'        },
+  { action: 'lead',          icon: Star,          label: 'Lead'          },
+];
+
+export default function NewMenu({ onSelect, onClose }: Props) {
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+    // Use capture so it fires before other handlers
+    document.addEventListener('mousedown', handler, true);
+    return () => document.removeEventListener('mousedown', handler, true);
+  }, [onClose]);
+
+  // Close on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  return (
+    <div
+      ref={menuRef}
+      className="absolute top-full right-0 mt-1.5 w-48 rounded-xl shadow-2xl z-[200]
+                 bg-[#1e2028] border border-white/10
+                 overflow-y-auto"
+      style={{ maxHeight: 'calc(100vh - 80px)' }}
+    >
+      {MENU_ITEMS.map(({ action, icon: Icon, label, highlight }) => (
+        <button
+          key={action}
+          onClick={() => { onSelect(action); onClose(); }}
+          className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm font-medium transition-colors text-left ${
+            highlight
+              ? 'text-violet-300 hover:bg-violet-500/20 hover:text-violet-200'
+              : 'text-white/90 hover:bg-white/10 hover:text-white'
+          }`}
+        >
+          <Icon size={15} className={highlight ? 'text-violet-400 shrink-0' : 'text-white/50 shrink-0'} />
+          {label}
+          {highlight && (
+            <span className="ml-auto text-[9px] font-bold px-1 py-0.5 rounded bg-violet-500/30 text-violet-300 uppercase tracking-wide">
+              AI
+            </span>
+          )}
+        </button>
+      ))}
+    </div>
+  );
+}
