@@ -37,6 +37,7 @@ import MyAccountPage from '@/pages/MyAccountPage';
 import MyTasksPage from '@/pages/MyTasksPage';
 import HelpPage from '@/pages/HelpPage';
 import SettingsPage from '@/pages/settings/SettingsPage';
+import NotificationBell from '@/components/NotificationBell';
 import {
   Search, LayoutDashboard, Users, Inbox, GitBranch,
   DollarSign, BarChart2, Megaphone, Settings,
@@ -348,6 +349,7 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
           {/* Settings + My Account — desktop */}
           {!searchOpen && (
             <div className="hidden sm:flex items-center gap-1">
+              <NotificationBell />
               <button
                 onClick={() => setOverlay('settings')}
                 title="Settings"

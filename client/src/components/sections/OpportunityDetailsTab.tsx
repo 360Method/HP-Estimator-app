@@ -18,6 +18,8 @@ import {
 import type { Opportunity } from '@/lib/types';
 import LeadNurturingPanel from '@/components/sections/LeadNurturingPanel';
 import EstimateDetailsPanel from '@/components/sections/EstimateDetailsPanel';
+import ConsultantBrief from '@/components/sections/ConsultantBrief';
+import PmHandoffBrief from '@/components/sections/PmHandoffBrief';
 import { ConvertToEstimateModal } from '@/components/ConversionModal';
 import CustomerActivityFeed from '@/components/CustomerActivityFeed';
 
@@ -409,11 +411,21 @@ export default function OpportunityDetailsTab() {
         </CardContent>
       </Card>
 
-      {/* Lead nurturing workspace — only shown for leads */}
-      {activeOpp.area === 'lead' && <LeadNurturingPanel />}
+      {/* Role-specific briefs — when a user is assigned a role, swap in their tailored view */}
+      {activeOpp.assignedRole === 'consultant' && (
+        <ConsultantBrief opportunity={activeOpp} customer={activeCustomer} />
+      )}
+      {activeOpp.assignedRole === 'project_manager' && activeOpp.area === 'job' && (
+        <PmHandoffBrief opportunity={activeOpp} customer={activeCustomer} />
+      )}
+
+      {/* Lead nurturing workspace — only shown for leads (skip if consultant brief is active) */}
+      {activeOpp.area === 'lead' && activeOpp.assignedRole !== 'consultant' && <LeadNurturingPanel />}
 
       {/* Estimate / job details panel — stage switcher, notes, attachments, contact */}
-      {(activeOpp.area === 'estimate' || activeOpp.area === 'job') && <EstimateDetailsPanel />}
+      {(activeOpp.area === 'estimate' || activeOpp.area === 'job') &&
+        activeOpp.assignedRole !== 'consultant' &&
+        !(activeOpp.assignedRole === 'project_manager' && activeOpp.area === 'job') && <EstimateDetailsPanel />}
 
       {/* Lineage chain */}
       {chain.length > 1 && (
