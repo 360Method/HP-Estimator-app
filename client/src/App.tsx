@@ -43,6 +43,9 @@ import TechLogin from "./pages/TechLogin";
 import TechDashboard from "./pages/TechDashboard";
 import TechJobDetail from "./pages/TechJobDetail";
 
+// Admin: Roadmap Generator human-checkpoint reviews
+import AdminRoadmapReviewsPage from "./pages/AdminRoadmapReviewsPage";
+
 // Domains that should serve only the customer portal (no admin app)
 const PORTAL_HOSTNAMES = ["client.handypioneers.com"];
 
@@ -100,6 +103,10 @@ function Router() {
 
       {/* Data migration onboarding wizard */}
       <Route path="/onboarding" component={() => <DataMigrationPage />} />
+
+      {/* Admin — Roadmap Generator human checkpoint */}
+      <Route path="/admin/roadmap-reviews/:id" component={AdminRoadmapReviewsPage} />
+      <Route path="/admin/roadmap-reviews" component={AdminRoadmapReviewsPage} />
 
       {/* Field tech PWA */}
       <Route path="/tech" component={TechLogin} />
