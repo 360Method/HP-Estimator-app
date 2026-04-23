@@ -92,6 +92,55 @@
       "when": 1776445347309,
       "tag": "0049_violet_daimon_hellstrom",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1777200000000,
+      "tag": "0051_tier_rename",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1777200001000,
+      "tag": "0052_email_templates",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1777200002000,
+      "tag": "0053_campaigns",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1777200003000,
+      "tag": "0054_settings_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1777200004000,
+      "tag": "0055_phone_forwarding",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1777200005000,
+      "tag": "0056_automation_categories",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1777200006000,
+      "tag": "0057_opportunities_auto_archive",
+      "breakpoints": true
     }
   ]
 }

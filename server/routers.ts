@@ -27,6 +27,8 @@ import { appSettingsRouter } from "./routers/appSettings";
 import { notificationPreferencesRouter } from "./routers/notificationPreferences";
 import { automationRulesRouter } from "./routers/automationRules";
 import { automationsRouter } from "./routers/automations";
+import { emailTemplatesRouter } from "./routers/emailTemplates";
+import { campaignsRouter } from "./routers/campaigns";
 import { techRouter } from "./routers/tech";
 import {
   getAdminAllowlist,
@@ -60,6 +62,8 @@ export const appRouter = router({
   notificationPreferences: notificationPreferencesRouter,
   automationRules: automationRulesRouter,
   automations: automationsRouter,
+  emailTemplates: emailTemplatesRouter,
+  campaigns: campaignsRouter,
   tech: techRouter,
 
   auth: router({

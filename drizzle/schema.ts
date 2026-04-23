@@ -592,6 +592,8 @@ export const opportunities = pgTable("opportunities", {
   notes: text("notes"),
   archived: boolean("archived").default(false).notNull(),
   archivedAt: varchar("archivedAt", { length: 32 }),
+  /** Reason archived: 'manual' | 'auto_lost_90d' | null */
+  archivedReason: varchar("archivedReason", { length: 32 }),
   // Lifecycle timestamps
   sourceLeadId: varchar("sourceLeadId", { length: 64 }),
   sourceEstimateId: varchar("sourceEstimateId", { length: 64 }),
@@ -1267,12 +1269,12 @@ export const appSettings = pgTable("appSettings", {
   brandColor: varchar("brandColor", { length: 20 }).default("#1E3A5F"),
   /** IANA timezone string (e.g. America/Los_Angeles) */
   timezone: varchar("timezone", { length: 60 }).default("America/Los_Angeles"),
-  /** Prefix for estimate numbers (e.g. EST) */
-  estimatePrefix: varchar("estimatePrefix", { length: 10 }).default("EST"),
-  /** Prefix for invoice numbers (e.g. INV) */
-  invoicePrefix: varchar("invoicePrefix", { length: 10 }).default("INV"),
-  /** Prefix for job numbers (e.g. JOB) */
-  jobPrefix: varchar("jobPrefix", { length: 10 }).default("JOB"),
+  /** Prefix for estimate numbers (e.g. HP-E-) */
+  estimatePrefix: varchar("estimatePrefix", { length: 10 }).default("HP-E-"),
+  /** Prefix for invoice numbers (e.g. HP-I-) */
+  invoicePrefix: varchar("invoicePrefix", { length: 10 }).default("HP-I-"),
+  /** Prefix for job numbers (e.g. HP-J-) */
+  jobPrefix: varchar("jobPrefix", { length: 10 }).default("HP-J-"),
   /** Customer-facing portal base URL */
   portalUrl: varchar("portalUrl", { length: 300 }).default("https://client.handypioneers.com"),
   /** Company website URL */
@@ -1367,6 +1369,13 @@ export const automationRules = pgTable("automationRules", {
   sortOrder: integer("sortOrder").notNull().default(0),
   /** Lifecycle stage for grouping: lead | estimate | job | invoice | review */
   stage: varchar("stage", { length: 30 }).notNull().default("lead"),
+  /**
+   * Manus-library category for UI grouping:
+   * 'lead_intake' | 'estimate_followup' | 'job_lifecycle' | 'invoice_payment' | 'review_retention'
+   */
+  category: varchar("category", { length: 40 }).notNull().default("lead_intake"),
+  /** Optional FK to emailTemplates.id — when set, send_email actions use this template */
+  emailTemplateId: integer("emailTemplateId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().notNull(),
 });
@@ -1388,3 +1397,110 @@ export const automationRuleLogs = pgTable("automationRuleLogs", {
   executedAt: timestamp("executedAt").defaultNow().notNull(),
 });
 export type DbAutomationRuleLog = typeof automationRuleLogs.$inferSelect;
+
+// ─── Email Templates ──────────────────────────────────────────────────────────
+// First-class email templates referenced by automation actions and transactional
+// email paths. Each template has a stable `key` (e.g. "magic_link", "estimate_sent")
+// used by code to look up the right template; users can edit subject/html/text/preheader
+// from the Settings UI. Merge tag schema lists the supported {{vars}} for the editor.
+export const emailTemplates = pgTable("emailTemplates", {
+  id: serial("id").primaryKey(),
+  /** Reserved for future multi-tenant support; currently always 1 */
+  tenantId: integer("tenantId").notNull().default(1),
+  /** Stable machine key (e.g. "magic_link", "estimate_sent") */
+  key: varchar("key", { length: 80 }).notNull(),
+  /** Human-readable label shown in the template picker */
+  name: varchar("name", { length: 160 }).notNull().default(""),
+  /** Email subject line (supports merge tags) */
+  subject: varchar("subject", { length: 300 }).notNull().default(""),
+  /** Preheader / preview text shown in inbox lists */
+  preheader: varchar("preheader", { length: 300 }).default(""),
+  /** HTML body (supports merge tags) */
+  html: text("html").notNull().default(""),
+  /** Plain-text fallback (supports merge tags) */
+  text: text("text").default(""),
+  /**
+   * JSON array describing supported merge tags for this template, e.g.
+   *   [{"tag":"customerFirstName","description":"First name"}]
+   */
+  mergeTagSchema: text("mergeTagSchema"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+export type DbEmailTemplate = typeof emailTemplates.$inferSelect;
+export type InsertDbEmailTemplate = typeof emailTemplates.$inferInsert;
+
+// ─── Campaigns ────────────────────────────────────────────────────────────────
+// Marketing campaigns are distinct from automations: an automation fires per-event
+// on a single recipient; a campaign is a one-time blast to a static recipient list,
+// tracked per-send for open/click attribution.
+export const campaignStatusEnum = pgEnum('campaign_status', ['draft', 'scheduled', 'sending', 'sent', 'cancelled']);
+export const campaignChannelEnum = pgEnum('campaign_channel', ['email', 'sms']);
+export const campaignSendStatusEnum = pgEnum('campaign_send_status', ['pending', 'sent', 'delivered', 'bounced', 'failed', 'opened', 'clicked']);
+
+export const campaigns = pgTable("campaigns", {
+  id: serial("id").primaryKey(),
+  /** Human-readable campaign name */
+  name: varchar("name", { length: 160 }).notNull(),
+  /** Channel the campaign delivers on */
+  channel: campaignChannelEnum("channel").notNull().default("email"),
+  /** For email campaigns: FK to emailTemplates.id (nullable if custom one-off payload) */
+  emailTemplateId: integer("emailTemplateId"),
+  /** Inline subject override (optional — overrides template subject if set) */
+  subjectOverride: varchar("subjectOverride", { length: 300 }),
+  /** Inline SMS body for SMS-channel campaigns */
+  smsBody: text("smsBody"),
+  /** Lifecycle status */
+  status: campaignStatusEnum("status").notNull().default("draft"),
+  /** Scheduled send time (null = send immediately when user hits "Send") */
+  scheduledAt: timestamp("scheduledAt"),
+  /** Time sending actually started */
+  sentAt: timestamp("sentAt"),
+  /** User who created the campaign */
+  createdBy: varchar("createdBy", { length: 64 }),
+  /** Aggregate counts (kept in sync by send workers) */
+  recipientCount: integer("recipientCount").notNull().default(0),
+  sentCount: integer("sentCount").notNull().default(0),
+  openCount: integer("openCount").notNull().default(0),
+  clickCount: integer("clickCount").notNull().default(0),
+  bounceCount: integer("bounceCount").notNull().default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+export type DbCampaign = typeof campaigns.$inferSelect;
+export type InsertDbCampaign = typeof campaigns.$inferInsert;
+
+export const campaignRecipients = pgTable("campaignRecipients", {
+  id: serial("id").primaryKey(),
+  campaignId: integer("campaignId").notNull(),
+  /** FK to customers.id (string id). Either customerId or raw email/phone must be set. */
+  customerId: varchar("customerId", { length: 64 }),
+  /** Raw email address for non-customer recipients */
+  email: varchar("email", { length: 320 }),
+  /** Raw phone (E.164) for non-customer recipients */
+  phone: varchar("phone", { length: 32 }),
+  /** Per-recipient merge vars (JSON) — override template defaults */
+  mergeVars: text("mergeVars"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbCampaignRecipient = typeof campaignRecipients.$inferSelect;
+
+export const campaignSends = pgTable("campaignSends", {
+  id: serial("id").primaryKey(),
+  campaignId: integer("campaignId").notNull(),
+  recipientId: integer("recipientId").notNull(),
+  status: campaignSendStatusEnum("status").notNull().default("pending"),
+  /** Provider message ID (SendGrid / Twilio) */
+  providerMessageId: varchar("providerMessageId", { length: 120 }),
+  /** First open timestamp */
+  openedAt: timestamp("openedAt"),
+  /** First click timestamp */
+  clickedAt: timestamp("clickedAt"),
+  /** Bounce reason if status=bounced */
+  bounceReason: varchar("bounceReason", { length: 300 }),
+  /** Error message if status=failed */
+  errorMessage: text("errorMessage"),
+  sentAt: timestamp("sentAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbCampaignSend = typeof campaignSends.$inferSelect;
