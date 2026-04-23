@@ -51,12 +51,23 @@ function verifyTwilioRequest(req: express.Request, routePath: string): boolean {
   const proto = forwardedProto.split(",")[0].trim();
   const host = forwardedHost.split(",")[0].trim();
   const url = `${proto}://${host}${routePath}`;
+  let valid = false;
   try {
-    return twilio.validateRequest(authToken, sig ?? "", url, req.body);
+    valid = twilio.validateRequest(authToken, sig ?? "", url, req.body);
   } catch (err) {
     console.warn(`[Twilio] Signature validation threw for ${routePath}:`, err);
-    return false;
+    valid = false;
   }
+  if (valid) return true;
+  // Safety net: when TWILIO_SIGNATURE_VERIFY_MODE=warn, log but allow through
+  // so we can keep calls flowing while diagnosing signature bugs (stale
+  // auth token, URL reconstruction mismatch, etc). Default is enforce.
+  const mode = process.env.TWILIO_SIGNATURE_VERIFY_MODE;
+  if (mode === "warn") {
+    console.warn(`[Twilio] Signature verify FAILED for ${routePath} — mode=warn, allowing through. url=${url} sigPresent=${!!sig}`);
+    return true;
+  }
+  return false;
 }
 
 async function ensurePhoneTables() {
