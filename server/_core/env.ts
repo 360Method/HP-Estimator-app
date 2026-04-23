@@ -1,5 +1,18 @@
+function resolveCookieSecret(): string {
+  const secret = process.env.JWT_SECRET ?? "";
+  if (process.env.NODE_ENV === "production" && (!secret || secret.length < 32)) {
+    throw new Error(
+      "[Auth] JWT_SECRET must be set to a strong random string (>=32 chars) in production."
+    );
+  }
+  if (!secret || secret.length < 32) {
+    console.warn("[Auth] JWT_SECRET missing or <32 chars — dev only, unsafe for production.");
+  }
+  return secret;
+}
+
 export const ENV = {
-  cookieSecret: process.env.JWT_SECRET ?? "",
+  cookieSecret: resolveCookieSecret(),
   databaseUrl: process.env.DATABASE_URL ?? "",
   isProduction: process.env.NODE_ENV === "production",
   cloudinaryCloudName: process.env.CLOUDINARY_CLOUD_NAME ?? "",
