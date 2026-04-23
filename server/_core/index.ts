@@ -113,8 +113,39 @@ async function ensurePhoneTables() {
   }
 }
 
+// Idempotent upgrade: replace `portalMagicLinks.token` with hashed `tokenHash`.
+// Runs on every boot. Drizzle-kit can drift from prod, so we don't rely on it.
+async function ensureMagicLinkTokenHash() {
+  try {
+    const { getDb } = await import("../db");
+    const { sql } = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return;
+    const existsRows = await db.execute(sql`
+      SELECT COUNT(*) AS c
+      FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'portalMagicLinks'
+        AND COLUMN_NAME = 'tokenHash'
+    `);
+    const rows = (existsRows as any)[0] ?? existsRows;
+    const count = Number(rows?.[0]?.c ?? rows?.c ?? 0);
+    if (count > 0) return;
+    console.log("[boot] Upgrading portalMagicLinks -> tokenHash column");
+    await db.execute(sql`DELETE FROM \`portalMagicLinks\``);
+    await db.execute(sql`ALTER TABLE \`portalMagicLinks\` DROP PRIMARY KEY`);
+    await db.execute(sql`ALTER TABLE \`portalMagicLinks\` DROP COLUMN \`token\``);
+    await db.execute(sql`ALTER TABLE \`portalMagicLinks\` ADD COLUMN \`tokenHash\` CHAR(64) NOT NULL`);
+    await db.execute(sql`ALTER TABLE \`portalMagicLinks\` ADD PRIMARY KEY (\`tokenHash\`)`);
+    console.log("[boot] portalMagicLinks upgrade complete");
+  } catch (err) {
+    console.warn("[boot] ensureMagicLinkTokenHash failed (non-fatal):", err);
+  }
+}
+
 async function startServer() {
   await ensurePhoneTables();
+  await ensureMagicLinkTokenHash();
   const app = express();
   const server = createServer(app);
 
