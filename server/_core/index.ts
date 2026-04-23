@@ -22,6 +22,7 @@ import { notifyOwner } from "../_core/notification";
 import { buildInboundCallTwiml, buildFallbackTwiml, getPhoneSettings } from "../phone";
 import { randomUUID } from "crypto";
 import { sdk } from "./sdk";
+import { registerAuthRoutes, seedDefaultAdminIfNeeded } from "./auth";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -795,6 +796,11 @@ async function startServer() {
   // ample headroom without handing 50 MB of free buffer to every caller.
   app.use(express.json({ limit: "25mb" }));
   app.use(express.urlencoded({ limit: "2mb", extended: true }));
+
+  // ── Staff admin auth: /api/auth/login, /api/auth/logout, /api/auth/me ─────
+  app.use("/api/auth/login", authLimiter);
+  registerAuthRoutes(app);
+  seedDefaultAdminIfNeeded().catch(err => console.error("[Auth] seed failed:", err));
   // ── Gmail poll schedule (every 2 minutes) ────────────────────────────────────────────────────
   setInterval(async () => {
     const email = process.env.GMAIL_CONNECTED_EMAIL;
