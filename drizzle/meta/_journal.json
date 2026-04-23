@@ -358,6 +358,55 @@
       "when": 1776445347310,
       "tag": "0050_married_supernaut",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "5",
+      "when": 1776445347311,
+      "tag": "0051_tier_rename",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "5",
+      "when": 1776445347312,
+      "tag": "0052_email_templates",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "5",
+      "when": 1776445347313,
+      "tag": "0053_campaigns",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "5",
+      "when": 1776445347314,
+      "tag": "0054_settings_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "5",
+      "when": 1776445347315,
+      "tag": "0055_phone_forwarding",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "5",
+      "when": 1776445347316,
+      "tag": "0056_automation_categories",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "5",
+      "when": 1776445347317,
+      "tag": "0057_opportunities_auto_archive",
+      "breakpoints": true
     }
   ]
 }

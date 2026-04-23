@@ -572,6 +572,8 @@ export const opportunities = mysqlTable("opportunities", {
   notes: text("notes"),
   archived: boolean("archived").default(false).notNull(),
   archivedAt: varchar("archivedAt", { length: 32 }),
+  /** Reason for archive: 'manual' | 'auto_lost_30d' — used by auto-archive job to find its own rows */
+  archivedReason: varchar("archivedReason", { length: 32 }),
   // Lifecycle timestamps
   sourceLeadId: varchar("sourceLeadId", { length: 64 }),
   sourceEstimateId: varchar("sourceEstimateId", { length: 64 }),
@@ -1339,6 +1341,10 @@ export const automationRules = mysqlTable("automationRules", {
   sortOrder: int("sortOrder").notNull().default(0),
   /** Lifecycle stage for grouping: lead | estimate | job | invoice | review */
   stage: varchar("stage", { length: 30 }).notNull().default("lead"),
+  /** Category grouping for UI tabs: lead_intake | estimate_follow_up | review_request | etc. */
+  category: varchar("category", { length: 40 }).notNull().default("lead_intake"),
+  /** Optional FK to emailTemplates.id — if set, overrides inline bodyTemplate */
+  emailTemplateId: int("emailTemplateId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -1373,3 +1379,96 @@ export const staffUsers = mysqlTable("staffUsers", {
 });
 export type StaffUser = typeof staffUsers.$inferSelect;
 export type InsertStaffUser = typeof staffUsers.$inferInsert;
+
+// ─── EMAIL TEMPLATES ──────────────────────────────────────────────────────────
+// First-class template records, looked up by (tenantId, key) for deterministic
+// send paths (magic_link, estimate_sent, …).  `mergeTagSchema` is a JSON blob
+// describing available {{vars}} for the editor UI.
+export const emailTemplates = mysqlTable("emailTemplates", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: int("tenantId").notNull().default(1),
+  key: varchar("key", { length: 80 }).notNull(),
+  name: varchar("name", { length: 160 }).notNull().default(""),
+  subject: varchar("subject", { length: 300 }).notNull().default(""),
+  preheader: varchar("preheader", { length: 300 }).default(""),
+  html: text("html").notNull(),
+  text: text("text"),
+  /** JSON array of {tag, description} describing available merge vars */
+  mergeTagSchema: text("mergeTagSchema"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbEmailTemplate = typeof emailTemplates.$inferSelect;
+export type InsertDbEmailTemplate = typeof emailTemplates.$inferInsert;
+
+// ─── CAMPAIGNS ────────────────────────────────────────────────────────────────
+// Marketing blasts — one-shot sends to a static recipient list with per-send
+// open/click/bounce tracking.
+export const campaigns = mysqlTable("campaigns", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 160 }).notNull(),
+  channel: mysqlEnum("channel", ["email", "sms"]).notNull().default("email"),
+  emailTemplateId: int("emailTemplateId"),
+  subjectOverride: varchar("subjectOverride", { length: 300 }),
+  smsBody: text("smsBody"),
+  status: mysqlEnum("status", [
+    "draft",
+    "scheduled",
+    "sending",
+    "sent",
+    "cancelled",
+  ])
+    .notNull()
+    .default("draft"),
+  scheduledAt: timestamp("scheduledAt"),
+  sentAt: timestamp("sentAt"),
+  createdBy: varchar("createdBy", { length: 64 }),
+  recipientCount: int("recipientCount").notNull().default(0),
+  sentCount: int("sentCount").notNull().default(0),
+  openCount: int("openCount").notNull().default(0),
+  clickCount: int("clickCount").notNull().default(0),
+  bounceCount: int("bounceCount").notNull().default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbCampaign = typeof campaigns.$inferSelect;
+export type InsertDbCampaign = typeof campaigns.$inferInsert;
+
+export const campaignRecipients = mysqlTable("campaignRecipients", {
+  id: int("id").autoincrement().primaryKey(),
+  campaignId: int("campaignId").notNull(),
+  customerId: varchar("customerId", { length: 64 }),
+  email: varchar("email", { length: 320 }),
+  phone: varchar("phone", { length: 32 }),
+  /** JSON object of per-recipient merge var overrides */
+  mergeVars: text("mergeVars"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbCampaignRecipient = typeof campaignRecipients.$inferSelect;
+export type InsertDbCampaignRecipient = typeof campaignRecipients.$inferInsert;
+
+export const campaignSends = mysqlTable("campaignSends", {
+  id: int("id").autoincrement().primaryKey(),
+  campaignId: int("campaignId").notNull(),
+  recipientId: int("recipientId").notNull(),
+  status: mysqlEnum("status", [
+    "pending",
+    "sent",
+    "delivered",
+    "bounced",
+    "failed",
+    "opened",
+    "clicked",
+  ])
+    .notNull()
+    .default("pending"),
+  providerMessageId: varchar("providerMessageId", { length: 120 }),
+  openedAt: timestamp("openedAt"),
+  clickedAt: timestamp("clickedAt"),
+  bounceReason: varchar("bounceReason", { length: 300 }),
+  errorMessage: text("errorMessage"),
+  sentAt: timestamp("sentAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbCampaignSend = typeof campaignSends.$inferSelect;
+export type InsertDbCampaignSend = typeof campaignSends.$inferInsert;

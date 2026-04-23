@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from 'vitest';
 const EXPECTED = {
-  // 360° membership tiers (bronze=Essential, silver=Full Coverage, gold=Maximum Protection)
+  // 360° membership tiers (Bronze / Silver / Gold)
   STRIPE_PRICE_BRONZE_MONTHLY:    'price_1TMN6u5fjArLs8MwqLRrS1vh',
   STRIPE_PRICE_BRONZE_QUARTERLY:  'price_1TMN6w5fjArLs8MwuHo4bGrh',
   STRIPE_PRICE_BRONZE_ANNUAL:     'price_1TMN6y5fjArLs8MwLSDfgRwZ',

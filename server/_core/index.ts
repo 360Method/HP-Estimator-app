@@ -1,10 +1,11 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
-import { registerAuthRoutes, seedDefaultAdminIfNeeded } from "./auth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
@@ -15,11 +16,12 @@ import { exchangeGmailCode, pollInboundEmails, sendOverdueReminderEmail } from "
 import { getFirstGmailToken, listOpportunities, updateOpportunity } from "../db";
 import { addSSEClient, broadcastNewMessage } from "../sse";
 import { getPortalInvoiceByStripePaymentIntentId, updatePortalInvoicePaid, getPortalInvoiceByCheckoutSessionId, findPortalCustomerById, getOverdueInvoicesForReminder, markPortalInvoiceReminderSent, getSignOffsEligibleForReviewRequest, getSignOffsEligibleForReviewReminder, markReviewRequestSent, markReviewReminderSent } from "../portalDb";
-import { create360MembershipFromWebhook, create360PortfolioMembershipsFromWebhook, releaseDeferredLaborBankCredits, handle360SubscriptionDeleted, handle360SubscriptionUpdated, handle360InvoicePaymentFailed } from "../threeSixtyWebhook.ts";
+import { create360MembershipFromWebhook, create360PortfolioMembershipsFromWebhook, releaseDeferredLaborBankCredits } from "../threeSixtyWebhook.ts";
 import { sendEmail } from "../gmail";
 import { notifyOwner } from "../_core/notification";
 import { buildInboundCallTwiml, buildFallbackTwiml, getPhoneSettings } from "../phone";
 import { randomUUID } from "crypto";
+import { sdk } from "./sdk";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -44,20 +46,40 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
 
-  // ── CORS: allow 360 funnel and portal to call the pro API ──
-  app.use(cors({
-    origin: [
-      "https://360.handypioneers.com",
-      "https://hp360funnel-pdnj394m.manus.space",
-      "https://client.handypioneers.com",
-      "http://localhost:3001",
-      "http://localhost:5173",
-    ],
-    credentials: true,
+  // ── Security headers (Helmet) ──
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "https://maps.googleapis.com", "https://js.stripe.com"],
+        frameSrc: ["https://js.stripe.com", "https://hooks.stripe.com"],
+        connectSrc: ["'self'", "https://api.stripe.com", "https://maps.googleapis.com"],
+        imgSrc: ["'self'", "data:", "blob:", "https:", "http:"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
   }));
 
-  // ── Health check (Railway probes this before marking deploy live) ──
-  app.get("/api/health", (_, res) => res.json({ ok: true }));
+  // ── Rate limiting ──
+  const globalLimiter = rateLimit({ windowMs: 60 * 1000, max: 100, standardHeaders: true, legacyHeaders: false });
+  const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, message: "Too many login attempts, try again later" });
+  app.use("/api/", globalLimiter);
+  app.use("/api/oauth/", authLimiter);
+
+  // ── CORS: allow 360 funnel and portal to call the pro API ──
+  const allowedOrigins = [
+    "https://360.handypioneers.com",
+    "https://client.handypioneers.com",
+  ];
+  if (process.env.NODE_ENV === "development") {
+    allowedOrigins.push("http://localhost:3001", "http://localhost:5173");
+  }
+  app.use(cors({
+    origin: allowedOrigins,
+    credentials: true,
+  }));
 
   // ── Stripe webhook: MUST be registered BEFORE express.json() ──
   app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async (req, res) => {
@@ -68,7 +90,7 @@ async function startServer() {
       res.status(400).json({ error: "Webhook secret not configured" });
       return;
     }
-    let event: Stripe.Event;
+    let event!: Stripe.Event;
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2025-03-31.basil" });
     // Try primary secret first, then fallback (supports dual-endpoint setup)
     let verified = false;
@@ -200,30 +222,6 @@ async function startServer() {
         console.log(`[Webhook] PaymentIntent failed: ${pi.id}`);
         break;
       }
-      case "customer.subscription.deleted": {
-        const sub = event.data.object as Stripe.Subscription;
-        console.log(`[Webhook] Subscription deleted: ${sub.id}`);
-        await handle360SubscriptionDeleted(sub).catch(err =>
-          console.error("[Webhook] subscription.deleted handler error:", err)
-        );
-        break;
-      }
-      case "customer.subscription.updated": {
-        const sub = event.data.object as Stripe.Subscription;
-        console.log(`[Webhook] Subscription updated: ${sub.id} status=${sub.status}`);
-        await handle360SubscriptionUpdated(sub).catch(err =>
-          console.error("[Webhook] subscription.updated handler error:", err)
-        );
-        break;
-      }
-      case "invoice.payment_failed": {
-        const inv = event.data.object as Stripe.Invoice;
-        console.log(`[Webhook] Invoice payment failed: ${inv.id}`);
-        await handle360InvoicePaymentFailed(inv).catch(err =>
-          console.error("[Webhook] invoice.payment_failed handler error:", err)
-        );
-        break;
-      }
       default:
         console.log(`[Webhook] Unhandled event type: ${event.type}`);
     }
@@ -236,7 +234,7 @@ async function startServer() {
     try {
       // Validate Twilio signature in production
       // Use x-forwarded-host and x-forwarded-proto to get the real public URL
-      // behind the Manus reverse proxy — Twilio signs with the public URL
+      // behind a reverse proxy — Twilio signs with the public URL
       const authToken = process.env.TWILIO_AUTH_TOKEN;
       if (authToken) {
         const sig = req.headers["x-twilio-signature"] as string;
@@ -249,9 +247,8 @@ async function startServer() {
         const valid = twilio.validateRequest(authToken, sig, url, req.body);
         if (!valid && process.env.NODE_ENV === "production") {
           console.warn(`[Twilio SMS] Signature validation failed for URL: ${url}`);
-          // Log but don't block — allow through so we can debug
-          // res.status(403).send("Forbidden");
-          // return;
+          res.status(403).send("Forbidden");
+          return;
         }
       }
       const inboundMsg = await handleInboundSms(req.body);
@@ -280,123 +277,6 @@ async function startServer() {
     }
   });
 
-  // ── Twilio Voice — inbound call routing ──────────────────────────────────────
-  // POST /api/twilio/voice/inbound — Twilio calls this for every inbound call
-  app.post("/api/twilio/voice/inbound", express.urlencoded({ extended: false }), async (req, res) => {
-    try {
-      const forwardedProto = (req.headers["x-forwarded-proto"] as string) || req.protocol;
-      const forwardedHost = (req.headers["x-forwarded-host"] as string) || req.get("host") || "localhost";
-      const proto = forwardedProto.split(",")[0].trim();
-      const host = forwardedHost.split(",")[0].trim();
-      const callbackBaseUrl = `${proto}://${host}`;
-      const twimlXml = await buildInboundCallTwiml(callbackBaseUrl);
-      res.set("Content-Type", "text/xml");
-      res.send(twimlXml);
-    } catch (err) {
-      console.error("[Twilio Voice inbound]", err);
-      const VoiceResponse = twilio.twiml.VoiceResponse;
-      const twiml = new VoiceResponse();
-      twiml.say("We're sorry, we're unable to take your call right now. Please try again later.");
-      res.set("Content-Type", "text/xml");
-      res.send(twiml.toString());
-    }
-  });
-
-  // ── Twilio Voice — stage-2 fallback (cell didn't answer) ─────────────────
-  // POST /api/twilio/voice/fallback — Twilio POSTs here when the <Dial> to the
-  // personal cell completes without being answered (no-answer, busy, failed).
-  // Routes to AI service or system voicemail — NEVER to personal cell voicemail.
-  app.post("/api/twilio/voice/fallback", express.urlencoded({ extended: false }), async (req, res) => {
-    try {
-      const forwardedProto = (req.headers["x-forwarded-proto"] as string) || req.protocol;
-      const forwardedHost = (req.headers["x-forwarded-host"] as string) || req.get("host") || "localhost";
-      const proto = forwardedProto.split(",")[0].trim();
-      const host = forwardedHost.split(",")[0].trim();
-      const callbackBaseUrl = `${proto}://${host}`;
-      const dialCallStatus = req.body.DialCallStatus as string | undefined;
-      console.log(`[Voice Fallback] DialCallStatus=${dialCallStatus}`);
-      // If the cell actually answered and completed, return empty TwiML
-      if (dialCallStatus === "completed") {
-        res.set("Content-Type", "text/xml");
-        res.send("<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response></Response>");
-        return;
-      }
-      // Cell didn't answer — route to AI service or system voicemail
-      const settings = await getPhoneSettings();
-      const twimlXml = buildFallbackTwiml(settings, callbackBaseUrl, false);
-      res.set("Content-Type", "text/xml");
-      res.send(twimlXml);
-    } catch (err) {
-      console.error("[Voice Fallback] Error:", err);
-      const VoiceResponse = twilio.twiml.VoiceResponse;
-      const twiml = new VoiceResponse();
-      twiml.say({ voice: "Polly.Joanna" }, "We're sorry, we're unable to take your call right now. Please try again later.");
-      res.set("Content-Type", "text/xml");
-      res.send(twiml.toString());
-    }
-  });
-  // ── Twilio Voice — voicemail recording callback ────────────────────────────
-  // POST /api/twilio/voice/voicemail — called after voicemail is recorded
-  // Persists the recording to the app DB (callLogs) AND notifies the owner.
-  app.post("/api/twilio/voice/voicemail", express.urlencoded({ extended: false }), async (req, res) => {
-    try {
-      const { CallSid, From, To, RecordingUrl, TranscriptionText, RecordingDuration } = req.body;
-      const callerNumber = From || "Unknown";
-      const durationSecs = RecordingDuration ? parseInt(RecordingDuration, 10) : 0;
-      const duration = durationSecs ? `${durationSecs}s` : "unknown duration";
-      const transcription = TranscriptionText ? `\n\nTranscription: ${TranscriptionText}` : "";
-
-      // ── Persist voicemail to app DB ──────────────────────────────────────────
-      // Call handleCallStatusUpdate so the voicemail is saved in callLogs and
-      // linked to the customer profile (creates stub customer if unknown).
-      if (CallSid) {
-        await handleCallStatusUpdate({
-          CallSid,
-          From: From || "",
-          To: To || "",
-          CallStatus: "completed",
-          CallDuration: RecordingDuration || "0",
-          Direction: "inbound",
-          RecordingUrl: RecordingUrl || undefined,
-        }).catch(dbErr => console.warn("[Voicemail DB persist] Failed:", dbErr));
-        // Download recording from Twilio and store in app S3 for inline playback
-        if (RecordingUrl) {
-          downloadAndStoreRecording(RecordingUrl, CallSid)
-            .then(async appUrl => {
-              if (!appUrl) return;
-              // Find the call log we just created and update it with the app URL
-              const { getCallLogByTwilioSid, updateCallLog } = await import("../db");
-              const log = await getCallLogByTwilioSid(CallSid).catch(() => null);
-              if (log?.id) await updateCallLog(log.id, { recordingAppUrl: appUrl }).catch(console.warn);
-            })
-            .catch(console.warn);
-        }
-      }
-
-      // ── Notify owner ─────────────────────────────────────────────────────────
-      await notifyOwner({
-        title: `📞 New Voicemail from ${callerNumber}`,
-        content: `Voicemail received from ${callerNumber} (${duration}).${transcription}${RecordingUrl ? `\n\nRecording: ${RecordingUrl}` : ""}`,
-      });
-      if (process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_ACCOUNT_SID && process.env.OWNER_PHONE && process.env.TWILIO_PHONE_NUMBER) {
-        try {
-          const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-          await twilioClient.messages.create({
-            to: process.env.OWNER_PHONE,
-            from: process.env.TWILIO_PHONE_NUMBER,
-            body: `📞 New voicemail from ${callerNumber} (${duration}).${TranscriptionText ? ` "${TranscriptionText.slice(0, 100)}"` : ""}`,
-          });
-        } catch (smsErr) {
-          console.warn("[Voicemail SMS notify] Failed:", smsErr);
-        }
-      }
-      res.sendStatus(204);
-    } catch (err) {
-      console.error("[Twilio Voice voicemail]", err);
-      res.sendStatus(204);
-    }
-  });
-
   // ── Twilio Voice TwiML — outbound call instructions ──────────────────────────
   // POST /api/twilio/voice/connect — returns TwiML to connect a browser call
   app.post("/api/twilio/voice/connect", express.urlencoded({ extended: false }), (req, res) => {
@@ -413,10 +293,112 @@ async function startServer() {
     res.send(twiml.toString());
   });
 
+  // ── Twilio Voice — inbound call routing ──────────────────────────────────────
+  // POST /api/twilio/voice/inbound — Twilio calls this for every inbound call
+  app.post("/api/twilio/voice/inbound", express.urlencoded({ extended: false }), async (req, res) => {
+    try {
+      const forwardedProto = (req.headers["x-forwarded-proto"] as string) || req.protocol;
+      const forwardedHost = (req.headers["x-forwarded-host"] as string) || req.get("host") || "localhost";
+      const proto = forwardedProto.split(",")[0].trim();
+      const host = forwardedHost.split(",")[0].trim();
+      const callbackBaseUrl = `${proto}://${host}`;
+      const twimlXml = await buildInboundCallTwiml(callbackBaseUrl);
+      res.set("Content-Type", "text/xml");
+      res.send(twimlXml);
+    } catch (err) {
+      console.error("[Twilio Voice inbound]", err);
+      const VoiceResponse = twilio.twiml.VoiceResponse;
+      const twiml2 = new VoiceResponse();
+      twiml2.say("We're sorry, we're unable to take your call right now. Please try again later.");
+      res.set("Content-Type", "text/xml");
+      res.send(twiml2.toString());
+    }
+  });
+
+  // ── Twilio Voice — stage-2 fallback (cell didn't answer) ─────────────────
+  app.post("/api/twilio/voice/fallback", express.urlencoded({ extended: false }), async (req, res) => {
+    try {
+      const forwardedProto = (req.headers["x-forwarded-proto"] as string) || req.protocol;
+      const forwardedHost = (req.headers["x-forwarded-host"] as string) || req.get("host") || "localhost";
+      const proto = forwardedProto.split(",")[0].trim();
+      const host = forwardedHost.split(",")[0].trim();
+      const callbackBaseUrl = `${proto}://${host}`;
+      const dialCallStatus = req.body.DialCallStatus as string | undefined;
+      console.log(`[Voice Fallback] DialCallStatus=${dialCallStatus}`);
+      if (dialCallStatus === "completed") {
+        res.set("Content-Type", "text/xml");
+        res.send("<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response></Response>");
+        return;
+      }
+      const settings = await getPhoneSettings();
+      const twimlXml = buildFallbackTwiml(settings, callbackBaseUrl, false);
+      res.set("Content-Type", "text/xml");
+      res.send(twimlXml);
+    } catch (err) {
+      console.error("[Voice Fallback] Error:", err);
+      const VoiceResponse = twilio.twiml.VoiceResponse;
+      const twiml2 = new VoiceResponse();
+      twiml2.say({ voice: "Polly.Joanna" }, "We're sorry, we're unable to take your call right now. Please try again later.");
+      res.set("Content-Type", "text/xml");
+      res.send(twiml2.toString());
+    }
+  });
+
+  // ── Twilio Voice — voicemail recording callback ────────────────────────────
+  app.post("/api/twilio/voice/voicemail", express.urlencoded({ extended: false }), async (req, res) => {
+    try {
+      const { CallSid, From, To, RecordingUrl, TranscriptionText, RecordingDuration } = req.body;
+      const callerNumber = From || "Unknown";
+      const durationSecs = RecordingDuration ? parseInt(RecordingDuration, 10) : 0;
+      const duration = durationSecs ? `${durationSecs}s` : "unknown duration";
+      const transcription = TranscriptionText ? `\n\nTranscription: ${TranscriptionText}` : "";
+
+      if (CallSid) {
+        await handleCallStatusUpdate({
+          CallSid,
+          From: From || "",
+          To: To || "",
+          CallStatus: "completed",
+          CallDuration: RecordingDuration || "0",
+          Direction: "inbound",
+          RecordingUrl: RecordingUrl || undefined,
+        }).catch(dbErr => console.warn("[Voicemail DB persist] Failed:", dbErr));
+        if (RecordingUrl) {
+          downloadAndStoreRecording(RecordingUrl, CallSid)
+            .then(async appUrl => {
+              if (!appUrl) return;
+              const { getCallLogByTwilioSid, updateCallLog } = await import("../db");
+              const log = await getCallLogByTwilioSid(CallSid).catch(() => null);
+              if (log?.id) await updateCallLog(log.id, { recordingUrl: appUrl }).catch(console.warn);
+            })
+            .catch(console.warn);
+        }
+      }
+
+      await notifyOwner({
+        title: `New Voicemail from ${callerNumber}`,
+        content: `Voicemail received from ${callerNumber} (${duration}).${transcription}${RecordingUrl ? `\n\nRecording: ${RecordingUrl}` : ""}`,
+      });
+      if (process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_ACCOUNT_SID && process.env.OWNER_PHONE && process.env.TWILIO_PHONE_NUMBER) {
+        try {
+          const twilioClient = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+          await twilioClient.messages.create({
+            to: process.env.OWNER_PHONE,
+            from: process.env.TWILIO_PHONE_NUMBER,
+            body: `New voicemail from ${callerNumber} (${duration}).${TranscriptionText ? ` "${TranscriptionText.slice(0, 100)}"` : ""}`,
+          });
+        } catch (smsErr) {
+          console.warn("[Voicemail SMS notify] Failed:", smsErr);
+        }
+      }
+      res.sendStatus(204);
+    } catch (err) {
+      console.error("[Twilio Voice voicemail]", err);
+      res.sendStatus(204);
+    }
+  });
+
   // ── Twilio Recording Proxy ─────────────────────────────────────────────────
-  // GET /api/twilio/recording/:sid — fetches recording from Twilio with Basic Auth
-  // and streams it to the authenticated browser. Avoids exposing Twilio credentials
-  // to the frontend and prevents the browser from prompting for Twilio login.
   app.get("/api/twilio/recording/:sid", async (req, res) => {
     try {
       const accountSid = process.env.TWILIO_ACCOUNT_SID;
@@ -426,7 +408,6 @@ async function startServer() {
         return;
       }
       const recordingSid = req.params.sid;
-      // Validate recording SID format (RE + 32 hex chars)
       if (!/^RE[0-9a-f]{32}$/i.test(recordingSid)) {
         res.status(400).json({ error: "Invalid recording SID" });
         return;
@@ -456,13 +437,19 @@ async function startServer() {
     }
   });
 
-  // ── SSE endpoint for real-time inbox updates ─────────────────────────────────────────────
-  app.get("/api/inbox/events", (req, res) => {
+  // ── SSE endpoint for real-time inbox updates (auth-gated) ────────────────────
+  app.get("/api/inbox/events", async (req, res) => {
+    try {
+      await sdk.authenticateRequest(req);
+    } catch {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
     const clientId = randomUUID();
     addSSEClient(clientId, res);
   });
 
-  // ── Gmail diagnostic endpoint (temporary) ─────────────────────────────────────────────────
+  // ── Gmail diagnostic endpoint ─────────────────────────────────────────────────────────────
   app.get("/api/gmail/debug", (req, res) => {
     res.json({
       configured: !!(process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET),
@@ -502,33 +489,14 @@ async function startServer() {
     }
   });
 
-  // ── Google Maps JS SDK proxy ─────────────────────────────────────────────────────────────────
-  // Proxies the Google Maps SDK server-side to avoid exposing the API key in the browser.
-  app.get("/api/maps/sdk", async (req, res) => {
+  // ── Google Maps JS SDK redirect ──────────────────────────────────────────────
+  // Redirects to the Google Maps JS API directly with our API key.
+  app.get("/api/maps/sdk", (req, res) => {
     const apiKey = process.env.GOOGLE_MAPS_API_KEY || "";
-    if (!apiKey) {
-      res.status(503).send("Google Maps API key not configured");
-      return;
-    }
     const libraries = (req.query.libraries as string) || "places,geocoding,geometry";
     const v = (req.query.v as string) || "weekly";
     const sdkUrl = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&v=${v}&libraries=${libraries}`;
-    try {
-      const upstream = await fetch(sdkUrl);
-      if (!upstream.ok) {
-        const body = await upstream.text();
-        console.error(`[Maps SDK proxy] Upstream error ${upstream.status}: ${body}`);
-        res.status(502).send("Maps SDK unavailable");
-        return;
-      }
-      res.set("Content-Type", "application/javascript; charset=utf-8");
-      res.set("Cache-Control", "public, max-age=3600");
-      const text = await upstream.text();
-      res.send(text);
-    } catch (err) {
-      console.error("[Maps SDK proxy] Error:", err);
-      res.status(502).send("Maps SDK proxy error");
-    }
+    res.redirect(302, sdkUrl);
   });
 
   // ── Portal estimate PDF download ─────────────────────────────────────────────
@@ -652,21 +620,10 @@ async function startServer() {
         </div>
       </body></html>`;
 
-      // Convert HTML to PDF using Puppeteer
-      const puppeteer = await import("puppeteer");
-      const browser = await puppeteer.default.launch({
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-        args: ["--no-sandbox", "--disable-setuid-sandbox"],
-        headless: true,
-      });
-      const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: "networkidle0" });
-      const pdfBuffer = await page.pdf({ format: "A4", printBackground: true });
-      await browser.close();
-
-      res.set("Content-Type", "application/pdf");
-      res.set("Content-Disposition", `attachment; filename="Estimate-${est.estimateNumber}.pdf"`);
-      res.send(pdfBuffer);
+      // Return HTML directly as a printable page (client uses browser print-to-PDF)
+      res.set("Content-Type", "text/html; charset=utf-8");
+      res.set("Content-Disposition", `inline; filename="Estimate-${est.estimateNumber}.html"`);
+      res.send(html);
     } catch (err) {
       console.error("[Portal PDF]", err);
       res.status(500).json({ error: "PDF generation failed" });
@@ -676,273 +633,6 @@ async function startServer() {
   // Configure body parser with larger size limit for file uploads
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
-
-  // Auth endpoints: POST /api/auth/login, POST /api/auth/logout, GET /api/auth/me
-  registerAuthRoutes(app);
-
-  // Seed default admin user if no staff users exist yet
-  await seedDefaultAdminIfNeeded();
-
-  // ── 360° REST enrollment endpoint (called by external funnel at 360.handypioneers.com) ──
-  app.post("/api/360/enroll", async (req, res) => {
-    const { tier, cadence, firstName, lastName, email, phone, address, city, state, zip } = req.body ?? {};
-    if (!tier || !cadence || !email) {
-      res.status(400).json({ error: "tier, cadence, and email are required" });
-      return;
-    }
-    const validTiers = ["bronze", "silver", "gold"];
-    const validCadences = ["monthly", "quarterly", "annual"];
-    if (!validTiers.includes(tier) || !validCadences.includes(cadence)) {
-      res.status(400).json({ error: "Invalid tier or cadence" });
-      return;
-    }
-    try {
-      const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2025-03-31.basil" });
-
-      // Resolve Stripe price ID from env vars
-      const priceEnvKey = `STRIPE_PRICE_360_${tier.toUpperCase()}_${cadence.toUpperCase()}`;
-      const priceId = process.env[priceEnvKey];
-      if (!priceId) {
-        res.status(503).json({ error: `Stripe price not configured (${priceEnvKey})` });
-        return;
-      }
-
-      const customerName = [firstName, lastName].filter(Boolean).join(" ") || email;
-      const successUrl = `${process.env.PORTAL_BASE_URL ?? "https://client.handypioneers.com"}/360-welcome?session_id={CHECKOUT_SESSION_ID}`;
-      const cancelUrl = `${process.env.FUNNEL_ORIGIN ?? "https://360.handypioneers.com"}/?canceled=1`;
-
-      const session = await stripe.checkout.sessions.create({
-        mode: "subscription",
-        line_items: [{ price: priceId, quantity: 1 }],
-        customer_email: email,
-        success_url: successUrl,
-        cancel_url: cancelUrl,
-        metadata: {
-          tier,
-          cadence,
-          customerName,
-          customerEmail: email,
-          customerPhone: phone ?? "",
-          serviceAddress: address ?? "",
-          serviceCity: city ?? "",
-          serviceState: state ?? "",
-          serviceZip: zip ?? "",
-        },
-      });
-
-      res.json({ checkoutUrl: session.url });
-    } catch (err) {
-      console.error("[360 Enroll]", err);
-      res.status(500).json({ error: "Failed to create checkout session" });
-    }
-  });
-
-  // ── 360° funnel checkout endpoint (called by hp-360-funnel frontend) ──────────────
-  // Accepts the funnel's payload shape and maps it to Stripe checkout.
-  app.post("/api/360/checkout", async (req, res) => {
-    const { tier: funnelTier, cadence, customer, type: checkoutType } = req.body ?? {};
-    if (!funnelTier || !cadence || !customer?.email) {
-      res.status(400).json({ error: "tier, cadence, and customer.email are required" });
-      return;
-    }
-
-    // Map funnel tier names → HP internal names
-    const TIER_MAP: Record<string, string> = {
-      exterior_shield: "bronze",
-      full_coverage:   "silver",
-      max:             "gold",
-    };
-    const tier = TIER_MAP[funnelTier];
-    if (!tier) {
-      res.status(400).json({ error: `Unknown tier: ${funnelTier}` });
-      return;
-    }
-
-    const validCadences = ["monthly", "quarterly", "annual"];
-    if (!validCadences.includes(cadence)) {
-      res.status(400).json({ error: `Invalid cadence: ${cadence}` });
-      return;
-    }
-
-    try {
-      const stripeKey = process.env.STRIPE_SECRET_KEY;
-      if (!stripeKey) { res.status(503).json({ error: "Stripe not configured" }); return; }
-      const stripe = new Stripe(stripeKey, { apiVersion: "2025-03-31.basil" });
-
-      const priceEnvKey = `STRIPE_PRICE_360_${tier.toUpperCase()}_${cadence.toUpperCase()}`;
-      const priceId = process.env[priceEnvKey];
-      if (!priceId) {
-        res.status(503).json({ error: `Stripe price not configured (${priceEnvKey})` });
-        return;
-      }
-
-      // Split "First Last" into parts; everything after first space is lastName
-      const nameParts = (customer.name ?? "").trim().split(/\s+/);
-      const firstName = nameParts[0] ?? "";
-      const lastName  = nameParts.slice(1).join(" ");
-      const customerName = customer.name || customer.email;
-
-      const successUrl = `${process.env.PORTAL_BASE_URL ?? "https://client.handypioneers.com"}/360-welcome?session_id={CHECKOUT_SESSION_ID}`;
-      const cancelUrl  = `${process.env.FUNNEL_ORIGIN ?? "https://360.handypioneers.com"}/?canceled=1`;
-
-      const session = await stripe.checkout.sessions.create({
-        mode: "subscription",
-        line_items: [{ price: priceId, quantity: 1 }],
-        customer_email: customer.email,
-        success_url: successUrl,
-        cancel_url: cancelUrl,
-        metadata: {
-          tier,
-          cadence,
-          checkoutType: checkoutType ?? "homeowner",
-          customerName,
-          customerEmail: customer.email,
-          customerPhone: customer.phone ?? "",
-          serviceAddress: customer.address ?? "",
-          serviceCity: customer.city ?? "",
-          serviceState: customer.state ?? "",
-          serviceZip: customer.zip ?? "",
-          firstName,
-          lastName,
-        },
-      });
-
-      res.json({ url: session.url });
-    } catch (err) {
-      console.error("[360 Checkout]", err);
-      res.status(500).json({ error: "Failed to create checkout session" });
-    }
-  });
-
-  // ── 360° portfolio checkout — multi-property subscription ──────────────────
-  // Uses inline price_data so no per-tier Stripe products need to be pre-created.
-  app.post("/api/360/portfolio-checkout", async (req, res) => {
-    const { cadence, properties, customer } = req.body ?? {};
-    if (!cadence || !Array.isArray(properties) || properties.length === 0 || !customer?.email) {
-      res.status(400).json({ error: "cadence, properties[], and customer.email are required" });
-      return;
-    }
-    const validCadences = ["monthly", "quarterly", "annual"];
-    if (!validCadences.includes(cadence)) {
-      res.status(400).json({ error: `Invalid cadence: ${cadence}` });
-      return;
-    }
-
-    // Cents per property per billing period, matching threeSixtyTiers.ts pricing
-    const TIER_PRICES: Record<string, Record<string, number>> = {
-      exterior_shield: { monthly: 5900,  quarterly: 16900, annual: 58800  },
-      full_coverage:   { monthly: 9900,  quarterly: 27900, annual: 94800  },
-      max:             { monthly: 14900, quarterly: 41900, annual: 142800 },
-    };
-
-    let totalCents = 0;
-    for (const prop of properties) {
-      const tierPrices = TIER_PRICES[prop.tier as string];
-      if (!tierPrices) {
-        res.status(400).json({ error: `Unknown tier: ${prop.tier}` });
-        return;
-      }
-      totalCents += tierPrices[cadence];
-    }
-
-    const INTERVAL: Record<string, { interval: "month" | "year"; interval_count: number }> = {
-      monthly:   { interval: "month", interval_count: 1 },
-      quarterly: { interval: "month", interval_count: 3 },
-      annual:    { interval: "year",  interval_count: 1 },
-    };
-
-    try {
-      const stripeKey = process.env.STRIPE_SECRET_KEY;
-      if (!stripeKey) { res.status(503).json({ error: "Stripe not configured" }); return; }
-      const stripe = new Stripe(stripeKey, { apiVersion: "2025-03-31.basil" });
-
-      const nameParts = (customer.name ?? "").trim().split(/\s+/);
-      const firstName = nameParts[0] ?? "";
-      const lastName  = nameParts.slice(1).join(" ");
-      const customerName = customer.name || customer.email;
-      const interiorAddonCount = (properties as any[]).filter(p => p.interiorAddon).length;
-      const { interval, interval_count } = INTERVAL[cadence];
-      const propCount = properties.length;
-
-      const successUrl = `${process.env.PORTAL_BASE_URL ?? "https://client.handypioneers.com"}/360-welcome?session_id={CHECKOUT_SESSION_ID}`;
-      const cancelUrl  = `${process.env.FUNNEL_ORIGIN ?? "https://360.handypioneers.com"}/?canceled=1`;
-
-      const session = await stripe.checkout.sessions.create({
-        mode: "subscription",
-        line_items: [{
-          price_data: {
-            currency: "usd",
-            recurring: { interval, interval_count },
-            product_data: {
-              name: `360° Portfolio Plan — ${propCount} ${propCount === 1 ? "property" : "properties"}`,
-              description: (properties as any[]).map((p: any) => `${p.address ?? "Property"} (${p.tier})`).join("; "),
-            },
-            unit_amount: totalCents,
-          },
-          quantity: 1,
-        }],
-        customer_email: customer.email,
-        success_url: successUrl,
-        cancel_url: cancelUrl,
-        metadata: {
-          planType: "portfolio",
-          cadence,
-          customerName,
-          customerEmail: customer.email,
-          customerPhone: customer.phone ?? "",
-          interiorAddonDoors: String(interiorAddonCount),
-          firstName,
-          lastName,
-          // JSON-encode properties for the webhook handler (max 500 chars per value)
-          properties: JSON.stringify(
-            (properties as any[]).map((p: any) => ({
-              address: p.address ?? "",
-              city: p.city ?? "",
-              state: p.state ?? "",
-              zip: p.zip ?? "",
-              tier: p.tier ?? "",
-              units: p.units ?? 1,
-              interiorAddon: !!p.interiorAddon,
-              interiorDoors: p.interiorDoors ?? 0,
-            }))
-          ).slice(0, 490),
-        },
-      });
-
-      res.json({ url: session.url });
-    } catch (err) {
-      console.error("[360 Portfolio Checkout]", err);
-      res.status(500).json({ error: "Failed to create portfolio checkout session" });
-    }
-  });
-
-  // ── 360° analytics event stub ───────────────────────────────────────────────
-  app.post("/api/360/event", express.json(), (req, res) => {
-    // Analytics only — log and acknowledge; no business logic
-    console.log("[360 Event]", JSON.stringify(req.body));
-    res.json({ ok: true });
-  });
-
-  // ── 360° session lookup — used by /360-welcome page to show tier/name ──────────
-  app.get("/api/360/session", async (req, res) => {
-    const sessionId = req.query.session_id as string | undefined;
-    if (!sessionId) { res.status(400).json({ error: "session_id required" }); return; }
-    const stripeKey = process.env.STRIPE_SECRET_KEY;
-    if (!stripeKey) { res.status(503).json({ error: "Stripe not configured" }); return; }
-    try {
-      const stripe = new Stripe(stripeKey, { apiVersion: "2025-03-31.basil" });
-      const session = await stripe.checkout.sessions.retrieve(sessionId);
-      res.json({
-        tier: session.metadata?.tier ?? null,
-        cadence: session.metadata?.cadence ?? null,
-        customerName: session.metadata?.customerName ?? session.customer_details?.name ?? null,
-      });
-    } catch (err) {
-      console.error("[360 Session]", err);
-      res.status(500).json({ error: "Could not retrieve session" });
-    }
-  });
-
   // ── Gmail poll schedule (every 2 minutes) ────────────────────────────────────────────────────
   setInterval(async () => {
     const email = process.env.GMAIL_CONNECTED_EMAIL;
@@ -954,80 +644,49 @@ async function startServer() {
   }, 2 * 60 * 1000); // every 2 minutes
 
   // ── Overdue invoice reminder (daily at 9 AM server time) ─────────────────────
+  const runOverdueReminders = async () => {
+    try {
+      const overdueRows = await getOverdueInvoicesForReminder();
+      const origin = process.env.PORTAL_ORIGIN ?? "https://client.handypioneers.com";
+      let sent = 0;
+      for (const { invoice, customer } of overdueRows) {
+        if (!customer.email) continue;
+        try {
+          await sendOverdueReminderEmail({
+            to: customer.email,
+            customerName: customer.name ?? "Valued Customer",
+            invoiceNumber: invoice.invoiceNumber,
+            amountDueCents: Math.max(0, invoice.amountDue - invoice.amountPaid),
+            dueDate: invoice.dueDate,
+            portalInvoiceId: invoice.id,
+            origin,
+          });
+          await markPortalInvoiceReminderSent(invoice.id);
+          sent++;
+        } catch (err) {
+          console.error(`[Overdue] Failed to send reminder for invoice ${invoice.id}:`, err);
+        }
+      }
+      if (sent > 0) {
+        console.log(`[Overdue] Sent ${sent} overdue reminder email(s)`);
+        await notifyOwner({
+          title: `Overdue reminders sent`,
+          content: `${sent} overdue invoice reminder email(s) sent to customers.`,
+        }).catch(() => {});
+      }
+    } catch (err) {
+      console.error("[Overdue] Reminder job error:", err);
+    }
+  };
   const scheduleOverdueReminders = () => {
     const now = new Date();
     const next9am = new Date(now);
     next9am.setHours(9, 0, 0, 0);
     if (next9am <= now) next9am.setDate(next9am.getDate() + 1);
     const msUntil9am = next9am.getTime() - now.getTime();
-    setTimeout(async () => {
-      try {
-        const overdueRows = await getOverdueInvoicesForReminder();
-        const origin = process.env.PORTAL_ORIGIN ?? "https://client.handypioneers.com";
-        let sent = 0;
-        for (const { invoice, customer } of overdueRows) {
-          if (!customer.email) continue;
-          try {
-            await sendOverdueReminderEmail({
-              to: customer.email,
-              customerName: customer.name ?? "Valued Customer",
-              invoiceNumber: invoice.invoiceNumber,
-              amountDueCents: Math.max(0, invoice.amountDue - invoice.amountPaid),
-              dueDate: invoice.dueDate,
-              portalInvoiceId: invoice.id,
-              origin,
-            });
-            await markPortalInvoiceReminderSent(invoice.id);
-            sent++;
-          } catch (err) {
-            console.error(`[Overdue] Failed to send reminder for invoice ${invoice.id}:`, err);
-          }
-        }
-        if (sent > 0) {
-          console.log(`[Overdue] Sent ${sent} overdue reminder email(s)`);
-          await notifyOwner({
-            title: `Overdue reminders sent`,
-            content: `${sent} overdue invoice reminder email(s) sent to customers.`,
-          }).catch(() => {});
-        }
-      } catch (err) {
-        console.error("[Overdue] Reminder job error:", err);
-      }
-      // Schedule next run in 24 hours
-      setInterval(async () => {
-        try {
-          const overdueRows = await getOverdueInvoicesForReminder();
-          const origin = process.env.PORTAL_ORIGIN ?? "https://client.handypioneers.com";
-          let sent = 0;
-          for (const { invoice, customer } of overdueRows) {
-            if (!customer.email) continue;
-            try {
-              await sendOverdueReminderEmail({
-                to: customer.email,
-                customerName: customer.name ?? "Valued Customer",
-                invoiceNumber: invoice.invoiceNumber,
-                amountDueCents: Math.max(0, invoice.amountDue - invoice.amountPaid),
-                dueDate: invoice.dueDate,
-                portalInvoiceId: invoice.id,
-                origin,
-              });
-              await markPortalInvoiceReminderSent(invoice.id);
-              sent++;
-            } catch (err) {
-              console.error(`[Overdue] Failed to send reminder for invoice ${invoice.id}:`, err);
-            }
-          }
-          if (sent > 0) {
-            console.log(`[Overdue] Sent ${sent} overdue reminder email(s)`);
-            await notifyOwner({
-              title: `Overdue reminders sent`,
-              content: `${sent} overdue invoice reminder email(s) sent to customers.`,
-            }).catch(() => {});
-          }
-        } catch (err) {
-          console.error("[Overdue] Reminder job error:", err);
-        }
-      }, 24 * 60 * 60 * 1000); // repeat every 24 hours
+    setTimeout(() => {
+      runOverdueReminders().catch(console.error);
+      setInterval(() => runOverdueReminders().catch(console.error), 24 * 60 * 60 * 1000);
     }, msUntil9am);
     console.log(`[Overdue] Next reminder run scheduled in ${Math.round(msUntil9am / 60000)} minutes`);
   };
@@ -1107,7 +766,7 @@ async function startServer() {
         if (!emailMatch) continue;
         const to        = emailMatch[1].trim();
         const firstName = nameMatch ? nameMatch[1].trim().split(" ")[0] : "there";
-        const tier      = tierMatch  ? tierMatch[1] : "Essential";
+        const tier      = tierMatch  ? tierMatch[1] : "Bronze";
         const tierLabel = tier.charAt(0).toUpperCase() + tier.slice(1);
         const createdAt = new Date((lead as any).createdAt ?? 0).getTime();
         const age  = now - createdAt;
@@ -1165,15 +824,82 @@ async function startServer() {
   setInterval(runDeferredCreditRelease, 6 * 60 * 60 * 1000); // every 6 hours
   console.log("[360 Deferred Credit] Deferred labor bank credit scheduler started (runs every 6 hours)");
 
-  // ── 360 Funnel Gateway ────────────────────────────────────────────────────────────────
-  // POST /api/360/event  — fire-and-forget event capture (abandonment, page views, etc.)
-  // POST /api/360/checkout — create Stripe session, return URL
-  // Frontend knows nothing about Stripe price IDs or business logic.
+  // ── Auto-archive Lost leads after 90 days (runs daily at 3 AM) ─────────────
+  const LOST_ARCHIVE_DAYS = 90;
+  const runLostLeadAutoArchive = async () => {
+    try {
+      const leads = await listOpportunities("lead", undefined, false, 2000);
+      const cutoff = Date.now() - LOST_ARCHIVE_DAYS * 24 * 60 * 60 * 1000;
+      let archived = 0;
+      for (const lead of leads) {
+        if (lead.stage !== "Lost") continue;
+        const updatedTs = new Date((lead as any).updatedAt ?? (lead as any).createdAt ?? 0).getTime();
+        if (updatedTs && updatedTs < cutoff) {
+          await updateOpportunity(lead.id, {
+            archived: true,
+            archivedAt: new Date().toISOString(),
+            archivedReason: "auto_lost_90d",
+          }).catch(() => null);
+          archived++;
+        }
+      }
+      if (archived > 0) {
+        console.log(`[AutoArchive] Auto-archived ${archived} Lost lead(s) (>= ${LOST_ARCHIVE_DAYS}d stale)`);
+      }
+    } catch (err) {
+      console.error("[AutoArchive] Lost-lead job error:", err);
+    }
+  };
+  const scheduleLostLeadAutoArchive = () => {
+    const now = new Date();
+    const next3am = new Date(now);
+    next3am.setHours(3, 0, 0, 0);
+    if (next3am <= now) next3am.setDate(next3am.getDate() + 1);
+    const msUntil3am = next3am.getTime() - now.getTime();
+    setTimeout(() => {
+      runLostLeadAutoArchive().catch(console.error);
+      setInterval(() => runLostLeadAutoArchive().catch(console.error), 24 * 60 * 60 * 1000);
+    }, msUntil3am);
+    console.log(`[AutoArchive] Next Lost-lead sweep scheduled in ${Math.round(msUntil3am / 60000)} minutes`);
+  };
+  scheduleLostLeadAutoArchive();
 
-  app.post("/api/360/event", async (req, res) => {
+  // ── 360° Funnel REST endpoints (called from https://360.handypioneers.com) ──
+
+  // POST /api/360/checkout — creates a Stripe Checkout session for 360 enrollment
+  app.post("/api/360/checkout", express.json(), async (req, res) => {
+    try {
+      const caller = appRouter.createCaller({ req, res, user: null } as any);
+      const result = await caller.threeSixty.checkout.createSession(req.body);
+      res.json(result);
+    } catch (err: any) {
+      console.error("[360 REST] /api/360/checkout error:", err?.message ?? err);
+      res.status(err?.code === "BAD_REQUEST" ? 400 : 500).json({
+        error: err?.message ?? "Failed to create checkout session",
+      });
+    }
+  });
+
+  // POST /api/360/portfolio-checkout — creates a Stripe Checkout session for portfolio enrollment
+  app.post("/api/360/portfolio-checkout", express.json(), async (req, res) => {
+    try {
+      const caller = appRouter.createCaller({ req, res, user: null } as any);
+      const result = await caller.threeSixty.portfolioCheckout.createSession(req.body);
+      res.json(result);
+    } catch (err: any) {
+      console.error("[360 REST] /api/360/portfolio-checkout error:", err?.message ?? err);
+      res.status(err?.code === "BAD_REQUEST" ? 400 : 500).json({
+        error: err?.message ?? "Failed to create checkout session",
+      });
+    }
+  });
+
+  // POST /api/360/event — analytics event tracking + cart abandonment capture from funnel
+  app.post("/api/360/event", express.json(), async (req, res) => {
     const { event, type, data } = req.body ?? {};
     if (!event || !type || !data) {
-      return res.status(400).json({ ok: false, error: "Missing event, type, or data" });
+      res.status(400).json({ ok: false, error: "Missing event, type, or data" });
+      return;
     }
     // Async handlers — fire and forget so frontend gets instant 200
     setImmediate(async () => {
@@ -1229,109 +955,7 @@ async function startServer() {
         }
       }
     });
-    return res.json({ ok: true });
-  });
-
-  app.post("/api/360/checkout", async (req, res) => {
-    const { type, tier, cadence, properties, customer, origin } = req.body ?? {};
-    if (!type || !cadence || !customer || !origin) {
-      return res.status(400).json({ error: "Missing required fields: type, cadence, customer, origin" });
-    }
-    try {
-      const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2025-03-31.basil" });
-      let lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [];
-
-      if (type === "homeowner") {
-        if (!tier) return res.status(400).json({ error: "tier required for homeowner" });
-        // Normalize funnel tier names to internal Stripe product names
-        const HOMEOWNER_TIER_MAP: Record<string, string> = {
-          exterior_shield: "BRONZE", bronze: "BRONZE", essential: "BRONZE",
-          full_coverage: "SILVER", silver: "SILVER", full: "SILVER",
-          max: "GOLD", gold: "GOLD", maximum: "GOLD",
-        };
-        const normalizedTier = HOMEOWNER_TIER_MAP[(tier as string).toLowerCase()] ?? (tier as string).toUpperCase();
-        const key = `STRIPE_PRICE_${normalizedTier}_${(cadence as string).toUpperCase()}`;
-        const priceId = process.env[key];
-        if (!priceId) return res.status(400).json({ error: `Stripe price not configured: ${key} (raw tier: ${tier})` });
-        lineItems = [{ price: priceId, quantity: 1 }];
-      } else if (type === "portfolio") {
-        if (!Array.isArray(properties) || properties.length === 0) {
-          return res.status(400).json({ error: "properties array required for portfolio" });
-        }
-        const tierKeyMap: Record<string, string> = {
-          essential: "EXTERIOR", exterior_shield: "EXTERIOR",
-          full: "FULL", full_coverage: "FULL",
-          maximum: "MAX", max: "MAX",
-        };
-        lineItems = (properties as any[]).map((p) => {
-          const tierKey = tierKeyMap[(p.tier as string)?.toLowerCase()] ?? "EXTERIOR";
-          const priceKey = `STRIPE_PRICE_PORTFOLIO_${tierKey}_${(cadence as string).toUpperCase()}`;
-          const priceId = process.env[priceKey];
-          if (!priceId) throw new Error(`Stripe price not configured: ${priceKey}`);
-          return { price: priceId, quantity: 1 };
-        });
-        // Interior add-on: per-cadence pricing based on property type (door count)
-        // sfh=1 door, duplex=2, triplex=3, fourplex=4
-        const DOOR_COUNT: Record<string, number> = { sfh: 1, duplex: 2, triplex: 3, fourplex: 4 };
-        for (const prop of (properties as any[])) {
-          if (!prop.interiorAddon) continue;
-          const doors = DOOR_COUNT[(prop.type as string)?.toLowerCase()] ?? 1;
-          const addonKey = `STRIPE_PRICE_INTERIOR_ADDON_${(cadence as string).toUpperCase()}_PER_DOOR`;
-          const addonId = process.env[addonKey] ?? process.env.STRIPE_PRICE_INTERIOR_ADDON_ANNUAL_PER_DOOR;
-          if (addonId) lineItems.push({ price: addonId, quantity: doors });
-        }
-      } else {
-        return res.status(400).json({ error: `Unknown type: ${type}` });
-      }
-
-      // Detect portal origin (client.handypioneers.com, handyfield manus.space, or localhost)
-      const isPortalOrigin = typeof origin === "string" && (
-        origin.includes("client.handypioneers") ||
-        origin.includes("handyfield")
-      );
-      const successPath = isPortalOrigin
-        ? `/portal/360-confirmation?session_id={CHECKOUT_SESSION_ID}`
-        : `/360/confirmation?session_id={CHECKOUT_SESSION_ID}`;
-      const cancelPath = isPortalOrigin
-        ? `/portal/360-membership?cancelled=1`
-        : type === "portfolio"
-          ? `/360/multifamily?cancelled=1`
-          : `/360/checkout?tier=${tier}&cadence=${cadence}&cancelled=1`;
-
-      const session = await stripe.checkout.sessions.create({
-        mode: "subscription",
-        line_items: lineItems,
-        customer_email: (customer as any).email ?? undefined,
-        allow_promotion_codes: true,
-        success_url: `${origin}${successPath}`,
-        cancel_url: `${origin}${cancelPath}`,
-        metadata: {
-          planType: type as string,
-          tier: (tier as string) ?? "",
-          cadence: cadence as string,
-          customerName: (customer as any).name ?? "",
-          customerEmail: (customer as any).email ?? "",
-          customerPhone: (customer as any).phone ?? "",
-          serviceAddress: (customer as any).address ?? "",
-          serviceCity: (customer as any).city ?? "",
-          serviceState: (customer as any).state ?? "",
-          serviceZip: (customer as any).zip ?? "",
-          properties: type === "portfolio" ? JSON.stringify(properties) : "",
-        },
-        subscription_data: {
-          metadata: {
-            planType: type as string,
-            tier: (tier as string) ?? "",
-            cadence: cadence as string,
-            customerEmail: (customer as any).email ?? "",
-          },
-        },
-      });
-      return res.json({ url: session.url! });
-    } catch (err: any) {
-      console.error("[360 Gateway] checkout error:", err);
-      return res.status(500).json({ error: err.message });
-    }
+    res.json({ ok: true });
   });
 
   // tRPC API

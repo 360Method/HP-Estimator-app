@@ -2,7 +2,7 @@ import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
 import { automationRules, automationRuleLogs } from "../../drizzle/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, sql } from "drizzle-orm";
 
 const conditionSchema = z.object({
   field: z.string(),
@@ -17,18 +17,46 @@ const actionPayloadSchema = z.union([
   z.object({ noteTemplate: z.string() }),
 ]);
 
+const categoryEnum = z.enum([
+  "lead_intake",
+  "estimate_followup",
+  "job_lifecycle",
+  "invoice_payment",
+  "review_retention",
+]);
+
 export const automationRulesRouter = router({
-  list: protectedProcedure.query(async () => {
+  list: protectedProcedure
+    .input(z.object({ category: categoryEnum.optional() }).optional())
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database not available");
+      const base = db.select().from(automationRules);
+      const rules = input?.category
+        ? await base
+            .where(eq(automationRules.category, input.category))
+            .orderBy(automationRules.sortOrder, automationRules.createdAt)
+        : await base.orderBy(automationRules.sortOrder, automationRules.createdAt);
+      return rules.map((r) => ({
+        ...r,
+        conditions: r.conditions ? JSON.parse(r.conditions) : [],
+        actionPayload: r.actionPayload ? JSON.parse(r.actionPayload) : {},
+      }));
+    }),
+
+  /** Returns [{category, count}] rows so the UI can render category pills. */
+  countsByCategory: protectedProcedure.query(async () => {
     const db = await getDb();
-    const rules = await db
-      .select()
+    if (!db) throw new Error("Database not available");
+    const rows = await db
+      .select({
+        category: automationRules.category,
+        count: sql<number>`count(*)::int`,
+        enabledCount: sql<number>`sum(case when ${automationRules.enabled} then 1 else 0 end)::int`,
+      })
       .from(automationRules)
-      .orderBy(automationRules.sortOrder, automationRules.createdAt);
-    return rules.map((r) => ({
-      ...r,
-      conditions: r.conditions ? JSON.parse(r.conditions) : [],
-      actionPayload: r.actionPayload ? JSON.parse(r.actionPayload) : {},
-    }));
+      .groupBy(automationRules.category);
+    return rows;
   }),
 
   create: protectedProcedure
@@ -41,10 +69,14 @@ export const automationRulesRouter = router({
         actionPayload: actionPayloadSchema,
         delayMinutes: z.number().int().min(0).default(0),
         enabled: z.boolean().default(true),
+        category: categoryEnum.optional().default("lead_intake"),
+        emailTemplateId: z.number().int().nullable().optional(),
+        stage: z.string().max(30).optional(),
       })
     )
     .mutation(async ({ input }) => {
       const db = await getDb();
+      if (!db) throw new Error("Database not available");
       const result = await db.insert(automationRules).values({
         name: input.name,
         trigger: input.trigger,
@@ -54,8 +86,12 @@ export const automationRulesRouter = router({
         delayMinutes: input.delayMinutes,
         enabled: input.enabled,
         sortOrder: 0,
+        category: input.category,
+        emailTemplateId: input.emailTemplateId ?? null,
+        stage: input.stage ?? "lead",
       });
-      return { id: (result as any).insertId };
+      const insertId = Number((result as unknown as { insertId: number | string }).insertId);
+      return { id: insertId };
     }),
 
   update: protectedProcedure
@@ -69,12 +105,16 @@ export const automationRulesRouter = router({
         actionPayload: actionPayloadSchema.optional(),
         delayMinutes: z.number().int().min(0).optional(),
         enabled: z.boolean().optional(),
+        category: categoryEnum.optional(),
+        emailTemplateId: z.number().int().nullable().optional(),
+        stage: z.string().max(30).optional(),
       })
     )
     .mutation(async ({ input }) => {
       const db = await getDb();
+      if (!db) throw new Error("Database not available");
       const { id, conditions, actionPayload, ...rest } = input;
-      const patch: Record<string, unknown> = { ...rest };
+      const patch: Record<string, unknown> = { ...rest, updatedAt: new Date() };
       if (conditions !== undefined) patch.conditions = JSON.stringify(conditions);
       if (actionPayload !== undefined) patch.actionPayload = JSON.stringify(actionPayload);
       await db.update(automationRules).set(patch).where(eq(automationRules.id, id));
@@ -85,6 +125,7 @@ export const automationRulesRouter = router({
     .input(z.object({ id: z.number().int(), enabled: z.boolean() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
+      if (!db) throw new Error("Database not available");
       await db.update(automationRules).set({ enabled: input.enabled }).where(eq(automationRules.id, input.id));
       return { ok: true };
     }),
@@ -93,6 +134,7 @@ export const automationRulesRouter = router({
     .input(z.object({ id: z.number().int() }))
     .mutation(async ({ input }) => {
       const db = await getDb();
+      if (!db) throw new Error("Database not available");
       await db.delete(automationRules).where(eq(automationRules.id, input.id));
       return { ok: true };
     }),
@@ -101,6 +143,7 @@ export const automationRulesRouter = router({
     .input(z.object({ ruleId: z.number().int(), limit: z.number().int().max(50).default(20) }))
     .query(async ({ input }) => {
       const db = await getDb();
+      if (!db) throw new Error("Database not available");
       return db
         .select()
         .from(automationRuleLogs)

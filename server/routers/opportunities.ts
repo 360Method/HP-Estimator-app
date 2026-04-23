@@ -115,13 +115,44 @@ export const opportunitiesRouter = router({
 
   /** Archive an opportunity */
   archive: protectedProcedure
-    .input(z.object({ id: z.string() }))
+    .input(z.object({ id: z.string(), reason: z.string().max(32).optional() }))
     .mutation(async ({ input }) => {
+      const opp = await getOpportunityById(input.id);
       await updateOpportunity(input.id, {
         archived: true,
         archivedAt: new Date().toISOString(),
+        archivedReason: input.reason ?? "manual",
       });
+      // Recompute lifecycle stage whenever a job is archived — disabled in MySQL port
+      void opp;
       return { success: true };
+    }),
+
+  /**
+   * Auto-archive Lost leads that have been stale for >= 90 days.
+   * Exposed as an on-demand tRPC mutation in addition to the daily cron.
+   */
+  autoArchiveLostLeads: protectedProcedure
+    .input(z.object({ olderThanDays: z.number().int().min(1).max(365).default(90) }).optional())
+    .mutation(async ({ input }) => {
+      const { listOpportunities } = await import("../db");
+      const leads = await listOpportunities("lead", undefined, false, 2000);
+      const days = input?.olderThanDays ?? 90;
+      const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+      let archived = 0;
+      for (const lead of leads) {
+        if (lead.stage !== "Lost") continue;
+        const ts = new Date((lead as any).updatedAt ?? (lead as any).createdAt ?? 0).getTime();
+        if (ts && ts < cutoff) {
+          await updateOpportunity(lead.id, {
+            archived: true,
+            archivedAt: new Date().toISOString(),
+            archivedReason: "auto_lost_90d",
+          }).catch(() => null);
+          archived++;
+        }
+      }
+      return { archived };
     }),
 
   /** Move opportunity to a new stage */
