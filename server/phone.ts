@@ -173,7 +173,33 @@ export async function buildInboundCallTwiml(callbackBaseUrl: string): Promise<st
   const VoiceResponse = twilio.twiml.VoiceResponse;
   const twiml = new VoiceResponse();
 
-  const settings = await getPhoneSettings();
+  const envForwardingNumber =
+    (process.env.FORWARD_TO_NUMBER && process.env.FORWARD_TO_NUMBER.trim()) ||
+    (process.env.OWNER_PHONE && process.env.OWNER_PHONE.trim()) ||
+    "";
+
+  // If DB read fails (e.g. phoneSettings table missing), fall back to a
+  // minimal env-only forward so inbound calls still reach the owner.
+  let settings: Awaited<ReturnType<typeof getPhoneSettings>>;
+  try {
+    settings = await getPhoneSettings();
+  } catch (err) {
+    console.error("[phone] getPhoneSettings failed; using env-only fallback:", err);
+    if (envForwardingNumber) {
+      const dial = twiml.dial({
+        callerId: ENV.twilioPhoneNumber || "",
+        timeout: 20,
+      });
+      dial.number(envForwardingNumber);
+    } else {
+      twiml.say(
+        { voice: "Polly.Joanna" },
+        "You've reached Handy Pioneers. We're unable to take your call right now. Please try again later.",
+      );
+    }
+    return twiml.toString();
+  }
+
   const {
     forwardingMode,
     greeting,
@@ -185,10 +211,7 @@ export async function buildInboundCallTwiml(callbackBaseUrl: string): Promise<st
   } = settings;
   // Env override: FORWARD_TO_NUMBER / OWNER_PHONE take precedence over a stale
   // DB row so ops can change the forwarding target without a DB write.
-  const forwardingNumber =
-    (process.env.FORWARD_TO_NUMBER && process.env.FORWARD_TO_NUMBER.trim()) ||
-    (process.env.OWNER_PHONE && process.env.OWNER_PHONE.trim()) ||
-    settings.forwardingNumber;
+  const forwardingNumber = envForwardingNumber || settings.forwardingNumber;
 
   // Determine if we're within business hours
   const withinHours = afterHoursEnabled
