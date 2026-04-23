@@ -832,6 +832,10 @@ async function startServer() {
   const { startAutomationEngine } = await import("../automations.js");
   startAutomationEngine();
 
+  // ── Priority Translation worker (Claude draft + 48h review reminder) ───────
+  const { startPriorityTranslationWorker } = await import("../workers/priorityTranslationWorker.js");
+  startPriorityTranslationWorker();
+
   // ── 360° Funnel REST endpoints (called from https://360.handypioneers.com) ──
 
   // POST /api/360/checkout — creates a Stripe Checkout session for 360 enrollment
