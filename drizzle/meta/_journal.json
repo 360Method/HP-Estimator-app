@@ -407,6 +407,13 @@
       "when": 1776445347317,
       "tag": "0057_opportunities_auto_archive",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "5",
+      "when": 1776445347318,
+      "tag": "0058_priority_translations",
+      "breakpoints": true
     }
   ]
 }
