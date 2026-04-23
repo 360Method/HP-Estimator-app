@@ -9,6 +9,8 @@ import { trpc } from "@/lib/trpc";
 import PortalLayout from "@/components/PortalLayout";
 import OnboardingModal from "@/components/OnboardingModal";
 import { Button } from "@/components/ui/button";
+import ProjectCompleteNudge from "@/components/portal/continuity/ProjectCompleteNudge";
+import HomeHealthScoreWidget from "@/components/portal/continuity/HomeHealthScoreWidget";
 import { toast } from "sonner";
 import {
   Loader2,
@@ -248,6 +250,9 @@ export default function PortalHome() {
     refetchOnWindowFocus: false,
   });
   const { data: teamInfo } = trpc.portal.getTeamInfo.useQuery();
+  const { data: recentCompletion } = trpc.portal.getRecentProjectCompletion.useQuery(undefined, {
+    refetchOnWindowFocus: false,
+  });
 
   if (!autoLoginDone || autoLogin.isPending) {
     return (
@@ -320,6 +325,19 @@ export default function PortalHome() {
             </p>
           )}
         </div>
+
+        {/* ── Continuity: Recent project wrap-up (Path A → B nudge) ── */}
+        {recentCompletion && (
+          <ProjectCompleteNudge
+            customerFirstName={customer?.name?.split(" ")[0] ?? "there"}
+            projectTitle={recentCompletion.projectTitle}
+            completionNotes={recentCompletion.completionNotes}
+            isMember={!!membershipData}
+          />
+        )}
+
+        {/* ── Continuity: Home Health Score (per-customer, THIS home only) ── */}
+        <HomeHealthScoreWidget customerFirstName={customer?.name?.split(" ")[0] ?? "there"} />
 
         {/* 360° Membership — teaser for non-members */}
         {!membershipData && (

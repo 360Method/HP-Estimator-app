@@ -96,8 +96,35 @@ async function ensurePhoneTables() {
   }
 }
 
+async function ensurePortalContinuityFlag() {
+  try {
+    const { getDb } = await import("../db");
+    const { sql } = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return;
+    // Defensive: the drizzle tracker diverges from prod DB (see memory note),
+    // so add the column if missing even when migration 0064 already recorded.
+    const [[row]]: any = await db.execute(sql`
+      SELECT COUNT(*) AS c FROM information_schema.columns
+      WHERE table_schema = DATABASE()
+        AND table_name = 'appSettings'
+        AND column_name = 'portalContinuityEnabled'
+    `);
+    if (row && Number(row.c) === 0) {
+      await db.execute(sql`
+        ALTER TABLE \`appSettings\`
+        ADD COLUMN \`portalContinuityEnabled\` boolean NOT NULL DEFAULT 1
+      `);
+      console.log("[boot] portalContinuityEnabled column added");
+    }
+  } catch (err) {
+    console.warn("[boot] ensurePortalContinuityFlag failed (non-fatal):", err);
+  }
+}
+
 async function startServer() {
   await ensurePhoneTables();
+  await ensurePortalContinuityFlag();
   const app = express();
   const server = createServer(app);
 

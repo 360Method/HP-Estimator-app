@@ -1294,6 +1294,11 @@ export const appSettings = mysqlTable("appSettings", {
   emailMagicLinkSubject: varchar("emailMagicLinkSubject", { length: 300 }).default("Your Handy Pioneers Customer Portal Login"),
   /** Body for the magic link login email (HTML allowed) */
   emailMagicLinkBody: text("emailMagicLinkBody"),
+  /**
+   * Global kill-switch for portal continuity surfaces (Path A → Path B nudges).
+   * When false, all five continuity modules render nothing. See migration 0064.
+   */
+  portalContinuityEnabled: boolean("portalContinuityEnabled").notNull().default(true),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 export type DbAppSettings = typeof appSettings.$inferSelect;

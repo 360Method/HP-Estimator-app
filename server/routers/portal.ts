@@ -1878,6 +1878,122 @@ export const portalRouter = router({
     };
   }),
 
+  /**
+   * Portal continuity: most recent completed project for the logged-in customer ONLY.
+   * Joins portalJobSignOffs (customerId = ctx.portalCustomer.id) with
+   * portalJobUpdates on hpOpportunityId. The crew's `message` field on updates
+   * is what the UI renders as "observations" — real text the crew captured,
+   * never a fabricated demo string.
+   *
+   * Returns null when:
+   *  - customer has no sign-offs
+   *  - the most recent sign-off is older than 60 days (stale nudge)
+   */
+  getRecentProjectCompletion: portalProcedure.query(async ({ ctx }) => {
+    const { getDb } = await import('../db');
+    const { portalJobSignOffs, portalJobUpdates, portalEstimates } = await import(
+      '../../drizzle/schema'
+    );
+    const { eq, desc, and } = await import('drizzle-orm');
+    const db = await getDb();
+    if (!db) return null;
+
+    const [signOff] = await db
+      .select()
+      .from(portalJobSignOffs)
+      .where(eq(portalJobSignOffs.customerId, ctx.portalCustomer.id))
+      .orderBy(desc(portalJobSignOffs.createdAt))
+      .limit(1);
+    if (!signOff) return null;
+
+    // 60-day freshness cap — beyond that the nudge stops feeling timely.
+    const signedAtMs = Date.parse(signOff.signedAt);
+    if (!Number.isFinite(signedAtMs)) return null;
+    const daysSince = (Date.now() - signedAtMs) / (1000 * 60 * 60 * 24);
+    if (daysSince > 60) return null;
+
+    const updates = await db
+      .select()
+      .from(portalJobUpdates)
+      .where(eq(portalJobUpdates.hpOpportunityId, signOff.hpOpportunityId))
+      .orderBy(desc(portalJobUpdates.createdAt))
+      .limit(6);
+
+    // Pull the project title from the linked portal estimate, scoped to customer.
+    const [estimate] = await db
+      .select()
+      .from(portalEstimates)
+      .where(and(
+        eq(portalEstimates.hpOpportunityId, signOff.hpOpportunityId),
+        eq(portalEstimates.customerId, ctx.portalCustomer.id),
+      ))
+      .limit(1);
+
+    // Concatenate crew update messages as newline-separated observations.
+    const completionNotes = updates.map((u) => u.message).filter(Boolean).join('\n');
+
+    return {
+      hpOpportunityId: signOff.hpOpportunityId,
+      projectTitle: estimate?.title ?? 'your recent project',
+      signedAt: signOff.signedAt,
+      completionNotes,
+    };
+  }),
+
+  /**
+   * Portal continuity: Home Health summary for the logged-in customer ONLY.
+   * Sources from portalReports rows where portalCustomerId = ctx.portalCustomer.id.
+   * Never aggregates across customers. Never returns demo data.
+   *
+   * Shape:
+   *  - score: latest healthScore for this customer, or null if no baseline yet
+   *  - openNowItems: count of priority="NOW" recommendations in the latest report
+   *  - latestReportId / latestSentAt: for deep-link to the report detail page
+   */
+  getHomeHealthSummary: portalProcedure.query(async ({ ctx }) => {
+    const { getDb } = await import('../db');
+    const { portalReports } = await import('../../drizzle/schema');
+    const { eq, desc } = await import('drizzle-orm');
+    const db = await getDb();
+    if (!db) return { score: null, openNowItems: 0, latestReportId: null, latestSentAt: null };
+
+    const rows = await db
+      .select()
+      .from(portalReports)
+      .where(eq(portalReports.portalCustomerId, ctx.portalCustomer.id))
+      .orderBy(desc(portalReports.sentAt))
+      .limit(1);
+
+    const latest = rows[0];
+    if (!latest) {
+      return { score: null, openNowItems: 0, latestReportId: null, latestSentAt: null };
+    }
+
+    let openNowItems = 0;
+    try {
+      const data = latest.reportJson ? JSON.parse(latest.reportJson) : null;
+      const recs = Array.isArray(data?.recommendations)
+        ? data.recommendations
+        : Array.isArray(data?.findings)
+          ? data.findings
+          : [];
+      openNowItems = recs.filter((r: any) => {
+        const p = (r?.priority ?? r?.urgency ?? r?.bucket)?.toString().toUpperCase();
+        const status = (r?.status ?? 'open').toString().toLowerCase();
+        return p === 'NOW' && status !== 'resolved' && status !== 'dismissed';
+      }).length;
+    } catch {
+      // Malformed JSON — surface zero rather than crash.
+    }
+
+    return {
+      score: latest.healthScore ?? null,
+      openNowItems,
+      latestReportId: latest.id,
+      latestSentAt: latest.sentAt,
+    };
+  }),
+
   /** Portal: returns HP team contact info for the "Your Team" card */
   getTeamInfo: portalPublicProcedure.query(async () => {
     const settings = await getOrCreateAppSettings().catch(() => null);
@@ -1885,6 +2001,8 @@ export const portalRouter = router({
       name: settings?.companyName ?? process.env.OWNER_NAME ?? 'Handy Pioneers Team',
       phone: settings?.supportPhone ?? process.env.OWNER_PHONE ?? '',
       email: settings?.supportEmail ?? 'help@handypioneers.com',
+      // Global kill-switch for portal continuity surfaces (Path A → Path B nudges).
+      portalContinuityEnabled: (settings as any)?.portalContinuityEnabled !== false,
     };
   }),
 

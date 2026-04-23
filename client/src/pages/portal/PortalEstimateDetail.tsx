@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Loader2, ArrowLeft, Pen, Type, Printer } from "lucide-react";
 import { toast } from "sonner";
 import SignaturePad from "signature_pad";
+import EstimateTierHint from "@/components/portal/continuity/EstimateTierHint";
 
 const HP_LOGO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg";
 const HP_ADDRESS = "808 SE Chkalov Dr, 3-433\nVancouver, WA 98683";
@@ -74,6 +75,9 @@ export default function PortalEstimateDetail() {
   const estimateId = Number(id);
 
   const { data, isLoading, refetch } = trpc.portal.getEstimate.useQuery({ id: estimateId });
+  const { data: membershipData } = trpc.portal.getMembership360.useQuery(undefined, {
+    refetchOnWindowFocus: false,
+  });
   const approveMutation = trpc.portal.approveEstimate.useMutation({
     onSuccess: (res) => {
       setApproveOpen(false);
@@ -244,6 +248,15 @@ export default function PortalEstimateDetail() {
             </div>
           </div>
         )}
+
+        {/* ── Continuity: 360° tier context for this specific estimate ── */}
+        <div className="mb-4">
+          <EstimateTierHint
+            totalCents={totalCents}
+            scopeText={[est.scopeOfWork, est.title].filter(Boolean).join(" ")}
+            isMember={!!membershipData}
+          />
+        </div>
 
         {/* ── Estimate document ── */}
         <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden" id="estimate-document">

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import ScheduleBaselineAddon from "@/components/portal/continuity/ScheduleBaselineAddon";
 
 function formatDate(ts: number | Date | null | undefined) {
   if (!ts) return "—";
@@ -20,6 +21,9 @@ function formatTime(ts: number | Date | null | undefined) {
 export default function PortalAppointments() {
   const [tab, setTab] = useState<"upcoming" | "past">("upcoming");
   const { data, isLoading } = trpc.portal.getAppointments.useQuery();
+  const { data: membershipData } = trpc.portal.getMembership360.useQuery(undefined, {
+    refetchOnWindowFocus: false,
+  });
 
   // Reschedule request state
   const [rescheduleAppt, setRescheduleAppt] = useState<null | { id: number; title: string; scheduledAt: Date }>(null);
@@ -70,6 +74,16 @@ export default function PortalAppointments() {
           </TabsList>
 
           <TabsContent value={tab} className="mt-0">
+            {/* ── Continuity: offer baseline add-on for the next upcoming visit ── */}
+            {tab === "upcoming" && !isLoading && upcoming[0] && (
+              <div className="mt-4 mb-2">
+                <ScheduleBaselineAddon
+                  appointmentTitle={upcoming[0].title ?? upcoming[0].type ?? "your upcoming visit"}
+                  scheduledAt={upcoming[0].scheduledAt as any}
+                  isMember={!!membershipData}
+                />
+              </div>
+            )}
             {isLoading ? (
               <div className="flex justify-center py-16">
                 <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
