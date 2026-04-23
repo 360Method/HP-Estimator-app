@@ -1,0 +1,1 @@
+ALTER TABLE `portalServiceRequests` ADD `photoUrls` text;
