@@ -97,4 +97,14 @@ export const appRouter = router({
         const list = await getAdminAllowlist();
         if (list.length === 1 && list[0].email === input.email.toLowerCase().trim()) {
           throw new TRPCError({
-  
+            code: "BAD_REQUEST",
+            message: "Cannot remove the last allowed email — the list would become empty (open mode).",
+          });
+        }
+        await removeAdminAllowlistEmail(input.email);
+        return { success: true };
+      }),
+  }),
+});
+
+export type AppRouter = typeof appRouter;
