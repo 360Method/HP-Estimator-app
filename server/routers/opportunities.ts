@@ -18,6 +18,15 @@ import {
 import { sendSms, isTwilioConfigured } from "../twilio";
 import { nanoid } from "nanoid";
 import { runAutomationsForTrigger } from "../automationEngine";
+import {
+  onLeadCreated,
+  onAppointmentBooked,
+  onSaleSigned,
+  onReassign,
+  recordPipelineEvent,
+  listPipelineEventsFor,
+  type TeamRole,
+} from "../leadRouting";
 
 const OpportunityInput = z.object({
   customerId: z.string(),
@@ -91,6 +100,15 @@ export const opportunitiesRouter = router({
         description: input.title || `New ${input.area}`,
         referenceNumber: id,
       }).catch(e => console.error(`[automation] ${triggerName} error:`, e));
+      // Lead routing — assign to Nurturer and notify.
+      if (input.area === 'lead') {
+        onLeadCreated({
+          opportunityId: id,
+          customerId: input.customerId,
+          title: input.title || 'New lead',
+          source: 'manual',
+        }).catch(e => console.error('[leadRouting] onLeadCreated error:', e));
+      }
       return result;
     }),
 
@@ -326,5 +344,91 @@ export const opportunitiesRouter = router({
       });
       await updateConversationLastMessage(conversation.id, input.body, "sms");
       return { success: true, messageId: msg.id, conversationId: conversation.id };
+    }),
+
+  /**
+   * Reassign an opportunity to a specific user + role.
+   * Fires pipeline_events audit row + notification to the incoming owner.
+   */
+  reassign: protectedProcedure
+    .input(z.object({
+      opportunityId: z.string(),
+      role: z.enum(["nurturer", "consultant", "project_manager"]),
+      userId: z.number(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const opp = await getOpportunityById(input.opportunityId);
+      if (!opp) throw new TRPCError({ code: "NOT_FOUND", message: "Opportunity not found" });
+      await onReassign({
+        opportunityId: input.opportunityId,
+        toRole: input.role as TeamRole,
+        toUserId: input.userId,
+        triggeredByUserId: ctx.user?.id ?? null,
+      });
+      return { success: true };
+    }),
+
+  /**
+   * Advance an opportunity to a new stage.
+   * If the stage transition crosses a role boundary (lead → appointment booked,
+   * estimate → job), the matching routing trigger fires automatically.
+   */
+  advanceStage: protectedProcedure
+    .input(z.object({
+      opportunityId: z.string(),
+      toStage: z.string(),
+      toArea: z.enum(["lead", "estimate", "job"]).optional(),
+      appointmentType: z.enum(["baseline", "consultation"]).optional(),
+      appointmentWhen: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const opp = await getOpportunityById(input.opportunityId);
+      if (!opp) throw new TRPCError({ code: "NOT_FOUND", message: "Opportunity not found" });
+
+      const fromStage = opp.stage;
+      const update: Record<string, unknown> = { stage: input.toStage };
+      if (input.toArea) update.area = input.toArea;
+      await updateOpportunity(input.opportunityId, update);
+
+      await recordPipelineEvent({
+        opportunityId: input.opportunityId,
+        eventType: "stage_changed",
+        fromStage,
+        toStage: input.toStage,
+        triggeredBy: ctx.user?.id ? String(ctx.user.id) : "system",
+      });
+
+      // Cross-role triggers
+      const stageLower = input.toStage.toLowerCase();
+      const isAppointmentBooked = stageLower.includes("appointment") || stageLower.includes("baseline") || stageLower.includes("consultation") || stageLower.includes("scheduled");
+      const isSaleSigned = input.toArea === "job" || stageLower.includes("signed") || stageLower.includes("won");
+
+      if (isAppointmentBooked) {
+        onAppointmentBooked({
+          opportunityId: input.opportunityId,
+          customerId: opp.customerId,
+          title: opp.title,
+          when: input.appointmentWhen ?? "soon",
+          appointmentType: input.appointmentType ?? "consultation",
+          triggeredByUserId: ctx.user?.id ?? null,
+        }).catch(e => console.error("[leadRouting] onAppointmentBooked error:", e));
+      } else if (isSaleSigned) {
+        onSaleSigned({
+          opportunityId: input.opportunityId,
+          customerId: opp.customerId,
+          title: opp.title,
+          value: opp.value,
+          triggeredByUserId: ctx.user?.id ?? null,
+        }).catch(e => console.error("[leadRouting] onSaleSigned error:", e));
+      }
+
+      return { success: true };
+    }),
+
+  /** Read-only pipeline history for an opportunity (timeline view). */
+  pipelineHistory: protectedProcedure
+    .input(z.object({ opportunityId: z.string(), limit: z.number().default(50) }))
+    .query(async ({ input }) => {
+      return listPipelineEventsFor(input.opportunityId, input.limit);
     }),
 });

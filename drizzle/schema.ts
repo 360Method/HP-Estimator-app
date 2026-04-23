@@ -612,6 +612,13 @@ export const opportunities = mysqlTable("opportunities", {
   propertyIdSource: varchar("propertyIdSource", { length: 32 }),
   /** FK to threeSixtyMemberships.id — set when job is created from a 360° work order */
   membershipId: int("membershipId"),
+  // ── Lead routing (migrations 0060-0062) ──
+  /** User assigned to own this opportunity at its current stage */
+  assignedUserId: int("assignedUserId"),
+  /** Role the assignment represents: nurturer | consultant | project_manager */
+  assignedRole: varchar("assignedRole", { length: 32 }),
+  /** ISO timestamp when the current assignment was made */
+  assignedAt: varchar("assignedAt", { length: 32 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -1472,3 +1479,53 @@ export const campaignSends = mysqlTable("campaignSends", {
 });
 export type DbCampaignSend = typeof campaignSends.$inferSelect;
 export type InsertDbCampaignSend = typeof campaignSends.$inferInsert;
+
+// ─── LEAD ROUTING: NOTIFICATIONS / PIPELINE EVENTS / USER ROLES ───────────────
+// Migrations 0061-0062. See server/leadRouting.ts for the event emitter.
+
+export const notifications = mysqlTable("notifications", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  role: varchar("role", { length: 32 }),
+  eventType: varchar("eventType", { length: 64 }).notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  body: text("body"),
+  linkUrl: varchar("linkUrl", { length: 512 }),
+  opportunityId: varchar("opportunityId", { length: 64 }),
+  customerId: varchar("customerId", { length: 64 }),
+  priority: varchar("priority", { length: 16 }).notNull().default("normal"),
+  emailSent: boolean("emailSent").default(false).notNull(),
+  smsSent: boolean("smsSent").default(false).notNull(),
+  readAt: varchar("readAt", { length: 32 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbNotification = typeof notifications.$inferSelect;
+export type InsertDbNotification = typeof notifications.$inferInsert;
+
+export const pipelineEvents = mysqlTable("pipelineEvents", {
+  id: int("id").autoincrement().primaryKey(),
+  opportunityId: varchar("opportunityId", { length: 64 }).notNull(),
+  eventType: varchar("eventType", { length: 64 }).notNull(),
+  fromStage: varchar("fromStage", { length: 64 }),
+  toStage: varchar("toStage", { length: 64 }),
+  fromRole: varchar("fromRole", { length: 32 }),
+  toRole: varchar("toRole", { length: 32 }),
+  fromUserId: int("fromUserId"),
+  toUserId: int("toUserId"),
+  triggeredBy: int("triggeredBy"),
+  payloadJson: text("payloadJson"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbPipelineEvent = typeof pipelineEvents.$inferSelect;
+export type InsertDbPipelineEvent = typeof pipelineEvents.$inferInsert;
+
+export const userRoles = mysqlTable("userRoles", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  role: varchar("role", { length: 32 }).notNull(),
+  isPrimary: boolean("isPrimary").default(false).notNull(),
+  mobileUrgent: boolean("mobileUrgent").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbUserRole = typeof userRoles.$inferSelect;
+export type InsertDbUserRole = typeof userRoles.$inferInsert;

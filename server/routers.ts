@@ -25,6 +25,8 @@ import { propertiesRouter } from "./routers/properties";
 import { phoneRouter } from "./routers/phone";
 import { appSettingsRouter } from "./routers/appSettings";
 import { notificationPreferencesRouter } from "./routers/notificationPreferences";
+import { notificationsRouter } from "./routers/notifications";
+import { pipelineEventsRouter } from "./routers/pipelineEvents";
 import { automationRulesRouter } from "./routers/automationRules";
 import { emailTemplatesRouter } from "./routers/emailTemplates";
 import { campaignsRouter } from "./routers/campaigns";
@@ -59,6 +61,8 @@ export const appRouter = router({
   phone: phoneRouter,
   appSettings: appSettingsRouter,
   notificationPreferences: notificationPreferencesRouter,
+  notifications: notificationsRouter,
+  pipelineEvents: pipelineEventsRouter,
   automationRules: automationRulesRouter,
   emailTemplates: emailTemplatesRouter,
   campaigns: campaignsRouter,

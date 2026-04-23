@@ -421,6 +421,34 @@
       "when": 1776445347319,
       "tag": "0059_repair_phone_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "5",
+      "when": 1777500000000,
+      "tag": "0060_lead_routing_opportunity_assignment",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "5",
+      "when": 1777500010000,
+      "tag": "0061_lead_routing_notifications_table",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "5",
+      "when": 1777500020000,
+      "tag": "0062_lead_routing_pipeline_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "5",
+      "when": 1777500030000,
+      "tag": "0063_lead_routing_seeds",
+      "breakpoints": true
     }
   ]
 }

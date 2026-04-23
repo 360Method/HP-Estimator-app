@@ -213,6 +213,24 @@ export async function handleCallStatusUpdate(params: {
       customerFirstName: customer?.displayName?.split(' ')[0],
       phone: callerPhone,
     }).catch(e => console.error('[automation] missed_call error:', e));
+
+    // Lead routing — notify the Nurturer about the missed inbound call so
+    // they can follow up before it goes cold. Creation of an opportunity is
+    // left to the Nurturer's discretion after they talk to the caller.
+    import('./leadRouting').then(({ createNotification, findDefaultUserForRole }) =>
+      findDefaultUserForRole('nurturer').then((userId) =>
+        createNotification({
+          userId,
+          role: 'nurturer',
+          eventType: 'missed_call',
+          title: `Missed call: ${customer?.displayName ?? callerPhone}`,
+          body: `Inbound call was missed. Call back today — leads go cold fast. Conversation thread is in the Inbox.`,
+          linkUrl: `/?section=inbox`,
+          customerId: customer?.id,
+          priority: 'high',
+        })
+      )
+    ).catch((e) => console.error('[leadRouting] missed_call notify failed:', e));
   }
   console.log(`[Twilio] Call ${CallSid} ${CallStatus} — ${durationSecs}s`);
 }

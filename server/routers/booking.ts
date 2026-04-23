@@ -19,6 +19,7 @@ import {
   getOnlineRequestById,
 } from "../db";
 import { notifyOwner } from "../_core/notification";
+import { onLeadCreated } from "../leadRouting";
 import { nanoid } from "nanoid";
 import { runAutomationsForTrigger } from "../automationEngine";
 
@@ -147,6 +148,15 @@ export const bookingRouter = router({
         description: input.serviceType,
         referenceNumber: leadId,
       }).catch(e => console.error('[automation] new_booking error:', e));
+
+      // Fire lead-routing notification to the Nurturer (non-blocking)
+      onLeadCreated({
+        opportunityId: leadId,
+        customerId: customer.id,
+        title: `New online request — ${displayName}`,
+        source: input.serviceType,
+        priority: input.timeline === 'emergency' ? 'high' : 'normal',
+      }).catch((e) => console.error('[leadRouting] onLeadCreated error:', e));
       return {
         success: true,
         leadId,
