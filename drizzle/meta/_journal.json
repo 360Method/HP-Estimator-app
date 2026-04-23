@@ -449,6 +449,13 @@
       "when": 1777500030000,
       "tag": "0063_lead_routing_seeds",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "5",
+      "when": 1777500050000,
+      "tag": "0065_sms_templates",
+      "breakpoints": true
     }
   ]
 }

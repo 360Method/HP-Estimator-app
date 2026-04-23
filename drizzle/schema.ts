@@ -1408,6 +1408,23 @@ export const emailTemplates = mysqlTable("emailTemplates", {
 export type DbEmailTemplate = typeof emailTemplates.$inferSelect;
 export type InsertDbEmailTemplate = typeof emailTemplates.$inferInsert;
 
+// ─── SMS TEMPLATES ────────────────────────────────────────────────────────────
+// Mirror of emailTemplates for SMS sends — looked up by (tenantId, key).
+// Single `body` field since SMS has no subject/html/preheader.
+export const smsTemplates = mysqlTable("smsTemplates", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: int("tenantId").notNull().default(1),
+  key: varchar("key", { length: 80 }).notNull(),
+  name: varchar("name", { length: 160 }).notNull().default(""),
+  body: text("body").notNull(),
+  /** JSON array of {tag, description} describing available merge vars */
+  mergeTagSchema: text("mergeTagSchema"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbSmsTemplate = typeof smsTemplates.$inferSelect;
+export type InsertDbSmsTemplate = typeof smsTemplates.$inferInsert;
+
 // ─── CAMPAIGNS ────────────────────────────────────────────────────────────────
 // Marketing blasts — one-shot sends to a static recipient list with per-send
 // open/click/bounce tracking.
