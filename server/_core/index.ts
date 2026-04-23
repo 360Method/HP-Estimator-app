@@ -828,6 +828,46 @@ async function startServer() {
   setInterval(runDeferredCreditRelease, 6 * 60 * 60 * 1000); // every 6 hours
   console.log("[360 Deferred Credit] Deferred labor bank credit scheduler started (runs every 6 hours)");
 
+  // ── Auto-archive Lost leads after 90 days (runs daily at 3 AM) ─────────────
+  const LOST_ARCHIVE_DAYS = 90;
+  const runLostLeadAutoArchive = async () => {
+    try {
+      const leads = await listOpportunities("lead", undefined, false, 2000);
+      const cutoff = Date.now() - LOST_ARCHIVE_DAYS * 24 * 60 * 60 * 1000;
+      let archived = 0;
+      for (const lead of leads) {
+        if (lead.stage !== "Lost") continue;
+        const updatedTs = new Date((lead as any).updatedAt ?? (lead as any).createdAt ?? 0).getTime();
+        if (updatedTs && updatedTs < cutoff) {
+          await updateOpportunity(lead.id, {
+            archived: true,
+            archivedAt: new Date().toISOString(),
+            archivedReason: "auto_lost_90d",
+          }).catch(() => null);
+          archived++;
+        }
+      }
+      if (archived > 0) {
+        console.log(`[AutoArchive] Auto-archived ${archived} Lost lead(s) (>= ${LOST_ARCHIVE_DAYS}d stale)`);
+      }
+    } catch (err) {
+      console.error("[AutoArchive] Lost-lead job error:", err);
+    }
+  };
+  const scheduleLostLeadAutoArchive = () => {
+    const now = new Date();
+    const next3am = new Date(now);
+    next3am.setHours(3, 0, 0, 0);
+    if (next3am <= now) next3am.setDate(next3am.getDate() + 1);
+    const msUntil3am = next3am.getTime() - now.getTime();
+    setTimeout(() => {
+      runLostLeadAutoArchive().catch(console.error);
+      setInterval(() => runLostLeadAutoArchive().catch(console.error), 24 * 60 * 60 * 1000);
+    }, msUntil3am);
+    console.log(`[AutoArchive] Next Lost-lead sweep scheduled in ${Math.round(msUntil3am / 60000)} minutes`);
+  };
+  scheduleLostLeadAutoArchive();
+
   // ── Retention Automation Engine (hourly) ────────────────────────────────────
   const { startAutomationEngine } = await import("../automations.js");
   startAutomationEngine();
