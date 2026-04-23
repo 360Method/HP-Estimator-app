@@ -1214,4 +1214,177 @@ export const timeLogs = pgTable("timeLogs", {
 });
 export type TimeLog = typeof timeLogs.$inferSelect;
 export type InsertTimeLog = typeof timeLogs.$inferInsert;
-export type InsertDbAutomationLog = typeof automationLogs
+export type InsertDbAutomationLog = typeof automationLogs.$inferInsert;
+export const forwardingModeEnum = pgEnum('forwarding_mode', ['forward_to_number', 'forward_to_ai', 'voicemail']);
+export const notificationChannelEnum = pgEnum('notification_channel', ['email', 'sms', 'in_app']);
+export const automationActionTypeEnum = pgEnum('automation_action_type', ['send_sms', 'send_email', 'notify_owner', 'create_note']);
+export const automationRuleLogStatusEnum = pgEnum('automation_rule_log_status', ['success', 'failed', 'skipped']);
+
+// ─── PHONE SETTINGS (singleton, id=1) ───────────────────────────────────────
+export const phoneSettings = pgTable("phoneSettings", {
+  id: integer("id").primaryKey().default(1),
+  /**
+   * How to route inbound calls:
+   *   forward_to_number — dial forwardingNumber
+   *   forward_to_ai     — dial aiServiceNumber
+   *   voicemail         — record a voicemail and notify owner
+   */
+  forwardingMode: forwardingModeEnum("forwardingMode").notNull().default("forward_to_number"),
+  /** E.164 number to forward calls to (personal cell) */
+  forwardingNumber: varchar("forwardingNumber", { length: 20 }).default(""),
+  /** E.164 number of the AI answering service */
+  aiServiceNumber: varchar("aiServiceNumber", { length: 20 }).default(""),
+  /** Optional TTS greeting played before connecting the call (forwarding modes only) */
+  greeting: varchar("greeting", { length: 500 }).default(""),
+  /** TTS prompt played to callers before they leave a voicemail (voicemail mode + after-hours) */
+  voicemailPrompt: varchar("voicemailPrompt", { length: 600 }).default(""),
+  /** Whether to record inbound calls */
+  callRecording: boolean("callRecording").notNull().default(false),
+  /** Voicemail transcription enabled */
+  transcribeVoicemail: boolean("transcribeVoicemail").notNull().default(true),
+  /** When true, calls outside business hours are routed to voicemail regardless of forwardingMode */
+  afterHoursEnabled: boolean("afterHoursEnabled").notNull().default(false),
+  /** Business hours start time in HH:MM 24h format (America/Los_Angeles) */
+  businessHoursStart: varchar("businessHoursStart", { length: 5 }).default("08:00"),
+  /** Business hours end time in HH:MM 24h format (America/Los_Angeles) */
+  businessHoursEnd: varchar("businessHoursEnd", { length: 5 }).default("17:00"),
+  /** Comma-separated days of week (0=Sun,1=Mon,...,6=Sat) e.g. "1,2,3,4,5" */
+  businessDays: varchar("businessDays", { length: 20 }).default("1,2,3,4,5"),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+export type DbPhoneSettings = typeof phoneSettings.$inferSelect;
+export type InsertDbPhoneSettings = typeof phoneSettings.$inferInsert;
+
+// ─── App Settings (singleton, id=1) ─────────────────────────────────────────
+// White-label foundation: every workspace-level config lives here.
+export const appSettings = pgTable("appSettings", {
+  id: integer("id").primaryKey().default(1),
+  /** Company display name */
+  companyName: varchar("companyName", { length: 120 }).default("Handy Pioneers"),
+  /** Public logo URL (CDN) */
+  logoUrl: varchar("logoUrl", { length: 500 }).default(""),
+  /** Brand primary color (hex, e.g. #1E3A5F) */
+  brandColor: varchar("brandColor", { length: 20 }).default("#1E3A5F"),
+  /** IANA timezone string (e.g. America/Los_Angeles) */
+  timezone: varchar("timezone", { length: 60 }).default("America/Los_Angeles"),
+  /** Prefix for estimate numbers (e.g. EST) */
+  estimatePrefix: varchar("estimatePrefix", { length: 10 }).default("EST"),
+  /** Prefix for invoice numbers (e.g. INV) */
+  invoicePrefix: varchar("invoicePrefix", { length: 10 }).default("INV"),
+  /** Prefix for job numbers (e.g. JOB) */
+  jobPrefix: varchar("jobPrefix", { length: 10 }).default("JOB"),
+  /** Customer-facing portal base URL */
+  portalUrl: varchar("portalUrl", { length: 300 }).default("https://client.handypioneers.com"),
+  /** Company website URL */
+  websiteUrl: varchar("websiteUrl", { length: 300 }).default("https://handypioneers.com"),
+  /** Support / contact email shown to customers */
+  supportEmail: varchar("supportEmail", { length: 320 }).default(""),
+  /** Support phone shown to customers */
+  supportPhone: varchar("supportPhone", { length: 30 }).default(""),
+  /** Physical address line 1 */
+  addressLine1: varchar("addressLine1", { length: 200 }).default(""),
+  /** City, State ZIP */
+  addressLine2: varchar("addressLine2", { length: 200 }).default(""),
+  /** Default tax rate (basis points, e.g. 875 = 8.75%) */
+  defaultTaxBps: integer("defaultTaxBps").default(875),
+  /** Default deposit percentage (0–100) */
+  defaultDepositPct: integer("defaultDepositPct").default(50),
+  /** Footer text shown on estimates and invoices */
+  documentFooter: text("documentFooter"),
+  /** Terms & conditions text shown on estimates */
+  termsText: text("termsText"),
+  /** Google Business review link (used in review-request automations) */
+  googleReviewLink: varchar("googleReviewLink", { length: 500 }).default(""),
+  /** Internal labor rate in cents per hour (e.g. 15000 = $150/hr) */
+  internalLaborRateCents: integer("internalLaborRateCents").default(15000),
+  /** Default markup percentage applied to material costs (0–200) */
+  defaultMarkupPct: integer("defaultMarkupPct").default(20),
+  /** SMS sender name shown to customers (max 11 chars for alphanumeric sender) */
+  smsFromName: varchar("smsFromName", { length: 30 }).default("HandyPioneers"),
+  // ── Transactional email templates (editable from Settings → Company) ──────
+  /** Subject for the estimate approval confirmation email */
+  emailEstimateApprovedSubject: varchar("emailEstimateApprovedSubject", { length: 300 }).default("Your estimate has been approved — Handy Pioneers"),
+  /** Body for the estimate approval confirmation email (HTML allowed) */
+  emailEstimateApprovedBody: text("emailEstimateApprovedBody"),
+  /** Subject for the job sign-off confirmation email */
+  emailJobSignOffSubject: varchar("emailJobSignOffSubject", { length: 300 }).default("Job complete — your final invoice is ready"),
+  /** Body for the job sign-off confirmation email (HTML allowed) */
+  emailJobSignOffBody: text("emailJobSignOffBody"),
+  /** Subject for the change order approval confirmation email */
+  emailChangeOrderApprovedSubject: varchar("emailChangeOrderApprovedSubject", { length: 300 }).default("Change order approved — Handy Pioneers"),
+  /** Body for the change order approval confirmation email (HTML allowed) */
+  emailChangeOrderApprovedBody: text("emailChangeOrderApprovedBody"),
+  /** Subject for the magic link login email */
+  emailMagicLinkSubject: varchar("emailMagicLinkSubject", { length: 300 }).default("Your Handy Pioneers Customer Portal Login"),
+  /** Body for the magic link login email (HTML allowed) */
+  emailMagicLinkBody: text("emailMagicLinkBody"),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+export type DbAppSettings = typeof appSettings.$inferSelect;
+
+// ─── Notification Preferences ────────────────────────────────────────────────
+// One row per event type + channel combination. Checked before any notification fires.
+export const notificationPreferences = pgTable("notificationPreferences", {
+  id: serial("id").primaryKey(),
+  /** Stable event key, e.g. 'new_lead', 'estimate_sent', 'invoice_paid' */
+  eventKey: varchar("eventKey", { length: 60 }).notNull(),
+  /** Channel: email | sms | in_app */
+  channel: notificationChannelEnum("channel").notNull(),
+  /** Whether this channel is enabled for this event */
+  enabled: boolean("enabled").notNull().default(true),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+export type DbNotificationPreference = typeof notificationPreferences.$inferSelect;
+
+// ─── Automation Rules ─────────────────────────────────────────────────────────
+// User-created if-this-then-that rules. Evaluated by the automation engine.
+export const automationRules = pgTable("automationRules", {
+  id: serial("id").primaryKey(),
+  /** Human-readable rule name */
+  name: varchar("name", { length: 120 }).notNull(),
+  /** Trigger event key, e.g. 'lead_created', 'estimate_sent', 'missed_call' */
+  trigger: varchar("trigger", { length: 60 }).notNull(),
+  /**
+   * Optional condition as JSON array of {field, operator, value} objects.
+   * Example: [{"field":"leadSource","operator":"eq","value":"Google Ads"}]
+   */
+  conditions: text("conditions"),
+  /** Action type: send_sms | send_email | notify_owner | create_note */
+  actionType: automationActionTypeEnum("actionType").notNull(),
+  /**
+   * Action payload as JSON. Shape depends on actionType:
+   *   send_sms:      { messageTemplate: string }
+   *   send_email:    { subject: string, bodyTemplate: string }
+   *   notify_owner:  { title: string, contentTemplate: string }
+   *   create_note:   { noteTemplate: string }
+   */
+  actionPayload: text("actionPayload").notNull(),
+  /** Minutes to wait before executing the action (0 = immediate) */
+  delayMinutes: integer("delayMinutes").notNull().default(0),
+  /** Whether this rule is active */
+  enabled: boolean("enabled").notNull().default(true),
+  /** Display order */
+  sortOrder: integer("sortOrder").notNull().default(0),
+  /** Lifecycle stage for grouping: lead | estimate | job | invoice | review */
+  stage: varchar("stage", { length: 30 }).notNull().default("lead"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().notNull(),
+});
+export type DbAutomationRule = typeof automationRules.$inferSelect;
+
+// ─── Automation Rule Logs ─────────────────────────────────────────────────────
+// Execution history for each rule run. Used for debugging and audit.
+export const automationRuleLogs = pgTable("automationRuleLogs", {
+  id: serial("id").primaryKey(),
+  ruleId: integer("ruleId").notNull(),
+  /** Trigger event key */
+  trigger: varchar("trigger", { length: 60 }).notNull(),
+  /** JSON snapshot of the trigger payload */
+  triggerPayload: text("triggerPayload"),
+  /** Execution result */
+  status: automationRuleLogStatusEnum("status").notNull(),
+  /** Error message if status = failed */
+  errorMessage: text("errorMessage"),
+  executedAt: timestamp("executedAt").defaultNow().notNull(),
+});
+export type DbAutomationRuleLog = typeof automationRuleLogs.$inferSelect;

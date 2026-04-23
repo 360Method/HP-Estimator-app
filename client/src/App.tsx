@@ -118,4 +118,18 @@ function App() {
       <ThemeProvider defaultTheme="light">
         <EstimatorProvider>
           <PortalProvider>
+            <TooltipProvider>
+              <Toaster />
+              <PwaInstallBanner />
+              <Router />
+            </TooltipProvider>
+          </PortalProvider>
+        </EstimatorProvider>
+      </ThemeProvider>
+    </ErrorBoundary>
+  );
+}
+
+export default App;
+
        
