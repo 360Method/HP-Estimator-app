@@ -21,6 +21,8 @@ import { runAgent } from "../lib/agentRuntime/runtime";
 import { approveTask, rejectTask } from "../lib/agentRuntime/approval";
 import { listToolKeys } from "../lib/agentRuntime/tools";
 import { validateHierarchy } from "../lib/agentRuntime/hierarchy";
+// Side-effect import: registers the 15 Phase-2 tool wrappers into the registry.
+import "../lib/agentRuntime/phase2Tools";
 
 const DEPARTMENTS = [
   "sales",

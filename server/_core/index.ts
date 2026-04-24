@@ -1272,6 +1272,8 @@ async function startServer() {
     const { auditRoster } = await import("../lib/agentRuntime/hierarchy");
     const { getDb } = await import("../db");
     const { aiAgents } = await import("../../drizzle/schema");
+    // Phase 2: register all 15 tool wrappers. Import for side-effects.
+    await import("../lib/agentRuntime/phase2Tools");
     startScheduler();
     startKpiCron();
     const db = await getDb();
