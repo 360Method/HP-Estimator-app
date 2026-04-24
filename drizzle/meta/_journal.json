@@ -449,6 +449,13 @@
       "when": 1777500030000,
       "tag": "0063_lead_routing_seeds",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "5",
+      "when": 1777500040000,
+      "tag": "0064_portal_continuity_flag",
+      "breakpoints": true
     }
   ]
 }

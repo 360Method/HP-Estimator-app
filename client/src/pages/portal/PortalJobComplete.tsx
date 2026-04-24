@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import ProjectCompleteNudge from "@/components/portal/continuity/ProjectCompleteNudge";
 import {
   Loader2,
   CheckCircle2,
@@ -175,6 +176,16 @@ export default function PortalJobComplete() {
       { enabled: !!hpOpportunityId, staleTime: 30_000 }
     );
 
+  // For the continuity nudge after sign-off: this customer's own completion
+  // record (never aggregated). Only fires if sign-off already exists.
+  const { data: recentCompletion } = trpc.portal.getRecentProjectCompletion.useQuery(
+    undefined,
+    { enabled: !!existingSignOff, refetchOnWindowFocus: false },
+  );
+  const { data: membershipData } = trpc.portal.getMembership360.useQuery(undefined, {
+    refetchOnWindowFocus: false,
+  });
+
   const submitMutation = trpc.portal.submitJobSignOff.useMutation();
 
   // Form state
@@ -274,25 +285,36 @@ export default function PortalJobComplete() {
 
         {/* Already signed */}
         {!isLoading && existingSignOff && (
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-6 text-center">
-            <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-3" />
-            <h2 className="text-lg font-semibold text-emerald-800 mb-1">
-              Already Signed Off
-            </h2>
-            <p className="text-sm text-emerald-700">
-              You signed off on{" "}
-              <strong>{fmtDate(existingSignOff.signedAt)}</strong> as{" "}
-              <strong>{existingSignOff.signerName}</strong>.
-            </p>
-            {existingSignOff.finalInvoiceId && (
-              <Button
-                className="mt-4 bg-[#1a2e1a] hover:bg-[#2d4a2d] text-white"
-                onClick={() =>
-                  navigate(`/portal/invoices/${existingSignOff.finalInvoiceId}`)
-                }
-              >
-                View Final Invoice
-              </Button>
+          <div className="space-y-5">
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-6 text-center">
+              <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto mb-3" />
+              <h2 className="text-lg font-semibold text-emerald-800 mb-1">
+                Already Signed Off
+              </h2>
+              <p className="text-sm text-emerald-700">
+                You signed off on{" "}
+                <strong>{fmtDate(existingSignOff.signedAt)}</strong> as{" "}
+                <strong>{existingSignOff.signerName}</strong>.
+              </p>
+              {existingSignOff.finalInvoiceId && (
+                <Button
+                  className="mt-4 bg-[#1a2e1a] hover:bg-[#2d4a2d] text-white"
+                  onClick={() =>
+                    navigate(`/portal/invoices/${existingSignOff.finalInvoiceId}`)
+                  }
+                >
+                  View Final Invoice
+                </Button>
+              )}
+            </div>
+            {/* ── Continuity nudge: only renders if crew captured notes for THIS project ── */}
+            {recentCompletion && recentCompletion.hpOpportunityId === hpOpportunityId && (
+              <ProjectCompleteNudge
+                customerFirstName={existingSignOff.signerName?.split(" ")[0] ?? "there"}
+                projectTitle={recentCompletion.projectTitle}
+                completionNotes={recentCompletion.completionNotes}
+                isMember={!!membershipData}
+              />
             )}
           </div>
         )}

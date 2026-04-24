@@ -5,6 +5,7 @@ import PortalLayout from "@/components/PortalLayout";
 import { Button } from "@/components/ui/button";
 import { Loader2, ArrowLeft, CreditCard, CheckCircle2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
+import InvoiceValueCompounds from "@/components/portal/continuity/InvoiceValueCompounds";
 
 const HP_LOGO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg";
 
@@ -28,6 +29,9 @@ export default function PortalInvoiceDetail() {
     { id: invoiceId },
     { enabled: !isNaN(invoiceId) }
   );
+  const { data: membershipData } = trpc.portal.getMembership360.useQuery(undefined, {
+    refetchOnWindowFocus: false,
+  });
 
   // On return from Stripe Checkout with ?paid=1, refetch to pick up webhook update
   useEffect(() => {
@@ -129,6 +133,13 @@ export default function PortalInvoiceDetail() {
                 <p className="text-green-600 text-xs mt-0.5">Paid on {fmtDate(inv.paidAt)}</p>
               )}
             </div>
+          </div>
+        )}
+
+        {/* ── Continuity: year-to-date investment compounding module ── */}
+        {isPaid && (
+          <div className="mb-6">
+            <InvoiceValueCompounds isMember={!!membershipData} />
           </div>
         )}
 

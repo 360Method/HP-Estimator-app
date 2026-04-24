@@ -114,6 +114,30 @@ async function ensurePhoneTables() {
   }
 }
 
+async function ensurePortalContinuityFlag() {
+  try {
+    const { getDb } = await import("../db");
+    const { sql } = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return;
+    const [[row]]: any = await db.execute(sql`
+      SELECT COUNT(*) AS c FROM information_schema.columns
+      WHERE table_schema = DATABASE()
+        AND table_name = 'appSettings'
+        AND column_name = 'portalContinuityEnabled'
+    `);
+    if (row && Number(row.c) === 0) {
+      await db.execute(sql`
+        ALTER TABLE \`appSettings\`
+        ADD COLUMN \`portalContinuityEnabled\` boolean NOT NULL DEFAULT 1
+      `);
+      console.log("[boot] portalContinuityEnabled column added");
+    }
+  } catch (err) {
+    console.warn("[boot] ensurePortalContinuityFlag failed (non-fatal):", err);
+  }
+}
+
 // Idempotent upgrade: replace `portalMagicLinks.token` with hashed `tokenHash`.
 // Runs on every boot. Drizzle-kit can drift from prod, so we don't rely on it.
 async function ensureMagicLinkTokenHash() {
@@ -146,6 +170,7 @@ async function ensureMagicLinkTokenHash() {
 
 async function startServer() {
   await ensurePhoneTables();
+  await ensurePortalContinuityFlag();
   await ensureMagicLinkTokenHash();
   const app = express();
   const server = createServer(app);
@@ -517,6 +542,27 @@ async function startServer() {
               if (log?.id) await updateCallLog(log.id, { recordingUrl: appUrl }).catch(console.warn);
             })
             .catch(console.warn);
+        }
+        // Voicemail always signals a fresh lead for the Nurturer — regardless of
+        // whether Twilio reports the call as "answered" (the voicemail recording
+        // is what was answered, not a live conversation).
+        try {
+          const { findOrCreateCustomerFromCall } = await import("../db");
+          const { createNotification, findDefaultUserForRole } = await import("../leadRouting");
+          const { customer } = await findOrCreateCustomerFromCall(From || callerNumber).catch(() => ({ customer: null }));
+          const userId = await findDefaultUserForRole('nurturer');
+          await createNotification({
+            userId,
+            role: 'nurturer',
+            eventType: 'voicemail',
+            title: `New voicemail from ${customer?.displayName ?? callerNumber}`,
+            body: `${duration} voicemail${TranscriptionText ? `: "${TranscriptionText.slice(0, 140)}"` : '.'} Call back today.`,
+            linkUrl: `/?section=inbox`,
+            customerId: customer?.id,
+            priority: 'high',
+          });
+        } catch (notifyErr) {
+          console.warn("[Voicemail nurturer notify] Failed:", notifyErr);
         }
       }
 
