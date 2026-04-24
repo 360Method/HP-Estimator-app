@@ -53,7 +53,7 @@ const isPortalDomain = PORTAL_HOSTNAMES.includes(window.location.hostname);
 
 /**
  * On portal domains, redirect root "/" to "/portal/login" so customers
- * never load the admin app and never trigger Manus OAuth.
+ * never load the admin app and never hit the staff login gate.
  */
 function PortalDomainRoot() {
   const [, navigate] = useLocation();

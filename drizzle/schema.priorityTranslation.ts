@@ -42,7 +42,9 @@ export type InsertDbPortalAccount = typeof portalAccounts.$inferInsert;
 export const portalMagicLinks = mysqlTable(
   "portalMagicLinks",
   {
-    token: varchar("token", { length: 128 }).primaryKey(),
+    // SHA-256 hex of the raw token the homeowner clicked with. We never
+    // store the raw token at rest.
+    tokenHash: varchar("tokenHash", { length: 64 }).primaryKey(),
     portalAccountId: varchar("portalAccountId", { length: 64 }).notNull(),
     expiresAt: timestamp("expiresAt").notNull(),
     consumedAt: timestamp("consumedAt"),

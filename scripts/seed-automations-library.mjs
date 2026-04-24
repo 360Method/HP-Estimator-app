@@ -1,5 +1,5 @@
 /**
- * Seed the 25-rule Manus automation library into automationRules.
+ * Seed the 25-rule automation library into automationRules.
  *
  * 5 categories (matches automationRules.category column):
  *   lead_intake        — new booking, missed call, inbound SMS acks
