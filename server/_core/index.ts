@@ -471,6 +471,27 @@ async function startServer() {
             })
             .catch(console.warn);
         }
+        // Voicemail always signals a fresh lead for the Nurturer — regardless of
+        // whether Twilio reports the call as "answered" (the voicemail recording
+        // is what was answered, not a live conversation).
+        try {
+          const { findOrCreateCustomerFromCall } = await import("../db");
+          const { createNotification, findDefaultUserForRole } = await import("../leadRouting");
+          const { customer } = await findOrCreateCustomerFromCall(From || callerNumber).catch(() => ({ customer: null }));
+          const userId = await findDefaultUserForRole('nurturer');
+          await createNotification({
+            userId,
+            role: 'nurturer',
+            eventType: 'voicemail',
+            title: `New voicemail from ${customer?.displayName ?? callerNumber}`,
+            body: `${duration} voicemail${TranscriptionText ? `: "${TranscriptionText.slice(0, 140)}"` : '.'} Call back today.`,
+            linkUrl: `/?section=inbox`,
+            customerId: customer?.id,
+            priority: 'high',
+          });
+        } catch (notifyErr) {
+          console.warn("[Voicemail nurturer notify] Failed:", notifyErr);
+        }
       }
 
       await notifyOwner({
