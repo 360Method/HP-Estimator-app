@@ -484,6 +484,13 @@
       "when": 1777500080000,
       "tag": "0068_ai_agents_phase_4_triggers_chat",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "5",
+      "when": 1777500090000,
+      "tag": "0069_vendors_crm",
+      "breakpoints": true
     }
   ]
 }

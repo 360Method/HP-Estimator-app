@@ -1786,3 +1786,116 @@ export const integratorChatMessages = mysqlTable("integrator_chat_messages", {
 });
 export type DbIntegratorChatMessage = typeof integratorChatMessages.$inferSelect;
 export type InsertDbIntegratorChatMessage = typeof integratorChatMessages.$inferInsert;
+
+// ─── VENDORS CRM ─────────────────────────────────────────────────────────────
+// Trade-keyed vendor network with onboarding, jobs, and activity log.
+
+export const vendors = mysqlTable("vendors", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  companyName: varchar("companyName", { length: 255 }),
+  contactName: varchar("contactName", { length: 255 }),
+  email: varchar("email", { length: 255 }),
+  phone: varchar("phone", { length: 32 }),
+  addressLine1: varchar("addressLine1", { length: 255 }),
+  city: varchar("city", { length: 120 }),
+  state: varchar("state", { length: 40 }),
+  zip: varchar("zip", { length: 20 }),
+  serviceArea: varchar("serviceArea", { length: 255 }),
+  licenseNumber: varchar("licenseNumber", { length: 120 }),
+  insuranceExpiry: date("insuranceExpiry"),
+  bondingExpiry: date("bondingExpiry"),
+  w9OnFile: boolean("w9OnFile").default(false).notNull(),
+  coiOnFile: boolean("coiOnFile").default(false).notNull(),
+  status: mysqlEnum("status", ["prospect", "onboarding", "active", "paused", "retired"])
+    .notNull()
+    .default("prospect"),
+  tier: mysqlEnum("tier", ["preferred", "approved", "trial", "probation"])
+    .notNull()
+    .default("trial"),
+  rating: decimal("rating", { precision: 3, scale: 2 }),
+  jobsCompleted: int("jobsCompleted").default(0).notNull(),
+  lastJobAt: timestamp("lastJobAt"),
+  notes: text("notes"),
+  tagsJson: text("tagsJson"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbVendor = typeof vendors.$inferSelect;
+export type InsertDbVendor = typeof vendors.$inferInsert;
+
+export const trades = mysqlTable("trades", {
+  id: int("id").autoincrement().primaryKey(),
+  slug: varchar("slug", { length: 80 }).notNull().unique(),
+  name: varchar("name", { length: 120 }).notNull(),
+  category: varchar("category", { length: 80 }),
+  description: text("description"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbTrade = typeof trades.$inferSelect;
+export type InsertDbTrade = typeof trades.$inferInsert;
+
+export const vendorTrades = mysqlTable("vendor_trades", {
+  vendorId: int("vendorId").notNull(),
+  tradeId: int("tradeId").notNull(),
+  proficiency: mysqlEnum("proficiency", ["primary", "secondary", "occasional"])
+    .notNull()
+    .default("primary"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbVendorTrade = typeof vendorTrades.$inferSelect;
+export type InsertDbVendorTrade = typeof vendorTrades.$inferInsert;
+
+export const vendorJobs = mysqlTable("vendor_jobs", {
+  id: int("id").autoincrement().primaryKey(),
+  vendorId: int("vendorId").notNull(),
+  opportunityId: varchar("opportunityId", { length: 64 }),
+  customerId: varchar("customerId", { length: 64 }),
+  status: mysqlEnum("status", ["proposed", "accepted", "in_progress", "completed", "cancelled"])
+    .notNull()
+    .default("proposed"),
+  agreedAmountCents: int("agreedAmountCents"),
+  paidAmountCents: int("paidAmountCents").default(0).notNull(),
+  scheduledFor: timestamp("scheduledFor"),
+  completedAt: timestamp("completedAt"),
+  qualityRating: int("qualityRating"),
+  qualityNotes: text("qualityNotes"),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbVendorJob = typeof vendorJobs.$inferSelect;
+export type InsertDbVendorJob = typeof vendorJobs.$inferInsert;
+
+export const vendorCommunications = mysqlTable("vendor_communications", {
+  id: int("id").autoincrement().primaryKey(),
+  vendorId: int("vendorId").notNull(),
+  channel: mysqlEnum("channel", ["call", "email", "sms", "meeting", "note", "quote", "order", "followup"]).notNull(),
+  direction: mysqlEnum("direction", ["inbound", "outbound", "internal"]).notNull().default("outbound"),
+  subject: varchar("subject", { length: 255 }),
+  body: text("body"),
+  opportunityId: varchar("opportunityId", { length: 64 }),
+  loggedByUserId: int("loggedByUserId"),
+  loggedByAgent: varchar("loggedByAgent", { length: 80 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbVendorCommunication = typeof vendorCommunications.$inferSelect;
+export type InsertDbVendorCommunication = typeof vendorCommunications.$inferInsert;
+
+export const vendorOnboardingSteps = mysqlTable("vendor_onboarding_steps", {
+  id: int("id").autoincrement().primaryKey(),
+  vendorId: int("vendorId").notNull(),
+  stepKey: varchar("stepKey", { length: 80 }).notNull(),
+  label: varchar("label", { length: 255 }).notNull(),
+  status: mysqlEnum("status", ["pending", "in_progress", "complete", "skipped", "blocked"])
+    .notNull()
+    .default("pending"),
+  dueAt: timestamp("dueAt"),
+  completedAt: timestamp("completedAt"),
+  notes: text("notes"),
+  assignedToUserId: int("assignedToUserId"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbVendorOnboardingStep = typeof vendorOnboardingSteps.$inferSelect;
+export type InsertDbVendorOnboardingStep = typeof vendorOnboardingSteps.$inferInsert;

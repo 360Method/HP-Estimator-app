@@ -239,12 +239,22 @@ async function ensureAgentPhase4Tables() {
   }
 }
 
+async function ensureVendorTablesBoot() {
+  try {
+    const { ensureVendorTables } = await import("../vendors");
+    await ensureVendorTables();
+  } catch (err) {
+    console.warn("[boot] ensureVendorTablesBoot failed (non-fatal):", err);
+  }
+}
+
 async function startServer() {
   await ensurePhoneTables();
   await ensurePortalContinuityFlag();
   await ensureMagicLinkTokenHash();
   await ensureSchedulingTablesBoot();
   await ensureAgentPhase4Tables();
+  await ensureVendorTablesBoot();
   const app = express();
   const server = createServer(app);
 

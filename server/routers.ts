@@ -36,6 +36,7 @@ import { integratorChatRouter } from "./routers/integratorChat";
 import { kpisRouter } from "./routers/kpis";
 import { forgeRouter } from "./routers/forge";
 import { schedulingRouter } from "./routers/scheduling";
+import { vendorsRouter } from "./routers/vendors";
 import {
   getAdminAllowlist,
   addAdminAllowlistEmail,
@@ -77,6 +78,7 @@ export const appRouter = router({
   kpis: kpisRouter,
   forge: forgeRouter,
   scheduling: schedulingRouter,
+  vendors: vendorsRouter,
 
   auth: router({
     /**

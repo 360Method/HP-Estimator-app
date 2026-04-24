@@ -47,6 +47,9 @@ import AiAgentTasks from "./pages/admin/AiAgentTasks";
 import DepartmentDetail from "./pages/admin/DepartmentDetail";
 import AdminSchedulingPage from "./pages/admin/AdminSchedulingPage";
 import IntegratorChat from "./pages/admin/IntegratorChat";
+import AdminVendorsList from "./pages/admin/AdminVendorsList";
+import AdminVendorDetail from "./pages/admin/AdminVendorDetail";
+import AdminVendorNew from "./pages/admin/AdminVendorNew";
 
 // Domains that should serve only the customer portal (no admin app)
 const PORTAL_HOSTNAMES = ["client.handypioneers.com"];
@@ -118,6 +121,9 @@ function Router() {
       <Route path="/admin/ai-agents" component={AiAgentsList} />
       <Route path="/admin/departments/:slug" component={DepartmentDetail} />
       <Route path="/admin/scheduling" component={AdminSchedulingPage} />
+      <Route path="/admin/vendors/new" component={AdminVendorNew} />
+      <Route path="/admin/vendors/:id" component={AdminVendorDetail} />
+      <Route path="/admin/vendors" component={AdminVendorsList} />
 
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />

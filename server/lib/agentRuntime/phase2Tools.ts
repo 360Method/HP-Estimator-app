@@ -25,7 +25,6 @@ import {
   invoicePayments,
   emailTemplates,
   notifications,
-  pipelineEvents,
   userRoles,
 } from "../../../drizzle/schema";
 import { and, desc, eq, gte, like, or } from "drizzle-orm";
@@ -319,33 +318,33 @@ registerTool({
   definition: {
     name: "logVendorContact",
     description:
-      "Log a vendor-network interaction (call, email, quote received, etc.). No dedicated vendors table yet — this writes to pipelineEvents with eventType='vendor_contact' for now.",
+      "Log a vendor-network interaction (call, email, quote received, etc.) to the vendor's communication log.",
     input_schema: {
       type: "object",
       properties: {
-        vendorId: { type: "string", description: "External vendor id or name — free-form until we have a vendors table." },
-        type: { type: "string", enum: ["call", "email", "quote", "order", "followup"] },
-        notes: { type: "string" },
-        opportunityId: { type: "string", description: "Optional — if this vendor contact relates to a specific job." },
+        vendorId: { type: "number", description: "Numeric vendor id from the vendors table." },
+        channel: { type: "string", enum: ["call", "email", "sms", "meeting", "note", "quote", "order", "followup"] },
+        direction: { type: "string", enum: ["inbound", "outbound", "internal"] },
+        subject: { type: "string" },
+        body: { type: "string" },
+        opportunityId: { type: "string", description: "Optional — link to a specific opportunity." },
+        loggedByAgent: { type: "string", description: "Slug of the agent doing the logging (optional)." },
       },
-      required: ["vendorId", "type"],
+      required: ["vendorId", "channel"],
     },
   },
   handler: async ({ input }) => {
-    const d = await db();
-    // pipelineEvents requires a non-null opportunityId. Use "" (sentinel) when
-    // the contact is standalone — Phase 4 will move this to a proper vendors
-    // table with its own activity log.
-    await d.insert(pipelineEvents).values({
-      opportunityId: (input.opportunityId as string | undefined) ?? "",
-      eventType: "vendor_contact",
-      payloadJson: JSON.stringify({
-        vendorId: input.vendorId,
-        type: input.type,
-        notes: input.notes ?? null,
-      }),
+    const { logCommunication } = await import("../../vendors");
+    const row = await logCommunication({
+      vendorId: Number(input.vendorId),
+      channel: input.channel as never,
+      direction: (input.direction as never) ?? "outbound",
+      subject: input.subject as string | undefined,
+      body: input.body as string | undefined,
+      opportunityId: input.opportunityId as string | undefined,
+      loggedByAgent: input.loggedByAgent as string | undefined,
     });
-    return { ok: true };
+    return { ok: true, communicationId: row.id };
   },
 });
 
@@ -682,6 +681,125 @@ registerTool({
   },
 });
 
+// ── 19. listVendors ──────────────────────────────────────────────────────────
+registerTool({
+  key: "vendors.list",
+  requiresApproval: false,
+  definition: {
+    name: "listVendors",
+    description: "List vendors in the network, optionally filtered by status, tier, or trade slug.",
+    input_schema: {
+      type: "object",
+      properties: {
+        status: { type: "string", enum: ["prospect", "onboarding", "active", "paused", "retired"] },
+        tier: { type: "string", enum: ["preferred", "approved", "trial", "probation"] },
+        tradeSlug: { type: "string" },
+        limit: { type: "number" },
+      },
+    },
+  },
+  handler: async ({ input }) => {
+    const { listVendors } = await import("../../vendors");
+    const rows = await listVendors({
+      status: input.status as never,
+      tier: input.tier as never,
+      tradeSlug: input.tradeSlug as string | undefined,
+      limit: (input.limit as number) ?? 50,
+    });
+    return rows.map((v) => ({
+      id: v.id,
+      name: v.name,
+      companyName: v.companyName,
+      status: v.status,
+      tier: v.tier,
+      rating: v.rating,
+      jobsCompleted: v.jobsCompleted,
+      lastJobAt: v.lastJobAt,
+    }));
+  },
+});
+
+// ── 20. getVendor ────────────────────────────────────────────────────────────
+registerTool({
+  key: "vendors.get",
+  requiresApproval: false,
+  definition: {
+    name: "getVendor",
+    description: "Fetch a single vendor with trades, onboarding steps, recent jobs, and recent communications.",
+    input_schema: {
+      type: "object",
+      properties: { id: { type: "number" } },
+      required: ["id"],
+    },
+  },
+  handler: async ({ input }) => {
+    const { getVendor } = await import("../../vendors");
+    const v = await getVendor(Number(input.id));
+    if (!v) throw new Error("Vendor not found");
+    return v;
+  },
+});
+
+// ── 21. rankVendorsForOpportunity ────────────────────────────────────────────
+registerTool({
+  key: "vendors.rankForOpportunity",
+  requiresApproval: false,
+  definition: {
+    name: "rankVendorsForOpportunity",
+    description:
+      "Score and rank vendors that match a trade for a given opportunity. Considers tier, status, rating, recency, and current load. Returns top N with score breakdown.",
+    input_schema: {
+      type: "object",
+      properties: {
+        tradeSlug: { type: "string", description: "Slug of the trade required (e.g. 'plumbing', 'electrical')." },
+        opportunityId: { type: "string" },
+        limit: { type: "number" },
+      },
+      required: ["tradeSlug"],
+    },
+  },
+  handler: async ({ input }) => {
+    const { rankVendorsForOpportunity } = await import("../../vendors");
+    return rankVendorsForOpportunity({
+      tradeSlug: String(input.tradeSlug),
+      opportunityId: input.opportunityId as string | undefined,
+      limit: (input.limit as number) ?? 10,
+    });
+  },
+});
+
+// ── 22. createVendorOnboardingStep ───────────────────────────────────────────
+registerTool({
+  key: "vendors.createOnboardingStep",
+  requiresApproval: false,
+  definition: {
+    name: "createVendorOnboardingStep",
+    description: "Add an onboarding workflow step for a vendor (e.g. W-9 collection, COI verification).",
+    input_schema: {
+      type: "object",
+      properties: {
+        vendorId: { type: "number" },
+        stepKey: { type: "string", description: "Stable slug for the step (e.g. 'w9_collected')." },
+        label: { type: "string", description: "Operator-facing label." },
+        status: { type: "string", enum: ["pending", "in_progress", "complete", "skipped", "blocked"] },
+        notes: { type: "string" },
+      },
+      required: ["vendorId", "stepKey", "label"],
+    },
+  },
+  handler: async ({ input }) => {
+    const { createOnboardingStep } = await import("../../vendors");
+    const row = await createOnboardingStep({
+      vendorId: Number(input.vendorId),
+      stepKey: String(input.stepKey),
+      label: String(input.label),
+      status: (input.status as never) ?? "pending",
+      notes: input.notes as string | undefined,
+    });
+    return { ok: true, stepId: row.id };
+  },
+});
+
 export const PHASE_2_TOOL_KEYS: RegisteredTool["key"][] = [
   "customers.list",
   "customers.get",
@@ -701,4 +819,8 @@ export const PHASE_2_TOOL_KEYS: RegisteredTool["key"][] = [
   "scheduling.listSlots",
   "scheduling.createBooking",
   "scheduling.cancel",
+  "vendors.list",
+  "vendors.get",
+  "vendors.rankForOpportunity",
+  "vendors.createOnboardingStep",
 ];

@@ -14,6 +14,7 @@ const NAV = [
   { href: "/admin/ai-agents", label: "AI Agents" },
   { href: "/admin/ai-agents/tasks", label: "Approval Queue" },
   { href: "/admin/scheduling", label: "Scheduling" },
+  { href: "/admin/vendors", label: "Vendors" },
 ];
 
 export function AdminShell({ children }: { children: ReactNode }) {
