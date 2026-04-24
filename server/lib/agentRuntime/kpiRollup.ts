@@ -9,8 +9,11 @@
  *   - usd, count  → SUM
  *   - pct, days   → AVG
  *
- * Daily cron (6am Pacific): seat → department.
- * Weekly cron (Mon 6am Pacific): department → company.
+ * Daily cron (4am Pacific): seat → department.
+ * Weekly cron (Mon 4am Pacific): department → company.
+ *
+ * Earlier-morning slot is intentional: department-head briefings fire
+ * around 5–6am PT and need rollups already on disk when they pull KPIs.
  */
 
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
@@ -187,20 +190,22 @@ export async function rollupDepartmentsToCompany(): Promise<{ inserted: number }
 }
 
 // ─── Cron timer plumbing ───────────────────────────────────────────────────────
-// Pacific Time 6am trigger — we poll every 15 minutes and fire when the current
-// Pacific hour is 6 and we haven't fired in the last 12h (daily) / 6.5 days (weekly).
+// Pacific Time 4am trigger — we poll every 15 minutes and fire when the current
+// Pacific hour is 4 and we haven't fired in the last 12h (daily) / 6.5 days (weekly).
+
+const ROLLUP_HOUR_PT = 4;
 
 let dailyInterval: NodeJS.Timeout | null = null;
 let lastDaily = 0;
 let lastWeekly = 0;
 
-function isPacific6am(): boolean {
+function isPacificRollupHour(): boolean {
   const nowIso = new Date().toLocaleString("en-US", {
     timeZone: "America/Los_Angeles",
     hour12: false,
   });
   const hour = Number(nowIso.split(", ")[1]?.split(":")[0] ?? -1);
-  return hour === 6;
+  return hour === ROLLUP_HOUR_PT;
 }
 
 function isMonday(): boolean {
@@ -216,11 +221,11 @@ export function startKpiCron(periodMs: number = 15 * 60 * 1000) {
   dailyInterval = setInterval(async () => {
     try {
       const now = Date.now();
-      if (isPacific6am() && now - lastDaily > 12 * 60 * 60 * 1000) {
+      if (isPacificRollupHour() && now - lastDaily > 12 * 60 * 60 * 1000) {
         await rollupSeatsToDepartments();
         lastDaily = now;
       }
-      if (isPacific6am() && isMonday() && now - lastWeekly > 6.5 * 24 * 60 * 60 * 1000) {
+      if (isPacificRollupHour() && isMonday() && now - lastWeekly > 6.5 * 24 * 60 * 60 * 1000) {
         await rollupDepartmentsToCompany();
         lastWeekly = now;
       }
