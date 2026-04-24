@@ -21,6 +21,10 @@ import { sendEmail } from "../gmail";
 import { notifyOwner } from "../_core/notification";
 import { buildInboundCallTwiml, buildFallbackTwiml, getPhoneSettings } from "../phone";
 import { randomUUID } from "crypto";
+import fs from "fs";
+import os from "os";
+import path from "path";
+import multer from "multer";
 import { sdk } from "./sdk";
 import { registerAuthRoutes, seedDefaultAdminIfNeeded } from "./auth";
 
@@ -1170,6 +1174,63 @@ async function startServer() {
     });
     res.json({ ok: true });
   });
+
+  // ── Roadmap Generator / Priority Translation: multipart PDF intake ──
+  // Inspection report PDFs can legitimately run 50-80 MB (Spectora exports
+  // with embedded photos). Limit is 100 MB to keep a buffer without letting
+  // arbitrary huge payloads through. Writes the file to UPLOAD_VOLUME_PATH
+  // (Railway volume) if configured, else to the OS temp dir, then dispatches
+  // to the tRPC `priorityTranslation.submit` procedure with the storage path.
+  const ROADMAP_UPLOAD_MAX_BYTES = 100 * 1024 * 1024;
+  const roadmapUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: ROADMAP_UPLOAD_MAX_BYTES, files: 1 },
+    fileFilter: (_req, file, cb) => {
+      const isPdf = file.mimetype === "application/pdf" || /\.pdf$/i.test(file.originalname);
+      if (!isPdf) return cb(new Error("Only PDF uploads are accepted"));
+      cb(null, true);
+    },
+  });
+
+  async function handleRoadmapSubmit(req: express.Request, res: express.Response) {
+    try {
+      const file = (req as any).file as Express.Multer.File | undefined;
+      let storagePath: string | undefined;
+      if (file) {
+        const uploadDir = process.env.UPLOAD_VOLUME_PATH || path.join(os.tmpdir(), "handy-uploads");
+        await fs.promises.mkdir(uploadDir, { recursive: true });
+        const filename = `priority-translation-${randomUUID()}.pdf`;
+        const fullPath = path.join(uploadDir, filename);
+        await fs.promises.writeFile(fullPath, file.buffer);
+        storagePath = fullPath;
+      }
+      const caller = appRouter.createCaller({ req, res, user: null } as any);
+      const result = await caller.priorityTranslation.submit({
+        firstName: req.body.firstName,
+        lastName: req.body.lastName,
+        email: req.body.email,
+        phone: req.body.phone,
+        propertyAddress: req.body.propertyAddress,
+        notes: req.body.notes,
+        pdfStoragePath: storagePath,
+        reportUrl: req.body.reportUrl,
+        source: req.body.source || "roadmap_generator",
+      });
+      res.json(result);
+    } catch (err: any) {
+      if (err?.code === "LIMIT_FILE_SIZE") {
+        res.status(413).json({ error: "File too large \u2014 max 100MB" });
+        return;
+      }
+      console.error("[Roadmap Generator] submit error:", err?.message ?? err);
+      const status = err?.code === "BAD_REQUEST" ? 400 : err?.code === "FORBIDDEN" ? 403 : 500;
+      res.status(status).json({ error: err?.message ?? "Submit failed" });
+    }
+  }
+
+  app.post("/api/roadmap-generator/submit", roadmapUpload.single("report_pdf"), handleRoadmapSubmit);
+  // Alias for the earlier endpoint name used by the manus frontend.
+  app.post("/api/priority-translation/submit", roadmapUpload.single("report_pdf"), handleRoadmapSubmit);
 
   // tRPC API
   app.use(
