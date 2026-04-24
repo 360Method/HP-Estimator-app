@@ -1,11 +1,16 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
-import { ENV } from "../_core/env";
+import { invokeLLM } from "../_core/llm";
 
-// In-memory per-user rate limiter (30 calls / 60 s). The pro app runs
-// single-process on Railway, so this is sufficient. If we scale to multiple
-// instances, swap for a Redis-backed counter.
+// Client-facing LLM proxy.
+//
+// Historical name: "forge" — kept for client-contract compatibility with
+// CalculatorSection.tsx which calls `trpcClient.forge.proxy.mutate({ path,
+// params })`. Internally this now dispatches to Anthropic's Messages API via
+// invokeLLM. No third-party LLM provider is contacted.
+
+// ─── Rate limit: 30 calls / 60s / user, in-memory ──────────────────────────
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_MAX = 30;
 const rateLimitBuckets = new Map<number, { count: number; windowStart: number }>();
@@ -20,22 +25,45 @@ function checkRateLimit(userId: number) {
   if (bucket.count >= RATE_LIMIT_MAX) {
     throw new TRPCError({
       code: "TOO_MANY_REQUESTS",
-      message: `Forge proxy rate limit exceeded (${RATE_LIMIT_MAX} calls/minute).`,
+      message: `AI proxy rate limit exceeded (${RATE_LIMIT_MAX} calls/minute).`,
     });
   }
   bucket.count += 1;
 }
 
+// Brand-appropriate system prompt for the Calculator's cost-range analysis.
+// Voice guardrails from the brand style: no "handyman", "cheap", "affordable",
+// "simple", "easy". "Pricing analyst" framing keeps the LLM on task.
+const CALCULATOR_SYSTEM_PROMPT =
+  "You are a pricing analyst for a home services company operating in the Pacific Northwest. Respond only with JSON. No prose, no markdown fences, no commentary.";
+
 const ALLOWED_PATHS = new Set(["chat/completions"]);
 
+// Message shape the Calculator currently sends — OpenAI-style { role, content }.
+const chatMessage = z.object({
+  role: z.enum(["system", "user", "assistant"]),
+  content: z.string(),
+});
+
+// Accept the lenient shape the browser historically posted to Forge. Only the
+// fields we actually forward are enforced; anything else is dropped silently.
+const chatParams = z
+  .object({
+    model: z.string().optional(),
+    messages: z.array(chatMessage).min(1),
+    max_tokens: z.number().int().positive().max(8000).optional(),
+  })
+  .passthrough();
+
 export const forgeRouter = router({
-  // Proxies an authenticated user's request to the Forge API using the
-  // server-held BUILT_IN_FORGE_API_KEY. The client never sees the key.
+  // Mutation name `proxy` kept for client compatibility. The upstream is now
+  // Anthropic, not Forge — but the returned shape
+  // `{ choices: [{ message: { content } }] }` is preserved.
   proxy: protectedProcedure
     .input(
       z.object({
         path: z.string().min(1).max(128),
-        params: z.record(z.any()),
+        params: chatParams,
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -45,47 +73,35 @@ export const forgeRouter = router({
       if (!ALLOWED_PATHS.has(path)) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: `Forge proxy path not allowed: ${path}`,
+          message: `AI proxy path not allowed: ${path}`,
         });
       }
 
-      if (!ENV.forgeApiUrl || !ENV.forgeApiKey) {
-        throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "Forge API is not configured on the server.",
-        });
-      }
-
-      const base = ENV.forgeApiUrl.endsWith("/") ? ENV.forgeApiUrl : `${ENV.forgeApiUrl}/`;
-      const url = `${base}${path}`;
-
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${ENV.forgeApiKey}`,
-        },
-        body: JSON.stringify(input.params),
-      });
-
-      const text = await response.text();
-      if (!response.ok) {
-        console.warn(
-          `[forge.proxy] upstream ${response.status} for ${path}:`,
-          text.slice(0, 300)
-        );
-        throw new TRPCError({
-          code: "BAD_GATEWAY",
-          message: `Forge upstream error ${response.status}`,
-        });
-      }
+      const messages = input.params.messages.map(m => ({
+        role: m.role,
+        content: m.content,
+      }));
 
       try {
-        return JSON.parse(text);
-      } catch {
+        const result = await invokeLLM({
+          messages,
+          max_tokens: input.params.max_tokens ?? 500,
+          systemOverride: CALCULATOR_SYSTEM_PROMPT,
+        });
+        const content = result.choices[0]?.message?.content ?? "";
+        return {
+          choices: [
+            {
+              message: { role: "assistant" as const, content },
+            },
+          ],
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.warn(`[forge.proxy] Anthropic upstream error:`, message);
         throw new TRPCError({
           code: "BAD_GATEWAY",
-          message: "Forge response was not valid JSON",
+          message: "AI upstream error",
         });
       }
     }),
