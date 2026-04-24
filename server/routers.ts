@@ -32,6 +32,7 @@ import { emailTemplatesRouter } from "./routers/emailTemplates";
 import { campaignsRouter } from "./routers/campaigns";
 import { priorityTranslationRouter } from "./routers/priorityTranslation";
 import { aiAgentsRouter } from "./routers/aiAgents";
+import { integratorChatRouter } from "./routers/integratorChat";
 import { kpisRouter } from "./routers/kpis";
 import { forgeRouter } from "./routers/forge";
 import { schedulingRouter } from "./routers/scheduling";
@@ -72,6 +73,7 @@ export const appRouter = router({
   campaigns: campaignsRouter,
   priorityTranslation: priorityTranslationRouter,
   aiAgents: aiAgentsRouter,
+  integratorChat: integratorChatRouter,
   kpis: kpisRouter,
   forge: forgeRouter,
   scheduling: schedulingRouter,

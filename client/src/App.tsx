@@ -46,6 +46,7 @@ import AiAgentDetail from "./pages/admin/AiAgentDetail";
 import AiAgentTasks from "./pages/admin/AiAgentTasks";
 import DepartmentDetail from "./pages/admin/DepartmentDetail";
 import AdminSchedulingPage from "./pages/admin/AdminSchedulingPage";
+import IntegratorChat from "./pages/admin/IntegratorChat";
 
 // Domains that should serve only the customer portal (no admin app)
 const PORTAL_HOSTNAMES = ["client.handypioneers.com"];
@@ -111,6 +112,7 @@ function Router() {
 
       {/* Admin — AI agent runtime + KPI dashboard (Phase 1) */}
       <Route path="/admin/dashboard" component={AdminDashboard} />
+      <Route path="/admin/chat" component={IntegratorChat} />
       <Route path="/admin/ai-agents/tasks" component={AiAgentTasks} />
       <Route path="/admin/ai-agents/:id" component={AiAgentDetail} />
       <Route path="/admin/ai-agents" component={AiAgentsList} />
