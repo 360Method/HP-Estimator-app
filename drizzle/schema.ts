@@ -572,8 +572,6 @@ export const opportunities = mysqlTable("opportunities", {
   notes: text("notes"),
   archived: boolean("archived").default(false).notNull(),
   archivedAt: varchar("archivedAt", { length: 32 }),
-  /** Reason for archive: 'manual' | 'auto_lost_30d' — used by auto-archive job to find its own rows */
-  archivedReason: varchar("archivedReason", { length: 32 }),
   // Lifecycle timestamps
   sourceLeadId: varchar("sourceLeadId", { length: 64 }),
   sourceEstimateId: varchar("sourceEstimateId", { length: 64 }),

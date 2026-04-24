@@ -139,7 +139,6 @@ export const opportunitiesRouter = router({
       await updateOpportunity(input.id, {
         archived: true,
         archivedAt: new Date().toISOString(),
-        archivedReason: input.reason ?? "manual",
       });
       // Recompute lifecycle stage whenever a job is archived — disabled in MySQL port
       void opp;
@@ -165,7 +164,6 @@ export const opportunitiesRouter = router({
           await updateOpportunity(lead.id, {
             archived: true,
             archivedAt: new Date().toISOString(),
-            archivedReason: "auto_lost_90d",
           }).catch(() => null);
           archived++;
         }

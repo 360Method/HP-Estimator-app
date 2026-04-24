@@ -1052,7 +1052,6 @@ async function startServer() {
           await updateOpportunity(lead.id, {
             archived: true,
             archivedAt: new Date().toISOString(),
-            archivedReason: "auto_lost_90d",
           }).catch(() => null);
           archived++;
         }
