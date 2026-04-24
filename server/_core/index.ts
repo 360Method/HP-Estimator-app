@@ -1081,6 +1081,34 @@ async function startServer() {
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
   });
+
+  // ── AI agent runtime (Phase 1) ──
+  // Scheduler polls for queued tasks assigned to autonomous agents.
+  // KPI cron aggregates seat → department daily and department → company weekly.
+  // Hierarchy audit logs any Integrator/Head/sub-agent parentage violations.
+  try {
+    const { startScheduler } = await import("../lib/agentRuntime/scheduler");
+    const { startKpiCron } = await import("../lib/agentRuntime/kpiRollup");
+    const { auditRoster } = await import("../lib/agentRuntime/hierarchy");
+    const { getDb } = await import("../db");
+    const { aiAgents } = await import("../../drizzle/schema");
+    startScheduler();
+    startKpiCron();
+    const db = await getDb();
+    if (db) {
+      const roster = await db.select().from(aiAgents);
+      const violations = auditRoster(roster);
+      if (violations.length > 0) {
+        console.warn(
+          `[boot] ai_agents hierarchy audit: ${violations.length} violation(s):`,
+          violations.map((v) => `#${v.agentId}: ${v.v.code} — ${v.v.message}`)
+        );
+      }
+    }
+    console.log("[boot] agent runtime scheduler + KPI cron started");
+  } catch (err) {
+    console.warn("[boot] agent runtime failed to start (non-fatal):", err);
+  }
 }
 
 // Bootstrap GMAIL_CONNECTED_EMAIL from DB so it survives server restarts

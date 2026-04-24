@@ -39,6 +39,13 @@ import PortalEnrollmentConfirmation from "./pages/portal/PortalEnrollmentConfirm
 import WorkOrderDetail from "./pages/WorkOrderDetail";
 import Welcome360Page from "./pages/Welcome360Page";
 
+// Admin pages (Phase 1 AI agent runtime + KPI dashboard)
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import AiAgentsList from "./pages/admin/AiAgentsList";
+import AiAgentDetail from "./pages/admin/AiAgentDetail";
+import AiAgentTasks from "./pages/admin/AiAgentTasks";
+import DepartmentDetail from "./pages/admin/DepartmentDetail";
+
 // Domains that should serve only the customer portal (no admin app)
 const PORTAL_HOSTNAMES = ["client.handypioneers.com"];
 
@@ -99,6 +106,13 @@ function Router() {
 
       {/* Data migration onboarding wizard */}
       <Route path="/onboarding" component={() => <DataMigrationPage />} />
+
+      {/* Admin — AI agent runtime + KPI dashboard (Phase 1) */}
+      <Route path="/admin/dashboard" component={AdminDashboard} />
+      <Route path="/admin/ai-agents/tasks" component={AiAgentTasks} />
+      <Route path="/admin/ai-agents/:id" component={AiAgentDetail} />
+      <Route path="/admin/ai-agents" component={AiAgentsList} />
+      <Route path="/admin/departments/:slug" component={DepartmentDetail} />
 
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />

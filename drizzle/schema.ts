@@ -1534,3 +1534,140 @@ export const userRoles = mysqlTable("userRoles", {
 });
 export type DbUserRole = typeof userRoles.$inferSelect;
 export type InsertDbUserRole = typeof userRoles.$inferInsert;
+
+// ─── AI AGENT RUNTIME (Phase 1) ───────────────────────────────────────────────
+// Migrations 0065. The runtime platform — no agents seeded yet. Phase 3 will
+// populate the ai_agents table. Hierarchy: Visionary (Marcin) → Integrator AI →
+// 8 Department Heads (isDepartmentHead=true) → sub-agents + humans.
+
+export const aiAgents = mysqlTable("ai_agents", {
+  id: int("id").autoincrement().primaryKey(),
+  seatName: varchar("seatName", { length: 80 }).notNull(),
+  department: mysqlEnum("department", [
+    "sales",
+    "operations",
+    "marketing",
+    "finance",
+    "customer_success",
+    "vendor_network",
+    "technology",
+    "strategy",
+    "integrator",
+  ]).notNull(),
+  role: text("role").notNull(),
+  systemPrompt: text("systemPrompt").notNull(),
+  model: varchar("model", { length: 40 }).notNull().default("claude-haiku-4-5-20251001"),
+  status: mysqlEnum("status", ["draft_queue", "autonomous", "paused", "disabled"])
+    .notNull()
+    .default("draft_queue"),
+  /** Self-FK: Integrator at the top (null), Department Heads report to Integrator, sub-agents report to their Head. */
+  reportsToSeatId: int("reportsToSeatId"),
+  /** Convenience flag so the UI can filter the Department Head tier without walking the tree. */
+  isDepartmentHead: boolean("isDepartmentHead").notNull().default(false),
+  costCapDailyUsd: decimal("costCapDailyUsd", { precision: 6, scale: 2 })
+    .notNull()
+    .default("5.00"),
+  runLimitDaily: int("runLimitDaily").notNull().default(200),
+  lastRunAt: timestamp("lastRunAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbAiAgent = typeof aiAgents.$inferSelect;
+export type InsertDbAiAgent = typeof aiAgents.$inferInsert;
+
+export const aiAgentTools = mysqlTable("ai_agent_tools", {
+  id: int("id").autoincrement().primaryKey(),
+  agentId: int("agentId").notNull(),
+  toolKey: varchar("toolKey", { length: 80 }).notNull(),
+  authorized: boolean("authorized").notNull().default(true),
+  notes: text("notes"),
+});
+export type DbAiAgentTool = typeof aiAgentTools.$inferSelect;
+export type InsertDbAiAgentTool = typeof aiAgentTools.$inferInsert;
+
+export const aiAgentTasks = mysqlTable("ai_agent_tasks", {
+  id: int("id").autoincrement().primaryKey(),
+  agentId: int("agentId").notNull(),
+  triggerType: mysqlEnum("triggerType", ["event", "schedule", "manual", "delegated"]).notNull(),
+  triggerPayload: text("triggerPayload"),
+  status: mysqlEnum("status", [
+    "queued",
+    "running",
+    "awaiting_approval",
+    "approved",
+    "rejected",
+    "completed",
+    "failed",
+  ])
+    .notNull()
+    .default("queued"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  startedAt: timestamp("startedAt"),
+  completedAt: timestamp("completedAt"),
+});
+export type DbAiAgentTask = typeof aiAgentTasks.$inferSelect;
+export type InsertDbAiAgentTask = typeof aiAgentTasks.$inferInsert;
+
+export const aiAgentRuns = mysqlTable("ai_agent_runs", {
+  id: int("id").autoincrement().primaryKey(),
+  taskId: int("taskId").notNull(),
+  agentId: int("agentId").notNull(),
+  input: text("input"),
+  output: text("output"),
+  toolCalls: text("toolCalls"),
+  inputTokens: int("inputTokens").notNull().default(0),
+  outputTokens: int("outputTokens").notNull().default(0),
+  costUsd: decimal("costUsd", { precision: 10, scale: 4 }).notNull().default("0.0000"),
+  durationMs: int("durationMs").notNull().default(0),
+  status: mysqlEnum("status", ["success", "failed", "tool_error", "cost_exceeded", "timed_out"]).notNull(),
+  errorMessage: text("errorMessage"),
+  approvedByUserId: int("approvedByUserId"),
+  approvedAt: timestamp("approvedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbAiAgentRun = typeof aiAgentRuns.$inferSelect;
+export type InsertDbAiAgentRun = typeof aiAgentRuns.$inferInsert;
+
+export const aiAgentHandoffs = mysqlTable("ai_agent_handoffs", {
+  id: int("id").autoincrement().primaryKey(),
+  fromAgentId: int("fromAgentId").notNull(),
+  toAgentId: int("toAgentId").notNull(),
+  taskId: int("taskId").notNull(),
+  reason: text("reason"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbAiAgentHandoff = typeof aiAgentHandoffs.$inferSelect;
+export type InsertDbAiAgentHandoff = typeof aiAgentHandoffs.$inferInsert;
+
+// ─── KPI ROLLUPS ──────────────────────────────────────────────────────────────
+// Seat → department → company rollup store. Agents write metrics via the
+// kpis.record tRPC procedure (also exposed as a built-in tool). Daily cron
+// aggregates seat → department, weekly cron aggregates department → company.
+
+export const kpiMetrics = mysqlTable("kpi_metrics", {
+  id: int("id").autoincrement().primaryKey(),
+  scope: mysqlEnum("scope", ["seat", "department", "company"]).notNull(),
+  /** For seat scope, FK to ai_agents.id. Null for department and company scope (use `key` prefix to distinguish dept). */
+  scopeId: int("scopeId"),
+  /** For department scope, the department enum string goes here instead of scopeId. */
+  scopeKey: varchar("scopeKey", { length: 40 }),
+  key: varchar("key", { length: 80 }).notNull(),
+  value: decimal("value", { precision: 14, scale: 4 }).notNull(),
+  unit: varchar("unit", { length: 20 }).notNull().default("count"),
+  period: mysqlEnum("period", [
+    "realtime",
+    "daily",
+    "weekly",
+    "monthly",
+    "trailing_30",
+    "trailing_90",
+    "trailing_365",
+  ])
+    .notNull()
+    .default("realtime"),
+  computedAt: timestamp("computedAt").defaultNow().notNull(),
+  sourceTaskId: int("sourceTaskId"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbKpiMetric = typeof kpiMetrics.$inferSelect;
+export type InsertDbKpiMetric = typeof kpiMetrics.$inferInsert;
