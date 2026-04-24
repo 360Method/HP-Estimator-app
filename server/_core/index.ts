@@ -1233,7 +1233,7 @@ async function startServer() {
   }
 
   app.post("/api/roadmap-generator/submit", roadmapUpload.single("report_pdf"), handleRoadmapSubmit);
-  // Alias for the earlier endpoint name used by the manus frontend.
+  // Alias for the earlier endpoint name used by the marketing frontend.
   app.post("/api/priority-translation/submit", roadmapUpload.single("report_pdf"), handleRoadmapSubmit);
 
   // tRPC API
