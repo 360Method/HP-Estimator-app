@@ -37,6 +37,7 @@ import { kpisRouter } from "./routers/kpis";
 import { forgeRouter } from "./routers/forge";
 import { schedulingRouter } from "./routers/scheduling";
 import { vendorsRouter } from "./routers/vendors";
+import { requestPasswordReset, consumePasswordReset } from "./passwordReset";
 import {
   getAdminAllowlist,
   addAdminAllowlistEmail,
@@ -97,6 +98,47 @@ export const appRouter = router({
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
     }),
+
+    /**
+     * Self-serve password reset request. Always returns success even when the
+     * email isn't on file — prevents account enumeration. Email contains a
+     * single-use token valid for 1 hour.
+     */
+    requestPasswordReset: publicProcedure
+      .input(z.object({ email: z.string().email() }))
+      .mutation(async ({ ctx, input }) => {
+        const requestIp =
+          (ctx.req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ||
+          ctx.req.socket.remoteAddress ||
+          null;
+        await requestPasswordReset({ email: input.email, requestIp });
+        return { ok: true } as const;
+      }),
+
+    /** Consume a reset token and set a new password (min 8 chars). */
+    consumePasswordReset: publicProcedure
+      .input(
+        z.object({
+          token: z.string().min(20),
+          newPassword: z.string().min(8).max(200),
+        }),
+      )
+      .mutation(async ({ input }) => {
+        const result = await consumePasswordReset({
+          rawToken: input.token,
+          newPassword: input.newPassword,
+        });
+        if (!result.ok) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              result.reason === "weak"
+                ? "Password must be at least 8 characters."
+                : "Reset link is invalid or has expired. Request a new one.",
+          });
+        }
+        return { ok: true } as const;
+      }),
   }),
 
   allowlist: router({

@@ -491,6 +491,13 @@
       "when": 1777500090000,
       "tag": "0069_vendors_crm",
       "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "5",
+      "when": 1777500100000,
+      "tag": "0070_password_reset_tokens",
+      "breakpoints": true
     }
   ]
 }

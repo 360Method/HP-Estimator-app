@@ -1899,3 +1899,19 @@ export const vendorOnboardingSteps = mysqlTable("vendor_onboarding_steps", {
 });
 export type DbVendorOnboardingStep = typeof vendorOnboardingSteps.$inferSelect;
 export type InsertDbVendorOnboardingStep = typeof vendorOnboardingSteps.$inferInsert;
+
+// ─── PASSWORD RESET TOKENS ────────────────────────────────────────────────────
+// One row per password-reset request. tokenHash is bcrypt of the raw token;
+// the raw token only ever lives in the email link. Single-use (usedAt) and
+// time-bound (expiresAt — typically now + 1h).
+export const passwordResetTokens = mysqlTable("password_reset_tokens", {
+  id: int("id").autoincrement().primaryKey(),
+  staffUserId: int("staffUserId").notNull(),
+  tokenHash: varchar("tokenHash", { length: 255 }).notNull(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  usedAt: timestamp("usedAt"),
+  requestIp: varchar("requestIp", { length: 64 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbPasswordResetToken = typeof passwordResetTokens.$inferSelect;
+export type InsertDbPasswordResetToken = typeof passwordResetTokens.$inferInsert;

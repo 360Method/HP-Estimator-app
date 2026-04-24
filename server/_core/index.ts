@@ -248,6 +248,15 @@ async function ensureVendorTablesBoot() {
   }
 }
 
+async function ensurePasswordResetTokensTableBoot() {
+  try {
+    const { ensurePasswordResetTokensTable } = await import("../passwordReset");
+    await ensurePasswordResetTokensTable();
+  } catch (err) {
+    console.warn("[boot] ensurePasswordResetTokensTableBoot failed (non-fatal):", err);
+  }
+}
+
 async function startServer() {
   await ensurePhoneTables();
   await ensurePortalContinuityFlag();
@@ -255,6 +264,7 @@ async function startServer() {
   await ensureSchedulingTablesBoot();
   await ensureAgentPhase4Tables();
   await ensureVendorTablesBoot();
+  await ensurePasswordResetTokensTableBoot();
   const app = express();
   const server = createServer(app);
 

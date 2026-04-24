@@ -51,6 +51,10 @@ import AdminVendorsList from "./pages/admin/AdminVendorsList";
 import AdminVendorDetail from "./pages/admin/AdminVendorDetail";
 import AdminVendorNew from "./pages/admin/AdminVendorNew";
 
+// Self-serve password reset (public)
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
+
 // Domains that should serve only the customer portal (no admin app)
 const PORTAL_HOSTNAMES = ["client.handypioneers.com"];
 
@@ -76,6 +80,10 @@ function Router() {
 
         {/* Public booking wizard — no login required */}
       <Route path="/book" component={BookingWizard} />
+
+      {/* Self-serve password reset (public) */}
+      <Route path="/forgot-password" component={ForgotPassword} />
+      <Route path="/reset-password" component={ResetPassword} />
 
       {/* Customer portal — public (no login required) */}
       <Route path="/portal/login" component={PortalLogin} />
