@@ -212,10 +212,14 @@ async function startServer() {
   app.use("/api/360/checkout", publicWriteLimiter);
   app.use("/api/360/portfolio-checkout", publicWriteLimiter);
 
-  // ── CORS: allow 360 funnel and portal to call the pro API ──
+  // ── CORS: allow 360 funnel, portal, and marketing site to call the pro API ──
   const allowedOrigins = [
     "https://360.handypioneers.com",
     "https://client.handypioneers.com",
+    "https://handypioneers.com",
+    "https://www.handypioneers.com",
+    "https://staging.handypioneers.com",
+    "https://staging-pro.handypioneers.com",
   ];
   if (process.env.NODE_ENV === "development") {
     allowedOrigins.push("http://localhost:3001", "http://localhost:5173");
