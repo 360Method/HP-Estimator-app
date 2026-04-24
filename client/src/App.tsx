@@ -1,5 +1,4 @@
 import { Toaster } from "@/components/ui/sonner";
-import { PwaInstallBanner } from "@/components/PwaInstallBanner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch, useLocation } from "wouter";
@@ -128,7 +127,6 @@ function App() {
           <PortalProvider>
             <TooltipProvider>
               <Toaster />
-              <PwaInstallBanner />
               <Router />
             </TooltipProvider>
           </PortalProvider>
