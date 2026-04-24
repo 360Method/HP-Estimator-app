@@ -1686,3 +1686,42 @@ export const kpiMetrics = mysqlTable("kpi_metrics", {
 });
 export type DbKpiMetric = typeof kpiMetrics.$inferSelect;
 export type InsertDbKpiMetric = typeof kpiMetrics.$inferInsert;
+
+// ─── SCHEDULING SLOTS + BOOKINGS ─────────────────────────────────────────────
+// In-house customer scheduling widget. Slots are operator-configured availability
+// windows; bookings are customer-confirmed visits that consume a slot.
+
+export const schedulingSlots = mysqlTable("scheduling_slots", {
+  id: int("id").autoincrement().primaryKey(),
+  startAt: timestamp("startAt").notNull(),
+  endAt: timestamp("endAt").notNull(),
+  capacity: int("capacity").default(1).notNull(),
+  bookedCount: int("bookedCount").default(0).notNull(),
+  blocked: boolean("blocked").default(false).notNull(),
+  notes: varchar("notes", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbSchedulingSlot = typeof schedulingSlots.$inferSelect;
+export type InsertDbSchedulingSlot = typeof schedulingSlots.$inferInsert;
+
+export const scheduledBookings = mysqlTable("scheduled_bookings", {
+  id: int("id").autoincrement().primaryKey(),
+  customerId: varchar("customerId", { length: 64 }).notNull(),
+  slotId: int("slotId").notNull(),
+  visitType: mysqlEnum("visitType", ["consultation", "baseline", "seasonal", "project"])
+    .notNull()
+    .default("consultation"),
+  status: mysqlEnum("status", ["confirmed", "rescheduled", "cancelled", "completed", "no_show"])
+    .notNull()
+    .default("confirmed"),
+  notes: text("notes"),
+  bookedBy: varchar("bookedBy", { length: 64 }).notNull().default("customer"),
+  confirmationCode: varchar("confirmationCode", { length: 16 }),
+  cancelledAt: timestamp("cancelledAt"),
+  cancelReason: varchar("cancelReason", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbScheduledBooking = typeof scheduledBookings.$inferSelect;
+export type InsertDbScheduledBooking = typeof scheduledBookings.$inferInsert;

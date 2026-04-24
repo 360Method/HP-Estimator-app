@@ -34,6 +34,7 @@ import { priorityTranslationRouter } from "./routers/priorityTranslation";
 import { aiAgentsRouter } from "./routers/aiAgents";
 import { kpisRouter } from "./routers/kpis";
 import { forgeRouter } from "./routers/forge";
+import { schedulingRouter } from "./routers/scheduling";
 import {
   getAdminAllowlist,
   addAdminAllowlistEmail,
@@ -73,6 +74,7 @@ export const appRouter = router({
   aiAgents: aiAgentsRouter,
   kpis: kpisRouter,
   forge: forgeRouter,
+  scheduling: schedulingRouter,
 
   auth: router({
     /**

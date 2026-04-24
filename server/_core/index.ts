@@ -172,10 +172,20 @@ async function ensureMagicLinkTokenHash() {
   }
 }
 
+async function ensureSchedulingTablesBoot() {
+  try {
+    const { ensureSchedulingTables } = await import("../scheduling");
+    await ensureSchedulingTables();
+  } catch (err) {
+    console.warn("[boot] ensureSchedulingTablesBoot failed (non-fatal):", err);
+  }
+}
+
 async function startServer() {
   await ensurePhoneTables();
   await ensurePortalContinuityFlag();
   await ensureMagicLinkTokenHash();
+  await ensureSchedulingTablesBoot();
   const app = express();
   const server = createServer(app);
 

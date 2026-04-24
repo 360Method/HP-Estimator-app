@@ -598,6 +598,90 @@ registerTool({
   },
 });
 
+// ── 16. scheduling.listSlots ─────────────────────────────────────────────────
+registerTool({
+  key: "scheduling.listSlots",
+  requiresApproval: false,
+  definition: {
+    name: "schedulingListSlots",
+    description:
+      "List open scheduling slots (operator availability windows). Returns up to 100 future slots with id, startAt, endAt, capacity, bookedCount.",
+    input_schema: {
+      type: "object",
+      properties: {
+        from: { type: "string", description: "ISO datetime — list slots on or after." },
+        to: { type: "string", description: "ISO datetime — list slots on or before." },
+        limit: { type: "number" },
+      },
+    },
+  },
+  handler: async ({ input }) => {
+    const { listAvailableSlots } = await import("../../scheduling");
+    const from = input.from ? new Date(String(input.from)) : undefined;
+    const to = input.to ? new Date(String(input.to)) : undefined;
+    const limit = Math.min(500, Number(input.limit ?? 100));
+    return listAvailableSlots({ from, to, limit });
+  },
+});
+
+// ── 17. scheduling.createBooking ─────────────────────────────────────────────
+registerTool({
+  key: "scheduling.createBooking",
+  requiresApproval: false,
+  definition: {
+    name: "schedulingCreateBooking",
+    description:
+      "Book an available slot for a customer. Visit type defaults to consultation. Returns the booking with confirmation code.",
+    input_schema: {
+      type: "object",
+      properties: {
+        customerId: { type: "string" },
+        slotId: { type: "number" },
+        visitType: {
+          type: "string",
+          enum: ["consultation", "baseline", "seasonal", "project"],
+        },
+        notes: { type: "string" },
+        bookedBy: { type: "string", description: "Defaults to 'agent' when omitted." },
+      },
+      required: ["customerId", "slotId"],
+    },
+  },
+  handler: async ({ input }) => {
+    const { createBooking } = await import("../../scheduling");
+    return createBooking({
+      customerId: String(input.customerId),
+      slotId: Number(input.slotId),
+      visitType: (input.visitType as never) ?? "consultation",
+      notes: input.notes as string | undefined,
+      bookedBy: (input.bookedBy as string | undefined) ?? "agent",
+    });
+  },
+});
+
+// ── 18. scheduling.cancel ─────────────────────────────────────────────────────
+registerTool({
+  key: "scheduling.cancel",
+  requiresApproval: false,
+  definition: {
+    name: "schedulingCancel",
+    description: "Cancel a booking by id. Frees the slot for re-booking.",
+    input_schema: {
+      type: "object",
+      properties: {
+        id: { type: "number" },
+        reason: { type: "string" },
+      },
+      required: ["id"],
+    },
+  },
+  handler: async ({ input }) => {
+    const { cancelBooking } = await import("../../scheduling");
+    await cancelBooking(Number(input.id), input.reason as string | undefined);
+    return { ok: true };
+  },
+});
+
 export const PHASE_2_TOOL_KEYS: RegisteredTool["key"][] = [
   "customers.list",
   "customers.get",
@@ -614,4 +698,7 @@ export const PHASE_2_TOOL_KEYS: RegisteredTool["key"][] = [
   "kpis.recordExplicit",
   "hierarchy.pingIntegrator",
   "hierarchy.pingDepartmentHead",
+  "scheduling.listSlots",
+  "scheduling.createBooking",
+  "scheduling.cancel",
 ];

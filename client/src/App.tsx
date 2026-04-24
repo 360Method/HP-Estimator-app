@@ -35,6 +35,7 @@ import PortalReports from "./pages/portal/PortalReports";
 import PortalReportDetail from "./pages/portal/PortalReportDetail";
 import Portal360Membership from "./pages/portal/Portal360Membership";
 import PortalEnrollmentConfirmation from "./pages/portal/PortalEnrollmentConfirmation";
+import PortalSchedule from "./pages/portal/PortalSchedule";
 import WorkOrderDetail from "./pages/WorkOrderDetail";
 import Welcome360Page from "./pages/Welcome360Page";
 
@@ -44,6 +45,7 @@ import AiAgentsList from "./pages/admin/AiAgentsList";
 import AiAgentDetail from "./pages/admin/AiAgentDetail";
 import AiAgentTasks from "./pages/admin/AiAgentTasks";
 import DepartmentDetail from "./pages/admin/DepartmentDetail";
+import AdminSchedulingPage from "./pages/admin/AdminSchedulingPage";
 
 // Domains that should serve only the customer portal (no admin app)
 const PORTAL_HOSTNAMES = ["client.handypioneers.com"];
@@ -96,6 +98,7 @@ function Router() {
       <Route path="/portal/reports" component={PortalReports} />
       <Route path="/portal/360-membership" component={Portal360Membership} />
       <Route path="/portal/360-confirmation" component={PortalEnrollmentConfirmation} />
+      <Route path="/portal/schedule" component={PortalSchedule} />
 
       {/* 360° Method post-checkout confirmation (public) */}
       <Route path="/360-welcome" component={Welcome360Page} />
@@ -112,6 +115,7 @@ function Router() {
       <Route path="/admin/ai-agents/:id" component={AiAgentDetail} />
       <Route path="/admin/ai-agents" component={AiAgentsList} />
       <Route path="/admin/departments/:slug" component={DepartmentDetail} />
+      <Route path="/admin/scheduling" component={AdminSchedulingPage} />
 
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
