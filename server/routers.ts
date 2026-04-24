@@ -3,7 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_core/trpc";
 import { paymentsRouter } from "./routers/payments";
 import { estimateRouter } from "./routers/estimate";
 import { inboxRouter } from "./routers/inbox";
@@ -31,6 +31,7 @@ import { automationRulesRouter } from "./routers/automationRules";
 import { emailTemplatesRouter } from "./routers/emailTemplates";
 import { campaignsRouter } from "./routers/campaigns";
 import { priorityTranslationRouter } from "./routers/priorityTranslation";
+import { forgeRouter } from "./routers/forge";
 import {
   getAdminAllowlist,
   addAdminAllowlistEmail,
@@ -67,6 +68,7 @@ export const appRouter = router({
   emailTemplates: emailTemplatesRouter,
   campaigns: campaignsRouter,
   priorityTranslation: priorityTranslationRouter,
+  forge: forgeRouter,
 
   auth: router({
     /**
@@ -88,16 +90,18 @@ export const appRouter = router({
   }),
 
   allowlist: router({
-    list: protectedProcedure.query(async () => {
+    // adminProcedure (role='admin'): only the OWNER_EMAIL user gets this role at
+    // upsert time, so allowlist mutations can no longer self-privilege.
+    list: adminProcedure.query(async () => {
       return getAdminAllowlist();
     }),
-    add: protectedProcedure
+    add: adminProcedure
       .input(z.object({ email: z.string().email() }))
       .mutation(async ({ ctx, input }) => {
         await addAdminAllowlistEmail(input.email, ctx.user.email ?? ctx.user.openId);
         return { success: true };
       }),
-    remove: protectedProcedure
+    remove: adminProcedure
       .input(z.object({ email: z.string().email() }))
       .mutation(async ({ ctx, input }) => {
         const list = await getAdminAllowlist();

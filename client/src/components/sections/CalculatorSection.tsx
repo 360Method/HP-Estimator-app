@@ -13,18 +13,17 @@ import { LineItem, CustomLineItem, Tier, UNIT_LABELS, UnitType } from '@/lib/typ
 import { ChevronDown, AlertTriangle, CheckCircle2, XCircle, Sparkles, Plus, Trash2, Loader2, Ruler, Star } from 'lucide-react';
 import { toast } from 'sonner';
 import { ALL_PHASES } from '@/lib/phases';
-import { trpc } from '@/lib/trpc';
+import { trpc, trpcClient } from '@/lib/trpc';
 import { calcMemberDiscount, type MemberTier } from '../../../../shared/threeSixtyTiers';
-
-const FORGE_API_URL = import.meta.env.VITE_FRONTEND_FORGE_API_URL as string;
-const FORGE_API_KEY = import.meta.env.VITE_FRONTEND_FORGE_API_KEY as string;
 
 // Paint prep is only relevant for these two phases
 const PAINT_PREP_PHASE_IDS = new Set([5, 11]); // Drywall, Trim & Finish Carpentry
 
 // ─── AI COST ANALYSIS ────────────────────────────────────────
+// Calls the Forge LLM via the server-side tRPC proxy so the API key stays
+// on the server.
 async function analyzeCustomItemCost(description: string, qty: number, unitType: string): Promise<{ low: number; high: number; notes: string }> {
-  const prompt = `You are a residential remodel estimator in Vancouver, WA (Pacific Northwest). 
+  const prompt = `You are a residential remodel estimator in Vancouver, WA (Pacific Northwest).
 Analyze this custom scope item and provide a realistic cost RANGE for the TOTAL hard cost (materials + labor at $100/hr):
 
 Item: "${description}"
@@ -35,22 +34,16 @@ Respond ONLY with valid JSON in this exact format (no markdown, no explanation):
 
 Base your estimate on current Pacific Northwest contractor pricing (2024-2025). Be realistic and specific.`;
 
-  const response = await fetch(`${FORGE_API_URL}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${FORGE_API_KEY}`,
-    },
-    body: JSON.stringify({
+  const data = await trpcClient.forge.proxy.mutate({
+    path: 'chat/completions',
+    params: {
       model: 'claude-3-5-haiku',
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 200,
-    }),
+    },
   });
 
-  if (!response.ok) throw new Error('AI analysis failed');
-  const data = await response.json();
-  const text = data.choices?.[0]?.message?.content ?? '';
+  const text = data?.choices?.[0]?.message?.content ?? '';
   const parsed = JSON.parse(text.trim());
   return { low: parsed.low, high: parsed.high, notes: parsed.notes };
 }

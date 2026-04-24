@@ -22,6 +22,7 @@ import { notifyOwner } from "../_core/notification";
 import { buildInboundCallTwiml, buildFallbackTwiml, getPhoneSettings } from "../phone";
 import { randomUUID } from "crypto";
 import { sdk } from "./sdk";
+import { registerAuthRoutes, seedDefaultAdminIfNeeded } from "./auth";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -40,6 +41,23 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
     }
   }
   throw new Error(`No available port found starting from ${startPort}`);
+}
+
+function verifyTwilioRequest(req: express.Request, routePath: string): boolean {
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  if (!authToken) return true;
+  const sig = req.headers["x-twilio-signature"] as string | undefined;
+  const forwardedProto = (req.headers["x-forwarded-proto"] as string) || req.protocol;
+  const forwardedHost = (req.headers["x-forwarded-host"] as string) || req.get("host") || "localhost";
+  const proto = forwardedProto.split(",")[0].trim();
+  const host = forwardedHost.split(",")[0].trim();
+  const url = `${proto}://${host}${routePath}`;
+  try {
+    return twilio.validateRequest(authToken, sig ?? "", url, req.body);
+  } catch (err) {
+    console.warn(`[Twilio] Signature validation threw for ${routePath}:`, err);
+    return false;
+  }
 }
 
 async function ensurePhoneTables() {
@@ -102,8 +120,6 @@ async function ensurePortalContinuityFlag() {
     const { sql } = await import("drizzle-orm");
     const db = await getDb();
     if (!db) return;
-    // Defensive: the drizzle tracker diverges from prod DB (see memory note),
-    // so add the column if missing even when migration 0064 already recorded.
     const [[row]]: any = await db.execute(sql`
       SELECT COUNT(*) AS c FROM information_schema.columns
       WHERE table_schema = DATABASE()
@@ -122,9 +138,40 @@ async function ensurePortalContinuityFlag() {
   }
 }
 
+// Idempotent upgrade: replace `portalMagicLinks.token` with hashed `tokenHash`.
+// Runs on every boot. Drizzle-kit can drift from prod, so we don't rely on it.
+async function ensureMagicLinkTokenHash() {
+  try {
+    const { getDb } = await import("../db");
+    const { sql } = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return;
+    const existsRows = await db.execute(sql`
+      SELECT COUNT(*) AS c
+      FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'portalMagicLinks'
+        AND COLUMN_NAME = 'tokenHash'
+    `);
+    const rows = (existsRows as any)[0] ?? existsRows;
+    const count = Number(rows?.[0]?.c ?? rows?.c ?? 0);
+    if (count > 0) return;
+    console.log("[boot] Upgrading portalMagicLinks -> tokenHash column");
+    await db.execute(sql`DELETE FROM \`portalMagicLinks\``);
+    await db.execute(sql`ALTER TABLE \`portalMagicLinks\` DROP PRIMARY KEY`);
+    await db.execute(sql`ALTER TABLE \`portalMagicLinks\` DROP COLUMN \`token\``);
+    await db.execute(sql`ALTER TABLE \`portalMagicLinks\` ADD COLUMN \`tokenHash\` CHAR(64) NOT NULL`);
+    await db.execute(sql`ALTER TABLE \`portalMagicLinks\` ADD PRIMARY KEY (\`tokenHash\`)`);
+    console.log("[boot] portalMagicLinks upgrade complete");
+  } catch (err) {
+    console.warn("[boot] ensureMagicLinkTokenHash failed (non-fatal):", err);
+  }
+}
+
 async function startServer() {
   await ensurePhoneTables();
   await ensurePortalContinuityFlag();
+  await ensureMagicLinkTokenHash();
   const app = express();
   const server = createServer(app);
 
@@ -147,8 +194,19 @@ async function startServer() {
   // ── Rate limiting ──
   const globalLimiter = rateLimit({ windowMs: 60 * 1000, max: 100, standardHeaders: true, legacyHeaders: false });
   const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, message: "Too many login attempts, try again later" });
+  // Tight limiter for public, unauthenticated POST surfaces that write to DB/Stripe/email.
+  const publicWriteLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many requests, please try again later" },
+  });
   app.use("/api/", globalLimiter);
   app.use("/api/oauth/", authLimiter);
+  app.use("/api/360/event", publicWriteLimiter);
+  app.use("/api/360/checkout", publicWriteLimiter);
+  app.use("/api/360/portfolio-checkout", publicWriteLimiter);
 
   // ── CORS: allow 360 funnel and portal to call the pro API ──
   const allowedOrigins = [
@@ -314,24 +372,10 @@ async function startServer() {
   // POST /api/twilio/sms — Twilio calls this when an SMS arrives
   app.post("/api/twilio/sms", express.urlencoded({ extended: false }), async (req, res) => {
     try {
-      // Validate Twilio signature in production
-      // Use x-forwarded-host and x-forwarded-proto to get the real public URL
-      // behind a reverse proxy — Twilio signs with the public URL
-      const authToken = process.env.TWILIO_AUTH_TOKEN;
-      if (authToken) {
-        const sig = req.headers["x-twilio-signature"] as string;
-        const forwardedProto = (req.headers["x-forwarded-proto"] as string) || req.protocol;
-        const forwardedHost = (req.headers["x-forwarded-host"] as string) || req.get("host") || "localhost";
-        const proto = forwardedProto.split(",")[0].trim(); // take first if comma-separated
-        const host = forwardedHost.split(",")[0].trim();
-        const url = `${proto}://${host}/api/twilio/sms`;
-        console.log(`[Twilio SMS] Validating signature for URL: ${url}`);
-        const valid = twilio.validateRequest(authToken, sig, url, req.body);
-        if (!valid && process.env.NODE_ENV === "production") {
-          console.warn(`[Twilio SMS] Signature validation failed for URL: ${url}`);
-          res.status(403).send("Forbidden");
-          return;
-        }
+      if (!verifyTwilioRequest(req, "/api/twilio/sms")) {
+        console.warn("[Twilio SMS] Signature validation failed");
+        res.status(403).send("Forbidden");
+        return;
       }
       const inboundMsg = await handleInboundSms(req.body);
       // Broadcast real-time update to connected clients
@@ -351,6 +395,11 @@ async function startServer() {
   // POST /api/twilio/voice/status — Twilio calls this when call status changes
   app.post("/api/twilio/voice/status", express.urlencoded({ extended: false }), async (req, res) => {
     try {
+      if (!verifyTwilioRequest(req, "/api/twilio/voice/status")) {
+        console.warn("[Twilio Voice status] Signature validation failed");
+        res.status(403).send("Forbidden");
+        return;
+      }
       await handleCallStatusUpdate(req.body);
       res.sendStatus(204);
     } catch (err) {
@@ -361,7 +410,15 @@ async function startServer() {
 
   // ── Twilio Voice TwiML — outbound call instructions ──────────────────────────
   // POST /api/twilio/voice/connect — returns TwiML to connect a browser call
+  // SECURITY: signature check is CRITICAL here — this route lets Twilio dial
+  // an arbitrary number. Without verification, an attacker can spoof-POST to
+  // initiate calls to premium-rate destinations on our account.
   app.post("/api/twilio/voice/connect", express.urlencoded({ extended: false }), (req, res) => {
+    if (!verifyTwilioRequest(req, "/api/twilio/voice/connect")) {
+      console.warn("[Twilio Voice connect] Signature validation failed — blocking call dial-out");
+      res.status(403).send("Forbidden");
+      return;
+    }
     const to = req.body.To || req.body.to;
     const VoiceResponse = twilio.twiml.VoiceResponse;
     const twiml = new VoiceResponse();
@@ -379,6 +436,11 @@ async function startServer() {
   // POST /api/twilio/voice/inbound — Twilio calls this for every inbound call
   app.post("/api/twilio/voice/inbound", express.urlencoded({ extended: false }), async (req, res) => {
     try {
+      if (!verifyTwilioRequest(req, "/api/twilio/voice/inbound")) {
+        console.warn("[Twilio Voice inbound] Signature validation failed");
+        res.status(403).send("Forbidden");
+        return;
+      }
       const forwardedProto = (req.headers["x-forwarded-proto"] as string) || req.protocol;
       const forwardedHost = (req.headers["x-forwarded-host"] as string) || req.get("host") || "localhost";
       const proto = forwardedProto.split(",")[0].trim();
@@ -400,6 +462,11 @@ async function startServer() {
   // ── Twilio Voice — stage-2 fallback (cell didn't answer) ─────────────────
   app.post("/api/twilio/voice/fallback", express.urlencoded({ extended: false }), async (req, res) => {
     try {
+      if (!verifyTwilioRequest(req, "/api/twilio/voice/fallback")) {
+        console.warn("[Twilio Voice fallback] Signature validation failed");
+        res.status(403).send("Forbidden");
+        return;
+      }
       const forwardedProto = (req.headers["x-forwarded-proto"] as string) || req.protocol;
       const forwardedHost = (req.headers["x-forwarded-host"] as string) || req.get("host") || "localhost";
       const proto = forwardedProto.split(",")[0].trim();
@@ -445,6 +512,11 @@ async function startServer() {
   // ── Twilio Voice — voicemail recording callback ────────────────────────────
   app.post("/api/twilio/voice/voicemail", express.urlencoded({ extended: false }), async (req, res) => {
     try {
+      if (!verifyTwilioRequest(req, "/api/twilio/voice/voicemail")) {
+        console.warn("[Twilio Voice voicemail] Signature validation failed");
+        res.status(403).send("Forbidden");
+        return;
+      }
       const { CallSid, From, To, RecordingUrl, TranscriptionText, RecordingDuration } = req.body;
       const callerNumber = From || "Unknown";
       const durationSecs = RecordingDuration ? parseInt(RecordingDuration, 10) : 0;
@@ -568,8 +640,18 @@ async function startServer() {
     addSSEClient(clientId, res);
   });
 
-  // ── Gmail diagnostic endpoint ─────────────────────────────────────────────────────────────
-  app.get("/api/gmail/debug", (req, res) => {
+  // ── Gmail diagnostic endpoint (admin only) ─────────────────────────────────────
+  app.get("/api/gmail/debug", async (req, res) => {
+    try {
+      const user = await sdk.authenticateRequest(req);
+      if (user.role !== "admin") {
+        res.status(403).json({ error: "Admin access required" });
+        return;
+      }
+    } catch {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
     res.json({
       configured: !!(process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET),
       clientIdPrefix: process.env.GMAIL_CLIENT_ID?.slice(0, 20) || null,
@@ -645,6 +727,12 @@ async function startServer() {
         if (!d) return "—";
         return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
       };
+      const esc = (v: unknown): string => String(v ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
 
       // Build HTML matching the portal estimate detail layout
       const isLegacy = phases.length > 0 && !phases[0].items;
@@ -652,20 +740,20 @@ async function startServer() {
       if (isLegacy) {
         lineItemsHtml = `<table class="items-table"><thead><tr><th>Services</th><th>Qty</th><th>Unit Price</th><th>Amount</th></tr></thead><tbody>`;
         for (const row of phases) {
-          lineItemsHtml += `<tr><td>${row.description || ""}</td><td>—</td><td>—</td><td>${fmtMoney(est.totalAmount ?? 0)}</td></tr>`;
+          lineItemsHtml += `<tr><td>${esc(row.description)}</td><td>—</td><td>—</td><td>${fmtMoney(est.totalAmount ?? 0)}</td></tr>`;
         }
         lineItemsHtml += `</tbody></table>`;
       } else {
         for (const phase of phases) {
           lineItemsHtml += `<div class="phase-block">`;
-          lineItemsHtml += `<div class="phase-header"><strong>${phase.phaseName || ""}</strong>`;
-          if (phase.phaseDescription) lineItemsHtml += `<p class="phase-desc">${phase.phaseDescription}</p>`;
+          lineItemsHtml += `<div class="phase-header"><strong>${esc(phase.phaseName)}</strong>`;
+          if (phase.phaseDescription) lineItemsHtml += `<p class="phase-desc">${esc(phase.phaseDescription)}</p>`;
           lineItemsHtml += `</div>`;
           lineItemsHtml += `<table class="items-table"><thead><tr><th>Services</th><th>Qty</th><th>Unit Price</th><th>Amount</th></tr></thead><tbody>`;
           for (const item of (phase.items || [])) {
-            lineItemsHtml += `<tr><td><strong>${item.name || ""}</strong>`;
-            if (item.scopeOfWork) lineItemsHtml += `<br/><span class="sow">SCOPE OF WORK<br/>— ${item.scopeOfWork}</span>`;
-            lineItemsHtml += `</td><td>${item.qty ?? "—"}</td><td>${item.unitPrice != null ? fmtMoney(Math.round(item.unitPrice * 100)) : "—"}</td><td>${item.amount != null ? fmtMoney(Math.round(item.amount * 100)) : "—"}</td></tr>`;
+            lineItemsHtml += `<tr><td><strong>${esc(item.name)}</strong>`;
+            if (item.scopeOfWork) lineItemsHtml += `<br/><span class="sow">SCOPE OF WORK<br/>— ${esc(item.scopeOfWork)}</span>`;
+            lineItemsHtml += `</td><td>${esc(item.qty ?? "—")}</td><td>${item.unitPrice != null ? fmtMoney(Math.round(item.unitPrice * 100)) : "—"}</td><td>${item.amount != null ? fmtMoney(Math.round(item.amount * 100)) : "—"}</td></tr>`;
           }
           lineItemsHtml += `</tbody></table>`;
           if (phase.phaseSubtotal != null) {
@@ -718,13 +806,13 @@ async function startServer() {
           <div><div class="company">Handy Pioneers</div><div class="tagline">808 SE Chkalov Dr 3-433, Vancouver, WA 98683 &nbsp;|&nbsp; (360) 544-9858 &nbsp;|&nbsp; help@handypioneers.com</div></div>
           <div style="margin-left:auto;text-align:right;font-size:12px;">
             <div style="opacity:0.7">ESTIMATE</div>
-            <div style="font-weight:700;font-size:16px">${est.estimateNumber}</div>
+            <div style="font-weight:700;font-size:16px">${esc(est.estimateNumber)}</div>
           </div>
         </div>
         <div class="gold-bar"></div>
         <div class="body">
           <table class="meta-table"><tr>
-            <td><span class="section-label">For</span><br/><strong>${portalCustomer.name}</strong></td>
+            <td><span class="section-label">For</span><br/><strong>${esc(portalCustomer.name)}</strong></td>
             <td class="right"><span class="label">Estimate Date:</span> <span class="value">${fmtDate(est.sentAt)}</span><br/><span class="label">Expires:</span> <span class="value">${fmtDate(est.expiresAt)}</span></td>
           </tr></table>
           ${lineItemsHtml}
@@ -749,9 +837,16 @@ async function startServer() {
     }
   });
 
-  // Configure body parser with larger size limit for file uploads
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  // Body parsers. File uploads route through uploadsRouter which caps at 16 MB
+  // after base64 decode; JSON wire payload only ~33% larger, so 25 MB is
+  // ample headroom without handing 50 MB of free buffer to every caller.
+  app.use(express.json({ limit: "25mb" }));
+  app.use(express.urlencoded({ limit: "2mb", extended: true }));
+
+  // ── Staff admin auth: /api/auth/login, /api/auth/logout, /api/auth/me ─────
+  app.use("/api/auth/login", authLimiter);
+  registerAuthRoutes(app);
+  seedDefaultAdminIfNeeded().catch(err => console.error("[Auth] seed failed:", err));
   // ── Gmail poll schedule (every 2 minutes) ────────────────────────────────────────────────────
   setInterval(async () => {
     const email = process.env.GMAIL_CONNECTED_EMAIL;
