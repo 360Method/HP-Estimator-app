@@ -1725,3 +1725,64 @@ export const scheduledBookings = mysqlTable("scheduled_bookings", {
 });
 export type DbScheduledBooking = typeof scheduledBookings.$inferSelect;
 export type InsertDbScheduledBooking = typeof scheduledBookings.$inferInsert;
+
+// ─── AI AGENT RUNTIME (Phase 4 — autonomous triggers + integrator chat) ───────
+// Migration 0068. Together with the Phase 1 tables above, this is what flips
+// agents from manual-only to live 24/7. Boot-time `ensureAgentPhase4Tables` in
+// server/_core/index.ts re-creates these on prod when drizzle-kit drifts.
+
+export const aiAgentEventSubscriptions = mysqlTable("ai_agent_event_subscriptions", {
+  id: int("id").autoincrement().primaryKey(),
+  agentId: int("agentId").notNull(),
+  /** Domain event key, e.g. 'lead.created', 'opportunity.stage_changed', 'voicemail.received'. */
+  eventName: varchar("eventName", { length: 80 }).notNull(),
+  /** Optional JSON match expression. When non-null, the trigger bus only fires if the payload matches. */
+  filter: text("filter"),
+  enabled: boolean("enabled").notNull().default(true),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbAiAgentEventSubscription = typeof aiAgentEventSubscriptions.$inferSelect;
+export type InsertDbAiAgentEventSubscription = typeof aiAgentEventSubscriptions.$inferInsert;
+
+export const aiAgentSchedules = mysqlTable("ai_agent_schedules", {
+  id: int("id").autoincrement().primaryKey(),
+  agentId: int("agentId").notNull(),
+  /** Five-field cron expression, e.g. '0 6 * * 1' (Monday 06:00). Timezone applied separately. */
+  cronExpression: varchar("cronExpression", { length: 80 }).notNull(),
+  timezone: varchar("timezone", { length: 64 }).notNull().default("America/Los_Angeles"),
+  enabled: boolean("enabled").notNull().default(true),
+  lastRunAt: timestamp("lastRunAt"),
+  nextRunAt: timestamp("nextRunAt"),
+  /** Optional payload merged into trigger payload. */
+  payload: text("payload"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbAiAgentSchedule = typeof aiAgentSchedules.$inferSelect;
+export type InsertDbAiAgentSchedule = typeof aiAgentSchedules.$inferInsert;
+
+export const integratorChatConversations = mysqlTable("integrator_chat_conversations", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  title: varchar("title", { length: 200 }),
+  lastMessageAt: timestamp("lastMessageAt"),
+  archived: boolean("archived").notNull().default(false),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbIntegratorChatConversation = typeof integratorChatConversations.$inferSelect;
+export type InsertDbIntegratorChatConversation = typeof integratorChatConversations.$inferInsert;
+
+export const integratorChatMessages = mysqlTable("integrator_chat_messages", {
+  id: int("id").autoincrement().primaryKey(),
+  conversationId: int("conversationId").notNull(),
+  userId: int("userId").notNull(),
+  role: mysqlEnum("role", ["user", "assistant", "tool"]).notNull(),
+  content: text("content").notNull(),
+  toolCalls: text("toolCalls"),
+  inputTokens: int("inputTokens").notNull().default(0),
+  outputTokens: int("outputTokens").notNull().default(0),
+  costUsd: decimal("costUsd", { precision: 10, scale: 4 }).notNull().default("0.0000"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbIntegratorChatMessage = typeof integratorChatMessages.$inferSelect;
+export type InsertDbIntegratorChatMessage = typeof integratorChatMessages.$inferInsert;

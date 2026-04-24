@@ -396,6 +396,22 @@ export const opportunitiesRouter = router({
         triggeredBy: ctx.user?.id ? String(ctx.user.id) : "system",
       });
 
+      // Phase 4 agent trigger: stage transitions feed Margin Monitor (completed),
+      // QA AI (visit.completed-like flows), and any future stage-listening agents.
+      {
+        const { emitAgentEvent } = await import("../lib/agentRuntime/triggerBus");
+        emitAgentEvent("opportunity.stage_changed", {
+          opportunityId: input.opportunityId,
+          customerId: opp.customerId,
+          fromStage,
+          toStage: input.toStage,
+          stage: input.toStage,
+          area: input.toArea ?? opp.area,
+          value: opp.value,
+          title: opp.title,
+        }).catch(() => null);
+      }
+
       // Cross-role triggers
       const stageLower = input.toStage.toLowerCase();
       const isAppointmentBooked = stageLower.includes("appointment") || stageLower.includes("baseline") || stageLower.includes("consultation") || stageLower.includes("scheduled");

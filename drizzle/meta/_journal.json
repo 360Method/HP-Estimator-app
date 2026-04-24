@@ -477,6 +477,13 @@
       "when": 1777500070000,
       "tag": "0067_scheduling_slots_bookings",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "5",
+      "when": 1777500080000,
+      "tag": "0068_ai_agents_phase_4_triggers_chat",
+      "breakpoints": true
     }
   ]
 }

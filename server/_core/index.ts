@@ -181,11 +181,70 @@ async function ensureSchedulingTablesBoot() {
   }
 }
 
+async function ensureAgentPhase4Tables() {
+  // Phase 4 (triggers + chat) tables. Drizzle-kit's tracker has drifted from
+  // prod a few times — same boot-time idempotent guard the phone tables use.
+  try {
+    const { getDb } = await import("../db");
+    const { sql } = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return;
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`ai_agent_event_subscriptions\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`agentId\` int NOT NULL,
+      \`eventName\` varchar(80) NOT NULL,
+      \`filter\` text,
+      \`enabled\` boolean NOT NULL DEFAULT true,
+      \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT \`ai_agent_event_subscriptions_id\` PRIMARY KEY(\`id\`)
+    )`);
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`ai_agent_schedules\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`agentId\` int NOT NULL,
+      \`cronExpression\` varchar(80) NOT NULL,
+      \`timezone\` varchar(64) NOT NULL DEFAULT 'America/Los_Angeles',
+      \`enabled\` boolean NOT NULL DEFAULT true,
+      \`lastRunAt\` timestamp NULL,
+      \`nextRunAt\` timestamp NULL,
+      \`payload\` text,
+      \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT \`ai_agent_schedules_id\` PRIMARY KEY(\`id\`)
+    )`);
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`integrator_chat_conversations\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`userId\` int NOT NULL,
+      \`title\` varchar(200),
+      \`lastMessageAt\` timestamp NULL,
+      \`archived\` boolean NOT NULL DEFAULT false,
+      \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      \`updatedAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT \`integrator_chat_conversations_id\` PRIMARY KEY(\`id\`)
+    )`);
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`integrator_chat_messages\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`conversationId\` int NOT NULL,
+      \`userId\` int NOT NULL,
+      \`role\` enum('user','assistant','tool') NOT NULL,
+      \`content\` text NOT NULL,
+      \`toolCalls\` text,
+      \`inputTokens\` int NOT NULL DEFAULT 0,
+      \`outputTokens\` int NOT NULL DEFAULT 0,
+      \`costUsd\` decimal(10,4) NOT NULL DEFAULT '0.0000',
+      \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT \`integrator_chat_messages_id\` PRIMARY KEY(\`id\`)
+    )`);
+    console.log("[boot] agent phase-4 tables ensured");
+  } catch (err) {
+    console.warn("[boot] ensureAgentPhase4Tables failed (non-fatal):", err);
+  }
+}
+
 async function startServer() {
   await ensurePhoneTables();
   await ensurePortalContinuityFlag();
   await ensureMagicLinkTokenHash();
   await ensureSchedulingTablesBoot();
+  await ensureAgentPhase4Tables();
   const app = express();
   const server = createServer(app);
 
@@ -279,16 +338,34 @@ async function startServer() {
         const pi = event.data.object as Stripe.PaymentIntent;
         console.log(`[Webhook] PaymentIntent succeeded: ${pi.id} amount=${pi.amount}`);
         // Sync portal invoice status to 'paid'
+        let portalInvoiceId: string | null = null;
         try {
           const inv = await getPortalInvoiceByStripePaymentIntentId(pi.id);
           if (inv) {
             await updatePortalInvoicePaid(inv.id, pi.amount_received, pi.id);
+            portalInvoiceId = inv.id;
             console.log(`[Webhook] Portal invoice ${inv.id} marked paid via PI ${pi.id}`);
           } else {
             console.log(`[Webhook] No portal invoice found for PI ${pi.id} — may be client-side only`);
           }
         } catch (dbErr) {
           console.error(`[Webhook] DB update failed for PI ${pi.id}:`, dbErr);
+        }
+        // Phase 4 agent trigger: payment.received fans out to Cash Flow,
+        // Bookkeeping, Onboarding (membership initial), and any future listeners.
+        try {
+          const { emitAgentEvent } = await import("../lib/agentRuntime/triggerBus");
+          emitAgentEvent("payment.received", {
+            paymentIntentId: pi.id,
+            amountCents: pi.amount_received ?? pi.amount,
+            currency: pi.currency,
+            invoiceId: portalInvoiceId,
+            invoiceNumber: pi.metadata?.invoiceNumber ?? null,
+            customerName: pi.metadata?.customerName ?? null,
+            source: "stripe",
+          }).catch(() => null);
+        } catch (emitErr) {
+          console.warn("[Webhook] payment.received emit failed:", emitErr);
         }
         break;
       }
@@ -579,6 +656,16 @@ async function startServer() {
             customerId: customer?.id,
             priority: 'high',
           });
+          // Phase 4 trigger: voicemail.received fans out to Lead Nurturer AI.
+          const { emitAgentEvent } = await import("../lib/agentRuntime/triggerBus");
+          emitAgentEvent("voicemail.received", {
+            customerId: customer?.id ?? null,
+            customerName: customer?.displayName ?? callerNumber,
+            callerNumber,
+            durationSecs,
+            transcription: TranscriptionText ?? "",
+            recordingUrl: RecordingUrl ?? null,
+          }).catch(() => null);
         } catch (notifyErr) {
           console.warn("[Voicemail nurturer notify] Failed:", notifyErr);
         }
@@ -1230,6 +1317,23 @@ async function startServer() {
         reportUrl: req.body.reportUrl,
         source: req.body.source || "roadmap_generator",
       });
+      // Phase 4 agent trigger: a Roadmap Generator submission is a hot inbound
+      // lead. Fans out to whichever agent subscribes (default: Lead Nurturer).
+      try {
+        const { emitAgentEvent } = await import("../lib/agentRuntime/triggerBus");
+        emitAgentEvent("roadmap_generator.submitted", {
+          firstName: req.body.firstName,
+          lastName: req.body.lastName,
+          email: req.body.email,
+          phone: req.body.phone,
+          propertyAddress: req.body.propertyAddress,
+          notes: req.body.notes,
+          source: req.body.source || "roadmap_generator",
+          submissionId: (result as { id?: string | number } | null)?.id ?? null,
+        }).catch(() => null);
+      } catch (emitErr) {
+        console.warn("[Roadmap Generator] event emit failed:", emitErr);
+      }
       res.json(result);
     } catch (err: any) {
       if (err?.code === "LIMIT_FILE_SIZE") {
