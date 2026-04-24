@@ -1524,6 +1524,29 @@ const ALL_TEMPLATES = [
 
 const conn = await mysql.createConnection(url);
 
+// Ensure the table exists even if migration 0052 wasn't applied — the
+// drizzle tracker has diverged from prod state during the MySQL port
+// (see CLAUDE.md). Mirrors the ensurePhoneTables / smsTemplates seed
+// guard pattern documented in b60ec4c.
+await conn.execute(`
+  CREATE TABLE IF NOT EXISTS emailTemplates (
+    id int AUTO_INCREMENT NOT NULL,
+    tenantId int NOT NULL DEFAULT 1,
+    \`key\` varchar(80) NOT NULL,
+    name varchar(160) NOT NULL DEFAULT '',
+    subject varchar(300) NOT NULL DEFAULT '',
+    preheader varchar(300) DEFAULT '',
+    html text NOT NULL,
+    \`text\` text,
+    mergeTagSchema text,
+    createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY emailTemplates_tenant_key_unique (tenantId, \`key\`),
+    KEY emailTemplates_key_idx (\`key\`)
+  )
+`);
+
 let inserted = 0;
 let updated = 0;
 
