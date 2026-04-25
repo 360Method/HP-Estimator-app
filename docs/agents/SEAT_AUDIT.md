@@ -1,57 +1,66 @@
 # Agent Seat Audit
 
-> **Auto-generated** by `node scripts/seed-charters.mjs` on each deploy.
-> This file is overwritten on every seed run — do not edit manually.
-> Last manual entry: pre-deploy baseline (no DB yet).
+Generated: 2026-04-25
 
 ## Summary
 - **Total expected seats:** 31
-- **Found in ai_agents:** 0 (run `node scripts/seed-ai-agents.mjs` first)
-- **Operational:** 0
-- **Incomplete:** 31
-- **Total KPIs seeded:** 0 (run `node scripts/seed-charters.mjs`)
-- **Total playbooks seeded:** 0 (run `node scripts/seed-charters.mjs`)
+- **Found in ai_agents:** 31
+- **Operational:** 15
+- **Incomplete:** 16
+- **Total KPIs seeded:** 105
+- **Total playbooks seeded:** 36
 
-## Expected Seats
+## Seat Status
 
 | Seat | Department | Exists in ai_agents | Charter Loaded | KPIs Seeded | Playbooks Seeded | Trigger/Schedule | Status |
 |------|-----------|---------------------|----------------|-------------|-----------------|-----------------|--------|
-| Integrator (Main AI) | integrator_visionary | ✗ pending seed | ✗ | 0 | 0 | — | **incomplete** (not seeded) |
-| AI SDR (Prospecting Research) | sales | ✗ pending seed | ✗ | 0 | 0 | — | **incomplete** |
-| AI Membership Success | sales | ✗ pending seed | ✗ | 0 | 0 | — | **incomplete** |
-| Customer Experience Lead | sales | ✗ pending seed | ✗ | 0 | 0 | — | **incomplete** |
-| Project Manager | operations | ✗ pending seed | ✗ | 0 | 0 | — | **incomplete** |
-| AI Dispatch | operations | ✗ pending seed | ✗ | 0 | 0 | — | **incomplete** |
-| AI QA | operations | ✗ pending seed | ✗ | 0 | 0 | — | **incomplete** |
-| Internal Tradesmen | operations | ✗ pending seed | ✗ | 0 | 0 | — | **incomplete** |
-| External Contractor Network | operations | ✗ pending seed | ✗ | 0 | 0 | — | **incomplete** |
-| AI Content/SEO | marketing | ✗ pending seed | ✗ | 0 | 0 | — | **incomplete** |
-| AI Paid Ads | marketing | ✗ pending seed | ✗ | 0 | 0 | — | **incomplete** |
-| AI Brand Guardian | marketing | ✗ pending seed | ✗ | 0 | 0 | — | **incomplete** |
-| AI Community/Reviews | marketing | ✗ pending seed | ✗ | 0 | 0 | — | **incomplete** |
-| AI Bookkeeping | finance | ✗ pending seed | ✗ | 0 | 0 | — | **incomplete** |
-| AI Margin Monitor | finance | ✗ pending seed | ✗ | 0 | 0 | — | **incomplete** |
-| AI Cash Flow | finance | ✗ pending seed | ✗ | 0 | 0 | — | **incomplete** |
-| CPA/Tax | finance | ✗ pending seed | ✗ | 0 | 0 | — | **incomplete** |
-| AI Onboarding | customer_success | ✗ pending seed | ✗ | 0 | 0 | — | **incomplete** |
-| AI Annual Valuation | customer_success | ✗ pending seed | ✗ | 0 | 0 | — | **incomplete** |
-| AI Nurture Cadence | customer_success | ✗ pending seed | ✗ | 0 | 0 | — | **incomplete** |
-| Member Concierge | customer_success | ✗ pending seed | ✗ | 0 | 0 | — | **incomplete** |
-| AI Vendor Outreach | vendor_trades | ✗ pending seed | ✗ | 0 | 0 | — | **incomplete** |
-| AI Vendor Onboarding | vendor_trades | ✗ pending seed | ✗ | 0 | 0 | — | **incomplete** |
-| AI Trade Matching | vendor_trades | ✗ pending seed | ✗ | 0 | 0 | — | **incomplete** |
-| AI Vendor Performance | vendor_trades | ✗ pending seed | ✗ | 0 | 0 | — | **incomplete** |
-| AI System Integrity | technology | ✗ pending seed | ✗ | 0 | 0 | — | **incomplete** |
-| AI Security | technology | ✗ pending seed | ✗ | 0 | 0 | — | **incomplete** |
-| Software Engineer | technology | ✗ pending seed | ✗ | 0 | 0 | — | **incomplete** |
-| AI Market Research | strategy_expansion | ✗ pending seed | ✗ | 0 | 0 | — | **incomplete** |
-| AI Expansion Playbook | strategy_expansion | ✗ pending seed | ✗ | 0 | 0 | — | **incomplete** |
-| AI Licensing/White-Label | strategy_expansion | ✗ pending seed | ✗ | 0 | 0 | — | **incomplete** |
+| integrator | integrator | ✓ | ✗ | 0 | 0 | cron | **incomplete** (no charter, 0 KPIs, 0 playbooks) |
+| ai_sdr | sales | ✓ | ✓ | 8 | 3 | event+cron | **operational** |
+| ai_membership_success | sales | ✓ | ✓ | 4 | 2 | event | **operational** |
+| cx_lead | sales | ✓ | ✓ | 0 | 0 | none | **incomplete** (0 KPIs, 0 playbooks) |
+| project_manager | operations | ✓ | ✓ | 0 | 0 | none | **incomplete** (0 KPIs, 0 playbooks) |
+| ai_dispatch | operations | ✓ | ✓ | 5 | 2 | event+cron | **operational** |
+| ai_qa | operations | ✓ | ✓ | 3 | 1 | event | **operational** |
+| internal_tradesmen | operations | ✓ | ✓ | 0 | 0 | none | **incomplete** (0 KPIs, 0 playbooks) |
+| external_contractor_network | operations | ✓ | ✓ | 0 | 1 | event | **incomplete** (0 KPIs) |
+| ai_content_seo | marketing | ✓ | ✓ | 8 | 1 | cron | **operational** |
+| ai_paid_ads | marketing | ✓ | ✓ | 3 | 0 | none | **incomplete** (0 playbooks) |
+| ai_brand_guardian | marketing | ✓ | ✓ | 2 | 1 | cron | **operational** |
+| ai_community_reviews | marketing | ✓ | ✓ | 3 | 3 | event | **operational** |
+| ai_bookkeeping | finance | ✓ | ✓ | 5 | 2 | event+cron | **operational** |
+| ai_margin_monitor | finance | ✓ | ✓ | 3 | 1 | event | **operational** |
+| ai_cash_flow | finance | ✓ | ✓ | 3 | 1 | event+cron | **operational** |
+| cpa_tax | finance | ✓ | ✓ | 0 | 0 | none | **incomplete** (0 KPIs, 0 playbooks) |
+| ai_onboarding | customer_success | ✓ | ✓ | 8 | 2 | event+cron | **operational** |
+| ai_annual_valuation | customer_success | ✓ | ✓ | 3 | 1 | none | **operational** |
+| ai_nurture_cadence | customer_success | ✓ | ✓ | 3 | 2 | event+cron | **operational** |
+| member_concierge | customer_success | ✓ | ✓ | 0 | 0 | none | **incomplete** (0 KPIs, 0 playbooks) |
+| ai_vendor_outreach | vendor_network | ✓ | ✗ | 0 | 0 | cron | **incomplete** (no charter, 0 KPIs, 0 playbooks) |
+| ai_vendor_onboarding | vendor_network | ✓ | ✗ | 0 | 0 | none | **incomplete** (no charter, 0 KPIs, 0 playbooks) |
+| ai_trade_matching | vendor_network | ✓ | ✗ | 0 | 0 | none | **incomplete** (no charter, 0 KPIs, 0 playbooks) |
+| ai_vendor_performance | vendor_network | ✓ | ✗ | 0 | 0 | event | **incomplete** (no charter, 0 KPIs, 0 playbooks) |
+| ai_system_integrity | technology | ✓ | ✓ | 8 | 3 | cron | **operational** |
+| ai_security | technology | ✓ | ✓ | 3 | 1 | cron | **operational** |
+| software_engineer | technology | ✓ | ✓ | 0 | 0 | none | **incomplete** (0 KPIs, 0 playbooks) |
+| ai_market_research | strategy | ✓ | ✗ | 0 | 0 | cron | **incomplete** (no charter, 0 KPIs, 0 playbooks) |
+| ai_expansion_playbook | strategy | ✓ | ✗ | 0 | 0 | none | **incomplete** (no charter, 0 KPIs, 0 playbooks) |
+| ai_licensing_whitelabel | strategy | ✓ | ✗ | 0 | 0 | none | **incomplete** (no charter, 0 KPIs, 0 playbooks) |
 
 ## Decisions Needed
 
-- Run `node scripts/seed-ai-agents.mjs` to populate `aiAgents` table
-- Run `node scripts/seed-charters.mjs` to seed charters, KPIs, and playbooks
-- After seeding, re-run `node scripts/seed-charters.mjs` to regenerate this file
-- **Seat count note:** User's original spec says "25 seats" but org chart lists 31. Recommend Marcin confirm which 6 seats to dedupe/remove. Options: merge `external_contractor_network` with `ai_vendor_outreach` (they overlap), and consolidate 4 strategy seats to 3.
-- **Activation:** All AI seats start as `status='draft_queue'`. Marcin activates individually from `/settings` → Agent Charters → edit seat status.
+- integrator: no charter, 0 KPIs, 0 playbooks
+- cx_lead: 0 KPIs, 0 playbooks
+- project_manager: 0 KPIs, 0 playbooks
+- internal_tradesmen: 0 KPIs, 0 playbooks
+- external_contractor_network: 0 KPIs
+- ai_paid_ads: 0 playbooks
+- cpa_tax: 0 KPIs, 0 playbooks
+- member_concierge: 0 KPIs, 0 playbooks
+- ai_vendor_outreach: no charter, 0 KPIs, 0 playbooks
+- ai_vendor_onboarding: no charter, 0 KPIs, 0 playbooks
+- ai_trade_matching: no charter, 0 KPIs, 0 playbooks
+- ai_vendor_performance: no charter, 0 KPIs, 0 playbooks
+- software_engineer: 0 KPIs, 0 playbooks
+- ai_market_research: no charter, 0 KPIs, 0 playbooks
+- ai_expansion_playbook: no charter, 0 KPIs, 0 playbooks
+- ai_licensing_whitelabel: no charter, 0 KPIs, 0 playbooks
