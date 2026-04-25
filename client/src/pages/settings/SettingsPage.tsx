@@ -8,7 +8,7 @@ import {
   ArrowLeft, Building2, CreditCard, Bell, Users,
   FileText, Receipt, Briefcase, UserPlus, GitBranch,
   BookOpen, CheckSquare, Tag, Zap, ChevronDown, ChevronRight,
-  DollarSign, Layers, Settings, ShieldCheck, MapPin, Upload, Phone,
+  DollarSign, Layers, Settings, ShieldCheck, MapPin, Upload, Phone, Bot,
 } from 'lucide-react';
 
 // Sub-page imports
@@ -33,12 +33,14 @@ import ServiceAreaSettings from './ServiceAreaSettings';
 import ImportDataSettings from './ImportDataSettings';
 import PhoneSettings from './PhoneSettings';
 import AutomationsSettings from './AutomationsSettings';
+import AgentChartersSettings from './AgentChartersSettings';
 
 export type SettingsSection =
   | 'company' | 'billing' | 'notifications' | 'team' | 'roles' | 'allowlist'
   | 'estimates' | 'invoices' | 'jobs' | 'leads' | 'pipeline' | 'price-book'
   | 'checklists' | 'job-fields' | 'lead-sources' | 'tags'
-  | 'integrations' | 'service-area' | 'import-data' | 'phone' | 'automations';
+  | 'integrations' | 'service-area' | 'import-data' | 'phone' | 'automations'
+  | 'agent-charters';
 
 interface NavGroup {
   label: string;
@@ -92,6 +94,12 @@ const NAV_GROUPS: NavGroup[] = [
       { id: 'import-data', label: 'Import Data', icon: Upload },
     ],
   },
+  {
+    label: 'AI Agents',
+    items: [
+      { id: 'agent-charters', label: 'Charters & Playbooks', icon: Bot },
+    ],
+  },
 ];
 
 interface Props {
@@ -138,7 +146,8 @@ export default function SettingsPage({ onBack, initialSection = 'company' }: Pro
       case 'service-area':  return <ServiceAreaSettings />;
       case 'import-data':   return <ImportDataSettings />;
       case 'phone':          return <PhoneSettings />;
-      case 'automations':    return <AutomationsSettings />;
+      case 'automations':     return <AutomationsSettings />;
+      case 'agent-charters':  return <AgentChartersSettings />;
     }
   };
 

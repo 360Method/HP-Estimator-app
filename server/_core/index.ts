@@ -305,6 +305,69 @@ async function ensurePasswordResetTokensTableBoot() {
   }
 }
 
+async function ensureCharterTables() {
+  try {
+    const { getDb } = await import("../db");
+    const { sql } = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return;
+
+    // Add charter columns to ai_agents (idempotent)
+    await db.execute(sql`ALTER TABLE \`ai_agents\`
+      ADD COLUMN IF NOT EXISTS \`charterLoaded\` boolean NOT NULL DEFAULT false,
+      ADD COLUMN IF NOT EXISTS \`kpiCount\` int NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS \`playbookCount\` int NOT NULL DEFAULT 0
+    `).catch(() => {/* column already exists */});
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agentCharters\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`department\` varchar(50) NOT NULL,
+      \`markdownContent\` longtext NOT NULL,
+      \`version\` int NOT NULL DEFAULT 1,
+      \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+      \`updatedByStaffId\` int,
+      CONSTRAINT \`agentCharters_id\` PRIMARY KEY(\`id\`),
+      CONSTRAINT \`agentCharters_dept_uniq\` UNIQUE(\`department\`)
+    )`);
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agentKpis\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`scopeType\` enum('seat','department','company') NOT NULL,
+      \`scopeId\` varchar(100) NOT NULL,
+      \`key\` varchar(100) NOT NULL,
+      \`label\` varchar(200) NOT NULL,
+      \`targetMin\` decimal(10,2),
+      \`targetMax\` decimal(10,2),
+      \`unit\` varchar(20) NOT NULL,
+      \`period\` enum('daily','weekly','monthly','quarterly') NOT NULL,
+      \`sourceQuery\` text,
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      CONSTRAINT \`agentKpis_id\` PRIMARY KEY(\`id\`),
+      CONSTRAINT \`agentKpis_scope_key\` UNIQUE(\`scopeType\`, \`scopeId\`, \`key\`)
+    )`);
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agentPlaybooks\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`ownerSeatName\` varchar(100) NOT NULL,
+      \`ownerDepartment\` varchar(50) NOT NULL,
+      \`name\` varchar(200) NOT NULL,
+      \`slug\` varchar(200) NOT NULL,
+      \`content\` mediumtext NOT NULL,
+      \`variables\` text,
+      \`category\` varchar(50) NOT NULL,
+      \`version\` int NOT NULL DEFAULT 1,
+      \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+      \`updatedByStaffId\` int,
+      CONSTRAINT \`agentPlaybooks_id\` PRIMARY KEY(\`id\`),
+      CONSTRAINT \`agentPlaybooks_slug_uniq\` UNIQUE(\`slug\`)
+    )`);
+
+    console.log("[boot] ensureCharterTables OK");
+  } catch (err) {
+    console.warn("[boot] ensureCharterTables failed (non-fatal):", err);
+  }
+}
+
 async function startServer() {
   await ensurePhoneTables();
   await ensurePortalContinuityFlag();
@@ -314,6 +377,7 @@ async function startServer() {
   await ensureAgentPhase4Tables();
   await ensureVendorTablesBoot();
   await ensurePasswordResetTokensTableBoot();
+  await ensureCharterTables();
   const app = express();
   const server = createServer(app);
 

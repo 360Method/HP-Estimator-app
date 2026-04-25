@@ -31,15 +31,17 @@ import { automationRulesRouter } from "./routers/automationRules";
 import { emailTemplatesRouter } from "./routers/emailTemplates";
 import { campaignsRouter } from "./routers/campaigns";
 import { priorityTranslationRouter } from "./routers/priorityTranslation";
-import { gbpRouter } from "./routers/gbp";
-import { metaRouter } from "./routers/meta";
-import { googleAdsRouter } from "./routers/googleAds";
-import { aiAgentsRouter } from "./routers/aiAgents";
+import { gbpRouter }           from "./routers/gbp";
+import { metaRouter }          from "./routers/meta";
+import { googleAdsRouter }     from "./routers/googleAds";
+import { aiAgentsRouter }      from "./routers/aiAgents";
 import { integratorChatRouter } from "./routers/integratorChat";
-import { kpisRouter } from "./routers/kpis";
-import { forgeRouter } from "./routers/forge";
-import { schedulingRouter } from "./routers/scheduling";
-import { vendorsRouter } from "./routers/vendors";
+import { kpisRouter }          from "./routers/kpis";
+import { forgeRouter }         from "./routers/forge";
+import { schedulingRouter }    from "./routers/scheduling";
+import { vendorsRouter }       from "./routers/vendors";
+import { agentsRouter }        from "./routers/agents";
+import { playbooksRouter }     from "./routers/playbooks";
 import { requestPasswordReset, consumePasswordReset } from "./passwordReset";
 import {
   getAdminAllowlist,
@@ -86,6 +88,8 @@ export const appRouter = router({
   forge: forgeRouter,
   scheduling: schedulingRouter,
   vendors: vendorsRouter,
+  agents: agentsRouter,
+  playbooks: playbooksRouter,
 
   auth: router({
     /**
