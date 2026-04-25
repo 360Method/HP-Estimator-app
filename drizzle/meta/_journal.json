@@ -505,6 +505,13 @@
       "when": 1777500110000,
       "tag": "0071_oauth_integrations",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "5",
+      "when": 1777500120000,
+      "tag": "0072_charter_runtime",
+      "breakpoints": true
     }
   ]
 }
