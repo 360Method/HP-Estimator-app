@@ -4,6 +4,29 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch, useLocation } from "wouter";
 import { useEffect } from "react";
+
+// ── GA4 helpers ───────────────────────────────────────────────────────────────
+declare global {
+  interface Window {
+    gtag?: (...args: any[]) => void;
+    dataLayer?: any[];
+  }
+}
+
+export function trackPageview(path: string) {
+  if (typeof window !== "undefined" && window.gtag) {
+    window.gtag("event", "page_view", {
+      page_path: path,
+      page_location: window.location.href,
+    });
+  }
+}
+
+export function trackEvent(eventName: string, params?: Record<string, any>) {
+  if (typeof window !== "undefined" && window.gtag) {
+    window.gtag("event", eventName, params);
+  }
+}
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { EstimatorProvider } from "./contexts/EstimatorContext";
@@ -57,6 +80,11 @@ function PortalDomainRoot() {
 }
 
 function Router() {
+  const [location] = useLocation();
+  useEffect(() => {
+    trackPageview(location);
+  }, [location]);
+
   return (
     <Switch>
       {/* Main app — on portal domains, root redirects to portal login */}

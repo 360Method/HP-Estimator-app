@@ -138,9 +138,9 @@ function ReviewRequestPanel() {
       <CardContent className="space-y-4">
         <div className="grid grid-cols-3 gap-3">
           {[
-            { label: 'Avg Rating', value: '4.9', sub: '47 reviews' },
+            { label: 'Avg Rating', value: '4.9', sub: '38 reviews' },
             { label: 'Google', value: '4.9★', sub: '38 reviews' },
-            { label: 'Yelp', value: '4.8★', sub: '9 reviews' },
+            { label: 'GBP', value: '—', sub: 'Connect GBP' },
           ].map(stat => (
             <div key={stat.label} className="rounded-lg bg-muted/40 p-3 text-center">
               <div className="text-lg font-bold">{stat.value}</div>

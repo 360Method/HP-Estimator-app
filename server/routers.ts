@@ -31,6 +31,9 @@ import { automationRulesRouter } from "./routers/automationRules";
 import { emailTemplatesRouter } from "./routers/emailTemplates";
 import { campaignsRouter } from "./routers/campaigns";
 import { priorityTranslationRouter } from "./routers/priorityTranslation";
+import { gbpRouter } from "./routers/gbp";
+import { metaRouter } from "./routers/meta";
+import { googleAdsRouter } from "./routers/googleAds";
 import {
   getAdminAllowlist,
   addAdminAllowlistEmail,
@@ -67,6 +70,9 @@ export const appRouter = router({
   emailTemplates: emailTemplatesRouter,
   campaigns: campaignsRouter,
   priorityTranslation: priorityTranslationRouter,
+  gbp: gbpRouter,
+  meta: metaRouter,
+  googleAds: googleAdsRouter,
 
   auth: router({
     /**
