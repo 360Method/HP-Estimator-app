@@ -5,6 +5,8 @@ import {
   decimal,
   double,
   int,
+  longtext,
+  mediumtext,
   mysqlEnum,
   mysqlTable,
   text,
@@ -1534,3 +1536,83 @@ export const userRoles = mysqlTable("userRoles", {
 });
 export type DbUserRole = typeof userRoles.$inferSelect;
 export type InsertDbUserRole = typeof userRoles.$inferInsert;
+
+// ─── AI AGENTS ────────────────────────────────────────────────────────────────
+// Migration 0065. Registry of all org seats (AI, human, hybrid).
+// Human seats are status='human_only'; AI seats start as 'draft_queue'.
+
+export const aiAgents = mysqlTable("aiAgents", {
+  id:                  int("id").autoincrement().primaryKey(),
+  name:                varchar("name", { length: 100 }).notNull(),
+  seatName:            varchar("seatName", { length: 100 }).notNull().unique(),
+  department:          varchar("department", { length: 50 }).notNull(),
+  agentType:           mysqlEnum("agentType", ["ai", "human", "hybrid"]).notNull().default("ai"),
+  status:              mysqlEnum("status", ["active", "draft_queue", "human_only", "inactive"]).notNull().default("draft_queue"),
+  systemPrompt:        text("systemPrompt"),
+  tools:               text("tools"),
+  hierarchyParentSeat: varchar("hierarchyParentSeat", { length: 100 }),
+  eventSubscriptions:  text("eventSubscriptions"),
+  schedules:           text("schedules"),
+  charterLoaded:       boolean("charterLoaded").notNull().default(false),
+  kpiCount:            int("kpiCount").notNull().default(0),
+  playbookCount:       int("playbookCount").notNull().default(0),
+  createdAt:           timestamp("createdAt").defaultNow().notNull(),
+  updatedAt:           timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbAiAgent = typeof aiAgents.$inferSelect;
+export type InsertDbAiAgent = typeof aiAgents.$inferInsert;
+
+// ─── AGENT CHARTERS ───────────────────────────────────────────────────────────
+// Migration 0066. One row per department. Full charter markdown.
+// Loaded into agent system prompts at runtime (seat section only).
+
+export const agentCharters = mysqlTable("agentCharters", {
+  id:               int("id").autoincrement().primaryKey(),
+  department:       varchar("department", { length: 50 }).notNull().unique(),
+  markdownContent:  longtext("markdownContent").notNull(),
+  version:          int("version").notNull().default(1),
+  updatedAt:        timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedByStaffId: int("updatedByStaffId"),
+});
+export type DbAgentCharter = typeof agentCharters.$inferSelect;
+export type InsertDbAgentCharter = typeof agentCharters.$inferInsert;
+
+// ─── AGENT KPIS ───────────────────────────────────────────────────────────────
+// Migration 0066. KPI definitions seeded from charter "KPIs" tables.
+// scopeId = seatName for seat-level, department slug for dept-level.
+
+export const agentKpis = mysqlTable("agentKpis", {
+  id:          int("id").autoincrement().primaryKey(),
+  scopeType:   mysqlEnum("scopeType", ["seat", "department", "company"]).notNull(),
+  scopeId:     varchar("scopeId", { length: 100 }).notNull(),
+  key:         varchar("key", { length: 100 }).notNull(),
+  label:       varchar("label", { length: 200 }).notNull(),
+  targetMin:   decimal("targetMin", { precision: 10, scale: 2 }),
+  targetMax:   decimal("targetMax", { precision: 10, scale: 2 }),
+  unit:        varchar("unit", { length: 20 }).notNull(),
+  period:      mysqlEnum("period", ["daily", "weekly", "monthly", "quarterly"]).notNull(),
+  sourceQuery: text("sourceQuery"),
+  createdAt:   timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbAgentKpi = typeof agentKpis.$inferSelect;
+export type InsertDbAgentKpi = typeof agentKpis.$inferInsert;
+
+// ─── AGENT PLAYBOOKS ──────────────────────────────────────────────────────────
+// Migration 0066. Playbook templates seeded from charter "Initial Playbook Library".
+// Agents fetch by slug via playbooks.get(slug) tool.
+
+export const agentPlaybooks = mysqlTable("agentPlaybooks", {
+  id:               int("id").autoincrement().primaryKey(),
+  ownerSeatName:    varchar("ownerSeatName", { length: 100 }).notNull(),
+  ownerDepartment:  varchar("ownerDepartment", { length: 50 }).notNull(),
+  name:             varchar("name", { length: 200 }).notNull(),
+  slug:             varchar("slug", { length: 200 }).notNull().unique(),
+  content:          mediumtext("content").notNull(),
+  variables:        text("variables"),
+  category:         varchar("category", { length: 50 }).notNull(),
+  version:          int("version").notNull().default(1),
+  updatedAt:        timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  updatedByStaffId: int("updatedByStaffId"),
+});
+export type DbAgentPlaybook = typeof agentPlaybooks.$inferSelect;
+export type InsertDbAgentPlaybook = typeof agentPlaybooks.$inferInsert;

@@ -122,9 +122,95 @@ async function ensurePortalContinuityFlag() {
   }
 }
 
+async function ensureCharterTables() {
+  try {
+    const { getDb } = await import("../db");
+    const { sql }   = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return;
+
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS \`aiAgents\` (
+        \`id\`                    int          NOT NULL AUTO_INCREMENT,
+        \`name\`                  varchar(100) NOT NULL,
+        \`seatName\`              varchar(100) NOT NULL,
+        \`department\`            varchar(50)  NOT NULL,
+        \`agentType\`             enum('ai','human','hybrid') NOT NULL DEFAULT 'ai',
+        \`status\`                enum('active','draft_queue','human_only','inactive') NOT NULL DEFAULT 'draft_queue',
+        \`systemPrompt\`          text,
+        \`tools\`                 text,
+        \`hierarchyParentSeat\`   varchar(100),
+        \`eventSubscriptions\`    text,
+        \`schedules\`             text,
+        \`charterLoaded\`         boolean NOT NULL DEFAULT false,
+        \`kpiCount\`              int NOT NULL DEFAULT 0,
+        \`playbookCount\`         int NOT NULL DEFAULT 0,
+        \`createdAt\`             timestamp NOT NULL DEFAULT (now()),
+        \`updatedAt\`             timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (\`id\`),
+        UNIQUE KEY \`aiAgents_seatName_uniq\` (\`seatName\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS \`agentCharters\` (
+        \`id\`               int          NOT NULL AUTO_INCREMENT,
+        \`department\`       varchar(50)  NOT NULL,
+        \`markdownContent\`  longtext     NOT NULL,
+        \`version\`          int          NOT NULL DEFAULT 1,
+        \`updatedAt\`        timestamp    NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+        \`updatedByStaffId\` int,
+        PRIMARY KEY (\`id\`),
+        UNIQUE KEY \`agentCharters_dept_uniq\` (\`department\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS \`agentKpis\` (
+        \`id\`          int          NOT NULL AUTO_INCREMENT,
+        \`scopeType\`   enum('seat','department','company') NOT NULL,
+        \`scopeId\`     varchar(100) NOT NULL,
+        \`key\`         varchar(100) NOT NULL,
+        \`label\`       varchar(200) NOT NULL,
+        \`targetMin\`   decimal(10,2),
+        \`targetMax\`   decimal(10,2),
+        \`unit\`        varchar(20)  NOT NULL,
+        \`period\`      enum('daily','weekly','monthly','quarterly') NOT NULL,
+        \`sourceQuery\` text,
+        \`createdAt\`   timestamp    NOT NULL DEFAULT (now()),
+        PRIMARY KEY (\`id\`),
+        UNIQUE KEY \`agentKpis_scope_key\` (\`scopeType\`, \`scopeId\`, \`key\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS \`agentPlaybooks\` (
+        \`id\`               int          NOT NULL AUTO_INCREMENT,
+        \`ownerSeatName\`    varchar(100) NOT NULL,
+        \`ownerDepartment\`  varchar(50)  NOT NULL,
+        \`name\`             varchar(200) NOT NULL,
+        \`slug\`             varchar(200) NOT NULL,
+        \`content\`          mediumtext   NOT NULL,
+        \`variables\`        text,
+        \`category\`         varchar(50)  NOT NULL,
+        \`version\`          int          NOT NULL DEFAULT 1,
+        \`updatedAt\`        timestamp    NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+        \`updatedByStaffId\` int,
+        PRIMARY KEY (\`id\`),
+        UNIQUE KEY \`agentPlaybooks_slug_uniq\` (\`slug\`)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+
+    console.log("[boot] ensureCharterTables OK");
+  } catch (err) {
+    console.warn("[boot] ensureCharterTables failed (non-fatal):", err);
+  }
+}
+
 async function startServer() {
   await ensurePhoneTables();
   await ensurePortalContinuityFlag();
+  await ensureCharterTables();
   const app = express();
   const server = createServer(app);
 
