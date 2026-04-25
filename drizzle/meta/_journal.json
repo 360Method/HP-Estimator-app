@@ -498,6 +498,13 @@
       "when": 1777500100000,
       "tag": "0070_password_reset_tokens",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "5",
+      "when": 1777500110000,
+      "tag": "0071_oauth_integrations",
+      "breakpoints": true
     }
   ]
 }
