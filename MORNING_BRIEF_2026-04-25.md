@@ -57,3 +57,54 @@ Both are 5–15 min upgrades. Everything else is build-toolchain-only.
 - Branch `overnight/charter-runtime-snyk` is ready to merge (PR in the link below).
   Includes: `deptStatus()` fix, CHARTER_GAPS.md, dry-run script, Snyk baseline,
   this brief.
+
+---
+
+## Late-Morning Update — 2026-04-25
+
+### Done (autonomous, while Marcin was away)
+
+- **GBP env vars wired to Railway.** `GBP_CLIENT_ID`, `GBP_CLIENT_SECRET`,
+  `GBP_REDIRECT_URI` — all upserted via Railway GraphQL. Health now shows
+  `gbp.configured: true`. Needs OAuth connect to show `connected: true`.
+
+- **QBO "redirect_uri invalid" root cause found and fixed (PR #16, merged).**
+  Two separate bugs:
+  - `IntegrationsSettings.tsx` was sending `/api/quickbooks/callback` (wrong path)
+  - `QuickBooksPage.tsx` was sending `/settings/quickbooks/callback` (different wrong path)
+  - Intuit registered: `/api/integrations/qbo/callback`
+  - No backend handler existed at any of these paths.
+  Fix: Added Express `GET /api/integrations/qbo/callback` that exchanges the
+  auth code, saves tokens to `qbTokens`, and redirects `→ /settings/integrations?qb=connected`.
+  Both frontend pages updated to use the registered URI.
+  **QBO should connect now — try Settings → Integrations → Connect QuickBooks.**
+
+- **Snyk P1 security PRs merged:**
+  - PR #14: `drizzle-orm` 0.44.5 → 0.45.2 (SQL injection fix). Two drizzle-0.45
+    type incompatibilities in `agentRuntime` fixed (period enum cast, insert result shape).
+  - PR #15: `axios` 1.12.0 → 1.15.2 (DoS via `__proto__` fix). Drop-in upgrade.
+
+- **Charter gap drafts written (PR #17, open — Marcin to approve before seeding).**
+  - `external_contractor_network`: 3 KPIs with targets (see CHARTER_GAPS.md)
+  - `ai_paid_ads`: 2 playbooks — daily brief + budget reallocation rec
+  - Copy the `## DRAFT — Marcin to approve` blocks into `operations.md` and
+    `marketing.md`, then run `node scripts/seed-charters.mjs` to go 9/9 green.
+
+### Still Pending (needs Railway shell or Marcin)
+
+- **Agent runtime dry-runs** — `ANTHROPIC_API_KEY` not available locally; must
+  run `node scripts/dry-run-agent.mjs` in Railway shell (Dashboard → Shell).
+  Pre-flight checks confirmed passing. Estimated cost: ~$0.002 per run.
+
+### Production Health
+
+```
+/api/health → 200 OK
+gbp.configured: true  | gbp.connected: false  (needs OAuth)
+meta.configured: true | meta.connected: true
+googleAds.configured: true | googleAds.connected: true
+quickbooks.configured: true | quickbooks.connected: false (connect after deploy)
+```
+
+Railway builds in progress (~23:16 UTC): PRs 14, 15, 16 each triggered a deploy.
+All deploying to production; 7/9 dept dots confirmed green (unchanged).
