@@ -74,7 +74,11 @@ export default function AgentChartersSettings() {
   const deptStatus  = (dept: string) => {
     const seats = agentStatus?.filter(a => a.department === dept) ?? [];
     if (seats.length === 0) return 'no_agents';
-    if (seats.every(s => s.operational)) return 'operational';
+    // Disabled = human placeholder. Exclude from operational check so a dept
+    // with all-AI seats operational + human seats disabled still shows green.
+    const activeSeats = seats.filter(s => s.status !== 'disabled');
+    if (activeSeats.length === 0) return 'operational';
+    if (activeSeats.every(s => s.operational)) return 'operational';
     return 'incomplete';
   };
 
