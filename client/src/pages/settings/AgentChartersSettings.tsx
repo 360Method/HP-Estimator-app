@@ -17,15 +17,15 @@ import { Input }    from '@/components/ui/input';
 import { Badge }    from '@/components/ui/badge';
 
 const DEPT_LABELS: Record<string, string> = {
-  integrator_visionary: 'Integrator / Visionary',
-  sales:                'Sales & Lead Mgmt',
-  operations:           'Operations',
-  marketing:            'Marketing',
-  finance:              'Finance',
-  customer_success:     'Customer Success',
-  vendor_trades:        'Vendor & Trades',
-  technology:           'Technology',
-  strategy_expansion:   'Strategy & Expansion',
+  integrator:       'Integrator / Visionary',
+  sales:            'Sales & Lead Mgmt',
+  operations:       'Operations',
+  marketing:        'Marketing',
+  finance:          'Finance',
+  customer_success: 'Customer Success',
+  vendor_network:   'Vendor & Trades',
+  technology:       'Technology',
+  strategy:         'Strategy & Expansion',
 };
 
 type TabId = 'charter' | 'kpis' | 'playbooks';
@@ -129,8 +129,8 @@ export default function AgentChartersSettings() {
                     onClick={() => { setSelectedDept(dept); setActiveTab('charter'); }}
                     className="w-full flex items-center gap-2 pl-9 pr-4 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40 transition-colors text-left"
                   >
-                    {seat.agentType === 'human' ? <Users size={11} /> : <Bot size={11} />}
-                    <span className="truncate">{seat.name}</span>
+                    {seat.isDepartmentHead ? <Bot size={11} /> : <Users size={11} />}
+                    <span className="truncate">{seat.seatName}</span>
                     {seat.charterLoaded && (
                       <CheckCircle2 size={10} className="text-emerald-500 ml-auto shrink-0" />
                     )}
