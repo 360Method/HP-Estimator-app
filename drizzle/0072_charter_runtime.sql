@@ -1,4 +1,4 @@
--- Migration 0066: Charter runtime tables — stores structured charter content,
+-- Migration 0072: Charter runtime tables — stores structured charter content,
 -- KPI definitions, and playbook templates so operators can edit agent behavior
 -- from the admin UI without touching code (Nucleus pattern).
 
@@ -61,4 +61,10 @@ CREATE TABLE IF NOT EXISTS `agentPlaybooks` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;--> statement-breakpoint
 
 CREATE INDEX `agentPlaybooks_seat_idx`       ON `agentPlaybooks` (`ownerSeatName`);--> statement-breakpoint
-CREATE INDEX `agentPlaybooks_department_idx` ON `agentPlaybooks` (`ownerDepartment`);
+CREATE INDEX `agentPlaybooks_department_idx` ON `agentPlaybooks` (`ownerDepartment`);--> statement-breakpoint
+
+-- Add charter tracking columns to ai_agents (idempotent via IF NOT EXISTS)
+ALTER TABLE `ai_agents`
+  ADD COLUMN IF NOT EXISTS `charterLoaded` boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS `kpiCount` int NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS `playbookCount` int NOT NULL DEFAULT 0;

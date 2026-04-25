@@ -232,9 +232,9 @@ for (const file of files) {
   totalPlaybooks += playbooks.length;
   console.log(`  ✓ ${playbooks.length} playbooks upserted`);
 
-  // 4. Update aiAgents.charterLoaded / kpiCount / playbookCount for seats in this dept
+  // 4. Update ai_agents.charterLoaded / kpiCount / playbookCount for seats in this dept
   const [agentRows] = await conn.execute(
-    `SELECT seatName FROM \`aiAgents\` WHERE department = ?`,
+    `SELECT seatName FROM \`ai_agents\` WHERE department = ?`,
     [department]
   );
   for (const { seatName } of agentRows) {
@@ -243,13 +243,13 @@ for (const file of files) {
     const kc = kpiRows[0].c;
     const pc = playbookRows[0].c;
     await conn.execute(
-      `UPDATE \`aiAgents\` SET charterLoaded=true, kpiCount=?, playbookCount=? WHERE seatName=?`,
+      `UPDATE \`ai_agents\` SET charterLoaded=true, kpiCount=?, playbookCount=? WHERE seatName=?`,
       [kc, pc, seatName]
     );
   }
-  // Also update dept-level seats by dept KPI count
+  // Also mark charterLoaded for any remaining seats in this dept
   await conn.execute(
-    `UPDATE \`aiAgents\` a
+    `UPDATE \`ai_agents\` a
      SET a.charterLoaded = true
      WHERE a.department = ?`,
     [department]
@@ -266,17 +266,16 @@ console.log(`\nGenerating docs/agents/SEAT_AUDIT.md…`);
 
 const [agentRows] = await conn.execute(`
   SELECT
-    a.name,
     a.seatName,
     a.department,
-    a.agentType,
     a.status,
-    a.charterLoaded,
-    a.kpiCount,
-    a.playbookCount,
-    a.eventSubscriptions,
-    a.schedules
-  FROM aiAgents a
+    a.isDepartmentHead,
+    COALESCE(a.charterLoaded, false) AS charterLoaded,
+    COALESCE(a.kpiCount, 0) AS kpiCount,
+    COALESCE(a.playbookCount, 0) AS playbookCount,
+    (SELECT COUNT(*) FROM \`ai_agent_event_subscriptions\` e WHERE e.agentId = a.id AND e.enabled = 1) AS eventCount,
+    (SELECT COUNT(*) FROM \`ai_agent_schedules\` s WHERE s.agentId = a.id AND s.enabled = 1) AS scheduleCount
+  FROM \`ai_agents\` a
   ORDER BY a.department, a.seatName
 `);
 
@@ -310,30 +309,28 @@ for (const seat of EXPECTED_SEATS) {
   const charterLoaded  = row.charterLoaded ? '✓' : '✗';
   const kpiCount       = row.kpiCount;
   const playbookCount  = row.playbookCount;
-  const hasTrigger     = row.eventSubscriptions && JSON.parse(row.eventSubscriptions).length > 0;
-  const hasSchedule    = row.schedules && JSON.parse(row.schedules).length > 0;
+  const hasTrigger     = Number(row.eventCount) > 0;
+  const hasSchedule    = Number(row.scheduleCount) > 0;
   const triggerSched   = hasTrigger || hasSchedule
     ? (hasTrigger ? 'event' : '') + (hasTrigger && hasSchedule ? '+' : '') + (hasSchedule ? 'cron' : '')
     : 'none';
-  const isHuman        = row.agentType === 'human';
 
   const missing = [];
   if (!row.charterLoaded) missing.push('no charter');
-  if (!isHuman && kpiCount === 0) missing.push('0 KPIs');
-  if (!isHuman && playbookCount === 0) missing.push('0 playbooks');
-  if (!isHuman && !hasTrigger && !hasSchedule) missing.push('no trigger/schedule');
+  if (kpiCount === 0) missing.push('0 KPIs');
+  if (playbookCount === 0) missing.push('0 playbooks');
 
   const status = missing.length === 0 ? '**operational**' : `**incomplete** (${missing.join(', ')})`;
   if (missing.length === 0) operationalCount++;
   else incompleteReasons.push(`${seat}: ${missing.join(', ')}`);
 
-  auditRows += `| ${row.name} | ${row.department} | ✓ | ${charterLoaded} | ${kpiCount} | ${playbookCount} | ${triggerSched} | ${status} |\n`;
+  auditRows += `| ${row.seatName} | ${row.department} | ✓ | ${charterLoaded} | ${kpiCount} | ${playbookCount} | ${triggerSched} | ${status} |\n`;
 }
 
 // Add seats found in DB but not in expected list
 for (const row of agentRows) {
   if (!EXPECTED_SEATS.includes(row.seatName)) {
-    auditRows += `| ${row.name} _(extra)_ | ${row.department} | ✓ | ${row.charterLoaded ? '✓' : '✗'} | ${row.kpiCount} | ${row.playbookCount} | — | ⚠ not in expected list |\n`;
+    auditRows += `| ${row.seatName} _(extra)_ | ${row.department} | ✓ | ${row.charterLoaded ? '✓' : '✗'} | ${row.kpiCount} | ${row.playbookCount} | — | ⚠ not in expected list |\n`;
   }
 }
 

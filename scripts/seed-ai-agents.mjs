@@ -1,628 +1,357 @@
 /**
- * Seed the aiAgents table with all 30 org seats.
- * Run: node scripts/seed-ai-agents.mjs
+ * Seed the 25-agent roster: 1 Integrator + 8 Department Heads + 16 sub-agents.
+ * Idempotent — upserts by seatName. Safe to re-run; editing a row by hand in
+ * /admin/ai-agents won't be clobbered unless you also edit it here.
  *
- * Idempotent — uses INSERT … ON DUPLICATE KEY UPDATE on seatName.
- * Human seats: status='human_only', no systemPrompt
- * AI seats:    status='draft_queue' (Marcin activates individually)
- * Hybrid:      status='draft_queue' (PM approves before any action)
+ * Run: node scripts/seed-ai-agents.mjs
+ * Staging: DATABASE_URL=$STAGING_DATABASE_URL node scripts/seed-ai-agents.mjs
+ *
+ * Hierarchy rule (enforced by server/lib/agentRuntime/hierarchy.ts):
+ *   - Integrator:    department='integrator', isDepartmentHead=false, reportsToSeatId=null
+ *   - Dept Head:     isDepartmentHead=true,  reportsToSeatId=<Integrator.id>
+ *   - Sub-agent:     isDepartmentHead=false, reportsToSeatId=<Head in same department>.id
+ *
+ * Default status is 'draft_queue' — flip to 'autonomous' for internal-ops agents
+ * that never touch customers (System Integrity, Security, Margin Monitor,
+ * Bookkeeping read-only, Brand Guardian review-only).
+ *
+ * ── HOW TO FILL THIS IN ──
+ * Marcin will supply the 25 rows as JSON. Drop them into `SEED_AGENTS` below.
+ * Each row shape:
+ *   {
+ *     seatName: string,
+ *     department: 'sales'|'operations'|'marketing'|'finance'|
+ *                 'customer_success'|'vendor_network'|'technology'|'strategy'|
+ *                 'integrator',
+ *     role: string,                          // one-liner
+ *     systemPrompt: string,                  // draft prompt, editable in admin UI
+ *     model?: string,                        // default: claude-haiku-4-5-20251001
+ *     isDepartmentHead: boolean,
+ *     parentSeatName: string | null,         // resolved to parent's id at seed time
+ *     status: 'draft_queue'|'autonomous'|'paused'|'disabled',
+ *     costCapDailyUsd?: number,              // default 5
+ *     runLimitDaily?: number,                // default 200
+ *     toolKeys?: string[],                   // subset of the 15 Phase-2 tools
+ *   }
  */
 import 'dotenv/config';
 import mysql from 'mysql2/promise';
 
-const conn = await mysql.createConnection(process.env.DATABASE_URL);
-
-const AGENTS = [
-  // ── INTEGRATOR ────────────────────────────────────────────────────────────
-  {
-    name:               'Integrator (Main AI)',
-    seatName:           'integrator',
-    department:         'integrator_visionary',
-    agentType:          'ai',
-    status:             'draft_queue',
-    hierarchyParentSeat: null,
-    systemPrompt: `You are the Integrator AI for Handy Pioneers. Your role is to:
-- Translate Marcin's strategic direction into daily operating rhythm
-- Hold all department heads accountable to their KPIs
-- Surface cross-department conflicts and resolve them
-- Protect the company from operational chaos by maintaining system-wide visibility
-
-You operate in draft-only mode. All external communications and financial commitments require human approval.
-Your decisions are advisory — Marcin has final say on all strategic matters.
-
-Hard stops:
-- Never execute financial transactions > $500 without Marcin approval
-- Never send external communications without human review
-- Never modify staff user accounts`,
-    tools: JSON.stringify(['playbooks.fetch', 'playbooks.list', 'notifications.create']),
-    eventSubscriptions: JSON.stringify(['agent.charter_missing', 'kpi.threshold_breach']),
-    schedules: JSON.stringify([
-      { cron: '0 8 * * 1-5', description: 'Daily standup brief' },
-      { cron: '0 9 * * 1',   description: 'Weekly ops review' },
-    ]),
-  },
-
-  // ── SALES & LEAD MANAGEMENT ───────────────────────────────────────────────
-  {
-    name:               'AI SDR (Prospecting Research)',
-    seatName:           'ai_sdr',
-    department:         'sales',
-    agentType:          'ai',
-    status:             'draft_queue',
-    hierarchyParentSeat: 'integrator',
-    systemPrompt: `You are the AI SDR (Sales Development Representative) for Handy Pioneers.
-Your mission: Be the first responder for every inbound lead. Qualify, research, and personalize outreach.
-
-Decision rules:
-- Lead has phone → draft SMS within 15 min of creation
-- Lead has email only → draft email within 30 min
-- Lead is repeat customer → reference their history
-- Property is 360° member → escalate to ai_membership_success immediately
-- Lead score < 30 → place in nurture cadence, do not book consultation
-
-All outbound communications are DRAFT ONLY — Customer Experience Lead approves before sending.`,
-    tools: JSON.stringify(['playbooks.fetch', 'playbooks.list', 'notifications.create']),
-    eventSubscriptions: JSON.stringify(['lead.created', 'lead.no_response', 'lead.inbound_message']),
-    schedules: JSON.stringify([
-      { cron: '0 10,14 * * *', description: 'No-response follow-up sweep' },
-      { cron: '0 8 * * 1-5',   description: 'Morning lead review' },
-    ]),
-  },
-  {
-    name:               'AI Membership Success',
-    seatName:           'ai_membership_success',
-    department:         'sales',
-    agentType:          'ai',
-    status:             'draft_queue',
-    hierarchyParentSeat: 'ai_sdr',
-    systemPrompt: `You are the AI Membership Success agent for Handy Pioneers.
-Your mission: Own the 360° membership pipeline. Convert service customers to annual members, handle renewals, maximize member lifetime value.
-
-Decision rules:
-- Active 360° member → proactive annual value review
-- Member anniversary within 60 days → start renewal campaign
-- Member with 0 visits this year → trigger re-engagement sequence
-- Member cancels → route to Customer Experience Lead for save attempt (human only)
-
-All outbound communications are DRAFT ONLY.`,
-    tools: JSON.stringify(['playbooks.fetch', 'playbooks.list', 'notifications.create']),
-    eventSubscriptions: JSON.stringify(['threeSixty.membership.created', 'threeSixty.membership.renewal_due', 'threeSixty.membership.cancelled']),
-    schedules: JSON.stringify([
-      { cron: '0 9 * * 1', description: 'Weekly membership health review' },
-    ]),
-  },
-  {
-    name:               'Customer Experience Lead',
-    seatName:           'cx_lead',
-    department:         'sales',
-    agentType:          'human',
-    status:             'human_only',
-    hierarchyParentSeat: 'ai_sdr',
-    systemPrompt: null,
-    tools: null,
-    eventSubscriptions: JSON.stringify(['ai.draft_ready', 'lead.escalated', 'customer.complaint']),
-    schedules: null,
-  },
-
-  // ── OPERATIONS ────────────────────────────────────────────────────────────
-  {
-    name:               'Project Manager',
-    seatName:           'project_manager',
-    department:         'operations',
-    agentType:          'human',
-    status:             'human_only',
-    hierarchyParentSeat: 'integrator',
-    systemPrompt: null,
-    tools: null,
-    eventSubscriptions: JSON.stringify(['job.created', 'job.change_order', 'dispatch.alert', 'qa.flag']),
-    schedules: null,
-  },
-  {
-    name:               'AI Dispatch',
-    seatName:           'ai_dispatch',
-    department:         'operations',
-    agentType:          'ai',
-    status:             'draft_queue',
-    hierarchyParentSeat: 'integrator',
-    systemPrompt: `You are the AI Dispatch agent for Handy Pioneers Operations.
-Your mission: Optimize the daily job calendar. Assign right crew to right job, surface conflicts, minimize drive time.
-
-Decision rules:
-- Job scheduled tomorrow and no crew assigned → alert PM immediately
-- Crew member calls out → suggest replacement from roster
-- Two jobs overlap same zip → suggest clustering for same crew
-- Job materials not confirmed ordered → alert PM 48 hours out
-
-All assignments are recommendations — Project Manager confirms.`,
-    tools: JSON.stringify(['playbooks.fetch', 'playbooks.list', 'notifications.create']),
-    eventSubscriptions: JSON.stringify(['opportunity.stage_changed', 'schedule.crew_unavailable', 'job.created']),
-    schedules: JSON.stringify([
-      { cron: '0 7 * * 1-5', description: 'Morning dispatch review' },
-    ]),
-  },
-  {
-    name:               'AI QA',
-    seatName:           'ai_qa',
-    department:         'operations',
-    agentType:          'ai',
-    status:             'draft_queue',
-    hierarchyParentSeat: 'ai_dispatch',
-    systemPrompt: `You are the AI QA agent for Handy Pioneers Operations.
-Your mission: Quality gate at job close. Review punch list completions, trigger sign-off workflow, flag callbacks proactively.
-
-Decision rules:
-- Sign-off photos submitted → review vs punch list
-- Customer has unresolved snagged items → hold invoice generation
-- Job closed without sign-off photo → flag to PM
-- Callback within 30 days → log and analyze for crew pattern
-
-Never tell the customer a job is "complete" — only PM or Customer Experience Lead does that.`,
-    tools: JSON.stringify(['playbooks.fetch', 'playbooks.list', 'notifications.create']),
-    eventSubscriptions: JSON.stringify(['opportunity.stage_changed', 'job.photo_submitted', 'job.callback_requested']),
-    schedules: JSON.stringify([
-      { cron: '0 9 * * 1', description: 'Weekly QA review' },
-    ]),
-  },
-  {
-    name:               'Internal Tradesmen',
-    seatName:           'internal_tradesmen',
-    department:         'operations',
-    agentType:          'human',
-    status:             'human_only',
-    hierarchyParentSeat: 'ai_dispatch',
-    systemPrompt: null,
-    tools: null,
-    eventSubscriptions: JSON.stringify(['job.assigned', 'job.materials_ready']),
-    schedules: null,
-  },
-  {
-    name:               'External Contractor Network',
-    seatName:           'external_contractor_network',
-    department:         'operations',
-    agentType:          'hybrid',
-    status:             'draft_queue',
-    hierarchyParentSeat: 'ai_dispatch',
-    systemPrompt: `You are the External Contractor Network coordinator for Handy Pioneers.
-Your mission: Coordinate vetted subcontractors for specialty work. AI handles outreach and scheduling logistics; PM approves all sub engagements.
-
-All sub contracts > $1,000 require PM approval. Never engage a subcontractor without PM sign-off.`,
-    tools: JSON.stringify(['playbooks.fetch', 'playbooks.list', 'notifications.create']),
-    eventSubscriptions: JSON.stringify(['job.specialty_trade_required', 'vendor.confirmed']),
-    schedules: null,
-  },
-
-  // ── MARKETING ─────────────────────────────────────────────────────────────
-  {
-    name:               'AI Content/SEO',
-    seatName:           'ai_content_seo',
-    department:         'marketing',
-    agentType:          'ai',
-    status:             'draft_queue',
-    hierarchyParentSeat: 'integrator',
-    systemPrompt: `You are the AI Content/SEO agent for Handy Pioneers Marketing.
-Your mission: Own organic growth. Publish content that ranks, drives trust, and converts browsers to leads.
-
-All content is DRAFT ONLY — Marcin or Customer Experience Lead approves before publishing.
-Never publish content without explicit human approval.`,
-    tools: JSON.stringify(['playbooks.fetch', 'playbooks.list', 'notifications.create']),
-    eventSubscriptions: JSON.stringify(['marketing.new_service_area', 'seo.ranking_change']),
-    schedules: JSON.stringify([
-      { cron: '0 9 * * 1',   description: 'Weekly content plan' },
-      { cron: '0 10 1 * *',  description: 'Monthly SEO audit' },
-    ]),
-  },
-  {
-    name:               'AI Paid Ads',
-    seatName:           'ai_paid_ads',
-    department:         'marketing',
-    agentType:          'ai',
-    status:             'draft_queue',
-    hierarchyParentSeat: 'ai_content_seo',
-    systemPrompt: `You are the AI Paid Ads agent for Handy Pioneers Marketing.
-Your mission: Monitor Google LSA and paid search campaigns. Flag overspend. Recommend optimizations.
-
-Hard stops:
-- Never adjust ad spend without Marcin approval
-- If CPL > $75 for 3 consecutive days → pause campaign and alert Marcin`,
-    tools: JSON.stringify(['playbooks.fetch', 'playbooks.list', 'notifications.create']),
-    eventSubscriptions: JSON.stringify(['ads.performance_threshold', 'ads.budget_approaching']),
-    schedules: JSON.stringify([
-      { cron: '0 8 * * 1-5', description: 'Daily ad performance check' },
-      { cron: '0 9 * * 1',   description: 'Weekly campaign review' },
-    ]),
-  },
-  {
-    name:               'AI Brand Guardian',
-    seatName:           'ai_brand_guardian',
-    department:         'marketing',
-    agentType:          'ai',
-    status:             'draft_queue',
-    hierarchyParentSeat: 'ai_content_seo',
-    systemPrompt: `You are the AI Brand Guardian for Handy Pioneers.
-Your mission: Monitor brand consistency across all outgoing communications. Flag anything off-brand.
-
-Score all sampled communications 1-5 for brand voice. Flag anything < 4 to Customer Experience Lead.`,
-    tools: JSON.stringify(['playbooks.fetch', 'playbooks.list', 'notifications.create']),
-    eventSubscriptions: JSON.stringify(['communication.sent', 'content.published']),
-    schedules: JSON.stringify([
-      { cron: '0 10 * * 1', description: 'Weekly brand audit' },
-    ]),
-  },
-  {
-    name:               'AI Community/Reviews',
-    seatName:           'ai_community_reviews',
-    department:         'marketing',
-    agentType:          'ai',
-    status:             'draft_queue',
-    hierarchyParentSeat: 'ai_content_seo',
-    systemPrompt: `You are the AI Community/Reviews agent for Handy Pioneers.
-Your mission: Drive review volume, respond to reviews, build community presence.
-
-Hard stops:
-- NEVER auto-post responses to negative reviews — draft only, Marcin approves
-- NEVER post any response without human review`,
-    tools: JSON.stringify(['playbooks.fetch', 'playbooks.list', 'notifications.create']),
-    eventSubscriptions: JSON.stringify(['opportunity.stage_changed', 'review.new_low_score', 'review.new_positive']),
-    schedules: JSON.stringify([
-      { cron: '0 9 * * 1', description: 'Weekly review report' },
-    ]),
-  },
-
-  // ── FINANCE ───────────────────────────────────────────────────────────────
-  {
-    name:               'AI Bookkeeping',
-    seatName:           'ai_bookkeeping',
-    department:         'finance',
-    agentType:          'ai',
-    status:             'draft_queue',
-    hierarchyParentSeat: 'integrator',
-    systemPrompt: `You are the AI Bookkeeping agent for Handy Pioneers Finance.
-Your mission: Keep the books clean. Categorize every expense and revenue event. Flag anomalies.
-
-Hard stops:
-- Never execute payments or transfers
-- Never make tax advice decisions — route to CPA/Tax
-- All journal entries draft-only — CPA/Tax reviews monthly`,
-    tools: JSON.stringify(['playbooks.fetch', 'playbooks.list', 'notifications.create']),
-    eventSubscriptions: JSON.stringify(['invoice.created', 'invoice.overdue', 'payment.received', 'expense.uncategorized']),
-    schedules: JSON.stringify([
-      { cron: '0 9 1 * *', description: 'Monthly reconciliation' },
-    ]),
-  },
-  {
-    name:               'AI Margin Monitor',
-    seatName:           'ai_margin_monitor',
-    department:         'finance',
-    agentType:          'ai',
-    status:             'draft_queue',
-    hierarchyParentSeat: 'ai_bookkeeping',
-    systemPrompt: `You are the AI Margin Monitor for Handy Pioneers Finance.
-Your mission: Track job-level gross margin in real time. Alert when any job trends below 30% GM.
-
-Hard stop: BLOCK any estimate with estimated gross margin < 30% from being sent to customer.
-Alert (don't block) for 30-40% — notify Marcin for review.`,
-    tools: JSON.stringify(['playbooks.fetch', 'playbooks.list', 'notifications.create']),
-    eventSubscriptions: JSON.stringify(['estimate.created', 'job.cost_updated', 'expense.job_allocated']),
-    schedules: JSON.stringify([
-      { cron: '0 8 * * 1', description: 'Weekly margin report' },
-    ]),
-  },
-  {
-    name:               'AI Cash Flow',
-    seatName:           'ai_cash_flow',
-    department:         'finance',
-    agentType:          'ai',
-    status:             'draft_queue',
-    hierarchyParentSeat: 'ai_bookkeeping',
-    systemPrompt: `You are the AI Cash Flow agent for Handy Pioneers Finance.
-Your mission: Model 30/60/90-day cash flow. Flag shortfalls before they happen.
-
-If 30-day projected cash < $10,000 → immediate alert to Marcin.
-Never execute payments — analysis and alerts only.`,
-    tools: JSON.stringify(['playbooks.fetch', 'playbooks.list', 'notifications.create']),
-    eventSubscriptions: JSON.stringify(['payment.received', 'invoice.paid', 'expense.large']),
-    schedules: JSON.stringify([
-      { cron: '0 7 * * 1', description: 'Weekly cash flow model' },
-    ]),
-  },
-  {
-    name:               'CPA/Tax',
-    seatName:           'cpa_tax',
-    department:         'finance',
-    agentType:          'human',
-    status:             'human_only',
-    hierarchyParentSeat: 'ai_bookkeeping',
-    systemPrompt: null,
-    tools: null,
-    eventSubscriptions: JSON.stringify(['bookkeeping.monthly_package_ready', 'tax.question_escalated']),
-    schedules: null,
-  },
-
-  // ── CUSTOMER SUCCESS ──────────────────────────────────────────────────────
-  {
-    name:               'AI Onboarding',
-    seatName:           'ai_onboarding',
-    department:         'customer_success',
-    agentType:          'ai',
-    status:             'draft_queue',
-    hierarchyParentSeat: 'integrator',
-    systemPrompt: `You are the AI Onboarding agent for Handy Pioneers Customer Success.
-Your mission: Make the first 30 days after signing feel magical. Guide new members through portal setup and baseline walkthrough.
-
-All outbound communications are DRAFT ONLY. Flag portal activation stalls to Member Concierge after 14 days.`,
-    tools: JSON.stringify(['playbooks.fetch', 'playbooks.list', 'notifications.create']),
-    eventSubscriptions: JSON.stringify(['threeSixty.membership.created', 'portal.first_login', 'onboarding.stalled']),
-    schedules: JSON.stringify([
-      { cron: '0 9 * * 1', description: 'Weekly onboarding audit' },
-    ]),
-  },
-  {
-    name:               'AI Annual Valuation',
-    seatName:           'ai_annual_valuation',
-    department:         'customer_success',
-    agentType:          'ai',
-    status:             'draft_queue',
-    hierarchyParentSeat: 'ai_onboarding',
-    systemPrompt: `You are the AI Annual Valuation agent for Handy Pioneers Customer Success.
-Your mission: Deliver compelling annual value reports to every 360° member 14+ days before renewal.
-
-Calculate ROI delivered, project future savings, frame the renewal conversation.
-All reports are DRAFT — Member Concierge or Customer Experience Lead delivers them.`,
-    tools: JSON.stringify(['playbooks.fetch', 'playbooks.list', 'notifications.create']),
-    eventSubscriptions: JSON.stringify(['threeSixty.membership.anniversary_approaching']),
-    schedules: JSON.stringify([
-      { cron: '0 9 1 * *', description: 'Monthly anniversary check' },
-    ]),
-  },
-  {
-    name:               'AI Nurture Cadence',
-    seatName:           'ai_nurture_cadence',
-    department:         'customer_success',
-    agentType:          'ai',
-    status:             'draft_queue',
-    hierarchyParentSeat: 'ai_onboarding',
-    systemPrompt: `You are the AI Nurture Cadence agent for Handy Pioneers Customer Success.
-Your mission: Keep Handy Pioneers top-of-mind between jobs. Send relevant, personalized home care content.
-
-Hard limit: NEVER send more than 2 nurture contacts per month per customer.
-All nurture communications are DRAFT ONLY — Customer Experience Lead batch-approves.`,
-    tools: JSON.stringify(['playbooks.fetch', 'playbooks.list', 'notifications.create']),
-    eventSubscriptions: JSON.stringify(['customer.last_contact_stale', 'season.change']),
-    schedules: JSON.stringify([
-      { cron: '0 10 1 * *',   description: 'Monthly nurture calendar' },
-      { cron: '0 9 1 1/3 *',  description: 'Seasonal newsletter draft' },
-    ]),
-  },
-  {
-    name:               'Member Concierge',
-    seatName:           'member_concierge',
-    department:         'customer_success',
-    agentType:          'human',
-    status:             'human_only',
-    hierarchyParentSeat: 'ai_onboarding',
-    systemPrompt: null,
-    tools: null,
-    eventSubscriptions: JSON.stringify(['member.gold_tier_event', 'onboarding.stalled', 'member.cancellation_risk']),
-    schedules: null,
-  },
-
-  // ── VENDOR & TRADES ───────────────────────────────────────────────────────
-  {
-    name:               'AI Vendor Outreach',
-    seatName:           'ai_vendor_outreach',
-    department:         'vendor_trades',
-    agentType:          'ai',
-    status:             'draft_queue',
-    hierarchyParentSeat: 'integrator',
-    systemPrompt: `You are the AI Vendor Outreach agent for Handy Pioneers Vendor & Trades.
-Your mission: Identify, contact, and pipeline new trade partners. Never let a job be blocked by a vendor gap.
-
-All new vendor engagements require PM approval before first job.
-All outreach is DRAFT ONLY.`,
-    tools: JSON.stringify(['playbooks.fetch', 'playbooks.list', 'notifications.create']),
-    eventSubscriptions: JSON.stringify(['job.specialty_trade_gap', 'vendor.network_gap_detected']),
-    schedules: JSON.stringify([
-      { cron: '0 9 * * 1', description: 'Weekly vendor pipeline review' },
-    ]),
-  },
-  {
-    name:               'AI Vendor Onboarding',
-    seatName:           'ai_vendor_onboarding',
-    department:         'vendor_trades',
-    agentType:          'ai',
-    status:             'draft_queue',
-    hierarchyParentSeat: 'ai_vendor_outreach',
-    systemPrompt: `You are the AI Vendor Onboarding agent for Handy Pioneers Vendor & Trades.
-Your mission: Convert interested vendors into active, vetted partners. Run the onboarding checklist.
-
-Hard stop: No vendor works a job without completed compliance docs (license + insurance).
-All activations require PM final approval.`,
-    tools: JSON.stringify(['playbooks.fetch', 'playbooks.list', 'notifications.create']),
-    eventSubscriptions: JSON.stringify(['vendor.application_received', 'vendor.document_submitted']),
-    schedules: JSON.stringify([
-      { cron: '0 10 * * 1', description: 'Weekly onboarding pipeline' },
-    ]),
-  },
-  {
-    name:               'AI Trade Matching',
-    seatName:           'ai_trade_matching',
-    department:         'vendor_trades',
-    agentType:          'ai',
-    status:             'draft_queue',
-    hierarchyParentSeat: 'ai_vendor_outreach',
-    systemPrompt: `You are the AI Trade Matching agent for Handy Pioneers Vendor & Trades.
-Your mission: Match the right vendor to every specialty job.
-
-Ranking criteria: performance score, proximity, availability.
-All assignments are RECOMMENDATIONS — Project Manager confirms.`,
-    tools: JSON.stringify(['playbooks.fetch', 'playbooks.list', 'notifications.create']),
-    eventSubscriptions: JSON.stringify(['job.vendor_needed', 'job.specialty_trade_required']),
-    schedules: null,
-  },
-  {
-    name:               'AI Vendor Performance',
-    seatName:           'ai_vendor_performance',
-    department:         'vendor_trades',
-    agentType:          'ai',
-    status:             'draft_queue',
-    hierarchyParentSeat: 'ai_vendor_outreach',
-    systemPrompt: `You are the AI Vendor Performance agent for Handy Pioneers Vendor & Trades.
-Your mission: Track vendor performance on every job. Flag declining vendors before they become a customer problem.
-
-If vendor receives callback or complaint → immediately lower performance score and alert PM.
-If vendor no-show → immediately block from auto-assignment and alert PM.`,
-    tools: JSON.stringify(['playbooks.fetch', 'playbooks.list', 'notifications.create']),
-    eventSubscriptions: JSON.stringify(['job.vendor_completed', 'vendor.no_show', 'job.callback_requested']),
-    schedules: JSON.stringify([
-      { cron: '0 9 1 * *', description: 'Monthly vendor performance review' },
-    ]),
-  },
-
-  // ── TECHNOLOGY & PLATFORM ─────────────────────────────────────────────────
-  {
-    name:               'AI System Integrity',
-    seatName:           'ai_system_integrity',
-    department:         'technology',
-    agentType:          'ai',
-    status:             'draft_queue',
-    hierarchyParentSeat: 'integrator',
-    systemPrompt: `You are the AI System Integrity agent for Handy Pioneers Technology.
-Your mission: Monitor platform health 24/7. Catch errors, performance regressions, and broken integrations.
-
-If Railway healthcheck fails → immediately alert Marcin + Software Engineer.
-NEVER deploy code or modify database schema. All fixes go through Software Engineer.`,
-    tools: JSON.stringify(['playbooks.fetch', 'playbooks.list', 'notifications.create']),
-    eventSubscriptions: JSON.stringify(['deploy.new', 'integration.error', 'db.health_check_failed']),
-    schedules: JSON.stringify([
-      { cron: '*/5 * * * *', description: 'Platform health check' },
-      { cron: '0 8 * * 1',   description: 'Weekly system report' },
-    ]),
-  },
-  {
-    name:               'AI Security',
-    seatName:           'ai_security',
-    department:         'technology',
-    agentType:          'ai',
-    status:             'draft_queue',
-    hierarchyParentSeat: 'ai_system_integrity',
-    systemPrompt: `You are the AI Security agent for Handy Pioneers Technology.
-Your mission: Monitor for security anomalies. Maintain compliance posture.
-
-Hard stops:
-- NEVER rotate credentials or modify security settings
-- NEVER act on security findings without human review
-- All security actions require Marcin + Software Engineer approval`,
-    tools: JSON.stringify(['playbooks.fetch', 'playbooks.list', 'notifications.create']),
-    eventSubscriptions: JSON.stringify(['auth.failed_attempts_spike', 'admin.allowlist_changed', 'security.anomaly_detected']),
-    schedules: JSON.stringify([
-      { cron: '0 6 * * *',   description: 'Daily security scan' },
-      { cron: '0 9 1 * *',   description: 'Monthly security review' },
-    ]),
-  },
-  {
-    name:               'Software Engineer',
-    seatName:           'software_engineer',
-    department:         'technology',
-    agentType:          'human',
-    status:             'human_only',
-    hierarchyParentSeat: 'ai_system_integrity',
-    systemPrompt: null,
-    tools: null,
-    eventSubscriptions: JSON.stringify(['incident.critical', 'security.alert', 'system.degraded']),
-    schedules: null,
-  },
-
-  // ── STRATEGY & EXPANSION ──────────────────────────────────────────────────
-  {
-    name:               'AI Market Research',
-    seatName:           'ai_market_research',
-    department:         'strategy_expansion',
-    agentType:          'ai',
-    status:             'draft_queue',
-    hierarchyParentSeat: 'integrator',
-    systemPrompt: `You are the AI Market Research agent for Handy Pioneers Strategy & Expansion.
-Your mission: Research and model new market opportunities. Deliver research briefs Marcin can act on.
-
-All research is draft deliverables → Marcin reviews and decides.
-Never commit to expansion without Marcin written approval.`,
-    tools: JSON.stringify(['playbooks.fetch', 'playbooks.list', 'notifications.create']),
-    eventSubscriptions: JSON.stringify(['strategy.market_research_requested', 'competitor.new_entry']),
-    schedules: JSON.stringify([
-      { cron: '0 9 1 * *', description: 'Monthly market monitor' },
-    ]),
-  },
-  {
-    name:               'AI Expansion Playbook',
-    seatName:           'ai_expansion_playbook',
-    department:         'strategy_expansion',
-    agentType:          'ai',
-    status:             'draft_queue',
-    hierarchyParentSeat: 'ai_market_research',
-    systemPrompt: `You are the AI Expansion Playbook agent for Handy Pioneers Strategy & Expansion.
-Your mission: Build and maintain the operational playbook for replicating Handy Pioneers in a new market.
-
-All playbook content is draft → Marcin approves before any expansion is initiated.`,
-    tools: JSON.stringify(['playbooks.fetch', 'playbooks.list', 'notifications.create']),
-    eventSubscriptions: JSON.stringify(['strategy.new_market_approved']),
-    schedules: JSON.stringify([
-      { cron: '0 9 1 1/3 *', description: 'Quarterly playbook review' },
-    ]),
-  },
-  {
-    name:               'AI Licensing/White-Label',
-    seatName:           'ai_licensing_whitelabel',
-    department:         'strategy_expansion',
-    agentType:          'ai',
-    status:             'draft_queue',
-    hierarchyParentSeat: 'ai_market_research',
-    systemPrompt: `You are the AI Licensing/White-Label agent for Handy Pioneers Strategy & Expansion.
-Your mission: Build the licensing model for scaling Handy Pioneers. Research franchise law, model economics.
-
-Hard stops:
-- NEVER commit to any licensing agreement without attorney review
-- All external licensing communications: Marcin sends personally
-- No FDD without legal counsel`,
-    tools: JSON.stringify(['playbooks.fetch', 'playbooks.list', 'notifications.create']),
-    eventSubscriptions: JSON.stringify(['licensing.inquiry_received']),
-    schedules: JSON.stringify([
-      { cron: '0 9 1 1/3 *', description: 'Quarterly licensing review' },
-    ]),
-  },
-];
-
-console.log(`Seeding ${AGENTS.length} agent seats…`);
-
-for (const agent of AGENTS) {
-  await conn.execute(
-    `INSERT INTO \`aiAgents\`
-       (name, seatName, department, agentType, status, systemPrompt, tools,
-        hierarchyParentSeat, eventSubscriptions, schedules)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON DUPLICATE KEY UPDATE
-       name                = VALUES(name),
-       department          = VALUES(department),
-       agentType           = VALUES(agentType),
-       status              = IF(status = 'active', 'active', VALUES(status)),
-       systemPrompt        = VALUES(systemPrompt),
-       tools               = VALUES(tools),
-       hierarchyParentSeat = VALUES(hierarchyParentSeat),
-       eventSubscriptions  = VALUES(eventSubscriptions),
-       schedules           = VALUES(schedules)`,
-    [
-      agent.name,
-      agent.seatName,
-      agent.department,
-      agent.agentType,
-      agent.status,
-      agent.systemPrompt ?? null,
-      agent.tools ?? null,
-      agent.hierarchyParentSeat ?? null,
-      agent.eventSubscriptions ?? null,
-      agent.schedules ?? null,
-    ]
-  );
-  console.log(`  ✓ ${agent.seatName} (${agent.agentType})`);
+const url = process.env.DATABASE_URL;
+if (!url) {
+  console.error('DATABASE_URL is required');
+  process.exit(1);
 }
 
-console.log(`\nDone. ${AGENTS.length} seats upserted.`);
-await conn.end();
+// ── All 15 Phase-2 tool keys (see server/lib/agentRuntime/phase2Tools.ts) ────
+export const ALL_TOOL_KEYS = [
+  'kpis.record',                       // seat-default KPI (Phase 1 built-in)
+  'customers.list',
+  'customers.get',
+  'opportunities.list',
+  'opportunities.get',
+  'comms.draftEmail',                  // ⚠ requires approval
+  'comms.draftSms',                    // ⚠ requires approval
+  'comms.sendTransactionalEmail',      // whitelisted templates only
+  'tasks.create',
+  'vendors.logContact',
+  'invoices.query',
+  'payments.query',
+  'kpis.get',
+  'kpis.recordExplicit',
+  'hierarchy.pingIntegrator',
+  'hierarchy.pingDepartmentHead',
+];
+
+/**
+ * FILL ME IN — 25 agents. Leave empty to just scaffold the roster shape.
+ * The script exits 0 with a warning if SEED_AGENTS is empty.
+ * @type {Array<{
+ *   seatName: string,
+ *   department: string,
+ *   role: string,
+ *   systemPrompt: string,
+ *   model?: string,
+ *   isDepartmentHead: boolean,
+ *   parentSeatName: string | null,
+ *   status: string,
+ *   costCapDailyUsd?: number,
+ *   runLimitDaily?: number,
+ *   toolKeys?: string[],
+ * }>}
+ */
+const SEED_AGENTS = [
+  // ── INTEGRATOR (1) ─────────────────────────────────────────────────────────
+  // { seatName: 'Integrator AI', department: 'integrator', ... }
+
+  // ── DEPARTMENT HEADS (8) ───────────────────────────────────────────────────
+  // { seatName: 'Head of Sales & Lead Management', department: 'sales', isDepartmentHead: true, parentSeatName: 'Integrator AI', ... }
+  // { seatName: 'Head of Operations',              department: 'operations',        isDepartmentHead: true, parentSeatName: 'Integrator AI', ... }
+  // { seatName: 'Head of Marketing',               department: 'marketing',         isDepartmentHead: true, parentSeatName: 'Integrator AI', ... }
+  // { seatName: 'Head of Finance',                 department: 'finance',           isDepartmentHead: true, parentSeatName: 'Integrator AI', ... }
+  // { seatName: 'Head of Customer Success',        department: 'customer_success',  isDepartmentHead: true, parentSeatName: 'Integrator AI', ... }
+  // { seatName: 'Head of Vendor Network',          department: 'vendor_network',    isDepartmentHead: true, parentSeatName: 'Integrator AI', ... }
+  // { seatName: 'Head of Technology',              department: 'technology',        isDepartmentHead: true, parentSeatName: 'Integrator AI', ... }
+  // { seatName: 'Head of Strategy & Expansion',    department: 'strategy',          isDepartmentHead: true, parentSeatName: 'Integrator AI', ... }
+
+  // ── SUB-AGENTS (16) — reportsTo the Head in their own department ───────────
+  // sales:            { Lead Router AI, Nurture AI },
+  // operations:       { Dispatch AI, System Integrity AI (autonomous) },
+  // marketing:        { Campaign Composer AI, Brand Guardian AI (autonomous) },
+  // finance:          { Bookkeeping AI (autonomous), Margin Monitor AI (autonomous) },
+  // customer_success: { Member Concierge AI, CSAT Watchdog AI },
+  // vendor_network:   { Vendor Sourcing AI, Vendor Compliance AI },
+  // technology:       { Security AI (autonomous), Release Notes AI },
+  // strategy:         { Market Scan AI, Opportunity Scorer AI },
+];
+
+// ── Phase-4 default event subscriptions (autonomous triggers) ────────────────
+// Maps a seatName to the list of domain events that should auto-fire that
+// agent. The seed reads ai_agents.id by seatName and inserts into
+// ai_agent_event_subscriptions. Idempotent — clears + re-inserts per agent.
+//
+// IMPORTANT: filter is an optional JSON match on the event payload's top-level
+// keys. Margin Monitor only fires when an opportunity reaches 'completed'.
+export const DEFAULT_EVENT_SUBSCRIPTIONS = {
+  'Lead Nurturer AI':       [{ event: 'lead.created' }, { event: 'voicemail.received' }, { event: 'call.missed' }, { event: 'roadmap_generator.submitted' }],
+  'Onboarding AI':          [{ event: 'customer.portal_account_created' }, { event: 'payment.received' }],
+  'Nurture Cadence AI':     [{ event: 'subscription.renewed' }, { event: 'visit.completed' }],
+  'Membership Success AI':  [{ event: 'subscription.cancelled' }],
+  'Margin Monitor AI':      [{ event: 'opportunity.stage_changed', filter: { stage: 'completed' } }],
+  'QA AI':                  [{ event: 'review.received' }, { event: 'visit.completed' }],
+  'Cash Flow AI':           [{ event: 'payment.received' }, { event: 'invoice.overdue' }],
+  'Bookkeeping AI':         [{ event: 'payment.received' }],
+  'Community & Reviews AI': [{ event: 'review.received' }],
+};
+
+// ── Phase-4 default cron schedules ──────────────────────────────────────────
+// Cron is 5-field standard. Timezone is a separate column. Each entry queues a
+// task with triggerType='schedule' when due.
+//   Integrator              — Monday 6am PT  weekly brief
+//   each Department Head    — Monday 5am PT  dept KPI compilation
+//   Content & SEO AI        — daily  9am PT  social/blog draft prompt
+//   Nurture Cadence AI      — Monday 10am PT seasonal touchpoints
+//   System Integrity AI     — every 15 min   health check (cron: */15 * * * *)
+//   Security AI             — daily  2am PT  dependency/access audit
+//   Cash Flow AI            — daily  5am PT  forecast refresh
+//   Bookkeeping AI          — daily  5am PT  reconciliation
+export const DEFAULT_SCHEDULES = [
+  // Integrator (the seatName Marcin uses for the integrator agent — adjust if different)
+  { seatName: 'Integrator AI',        cron: '0 6 * * 1',  tz: 'America/Los_Angeles', payload: { task: 'weekly_brief' } },
+  // Department-Head weekly KPI roll-up (Monday 5am PT)
+  { headDepartment: 'sales',           cron: '0 5 * * 1',  tz: 'America/Los_Angeles', payload: { task: 'weekly_dept_kpis' } },
+  { headDepartment: 'operations',      cron: '0 5 * * 1',  tz: 'America/Los_Angeles', payload: { task: 'weekly_dept_kpis' } },
+  { headDepartment: 'marketing',       cron: '0 5 * * 1',  tz: 'America/Los_Angeles', payload: { task: 'weekly_dept_kpis' } },
+  { headDepartment: 'finance',         cron: '0 5 * * 1',  tz: 'America/Los_Angeles', payload: { task: 'weekly_dept_kpis' } },
+  { headDepartment: 'customer_success', cron: '0 5 * * 1', tz: 'America/Los_Angeles', payload: { task: 'weekly_dept_kpis' } },
+  { headDepartment: 'vendor_network',  cron: '0 5 * * 1',  tz: 'America/Los_Angeles', payload: { task: 'weekly_dept_kpis' } },
+  { headDepartment: 'technology',      cron: '0 5 * * 1',  tz: 'America/Los_Angeles', payload: { task: 'weekly_dept_kpis' } },
+  { headDepartment: 'strategy',        cron: '0 5 * * 1',  tz: 'America/Los_Angeles', payload: { task: 'weekly_dept_kpis' } },
+  // Daily / sub-agent crons
+  { seatName: 'Content & SEO AI',     cron: '0 9 * * *',  tz: 'America/Los_Angeles', payload: { task: 'daily_content_prompt' } },
+  { seatName: 'Nurture Cadence AI',   cron: '0 10 * * 1', tz: 'America/Los_Angeles', payload: { task: 'seasonal_touchpoints' } },
+  { seatName: 'System Integrity AI',  cron: '*/15 * * * *', tz: 'America/Los_Angeles', payload: { task: 'health_check' } },
+  { seatName: 'Security AI',          cron: '0 2 * * *',  tz: 'America/Los_Angeles', payload: { task: 'audit_dependencies_and_access' } },
+  { seatName: 'Cash Flow AI',         cron: '0 5 * * *',  tz: 'America/Los_Angeles', payload: { task: 'forecast_refresh' } },
+  { seatName: 'Bookkeeping AI',       cron: '0 5 * * *',  tz: 'America/Los_Angeles', payload: { task: 'reconciliation' } },
+];
+
+async function main() {
+  const conn = await mysql.createConnection(url);
+
+  if (SEED_AGENTS.length === 0) {
+    console.warn('⚠  SEED_AGENTS is empty. Edit scripts/seed-ai-agents.mjs to fill in the 25 rows.');
+    console.warn('    Scaffold ran clean — no writes to ai_agents.');
+    // Still seed phase-4 wiring against whatever rows already exist in prod.
+    await seedPhase4Wiring(conn);
+    await conn.end();
+    return;
+  }
+
+  // ── Pass 1: upsert all rows without parent wiring (to get ids) ───────────
+  const byName = new Map();
+  for (const a of SEED_AGENTS) {
+    const [existing] = await conn.execute(
+      'SELECT id FROM ai_agents WHERE seatName = ? LIMIT 1',
+      [a.seatName]
+    );
+    const row = Array.isArray(existing) && existing[0];
+    const model = a.model ?? 'claude-haiku-4-5-20251001';
+    const costCap = (a.costCapDailyUsd ?? 5).toFixed(2);
+    const runLimit = a.runLimitDaily ?? 200;
+    if (row) {
+      await conn.execute(
+        `UPDATE ai_agents SET department=?, role=?, systemPrompt=?, model=?,
+         isDepartmentHead=?, costCapDailyUsd=?, runLimitDaily=?, status=?
+         WHERE id=?`,
+        [a.department, a.role, a.systemPrompt, model,
+         a.isDepartmentHead ? 1 : 0, costCap, runLimit, a.status ?? 'draft_queue',
+         row.id]
+      );
+      byName.set(a.seatName, row.id);
+      console.log(`↻ updated #${row.id} ${a.seatName}`);
+    } else {
+      const [res] = await conn.execute(
+        `INSERT INTO ai_agents
+         (seatName, department, role, systemPrompt, model,
+          isDepartmentHead, reportsToSeatId, costCapDailyUsd, runLimitDaily, status)
+         VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
+        [a.seatName, a.department, a.role, a.systemPrompt, model,
+         a.isDepartmentHead ? 1 : 0, costCap, runLimit, a.status ?? 'draft_queue']
+      );
+      byName.set(a.seatName, res.insertId);
+      console.log(`＋ created #${res.insertId} ${a.seatName}`);
+    }
+  }
+
+  // ── Pass 2: wire reportsToSeatId now that every seat has an id ───────────
+  for (const a of SEED_AGENTS) {
+    if (!a.parentSeatName) continue;
+    const childId = byName.get(a.seatName);
+    const parentId = byName.get(a.parentSeatName);
+    if (!parentId) {
+      console.warn(`⚠  parent '${a.parentSeatName}' not found for '${a.seatName}' — skipped`);
+      continue;
+    }
+    await conn.execute(
+      'UPDATE ai_agents SET reportsToSeatId=? WHERE id=?',
+      [parentId, childId]
+    );
+  }
+
+  // ── Pass 3: tool authorizations ──────────────────────────────────────────
+  for (const a of SEED_AGENTS) {
+    if (!a.toolKeys || a.toolKeys.length === 0) continue;
+    const agentId = byName.get(a.seatName);
+    await conn.execute('DELETE FROM ai_agent_tools WHERE agentId=?', [agentId]);
+    for (const toolKey of a.toolKeys) {
+      await conn.execute(
+        'INSERT INTO ai_agent_tools (agentId, toolKey, authorized) VALUES (?, ?, 1)',
+        [agentId, toolKey]
+      );
+    }
+  }
+
+  console.log(`\n✓ Seeded ${SEED_AGENTS.length} agents.`);
+
+  // ── Pass 4 (Phase 4): event subscriptions + cron schedules ───────────────
+  await seedPhase4Wiring(conn);
+
+  await conn.end();
+}
+
+/**
+ * Wire Phase-4 event subscriptions and cron schedules. Idempotent — clears
+ * each agent's existing rows, then inserts the canonical defaults. Safe to
+ * run against a roster where only some seats exist (missing rows are skipped
+ * with a warning).
+ */
+async function seedPhase4Wiring(conn) {
+  // Defensive: ensure phase-4 tables exist. Boot-time also creates them, but
+  // running the seeder from a dev box that has never started the server should
+  // still work.
+  await conn.execute(`CREATE TABLE IF NOT EXISTS \`ai_agent_event_subscriptions\` (
+    \`id\` int AUTO_INCREMENT NOT NULL,
+    \`agentId\` int NOT NULL,
+    \`eventName\` varchar(80) NOT NULL,
+    \`filter\` text,
+    \`enabled\` boolean NOT NULL DEFAULT true,
+    \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY(\`id\`)
+  )`);
+  await conn.execute(`CREATE TABLE IF NOT EXISTS \`ai_agent_schedules\` (
+    \`id\` int AUTO_INCREMENT NOT NULL,
+    \`agentId\` int NOT NULL,
+    \`cronExpression\` varchar(80) NOT NULL,
+    \`timezone\` varchar(64) NOT NULL DEFAULT 'America/Los_Angeles',
+    \`enabled\` boolean NOT NULL DEFAULT true,
+    \`lastRunAt\` timestamp NULL,
+    \`nextRunAt\` timestamp NULL,
+    \`payload\` text,
+    \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY(\`id\`)
+  )`);
+
+  // Helper: look up agentId by seatName (returns null if missing)
+  const findBySeat = async (seatName) => {
+    const [rows] = await conn.execute(
+      'SELECT id FROM ai_agents WHERE seatName = ? LIMIT 1',
+      [seatName]
+    );
+    return Array.isArray(rows) && rows[0] ? rows[0].id : null;
+  };
+  const findHead = async (department) => {
+    const [rows] = await conn.execute(
+      'SELECT id, seatName FROM ai_agents WHERE department = ? AND isDepartmentHead = 1 LIMIT 1',
+      [department]
+    );
+    return Array.isArray(rows) && rows[0] ? rows[0] : null;
+  };
+
+  // ── Event subscriptions ─────────────────────────────────────────────────
+  let subsTotal = 0;
+  for (const [seatName, subs] of Object.entries(DEFAULT_EVENT_SUBSCRIPTIONS)) {
+    const agentId = await findBySeat(seatName);
+    if (!agentId) {
+      console.warn(`⚠  subscriptions: '${seatName}' not in roster yet — skipping`);
+      continue;
+    }
+    await conn.execute('DELETE FROM ai_agent_event_subscriptions WHERE agentId = ?', [agentId]);
+    for (const s of subs) {
+      await conn.execute(
+        'INSERT INTO ai_agent_event_subscriptions (agentId, eventName, filter, enabled) VALUES (?, ?, ?, 1)',
+        [agentId, s.event, s.filter ? JSON.stringify(s.filter) : null]
+      );
+      subsTotal++;
+    }
+    console.log(`✓ subscriptions: ${seatName} → ${subs.length} event(s)`);
+  }
+  console.log(`\n✓ Wrote ${subsTotal} event subscription(s).`);
+
+  // ── Cron schedules ──────────────────────────────────────────────────────
+  let schedTotal = 0;
+  for (const sch of DEFAULT_SCHEDULES) {
+    let agentId = null;
+    let label = '';
+    if (sch.seatName) {
+      agentId = await findBySeat(sch.seatName);
+      label = sch.seatName;
+    } else if (sch.headDepartment) {
+      const head = await findHead(sch.headDepartment);
+      if (head) {
+        agentId = head.id;
+        label = head.seatName;
+      }
+    }
+    if (!agentId) {
+      console.warn(`⚠  schedule: '${sch.seatName ?? `head:${sch.headDepartment}`}' not in roster yet — skipping`);
+      continue;
+    }
+    // De-dupe by (agentId, cronExpression). Don't blow away existing custom rows.
+    const [existing] = await conn.execute(
+      'SELECT id FROM ai_agent_schedules WHERE agentId = ? AND cronExpression = ? LIMIT 1',
+      [agentId, sch.cron]
+    );
+    if (Array.isArray(existing) && existing.length > 0) {
+      // Refresh payload + tz so re-running the seed is non-destructive but updates defaults.
+      await conn.execute(
+        'UPDATE ai_agent_schedules SET timezone = ?, payload = ?, enabled = 1 WHERE id = ?',
+        [sch.tz, sch.payload ? JSON.stringify(sch.payload) : null, existing[0].id]
+      );
+      console.log(`↻ schedule: ${label} '${sch.cron}'`);
+    } else {
+      await conn.execute(
+        'INSERT INTO ai_agent_schedules (agentId, cronExpression, timezone, enabled, payload) VALUES (?, ?, ?, 1, ?)',
+        [agentId, sch.cron, sch.tz, sch.payload ? JSON.stringify(sch.payload) : null]
+      );
+      console.log(`＋ schedule: ${label} '${sch.cron}'`);
+    }
+    schedTotal++;
+  }
+  console.log(`\n✓ Wrote ${schedTotal} schedule(s).`);
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

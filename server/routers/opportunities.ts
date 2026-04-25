@@ -139,7 +139,6 @@ export const opportunitiesRouter = router({
       await updateOpportunity(input.id, {
         archived: true,
         archivedAt: new Date().toISOString(),
-        archivedReason: input.reason ?? "manual",
       });
       // Recompute lifecycle stage whenever a job is archived — disabled in MySQL port
       void opp;
@@ -165,7 +164,6 @@ export const opportunitiesRouter = router({
           await updateOpportunity(lead.id, {
             archived: true,
             archivedAt: new Date().toISOString(),
-            archivedReason: "auto_lost_90d",
           }).catch(() => null);
           archived++;
         }
@@ -397,6 +395,22 @@ export const opportunitiesRouter = router({
         toStage: input.toStage,
         triggeredBy: ctx.user?.id ? String(ctx.user.id) : "system",
       });
+
+      // Phase 4 agent trigger: stage transitions feed Margin Monitor (completed),
+      // QA AI (visit.completed-like flows), and any future stage-listening agents.
+      {
+        const { emitAgentEvent } = await import("../lib/agentRuntime/triggerBus");
+        emitAgentEvent("opportunity.stage_changed", {
+          opportunityId: input.opportunityId,
+          customerId: opp.customerId,
+          fromStage,
+          toStage: input.toStage,
+          stage: input.toStage,
+          area: input.toArea ?? opp.area,
+          value: opp.value,
+          title: opp.title,
+        }).catch(() => null);
+      }
 
       // Cross-role triggers
       const stageLower = input.toStage.toLowerCase();

@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { adminProcedure, protectedProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
-import { aiAgents, agentCharters, agentKpis, agentPlaybooks } from "../../drizzle/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { aiAgents, agentCharters, agentKpis } from "../../drizzle/schema";
+import { eq } from "drizzle-orm";
 
 export const agentsRouter = router({
   /** List all agent seats, optionally filtered by department */
@@ -11,15 +11,9 @@ export const agentsRouter = router({
     .query(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const rows = input?.department
-        ? await db.select().from(aiAgents).where(eq(aiAgents.department, input.department))
-        : await db.select().from(aiAgents);
-      return rows.map(r => ({
-        ...r,
-        tools:              r.tools              ? JSON.parse(r.tools)              : [],
-        eventSubscriptions: r.eventSubscriptions ? JSON.parse(r.eventSubscriptions) : [],
-        schedules:          r.schedules          ? JSON.parse(r.schedules)          : [],
-      }));
+      return input?.department
+        ? db.select().from(aiAgents).where(eq(aiAgents.department, input.department as any))
+        : db.select().from(aiAgents);
     }),
 
   /** Get a single agent by seatName */
@@ -29,13 +23,7 @@ export const agentsRouter = router({
       const db = await getDb();
       if (!db) throw new Error("Database not available");
       const [row] = await db.select().from(aiAgents).where(eq(aiAgents.seatName, input.seatName));
-      if (!row) return null;
-      return {
-        ...row,
-        tools:              row.tools              ? JSON.parse(row.tools)              : [],
-        eventSubscriptions: row.eventSubscriptions ? JSON.parse(row.eventSubscriptions) : [],
-        schedules:          row.schedules          ? JSON.parse(row.schedules)          : [],
-      };
+      return row ?? null;
     }),
 
   /** Status endpoint — charterLoaded, kpiCount, playbookCount per seat */
@@ -44,21 +32,20 @@ export const agentsRouter = router({
     if (!db) throw new Error("Database not available");
     const rows = await db
       .select({
-        seatName:      aiAgents.seatName,
-        name:          aiAgents.name,
-        department:    aiAgents.department,
-        agentType:     aiAgents.agentType,
-        status:        aiAgents.status,
-        charterLoaded: aiAgents.charterLoaded,
-        kpiCount:      aiAgents.kpiCount,
-        playbookCount: aiAgents.playbookCount,
+        seatName:       aiAgents.seatName,
+        department:     aiAgents.department,
+        status:         aiAgents.status,
+        isDepartmentHead: aiAgents.isDepartmentHead,
+        charterLoaded:  (aiAgents as any).charterLoaded,
+        kpiCount:       (aiAgents as any).kpiCount,
+        playbookCount:  (aiAgents as any).playbookCount,
       })
       .from(aiAgents);
     return rows.map(r => ({
       ...r,
       operational:
         r.charterLoaded &&
-        (r.agentType === 'human' || (r.kpiCount > 0 && r.playbookCount > 0)),
+        (r.kpiCount > 0 && r.playbookCount > 0),
     }));
   }),
 
