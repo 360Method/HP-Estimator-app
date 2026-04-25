@@ -32,4 +32,19 @@ export const ENV = {
   // imageGeneration.ts, dataApi.ts). Safe to leave empty; those services degrade gracefully.
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
+  // ── Google Business Profile ──────────────────────────────────────────────────
+  gbpClientId: process.env.GBP_CLIENT_ID ?? "",
+  gbpClientSecret: process.env.GBP_CLIENT_SECRET ?? "",
+  gbpRedirectUri: process.env.GBP_REDIRECT_URI ?? "",
+  // ── Meta (Facebook / Instagram) ─────────────────────────────────────────────
+  metaAppId: process.env.META_APP_ID ?? "",
+  metaAppSecret: process.env.META_APP_SECRET ?? "",
+  metaSystemUserToken: process.env.META_SYSTEM_USER_TOKEN ?? "",
+  metaAdAccountId: process.env.META_AD_ACCOUNT_ID ?? "",
+  // ── Google Ads ───────────────────────────────────────────────────────────────
+  googleAdsDevToken: process.env.GOOGLE_ADS_DEVELOPER_TOKEN ?? "",
+  googleAdsClientId: process.env.GOOGLE_ADS_CLIENT_ID ?? "",
+  googleAdsClientSecret: process.env.GOOGLE_ADS_CLIENT_SECRET ?? "",
+  googleAdsCustomerId: process.env.GOOGLE_ADS_CUSTOMER_ID ?? "",
+  googleAdsRedirectUri: process.env.GOOGLE_ADS_REDIRECT_URI ?? "",
 };

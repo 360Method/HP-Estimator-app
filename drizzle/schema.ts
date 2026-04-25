@@ -1550,6 +1550,55 @@ export const userRoles = mysqlTable("userRoles", {
 export type DbUserRole = typeof userRoles.$inferSelect;
 export type InsertDbUserRole = typeof userRoles.$inferInsert;
 
+// ─── GOOGLE BUSINESS PROFILE TOKENS ──────────────────────────────────────────
+// OAuth 2.0 tokens for the Google Business Profile API (one row = one connection).
+export const gbpTokens = mysqlTable("gbpTokens", {
+  id: int("id").autoincrement().primaryKey(),
+  accountId: varchar("accountId", { length: 128 }).notNull(),
+  locationId: varchar("locationId", { length: 128 }),
+  accessToken: text("accessToken").notNull(),
+  refreshToken: text("refreshToken").notNull(),
+  expiresAt: varchar("expiresAt", { length: 32 }).notNull(),
+  connectedAt: timestamp("connectedAt").defaultNow().notNull(),
+  connectedByStaffId: int("connectedByStaffId"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbGbpToken = typeof gbpTokens.$inferSelect;
+export type InsertDbGbpToken = typeof gbpTokens.$inferInsert;
+
+// ─── META CONNECTIONS ─────────────────────────────────────────────────────────
+// System-user token connection for Meta Marketing + Graph APIs (one row).
+export const metaConnections = mysqlTable("metaConnections", {
+  id: int("id").autoincrement().primaryKey(),
+  adAccountId: varchar("adAccountId", { length: 64 }).notNull(),
+  /** JSON array of connected page IDs */
+  pageIds: text("pageIds"),
+  /** active | expired | error */
+  tokenStatus: varchar("tokenStatus", { length: 32 }).default("active").notNull(),
+  lastVerifiedAt: timestamp("lastVerifiedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbMetaConnection = typeof metaConnections.$inferSelect;
+export type InsertDbMetaConnection = typeof metaConnections.$inferInsert;
+
+// ─── GOOGLE ADS TOKENS ────────────────────────────────────────────────────────
+// OAuth 2.0 tokens for the Google Ads API (one row = one MCC/customer connection).
+export const googleAdsTokens = mysqlTable("googleAdsTokens", {
+  id: int("id").autoincrement().primaryKey(),
+  customerId: varchar("customerId", { length: 64 }).notNull(),
+  accessToken: text("accessToken").notNull(),
+  refreshToken: text("refreshToken").notNull(),
+  expiresAt: varchar("expiresAt", { length: 32 }).notNull(),
+  connectedAt: timestamp("connectedAt").defaultNow().notNull(),
+  connectedByStaffId: int("connectedByStaffId"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbGoogleAdsToken = typeof googleAdsTokens.$inferSelect;
+export type InsertDbGoogleAdsToken = typeof googleAdsTokens.$inferInsert;
+
 // ─── AI AGENT RUNTIME (Phase 1) ───────────────────────────────────────────────
 // Migrations 0065. The runtime platform — no agents seeded yet. Phase 3 will
 // populate the ai_agents table. Hierarchy: Visionary (Marcin) → Integrator AI →

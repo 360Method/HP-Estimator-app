@@ -142,6 +142,54 @@ async function ensurePortalContinuityFlag() {
   }
 }
 
+async function ensureOAuthIntegrationTables() {
+  try {
+    const { getDb } = await import("../db");
+    const { sql } = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return;
+    // Defensive boot-time creates (drizzle tracker may diverge from prod DB)
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`gbpTokens\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`accountId\` varchar(128) NOT NULL,
+      \`locationId\` varchar(128),
+      \`accessToken\` text NOT NULL,
+      \`refreshToken\` text NOT NULL,
+      \`expiresAt\` varchar(32) NOT NULL,
+      \`connectedAt\` timestamp NOT NULL DEFAULT (now()),
+      \`connectedByStaffId\` int,
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT \`gbpTokens_id\` PRIMARY KEY(\`id\`)
+    )`);
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`metaConnections\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`adAccountId\` varchar(64) NOT NULL,
+      \`pageIds\` text,
+      \`tokenStatus\` varchar(32) NOT NULL DEFAULT 'active',
+      \`lastVerifiedAt\` timestamp,
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT \`metaConnections_id\` PRIMARY KEY(\`id\`)
+    )`);
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`googleAdsTokens\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`customerId\` varchar(64) NOT NULL,
+      \`accessToken\` text NOT NULL,
+      \`refreshToken\` text NOT NULL,
+      \`expiresAt\` varchar(32) NOT NULL,
+      \`connectedAt\` timestamp NOT NULL DEFAULT (now()),
+      \`connectedByStaffId\` int,
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT \`googleAdsTokens_id\` PRIMARY KEY(\`id\`)
+    )`);
+    console.log("[boot] OAuth integration tables ensured");
+  } catch (err) {
+    console.warn("[boot] ensureOAuthIntegrationTables failed (non-fatal):", err);
+  }
+}
+
 // Idempotent upgrade: replace `portalMagicLinks.token` with hashed `tokenHash`.
 // Runs on every boot. Drizzle-kit can drift from prod, so we don't rely on it.
 async function ensureMagicLinkTokenHash() {
@@ -260,6 +308,7 @@ async function ensurePasswordResetTokensTableBoot() {
 async function startServer() {
   await ensurePhoneTables();
   await ensurePortalContinuityFlag();
+  await ensureOAuthIntegrationTables();
   await ensureMagicLinkTokenHash();
   await ensureSchedulingTablesBoot();
   await ensureAgentPhase4Tables();
@@ -273,9 +322,9 @@ async function startServer() {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'", "https://maps.googleapis.com", "https://js.stripe.com"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "https://maps.googleapis.com", "https://js.stripe.com", "https://www.googletagmanager.com"],
         frameSrc: ["https://js.stripe.com", "https://hooks.stripe.com"],
-        connectSrc: ["'self'", "https://api.stripe.com", "https://maps.googleapis.com"],
+        connectSrc: ["'self'", "https://api.stripe.com", "https://maps.googleapis.com", "https://www.google-analytics.com", "https://analytics.google.com", "https://region1.google-analytics.com"],
         imgSrc: ["'self'", "data:", "blob:", "https:", "http:"],
         styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
         fontSrc: ["'self'", "https://fonts.gstatic.com"],
@@ -812,6 +861,54 @@ async function startServer() {
       // Store error for diagnostic endpoint
       process.env.GMAIL_LAST_ERROR = `${errMsg} ${errDetail}`.trim();
       res.redirect(`${origin}/?gmail=error&reason=${encodeURIComponent(errMsg.slice(0, 100))}`);
+    }
+  });
+
+  // ── GBP OAuth routes ─────────────────────────────────────────────────────────
+  const { gbpRouter: gbpOAuthRouter } = await import("../integrations/gbp/routes.js");
+  app.use("/api/integrations/gbp", gbpOAuthRouter);
+
+  // ── Meta integration routes ───────────────────────────────────────────────────
+  const { metaRouter: metaExpressRouter } = await import("../integrations/meta/routes.js");
+  app.use("/api/integrations/meta", metaExpressRouter);
+
+  // ── Google Ads OAuth routes ───────────────────────────────────────────────────
+  const { googleAdsRouter: googleAdsOAuthRouter } = await import("../integrations/google-ads/routes.js");
+  app.use("/api/integrations/google-ads", googleAdsOAuthRouter);
+
+  // ── Integration health endpoint ───────────────────────────────────────────────
+  app.get("/api/health", async (_req, res) => {
+    try {
+      const { getGbpTokens } = await import("../integrations/gbp/oauth.js");
+      const { getGoogleAdsTokens } = await import("../integrations/google-ads/oauth.js");
+      const [gbpTokenRow, gadsTokenRow] = await Promise.all([
+        getGbpTokens().catch(() => null),
+        getGoogleAdsTokens().catch(() => null),
+      ]);
+      const e = process.env;
+      res.json({
+        ok: true,
+        integrations: {
+          gbp: {
+            configured: !!(e.GBP_CLIENT_ID && e.GBP_CLIENT_SECRET),
+            connected: !!gbpTokenRow,
+          },
+          meta: {
+            configured: !!(e.META_SYSTEM_USER_TOKEN && e.META_AD_ACCOUNT_ID),
+            connected: !!(e.META_SYSTEM_USER_TOKEN && e.META_AD_ACCOUNT_ID),
+          },
+          googleAds: {
+            configured: !!(e.GOOGLE_ADS_CLIENT_ID && e.GOOGLE_ADS_DEVELOPER_TOKEN),
+            connected: !!gadsTokenRow,
+          },
+          quickbooks: {
+            configured: !!(e.QUICKBOOKS_CLIENT_ID && e.QUICKBOOKS_CLIENT_SECRET),
+            connected: false,
+          },
+        },
+      });
+    } catch {
+      res.json({ ok: true });
     }
   });
 
