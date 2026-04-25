@@ -36,17 +36,17 @@ const conn = await mysql.createConnection(process.env.DATABASE_URL);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Map filename stem → department slug */
+/** Map filename stem → department enum value in ai_agents */
 const DEPT_MAP = {
-  'integrator-visionary': 'integrator_visionary',
+  'integrator-visionary': 'integrator',
   'sales':                'sales',
   'operations':           'operations',
   'marketing':            'marketing',
   'finance':              'finance',
   'customer-success':     'customer_success',
-  'vendor-trades':        'vendor_trades',
+  'vendor-trades':        'vendor_network',
   'technology':           'technology',
-  'strategy-expansion':   'strategy_expansion',
+  'strategy-expansion':   'strategy',
 };
 
 /**

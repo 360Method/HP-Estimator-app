@@ -5,8 +5,8 @@ Generated: 2026-04-25
 ## Summary
 - **Total expected seats:** 31
 - **Found in ai_agents:** 31
-- **Operational:** 15
-- **Incomplete:** 16
+- **Operational:** 22
+- **Incomplete:** 9
 - **Total KPIs seeded:** 105
 - **Total playbooks seeded:** 36
 
@@ -14,7 +14,7 @@ Generated: 2026-04-25
 
 | Seat | Department | Exists in ai_agents | Charter Loaded | KPIs Seeded | Playbooks Seeded | Trigger/Schedule | Status |
 |------|-----------|---------------------|----------------|-------------|-----------------|-----------------|--------|
-| integrator | integrator | ✓ | ✗ | 0 | 0 | cron | **incomplete** (no charter, 0 KPIs, 0 playbooks) |
+| integrator | integrator | ✓ | ✓ | 5 | 2 | cron | **operational** |
 | ai_sdr | sales | ✓ | ✓ | 8 | 3 | event+cron | **operational** |
 | ai_membership_success | sales | ✓ | ✓ | 4 | 2 | event | **operational** |
 | cx_lead | sales | ✓ | ✓ | 0 | 0 | none | **incomplete** (0 KPIs, 0 playbooks) |
@@ -35,20 +35,19 @@ Generated: 2026-04-25
 | ai_annual_valuation | customer_success | ✓ | ✓ | 3 | 1 | none | **operational** |
 | ai_nurture_cadence | customer_success | ✓ | ✓ | 3 | 2 | event+cron | **operational** |
 | member_concierge | customer_success | ✓ | ✓ | 0 | 0 | none | **incomplete** (0 KPIs, 0 playbooks) |
-| ai_vendor_outreach | vendor_network | ✓ | ✗ | 0 | 0 | cron | **incomplete** (no charter, 0 KPIs, 0 playbooks) |
-| ai_vendor_onboarding | vendor_network | ✓ | ✗ | 0 | 0 | none | **incomplete** (no charter, 0 KPIs, 0 playbooks) |
-| ai_trade_matching | vendor_network | ✓ | ✗ | 0 | 0 | none | **incomplete** (no charter, 0 KPIs, 0 playbooks) |
-| ai_vendor_performance | vendor_network | ✓ | ✗ | 0 | 0 | event | **incomplete** (no charter, 0 KPIs, 0 playbooks) |
+| ai_vendor_outreach | vendor_network | ✓ | ✓ | 8 | 1 | cron | **operational** |
+| ai_vendor_onboarding | vendor_network | ✓ | ✓ | 3 | 1 | none | **operational** |
+| ai_trade_matching | vendor_network | ✓ | ✓ | 3 | 1 | none | **operational** |
+| ai_vendor_performance | vendor_network | ✓ | ✓ | 3 | 1 | event | **operational** |
 | ai_system_integrity | technology | ✓ | ✓ | 8 | 3 | cron | **operational** |
 | ai_security | technology | ✓ | ✓ | 3 | 1 | cron | **operational** |
 | software_engineer | technology | ✓ | ✓ | 0 | 0 | none | **incomplete** (0 KPIs, 0 playbooks) |
-| ai_market_research | strategy | ✓ | ✗ | 0 | 0 | cron | **incomplete** (no charter, 0 KPIs, 0 playbooks) |
-| ai_expansion_playbook | strategy | ✓ | ✗ | 0 | 0 | none | **incomplete** (no charter, 0 KPIs, 0 playbooks) |
-| ai_licensing_whitelabel | strategy | ✓ | ✗ | 0 | 0 | none | **incomplete** (no charter, 0 KPIs, 0 playbooks) |
+| ai_market_research | strategy | ✓ | ✓ | 7 | 2 | cron | **operational** |
+| ai_expansion_playbook | strategy | ✓ | ✓ | 2 | 0 | none | **incomplete** (0 playbooks) |
+| ai_licensing_whitelabel | strategy | ✓ | ✓ | 2 | 1 | none | **operational** |
 
 ## Decisions Needed
 
-- integrator: no charter, 0 KPIs, 0 playbooks
 - cx_lead: 0 KPIs, 0 playbooks
 - project_manager: 0 KPIs, 0 playbooks
 - internal_tradesmen: 0 KPIs, 0 playbooks
@@ -56,11 +55,5 @@ Generated: 2026-04-25
 - ai_paid_ads: 0 playbooks
 - cpa_tax: 0 KPIs, 0 playbooks
 - member_concierge: 0 KPIs, 0 playbooks
-- ai_vendor_outreach: no charter, 0 KPIs, 0 playbooks
-- ai_vendor_onboarding: no charter, 0 KPIs, 0 playbooks
-- ai_trade_matching: no charter, 0 KPIs, 0 playbooks
-- ai_vendor_performance: no charter, 0 KPIs, 0 playbooks
 - software_engineer: 0 KPIs, 0 playbooks
-- ai_market_research: no charter, 0 KPIs, 0 playbooks
-- ai_expansion_playbook: no charter, 0 KPIs, 0 playbooks
-- ai_licensing_whitelabel: no charter, 0 KPIs, 0 playbooks
+- ai_expansion_playbook: 0 playbooks
