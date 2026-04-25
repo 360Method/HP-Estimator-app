@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS `vendors` (
   `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT `vendors_id` PRIMARY KEY(`id`)
 );
-
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `trades` (
   `id` int AUTO_INCREMENT NOT NULL,
   `slug` varchar(80) NOT NULL,
@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS `trades` (
   CONSTRAINT `trades_id` PRIMARY KEY(`id`),
   CONSTRAINT `trades_slug_unique` UNIQUE(`slug`)
 );
-
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `vendor_trades` (
   `vendorId` int NOT NULL,
   `tradeId` int NOT NULL,
@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS `vendor_trades` (
   `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT `vendor_trades_pk` PRIMARY KEY(`vendorId`, `tradeId`)
 );
-
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `vendor_jobs` (
   `id` int AUTO_INCREMENT NOT NULL,
   `vendorId` int NOT NULL,
@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS `vendor_jobs` (
   `updatedAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT `vendor_jobs_id` PRIMARY KEY(`id`)
 );
-
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `vendor_communications` (
   `id` int AUTO_INCREMENT NOT NULL,
   `vendorId` int NOT NULL,
@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS `vendor_communications` (
   `createdAt` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT `vendor_communications_id` PRIMARY KEY(`id`)
 );
-
+--> statement-breakpoint
 CREATE TABLE IF NOT EXISTS `vendor_onboarding_steps` (
   `id` int AUTO_INCREMENT NOT NULL,
   `vendorId` int NOT NULL,
