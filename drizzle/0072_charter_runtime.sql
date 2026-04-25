@@ -63,8 +63,8 @@ CREATE TABLE IF NOT EXISTS `agentPlaybooks` (
 CREATE INDEX `agentPlaybooks_seat_idx`       ON `agentPlaybooks` (`ownerSeatName`);--> statement-breakpoint
 CREATE INDEX `agentPlaybooks_department_idx` ON `agentPlaybooks` (`ownerDepartment`);--> statement-breakpoint
 
--- Add charter tracking columns to ai_agents (idempotent via IF NOT EXISTS)
+-- Add charter tracking columns to ai_agents
 ALTER TABLE `ai_agents`
-  ADD COLUMN IF NOT EXISTS `charterLoaded` boolean NOT NULL DEFAULT false,
-  ADD COLUMN IF NOT EXISTS `kpiCount` int NOT NULL DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS `playbookCount` int NOT NULL DEFAULT 0;
+  ADD COLUMN `charterLoaded` boolean NOT NULL DEFAULT false,
+  ADD COLUMN `kpiCount` int NOT NULL DEFAULT 0,
+  ADD COLUMN `playbookCount` int NOT NULL DEFAULT 0;
