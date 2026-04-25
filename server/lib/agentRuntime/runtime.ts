@@ -280,8 +280,8 @@ async function ensureTask(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, in
     status: "running",
     startedAt: new Date(),
   });
-  // drizzle-orm mysql: insertId
-  return Number((inserted as unknown as { insertId?: number; lastInsertRowid?: number })[0]?.insertId ?? 0) || Number((inserted as { insertId?: number }).insertId ?? 0);
+  // drizzle-orm 0.45+: result is the header object directly, not an array
+  return Number((inserted as { insertId?: number }).insertId ?? 0);
 }
 
 type RunInsert = {

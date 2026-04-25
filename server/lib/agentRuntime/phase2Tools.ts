@@ -500,7 +500,7 @@ registerTool({
       scopeKey: (input.scopeKey as string | undefined) ?? null,
       value: Number(input.value).toFixed(4),
       unit: String(input.unit),
-      period: (input.period as string | undefined) ?? "realtime",
+      period: ((input.period as string | undefined) ?? "realtime") as "realtime" | "daily" | "weekly" | "monthly" | "trailing_30" | "trailing_90" | "trailing_365",
       sourceTaskId: ctx.taskId,
     });
     return { ok: true };
