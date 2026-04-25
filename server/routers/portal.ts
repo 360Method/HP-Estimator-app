@@ -1,6 +1,6 @@
 /**
  * Portal router — all tRPC procedures for the customer portal.
- * Uses portal session cookies (hp_portal_session) for auth, NOT Manus OAuth.
+ * Uses portal session cookies (hp_portal_session) for auth, NOT staff auth.
  */
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
@@ -141,7 +141,7 @@ const portalProcedure = publicProcedure.use(async ({ ctx, next }) => {
   return next({ ctx: { ...ctx, portalCustomer: customer } });
 });
 
-// HP staff procedure (requires Manus auth)
+// HP staff procedure (requires staff auth)
 const hpProcedure = protectedProcedure;
 
 // ─── ROUTER ───────────────────────────────────────────────────────────────────

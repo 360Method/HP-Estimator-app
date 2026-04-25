@@ -572,8 +572,6 @@ export const opportunities = mysqlTable("opportunities", {
   notes: text("notes"),
   archived: boolean("archived").default(false).notNull(),
   archivedAt: varchar("archivedAt", { length: 32 }),
-  /** Reason for archive: 'manual' | 'auto_lost_30d' — used by auto-archive job to find its own rows */
-  archivedReason: varchar("archivedReason", { length: 32 }),
   // Lifecycle timestamps
   sourceLeadId: varchar("sourceLeadId", { length: 64 }),
   sourceEstimateId: varchar("sourceEstimateId", { length: 64 }),
@@ -1380,7 +1378,7 @@ export const automationRuleLogs = mysqlTable("automationRuleLogs", {
 export type DbAutomationRuleLog = typeof automationRuleLogs.$inferSelect;
 
 // ─── STAFF USERS (self-hosted auth) ──────────────────────────────────────────
-// Replaces Manus OAuth. Staff log in with email + bcrypt password.
+// Staff log in with email + bcrypt password.
 export const staffUsers = mysqlTable("staffUsers", {
   id: int("id").autoincrement().primaryKey(),
   email: varchar("email", { length: 320 }).notNull().unique(),
@@ -1412,6 +1410,23 @@ export const emailTemplates = mysqlTable("emailTemplates", {
 });
 export type DbEmailTemplate = typeof emailTemplates.$inferSelect;
 export type InsertDbEmailTemplate = typeof emailTemplates.$inferInsert;
+
+// ─── SMS TEMPLATES ────────────────────────────────────────────────────────────
+// Mirror of emailTemplates for SMS sends — looked up by (tenantId, key).
+// Single `body` field since SMS has no subject/html/preheader.
+export const smsTemplates = mysqlTable("smsTemplates", {
+  id: int("id").autoincrement().primaryKey(),
+  tenantId: int("tenantId").notNull().default(1),
+  key: varchar("key", { length: 80 }).notNull(),
+  name: varchar("name", { length: 160 }).notNull().default(""),
+  body: text("body").notNull(),
+  /** JSON array of {tag, description} describing available merge vars */
+  mergeTagSchema: text("mergeTagSchema"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbSmsTemplate = typeof smsTemplates.$inferSelect;
+export type InsertDbSmsTemplate = typeof smsTemplates.$inferInsert;
 
 // ─── CAMPAIGNS ────────────────────────────────────────────────────────────────
 // Marketing blasts — one-shot sends to a static recipient list with per-send
@@ -1584,21 +1599,368 @@ export const googleAdsTokens = mysqlTable("googleAdsTokens", {
 export type DbGoogleAdsToken = typeof googleAdsTokens.$inferSelect;
 export type InsertDbGoogleAdsToken = typeof googleAdsTokens.$inferInsert;
 
-// ─── AI AGENT TOOLS ───────────────────────────────────────────────────────────
-// Registry of tools available to the AI agent. mode='draft_only' means the agent
-// can prepare an action but a human must approve before it executes.
-export const aiAgentTools = mysqlTable("aiAgentTools", {
+// ─── AI AGENT RUNTIME (Phase 1) ───────────────────────────────────────────────
+// Migrations 0065. The runtime platform — no agents seeded yet. Phase 3 will
+// populate the ai_agents table. Hierarchy: Visionary (Marcin) → Integrator AI →
+// 8 Department Heads (isDepartmentHead=true) → sub-agents + humans.
+
+export const aiAgents = mysqlTable("ai_agents", {
   id: int("id").autoincrement().primaryKey(),
-  /** Dot-namespaced tool name, e.g. "gbp.fetchReviews" */
-  toolName: varchar("toolName", { length: 128 }).notNull().unique(),
-  /** Human-readable description */
-  description: text("description"),
-  /** draft_only | auto | disabled */
-  mode: varchar("mode", { length: 32 }).default("draft_only").notNull(),
-  /** Integration category: gbp | meta | googleAds | inbox | etc. */
-  category: varchar("category", { length: 64 }),
+  seatName: varchar("seatName", { length: 80 }).notNull(),
+  department: mysqlEnum("department", [
+    "sales",
+    "operations",
+    "marketing",
+    "finance",
+    "customer_success",
+    "vendor_network",
+    "technology",
+    "strategy",
+    "integrator",
+  ]).notNull(),
+  role: text("role").notNull(),
+  systemPrompt: text("systemPrompt").notNull(),
+  model: varchar("model", { length: 40 }).notNull().default("claude-haiku-4-5-20251001"),
+  status: mysqlEnum("status", ["draft_queue", "autonomous", "paused", "disabled"])
+    .notNull()
+    .default("draft_queue"),
+  /** Self-FK: Integrator at the top (null), Department Heads report to Integrator, sub-agents report to their Head. */
+  reportsToSeatId: int("reportsToSeatId"),
+  /** Convenience flag so the UI can filter the Department Head tier without walking the tree. */
+  isDepartmentHead: boolean("isDepartmentHead").notNull().default(false),
+  costCapDailyUsd: decimal("costCapDailyUsd", { precision: 6, scale: 2 })
+    .notNull()
+    .default("5.00"),
+  runLimitDaily: int("runLimitDaily").notNull().default(200),
+  lastRunAt: timestamp("lastRunAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
+export type DbAiAgent = typeof aiAgents.$inferSelect;
+export type InsertDbAiAgent = typeof aiAgents.$inferInsert;
+
+export const aiAgentTools = mysqlTable("ai_agent_tools", {
+  id: int("id").autoincrement().primaryKey(),
+  agentId: int("agentId").notNull(),
+  toolKey: varchar("toolKey", { length: 80 }).notNull(),
+  authorized: boolean("authorized").notNull().default(true),
+  notes: text("notes"),
+});
 export type DbAiAgentTool = typeof aiAgentTools.$inferSelect;
 export type InsertDbAiAgentTool = typeof aiAgentTools.$inferInsert;
+
+export const aiAgentTasks = mysqlTable("ai_agent_tasks", {
+  id: int("id").autoincrement().primaryKey(),
+  agentId: int("agentId").notNull(),
+  triggerType: mysqlEnum("triggerType", ["event", "schedule", "manual", "delegated"]).notNull(),
+  triggerPayload: text("triggerPayload"),
+  status: mysqlEnum("status", [
+    "queued",
+    "running",
+    "awaiting_approval",
+    "approved",
+    "rejected",
+    "completed",
+    "failed",
+  ])
+    .notNull()
+    .default("queued"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  startedAt: timestamp("startedAt"),
+  completedAt: timestamp("completedAt"),
+});
+export type DbAiAgentTask = typeof aiAgentTasks.$inferSelect;
+export type InsertDbAiAgentTask = typeof aiAgentTasks.$inferInsert;
+
+export const aiAgentRuns = mysqlTable("ai_agent_runs", {
+  id: int("id").autoincrement().primaryKey(),
+  taskId: int("taskId").notNull(),
+  agentId: int("agentId").notNull(),
+  input: text("input"),
+  output: text("output"),
+  toolCalls: text("toolCalls"),
+  inputTokens: int("inputTokens").notNull().default(0),
+  outputTokens: int("outputTokens").notNull().default(0),
+  costUsd: decimal("costUsd", { precision: 10, scale: 4 }).notNull().default("0.0000"),
+  durationMs: int("durationMs").notNull().default(0),
+  status: mysqlEnum("status", ["success", "failed", "tool_error", "cost_exceeded", "timed_out"]).notNull(),
+  errorMessage: text("errorMessage"),
+  approvedByUserId: int("approvedByUserId"),
+  approvedAt: timestamp("approvedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbAiAgentRun = typeof aiAgentRuns.$inferSelect;
+export type InsertDbAiAgentRun = typeof aiAgentRuns.$inferInsert;
+
+export const aiAgentHandoffs = mysqlTable("ai_agent_handoffs", {
+  id: int("id").autoincrement().primaryKey(),
+  fromAgentId: int("fromAgentId").notNull(),
+  toAgentId: int("toAgentId").notNull(),
+  taskId: int("taskId").notNull(),
+  reason: text("reason"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbAiAgentHandoff = typeof aiAgentHandoffs.$inferSelect;
+export type InsertDbAiAgentHandoff = typeof aiAgentHandoffs.$inferInsert;
+
+// ─── KPI ROLLUPS ──────────────────────────────────────────────────────────────
+// Seat → department → company rollup store. Agents write metrics via the
+// kpis.record tRPC procedure (also exposed as a built-in tool). Daily cron
+// aggregates seat → department, weekly cron aggregates department → company.
+
+export const kpiMetrics = mysqlTable("kpi_metrics", {
+  id: int("id").autoincrement().primaryKey(),
+  scope: mysqlEnum("scope", ["seat", "department", "company"]).notNull(),
+  /** For seat scope, FK to ai_agents.id. Null for department and company scope (use `key` prefix to distinguish dept). */
+  scopeId: int("scopeId"),
+  /** For department scope, the department enum string goes here instead of scopeId. */
+  scopeKey: varchar("scopeKey", { length: 40 }),
+  key: varchar("key", { length: 80 }).notNull(),
+  value: decimal("value", { precision: 14, scale: 4 }).notNull(),
+  unit: varchar("unit", { length: 20 }).notNull().default("count"),
+  period: mysqlEnum("period", [
+    "realtime",
+    "daily",
+    "weekly",
+    "monthly",
+    "trailing_30",
+    "trailing_90",
+    "trailing_365",
+  ])
+    .notNull()
+    .default("realtime"),
+  computedAt: timestamp("computedAt").defaultNow().notNull(),
+  sourceTaskId: int("sourceTaskId"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbKpiMetric = typeof kpiMetrics.$inferSelect;
+export type InsertDbKpiMetric = typeof kpiMetrics.$inferInsert;
+
+// ─── SCHEDULING SLOTS + BOOKINGS ─────────────────────────────────────────────
+// In-house customer scheduling widget. Slots are operator-configured availability
+// windows; bookings are customer-confirmed visits that consume a slot.
+
+export const schedulingSlots = mysqlTable("scheduling_slots", {
+  id: int("id").autoincrement().primaryKey(),
+  startAt: timestamp("startAt").notNull(),
+  endAt: timestamp("endAt").notNull(),
+  capacity: int("capacity").default(1).notNull(),
+  bookedCount: int("bookedCount").default(0).notNull(),
+  blocked: boolean("blocked").default(false).notNull(),
+  notes: varchar("notes", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbSchedulingSlot = typeof schedulingSlots.$inferSelect;
+export type InsertDbSchedulingSlot = typeof schedulingSlots.$inferInsert;
+
+export const scheduledBookings = mysqlTable("scheduled_bookings", {
+  id: int("id").autoincrement().primaryKey(),
+  customerId: varchar("customerId", { length: 64 }).notNull(),
+  slotId: int("slotId").notNull(),
+  visitType: mysqlEnum("visitType", ["consultation", "baseline", "seasonal", "project"])
+    .notNull()
+    .default("consultation"),
+  status: mysqlEnum("status", ["confirmed", "rescheduled", "cancelled", "completed", "no_show"])
+    .notNull()
+    .default("confirmed"),
+  notes: text("notes"),
+  bookedBy: varchar("bookedBy", { length: 64 }).notNull().default("customer"),
+  confirmationCode: varchar("confirmationCode", { length: 16 }),
+  cancelledAt: timestamp("cancelledAt"),
+  cancelReason: varchar("cancelReason", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbScheduledBooking = typeof scheduledBookings.$inferSelect;
+export type InsertDbScheduledBooking = typeof scheduledBookings.$inferInsert;
+
+// ─── AI AGENT RUNTIME (Phase 4 — autonomous triggers + integrator chat) ───────
+// Migration 0068. Together with the Phase 1 tables above, this is what flips
+// agents from manual-only to live 24/7. Boot-time `ensureAgentPhase4Tables` in
+// server/_core/index.ts re-creates these on prod when drizzle-kit drifts.
+
+export const aiAgentEventSubscriptions = mysqlTable("ai_agent_event_subscriptions", {
+  id: int("id").autoincrement().primaryKey(),
+  agentId: int("agentId").notNull(),
+  /** Domain event key, e.g. 'lead.created', 'opportunity.stage_changed', 'voicemail.received'. */
+  eventName: varchar("eventName", { length: 80 }).notNull(),
+  /** Optional JSON match expression. When non-null, the trigger bus only fires if the payload matches. */
+  filter: text("filter"),
+  enabled: boolean("enabled").notNull().default(true),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbAiAgentEventSubscription = typeof aiAgentEventSubscriptions.$inferSelect;
+export type InsertDbAiAgentEventSubscription = typeof aiAgentEventSubscriptions.$inferInsert;
+
+export const aiAgentSchedules = mysqlTable("ai_agent_schedules", {
+  id: int("id").autoincrement().primaryKey(),
+  agentId: int("agentId").notNull(),
+  /** Five-field cron expression, e.g. '0 6 * * 1' (Monday 06:00). Timezone applied separately. */
+  cronExpression: varchar("cronExpression", { length: 80 }).notNull(),
+  timezone: varchar("timezone", { length: 64 }).notNull().default("America/Los_Angeles"),
+  enabled: boolean("enabled").notNull().default(true),
+  lastRunAt: timestamp("lastRunAt"),
+  nextRunAt: timestamp("nextRunAt"),
+  /** Optional payload merged into trigger payload. */
+  payload: text("payload"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbAiAgentSchedule = typeof aiAgentSchedules.$inferSelect;
+export type InsertDbAiAgentSchedule = typeof aiAgentSchedules.$inferInsert;
+
+export const integratorChatConversations = mysqlTable("integrator_chat_conversations", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  title: varchar("title", { length: 200 }),
+  lastMessageAt: timestamp("lastMessageAt"),
+  archived: boolean("archived").notNull().default(false),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbIntegratorChatConversation = typeof integratorChatConversations.$inferSelect;
+export type InsertDbIntegratorChatConversation = typeof integratorChatConversations.$inferInsert;
+
+export const integratorChatMessages = mysqlTable("integrator_chat_messages", {
+  id: int("id").autoincrement().primaryKey(),
+  conversationId: int("conversationId").notNull(),
+  userId: int("userId").notNull(),
+  role: mysqlEnum("role", ["user", "assistant", "tool"]).notNull(),
+  content: text("content").notNull(),
+  toolCalls: text("toolCalls"),
+  inputTokens: int("inputTokens").notNull().default(0),
+  outputTokens: int("outputTokens").notNull().default(0),
+  costUsd: decimal("costUsd", { precision: 10, scale: 4 }).notNull().default("0.0000"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbIntegratorChatMessage = typeof integratorChatMessages.$inferSelect;
+export type InsertDbIntegratorChatMessage = typeof integratorChatMessages.$inferInsert;
+
+// ─── VENDORS CRM ─────────────────────────────────────────────────────────────
+// Trade-keyed vendor network with onboarding, jobs, and activity log.
+
+export const vendors = mysqlTable("vendors", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  companyName: varchar("companyName", { length: 255 }),
+  contactName: varchar("contactName", { length: 255 }),
+  email: varchar("email", { length: 255 }),
+  phone: varchar("phone", { length: 32 }),
+  addressLine1: varchar("addressLine1", { length: 255 }),
+  city: varchar("city", { length: 120 }),
+  state: varchar("state", { length: 40 }),
+  zip: varchar("zip", { length: 20 }),
+  serviceArea: varchar("serviceArea", { length: 255 }),
+  licenseNumber: varchar("licenseNumber", { length: 120 }),
+  insuranceExpiry: date("insuranceExpiry"),
+  bondingExpiry: date("bondingExpiry"),
+  w9OnFile: boolean("w9OnFile").default(false).notNull(),
+  coiOnFile: boolean("coiOnFile").default(false).notNull(),
+  status: mysqlEnum("status", ["prospect", "onboarding", "active", "paused", "retired"])
+    .notNull()
+    .default("prospect"),
+  tier: mysqlEnum("tier", ["preferred", "approved", "trial", "probation"])
+    .notNull()
+    .default("trial"),
+  rating: decimal("rating", { precision: 3, scale: 2 }),
+  jobsCompleted: int("jobsCompleted").default(0).notNull(),
+  lastJobAt: timestamp("lastJobAt"),
+  notes: text("notes"),
+  tagsJson: text("tagsJson"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbVendor = typeof vendors.$inferSelect;
+export type InsertDbVendor = typeof vendors.$inferInsert;
+
+export const trades = mysqlTable("trades", {
+  id: int("id").autoincrement().primaryKey(),
+  slug: varchar("slug", { length: 80 }).notNull().unique(),
+  name: varchar("name", { length: 120 }).notNull(),
+  category: varchar("category", { length: 80 }),
+  description: text("description"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbTrade = typeof trades.$inferSelect;
+export type InsertDbTrade = typeof trades.$inferInsert;
+
+export const vendorTrades = mysqlTable("vendor_trades", {
+  vendorId: int("vendorId").notNull(),
+  tradeId: int("tradeId").notNull(),
+  proficiency: mysqlEnum("proficiency", ["primary", "secondary", "occasional"])
+    .notNull()
+    .default("primary"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbVendorTrade = typeof vendorTrades.$inferSelect;
+export type InsertDbVendorTrade = typeof vendorTrades.$inferInsert;
+
+export const vendorJobs = mysqlTable("vendor_jobs", {
+  id: int("id").autoincrement().primaryKey(),
+  vendorId: int("vendorId").notNull(),
+  opportunityId: varchar("opportunityId", { length: 64 }),
+  customerId: varchar("customerId", { length: 64 }),
+  status: mysqlEnum("status", ["proposed", "accepted", "in_progress", "completed", "cancelled"])
+    .notNull()
+    .default("proposed"),
+  agreedAmountCents: int("agreedAmountCents"),
+  paidAmountCents: int("paidAmountCents").default(0).notNull(),
+  scheduledFor: timestamp("scheduledFor"),
+  completedAt: timestamp("completedAt"),
+  qualityRating: int("qualityRating"),
+  qualityNotes: text("qualityNotes"),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbVendorJob = typeof vendorJobs.$inferSelect;
+export type InsertDbVendorJob = typeof vendorJobs.$inferInsert;
+
+export const vendorCommunications = mysqlTable("vendor_communications", {
+  id: int("id").autoincrement().primaryKey(),
+  vendorId: int("vendorId").notNull(),
+  channel: mysqlEnum("channel", ["call", "email", "sms", "meeting", "note", "quote", "order", "followup"]).notNull(),
+  direction: mysqlEnum("direction", ["inbound", "outbound", "internal"]).notNull().default("outbound"),
+  subject: varchar("subject", { length: 255 }),
+  body: text("body"),
+  opportunityId: varchar("opportunityId", { length: 64 }),
+  loggedByUserId: int("loggedByUserId"),
+  loggedByAgent: varchar("loggedByAgent", { length: 80 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbVendorCommunication = typeof vendorCommunications.$inferSelect;
+export type InsertDbVendorCommunication = typeof vendorCommunications.$inferInsert;
+
+export const vendorOnboardingSteps = mysqlTable("vendor_onboarding_steps", {
+  id: int("id").autoincrement().primaryKey(),
+  vendorId: int("vendorId").notNull(),
+  stepKey: varchar("stepKey", { length: 80 }).notNull(),
+  label: varchar("label", { length: 255 }).notNull(),
+  status: mysqlEnum("status", ["pending", "in_progress", "complete", "skipped", "blocked"])
+    .notNull()
+    .default("pending"),
+  dueAt: timestamp("dueAt"),
+  completedAt: timestamp("completedAt"),
+  notes: text("notes"),
+  assignedToUserId: int("assignedToUserId"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbVendorOnboardingStep = typeof vendorOnboardingSteps.$inferSelect;
+export type InsertDbVendorOnboardingStep = typeof vendorOnboardingSteps.$inferInsert;
+
+// ─── PASSWORD RESET TOKENS ────────────────────────────────────────────────────
+// One row per password-reset request. tokenHash is bcrypt of the raw token;
+// the raw token only ever lives in the email link. Single-use (usedAt) and
+// time-bound (expiresAt — typically now + 1h).
+export const passwordResetTokens = mysqlTable("password_reset_tokens", {
+  id: int("id").autoincrement().primaryKey(),
+  staffUserId: int("staffUserId").notNull(),
+  tokenHash: varchar("tokenHash", { length: 255 }).notNull(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  usedAt: timestamp("usedAt"),
+  requestIp: varchar("requestIp", { length: 64 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbPasswordResetToken = typeof passwordResetTokens.$inferSelect;
+export type InsertDbPasswordResetToken = typeof passwordResetTokens.$inferInsert;

@@ -1,5 +1,18 @@
+function resolveCookieSecret(): string {
+  const secret = process.env.JWT_SECRET ?? "";
+  if (process.env.NODE_ENV === "production" && (!secret || secret.length < 32)) {
+    throw new Error(
+      "[Auth] JWT_SECRET must be set to a strong random string (>=32 chars) in production."
+    );
+  }
+  if (!secret || secret.length < 32) {
+    console.warn("[Auth] JWT_SECRET missing or <32 chars — dev only, unsafe for production.");
+  }
+  return secret;
+}
+
 export const ENV = {
-  cookieSecret: process.env.JWT_SECRET ?? "",
+  cookieSecret: resolveCookieSecret(),
   databaseUrl: process.env.DATABASE_URL ?? "",
   isProduction: process.env.NODE_ENV === "production",
   cloudinaryCloudName: process.env.CLOUDINARY_CLOUD_NAME ?? "",
@@ -14,8 +27,9 @@ export const ENV = {
   qbClientSecret: process.env.QUICKBOOKS_CLIENT_SECRET ?? "",
   qbEnvironment: (process.env.QUICKBOOKS_ENVIRONMENT ?? "sandbox") as "sandbox" | "production",
   googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY ?? "",
-  // Legacy Forge vars — used by llm.ts, map.ts, notification.ts, voiceTranscription.ts.
-  // These services degrade gracefully when not set; set if you have an alternative endpoint.
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
+  // Legacy Forge vars — still referenced by non-LLM proxies (map.ts, voiceTranscription.ts,
+  // imageGeneration.ts, dataApi.ts). Safe to leave empty; those services degrade gracefully.
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
   // ── Google Business Profile ──────────────────────────────────────────────────
