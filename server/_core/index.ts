@@ -926,6 +926,75 @@ async function startServer() {
     }
   });
 
+  // ── QBO OAuth callback ────────────────────────────────────────────────────────
+  app.get("/api/integrations/qbo/callback", async (req, res) => {
+    const code = req.query.code as string | undefined;
+    const rawState = req.query.state as string | undefined;
+    const realmId = req.query.realmId as string | undefined;
+    if (!code || !realmId) { res.status(400).send("Missing code or realmId"); return; }
+
+    let userId: number | undefined;
+    let redirectUri = `${req.protocol}://${req.hostname}/api/integrations/qbo/callback`;
+    let returnTo = "/settings/integrations";
+    try {
+      if (rawState) {
+        const parsed = JSON.parse(Buffer.from(rawState, "base64").toString());
+        userId = parsed.userId;
+        if (parsed.redirectUri) redirectUri = parsed.redirectUri;
+        if (parsed.returnTo) returnTo = parsed.returnTo;
+      }
+    } catch { /* malformed state — proceed without userId */ }
+
+    if (!userId) { res.redirect(`${returnTo}?qb=error&reason=invalid_state`); return; }
+
+    const clientId = process.env.QUICKBOOKS_CLIENT_ID;
+    const clientSecret = process.env.QUICKBOOKS_CLIENT_SECRET;
+    if (!clientId || !clientSecret) { res.redirect(`${returnTo}?qb=error&reason=not_configured`); return; }
+
+    try {
+      const params = new URLSearchParams({
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: redirectUri,
+      });
+      const tokenResp = await fetch("https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`,
+        },
+        body: params.toString(),
+      });
+      if (!tokenResp.ok) {
+        const errText = await tokenResp.text();
+        console.error("[QBO callback] token exchange failed:", errText);
+        res.redirect(`${returnTo}?qb=error&reason=${encodeURIComponent(errText.slice(0, 100))}`);
+        return;
+      }
+      const tokenData = await tokenResp.json() as { access_token: string; refresh_token: string; expires_in?: number };
+      const expiresAt = new Date(Date.now() + (tokenData.expires_in ?? 3600) * 1000).toISOString();
+
+      const { getDb } = await import("../db.js");
+      const { qbTokens } = await import("../../drizzle/schema.js");
+      const { eq } = await import("drizzle-orm");
+      const db = await getDb();
+      if (db) {
+        const existing = await db.select({ id: qbTokens.id }).from(qbTokens).where(eq(qbTokens.userId, userId)).limit(1);
+        if (existing[0]) {
+          await db.update(qbTokens).set({ accessToken: tokenData.access_token, refreshToken: tokenData.refresh_token, realmId, expiresAt }).where(eq(qbTokens.userId, userId));
+        } else {
+          await db.insert(qbTokens).values({ userId, accessToken: tokenData.access_token, refreshToken: tokenData.refresh_token, realmId, expiresAt });
+        }
+      }
+      console.log(`[QBO] Connected for userId ${userId}, realmId ${realmId}`);
+      res.redirect(`${returnTo}?qb=connected`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[QBO callback] error:", msg);
+      res.redirect(`${returnTo}?qb=error&reason=${encodeURIComponent(msg.slice(0, 100))}`);
+    }
+  });
+
   // ── GBP OAuth routes ─────────────────────────────────────────────────────────
   const { gbpRouter: gbpOAuthRouter } = await import("../integrations/gbp/routes.js");
   app.use("/api/integrations/gbp", gbpOAuthRouter);
