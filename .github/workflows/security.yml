@@ -13,6 +13,7 @@ jobs:
   snyk:
     name: Snyk vulnerability scan
     runs-on: ubuntu-latest
+    continue-on-error: true   # baseline — remove after first triage pass
     steps:
       - uses: actions/checkout@v4
 

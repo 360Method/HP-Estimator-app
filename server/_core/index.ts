@@ -312,12 +312,10 @@ async function ensureCharterTables() {
     const db = await getDb();
     if (!db) return;
 
-    // Add charter columns to ai_agents (idempotent)
-    await db.execute(sql`ALTER TABLE \`ai_agents\`
-      ADD COLUMN IF NOT EXISTS \`charterLoaded\` boolean NOT NULL DEFAULT false,
-      ADD COLUMN IF NOT EXISTS \`kpiCount\` int NOT NULL DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS \`playbookCount\` int NOT NULL DEFAULT 0
-    `).catch(() => {/* column already exists */});
+    // Add charter columns to ai_agents — each ALTER is wrapped so re-runs skip gracefully
+    await db.execute(sql`ALTER TABLE \`ai_agents\` ADD COLUMN \`charterLoaded\` boolean NOT NULL DEFAULT false`).catch(() => {});
+    await db.execute(sql`ALTER TABLE \`ai_agents\` ADD COLUMN \`kpiCount\` int NOT NULL DEFAULT 0`).catch(() => {});
+    await db.execute(sql`ALTER TABLE \`ai_agents\` ADD COLUMN \`playbookCount\` int NOT NULL DEFAULT 0`).catch(() => {});
 
     await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agentCharters\` (
       \`id\` int AUTO_INCREMENT NOT NULL,
