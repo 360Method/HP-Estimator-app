@@ -121,7 +121,7 @@ function GmailRow() {
 function QuickBooksRow() {
   const { data: qbStatus, isLoading, refetch } = trpc.quickbooks.getStatus.useQuery();
   const { data: authUrlData } = trpc.quickbooks.getAuthUrl.useQuery(
-    { redirectUri: typeof window !== 'undefined' ? `${window.location.origin}/api/quickbooks/callback` : '' },
+    { redirectUri: typeof window !== 'undefined' ? `${window.location.origin}/api/integrations/qbo/callback` : '' },
     { enabled: qbStatus?.configured === true && !qbStatus?.connected }
   );
   const disconnect = trpc.quickbooks.disconnect.useMutation({ onSuccess: () => { toast.success('QuickBooks disconnected'); refetch(); } });
