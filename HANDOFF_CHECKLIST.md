@@ -1,5 +1,78 @@
 # HP Estimator — Integration Handoff Checklist
 
+## DONE — 2026-04-24 — Agent Runtime Fully Wired
+
+**PR merged:** "Wire department charters into agent runtime"
+
+### What shipped
+- [x] Migration `0072_charter_runtime.sql` — creates `agentCharters`, `agentKpis`, `agentPlaybooks` tables + adds `charterLoaded/kpiCount/playbookCount` columns to `ai_agents`
+- [x] Boot-time `ensureCharterTables()` idempotent guard (Railway deploy auto-creates tables on next boot)
+- [x] 9 charter docs in `docs/agents/` — integrator, sales, operations, marketing, finance, customer_success, vendor-trades, technology, strategy-expansion
+- [x] `server/routers/agents.ts` — tRPC procedures: list, get, status, listCharters, getCharter, updateCharter, listKpis, updateKpi
+- [x] `server/routers/playbooks.ts` — list/get/update
+- [x] Admin UI at Settings → Agent Charters & Playbooks
+- [x] `scripts/seed-charters.mjs` — parses charter docs → agentCharters, agentKpis, agentPlaybooks
+- [x] `scripts/seed-ai-agents.mjs` — **fully populated** with all 31 seats, system prompts, tool grants, event subscriptions, and cron schedules
+
+### Seat registry (31 seats)
+
+| Dept | seatName | Type | isDeptHead | Status |
+|------|----------|------|-----------|--------|
+| integrator | integrator | AI | — | draft_queue |
+| sales | ai_sdr | AI | ✓ | draft_queue |
+| sales | ai_membership_success | AI | | draft_queue |
+| sales | cx_lead | HUMAN | | disabled |
+| operations | ai_dispatch | AI | ✓ | draft_queue |
+| operations | project_manager | HUMAN | | disabled |
+| operations | ai_qa | AI | | draft_queue |
+| operations | internal_tradesmen | HUMAN | | disabled |
+| operations | external_contractor_network | Hybrid | | draft_queue |
+| marketing | ai_content_seo | AI | ✓ | draft_queue |
+| marketing | ai_paid_ads | AI | | draft_queue |
+| marketing | ai_brand_guardian | AI | | draft_queue |
+| marketing | ai_community_reviews | AI | | draft_queue |
+| finance | ai_bookkeeping | AI | ✓ | draft_queue |
+| finance | ai_margin_monitor | AI | | draft_queue |
+| finance | ai_cash_flow | AI | | draft_queue |
+| finance | cpa_tax | HUMAN | | disabled |
+| customer_success | ai_onboarding | AI | ✓ | draft_queue |
+| customer_success | ai_annual_valuation | AI | | draft_queue |
+| customer_success | ai_nurture_cadence | AI | | draft_queue |
+| customer_success | member_concierge | HUMAN | | disabled |
+| vendor_network | ai_vendor_outreach | AI | ✓ | draft_queue |
+| vendor_network | ai_vendor_onboarding | AI | | draft_queue |
+| vendor_network | ai_trade_matching | AI | | draft_queue |
+| vendor_network | ai_vendor_performance | AI | | draft_queue |
+| technology | ai_system_integrity | AI | ✓ | draft_queue |
+| technology | ai_security | AI | | draft_queue |
+| technology | software_engineer | HUMAN | | disabled |
+| strategy | ai_market_research | AI | ✓ | draft_queue |
+| strategy | ai_expansion_playbook | AI | | draft_queue |
+| strategy | ai_licensing_whitelabel | AI | | draft_queue |
+
+### To activate after deploy — run these two commands via Railway shell
+
+```bash
+# 1. Seed all 31 agent seats into ai_agents
+node scripts/seed-ai-agents.mjs
+
+# 2. Parse charter docs → seed agentCharters, agentKpis, agentPlaybooks
+node scripts/seed-charters.mjs
+```
+
+**Railway shell access:** Dashboard → HP-Estimator-app service → Deploy tab → Shell (or via `railway run` CLI)
+
+### Activation order (after seeding)
+Go to `/admin/ai-agents` and flip status from `draft_queue` → `autonomous` in this order:
+1. `ai_system_integrity` — platform watchdog (autonomous, no customer contact)
+2. `ai_bookkeeping` — reconciliation (autonomous, read-only financials)
+3. `ai_security` — daily audit (autonomous, read-only)
+4. `ai_sdr` — lead response (review first 10 drafts before going autonomous)
+5. `ai_dispatch` — scheduling (review first week before going autonomous)
+6. All others — activate as confidence grows
+
+---
+
 ## DONE — 2026-04-24
 
 ### GBP OAuth (Google Business Profile)
