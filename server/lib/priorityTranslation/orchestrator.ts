@@ -16,10 +16,17 @@
 import { eq } from "drizzle-orm";
 import path from "path";
 import fs from "fs";
-import { getDb } from "../../db";
+import { randomBytes } from "crypto";
+import {
+  getDb,
+  findCustomerByEmail,
+  createCustomer,
+  createOpportunity,
+} from "../../db";
 import {
   priorityTranslations,
   homeHealthRecords,
+  portalAccounts,
 } from "../../../drizzle/schema.priorityTranslation";
 import {
   parseAddress,
@@ -35,6 +42,7 @@ import {
 } from "./portalAccount";
 import { renderPriorityTranslationPdf } from "./pdf";
 import { sendPriorityTranslationReady } from "./email";
+import { onLeadCreated } from "../../leadRouting";
 
 const UPLOAD_BASE = process.env.UPLOAD_VOLUME_PATH || "/tmp";
 const UPLOAD_DIR = path.join(UPLOAD_BASE, "roadmap-generator");
@@ -127,11 +135,103 @@ export async function submitRoadmap(
     status: "processing",
   });
 
-  // Kick off async processing. Errors are caught and surfaced via the row's
-  // failureReason column + an owner notification email.
   const propertyAddressFull = [parsed.street, parsed.city, parsed.state, parsed.zip]
     .filter(Boolean)
     .join(", ");
+
+  // ── CRM bridge: every Roadmap submission must land on a customer-rooted
+  // record so the Nurturer (and every "open the customer profile" link
+  // downstream) has something to resolve. We dedupe by email — if a CRM
+  // customer already exists with this email, link to it; otherwise create
+  // one. Same for the opportunity (one per submission). The portalAccount
+  // is then back-linked via portalAccounts.customerId so every future
+  // surface (portal login, health record, magic-link visits) resolves to
+  // the same customer.
+  let customerId: string | null = null;
+  let opportunityId: string | null = null;
+  try {
+    const emailNorm = input.email.trim().toLowerCase();
+    const existing = await findCustomerByEmail(emailNorm);
+    if (existing) {
+      customerId = existing.id;
+    } else {
+      const newCustomerId = randomBytes(8).toString("hex");
+      const created = await createCustomer({
+        id: newCustomerId,
+        firstName: input.firstName,
+        lastName: input.lastName,
+        displayName: `${input.firstName} ${input.lastName}`.trim() || emailNorm,
+        email: emailNorm,
+        mobilePhone: input.phone,
+        homePhone: "",
+        workPhone: "",
+        company: "",
+        role: "",
+        customerType: "homeowner",
+        doNotService: false,
+        street: parsed.street,
+        unit: "",
+        city: parsed.city,
+        state: parsed.state,
+        zip: parsed.zip,
+        billsTo: "",
+        leadSource: "Roadmap Generator",
+        referredBy: "",
+        sendNotifications: true,
+        sendMarketingOptIn: false,
+        lifetimeValue: 0,
+        outstandingBalance: 0,
+        tags: "[]",
+      });
+      customerId = created.id;
+    }
+
+    // Back-link the portal account to the CRM customer so future portal
+    // surfaces (login, magic-link visits) resolve to the same root entity.
+    if (customerId && account.customerId !== customerId) {
+      await db
+        .update(portalAccounts)
+        .set({ customerId })
+        .where(eq(portalAccounts.id, account.id));
+    }
+
+    opportunityId = randomBytes(8).toString("hex");
+    await createOpportunity({
+      id: opportunityId,
+      customerId: customerId,
+      area: "lead",
+      stage: "New Lead",
+      title: `Roadmap Generator — ${input.firstName} ${input.lastName}`.trim(),
+      notes:
+        `Inspection-report submission via Roadmap Generator.\n\n` +
+        `Property: ${propertyAddressFull}\n` +
+        `Translation id: ${id}\n` +
+        (input.notes ? `\nHomeowner notes:\n${input.notes}` : ""),
+      value: 0,
+    });
+  } catch (err) {
+    console.error("[roadmap-generator] CRM bridge failed for", id, err);
+    // Don't block the homeowner's email — the priorityTranslations row is
+    // already persisted, processing will still fire. Operations team can
+    // backfill from priority_translations if this branch errored.
+  }
+
+  // ── Lead routing: assign Nurturer, drop pipeline_event, send notification.
+  // Best-effort — already-committed DB state is the source of truth.
+  if (opportunityId && customerId) {
+    onLeadCreated({
+      opportunityId,
+      customerId,
+      title: `Roadmap Generator submission — ${input.firstName} ${input.lastName}`.trim(),
+      source: "roadmap_generator",
+      priority: "high",
+    }).catch((err) =>
+      console.error("[roadmap-generator] onLeadCreated error for", id, err),
+    );
+  }
+
+  // Kick off async processing. Errors are caught and surfaced via the row's
+  // failureReason column + an owner notification email.
   setImmediate(() => {
     processRoadmap({
       id,
