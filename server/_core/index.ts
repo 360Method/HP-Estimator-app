@@ -927,14 +927,16 @@ async function startServer() {
   });
 
   // ── QBO OAuth callback ────────────────────────────────────────────────────────
-  app.get("/api/integrations/qbo/callback", async (req, res) => {
+  // Registered in Intuit: /api/quickbooks/callback
+  // Legacy alias also kept for any bookmarked URLs
+  const qboCallbackHandler = async (req: express.Request, res: express.Response) => {
     const code = req.query.code as string | undefined;
     const rawState = req.query.state as string | undefined;
     const realmId = req.query.realmId as string | undefined;
     if (!code || !realmId) { res.status(400).send("Missing code or realmId"); return; }
 
     let userId: number | undefined;
-    let redirectUri = `${req.protocol}://${req.hostname}/api/integrations/qbo/callback`;
+    let redirectUri = process.env.QUICKBOOKS_REDIRECT_URI || `${req.protocol}://${req.hostname}/api/quickbooks/callback`;
     let returnTo = "/settings/integrations";
     try {
       if (rawState) {
@@ -993,7 +995,9 @@ async function startServer() {
       console.error("[QBO callback] error:", msg);
       res.redirect(`${returnTo}?qb=error&reason=${encodeURIComponent(msg.slice(0, 100))}`);
     }
-  });
+  };
+  app.get("/api/quickbooks/callback", qboCallbackHandler);
+  app.get("/api/integrations/qbo/callback", qboCallbackHandler);
 
   // ── GBP OAuth routes ─────────────────────────────────────────────────────────
   const { gbpRouter: gbpOAuthRouter } = await import("../integrations/gbp/routes.js");
