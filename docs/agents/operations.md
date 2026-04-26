@@ -160,6 +160,14 @@ Coordinate vetted subcontractors for specialty work (electrical, plumbing, HVAC,
 2. Draft engagement request using `sub-engagement-request` playbook
 3. Await PM approval before sending
 
+#### KPIs
+
+| key | label | target_min | target_max | unit | period |
+|-----|-------|-----------|-----------|------|--------|
+| sub_engagement_time | Time from Job Assigned to Sub Engaged | null | 24 | hours | weekly |
+| sub_approval_rate | Sub Engagement Requests Approved by PM | 85 | null | % | monthly |
+| specialty_coverage_rate | Specialty Jobs Matched to Vetted Sub | 90 | null | % | monthly |
+
 ---
 
 ## Department Head SOPs
