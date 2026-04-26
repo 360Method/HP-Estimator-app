@@ -394,8 +394,125 @@ export async function onAppointmentBooked(params: {
       customerId: params.customerId,
       priority: "high",
     });
+
+    // Customer-facing confirmation — affluent-voice stewardship copy
+    // (per Customer Success Charter, 2026-04-25). Best-effort; the
+    // appointment is already committed to the DB.
+    void sendAppointmentConfirmationToCustomer({
+      customerId: params.customerId,
+      when: params.when,
+      appointmentType: params.appointmentType,
+      consultantUserId: consultantId,
+      opportunityId: params.opportunityId,
+    });
   } catch (err) {
     console.error("[leadRouting] onAppointmentBooked error:", err);
+  }
+}
+
+/**
+ * Send the customer-facing appointment confirmation. Pulls customer email +
+ * address from `customers`, consultant name from `users`, and renders the
+ * `appointment_confirmed` (or type-specific) email template. Falls back to
+ * inline HTML if the template seed has not been re-run.
+ */
+async function sendAppointmentConfirmationToCustomer(params: {
+  customerId: string;
+  when: string;
+  appointmentType: "baseline" | "consultation";
+  consultantUserId: number | null;
+  opportunityId: string;
+}): Promise<void> {
+  try {
+    const db = await getDb();
+    if (!db) return;
+    const [c] = await db.select().from(customers).where(eq(customers.id, params.customerId)).limit(1);
+    if (!c?.email) return;
+    const firstName = (c.firstName ?? c.displayName ?? "").trim().split(/\s+/)[0] || "there";
+
+    let consultantName = "your Handy Pioneers consultant";
+    if (params.consultantUserId) {
+      const [u] = await db.select().from(users).where(eq(users.id, params.consultantUserId)).limit(1);
+      if (u?.name) consultantName = u.name;
+    }
+
+    const address = [c.street, c.city, c.state].filter(Boolean).join(", ") || "your home";
+    const portalUrl = process.env.PORTAL_BASE_URL ?? "https://client.handypioneers.com";
+
+    // Parse the `when` ISO/string the schedule subsystem hands us. If parsing
+    // fails (free-text label), fall back to the raw string.
+    const dt = new Date(params.when);
+    const valid = !Number.isNaN(dt.getTime());
+    const appointmentDate = valid
+      ? dt.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })
+      : params.when;
+    const appointmentTime = valid
+      ? dt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
+      : "";
+    const appointmentDuration =
+      params.appointmentType === "baseline" ? "90 minutes to two hours" : "45 to 60 minutes";
+
+    const templateKey =
+      params.appointmentType === "baseline" ? "appt_baseline_scheduled" : "appt_consultation_scheduled";
+    const { renderEmailTemplate } = await import("./emailTemplates");
+    const tpl = await renderEmailTemplate(templateKey, {
+      customerFirstName: firstName,
+      appointmentDate,
+      appointmentTime,
+      appointmentAddress: address,
+      consultantName,
+      appointmentDuration,
+      portalUrl,
+    });
+
+    // Generic fallback if the type-specific template hasn't been seeded yet.
+    const generic = !tpl
+      ? await renderEmailTemplate("appointment_confirmed", {
+          customerFirstName: firstName,
+          appointmentDate,
+          appointmentTime,
+          appointmentAddress: address,
+          consultantName,
+          appointmentDuration,
+          portalUrl,
+        })
+      : null;
+
+    const subject =
+      tpl?.subject ?? generic?.subject ?? `Your visit on ${appointmentDate} is confirmed`;
+    const html =
+      tpl?.html ??
+      generic?.html ??
+      `<p>${firstName},</p>
+<p>Your visit with Handy Pioneers is confirmed.</p>
+<ul>
+  <li><strong>When:</strong> ${appointmentDate}${appointmentTime ? ` at ${appointmentTime}` : ""}</li>
+  <li><strong>Where:</strong> ${address}</li>
+  <li><strong>Visiting:</strong> ${consultantName}</li>
+  <li><strong>Length:</strong> approximately ${appointmentDuration}</li>
+</ul>
+<p>This is a stewardship conversation, not a presentation. We will walk your home with you, listen to what you have in mind, and share what a proper standard of care looks like for the project ahead.</p>
+<p>Need to adjust the time? Reply to this email or call (360) 241-5718.</p>
+<p>— The Handy Pioneers Team</p>`;
+
+    const { sendEmail, isGmailConfigured } = await import("./gmail");
+    if (isGmailConfigured()) {
+      await sendEmail({ to: c.email, subject, html }).catch((e) =>
+        console.warn("[appointment ack] email failed:", e),
+      );
+    }
+
+    // Optional SMS — only if the customer opted in to notifications.
+    if (c.sendNotifications && c.mobilePhone && isTwilioConfigured()) {
+      const smsBody = appointmentTime
+        ? `${firstName}, your Handy Pioneers visit is confirmed for ${appointmentDate} at ${appointmentTime}. ${consultantName} will see you. (360) 241-5718 if anything changes.`
+        : `${firstName}, your Handy Pioneers visit is confirmed for ${appointmentDate}. ${consultantName} will see you. (360) 241-5718 if anything changes.`;
+      await sendSms(c.mobilePhone, smsBody).catch((e) =>
+        console.warn("[appointment ack] sms failed:", e),
+      );
+    }
+  } catch (err) {
+    console.warn("[appointment ack] errored:", err);
   }
 }
 

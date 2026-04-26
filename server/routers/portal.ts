@@ -1178,6 +1178,34 @@ export const portalRouter = router({
         console.error('[Portal] SMS alert failed:', e);
       }
 
+      // Customer auto-ack — affluent-voice "your request is in our care"
+      // (per Customer Success Charter, 2026-04-25). Best-effort.
+      void (async () => {
+        try {
+          const { renderEmailTemplate } = await import('../emailTemplates');
+          const { sendEmail, isGmailConfigured } = await import('../gmail');
+          if (!isGmailConfigured()) return;
+          const portalUrl = process.env.PORTAL_BASE_URL ?? 'https://client.handypioneers.com';
+          const firstName = (ctx.portalCustomer.name ?? '').split(' ')[0] || ctx.portalCustomer.name || 'there';
+          const tpl = await renderEmailTemplate('service_request_acknowledged', {
+            customerFirstName: firstName,
+            portalUrl,
+          });
+          const subject = tpl?.subject ?? `Your request is in our care, ${firstName}`;
+          const html = tpl?.html ?? `<p>${firstName},</p>
+<p>We have received your request and added it to your home's standard-of-care file.</p>
+<p>Your Concierge will review the details and reach out personally to align on next steps and timing — expect to hear from them within one business day.</p>
+<p>Your full home history is always available in your portal: <a href="${portalUrl}">${portalUrl}</a></p>
+<p>For anything time-sensitive, call us directly at (360) 241-5718.</p>
+<p>— The Handy Pioneers Team</p>`;
+          await sendEmail({ to: ctx.portalCustomer.email, subject, html }).catch((err) =>
+            console.warn('[service request ack] email failed:', err),
+          );
+        } catch (err) {
+          console.warn('[service request ack] errored:', err);
+        }
+      })();
+
       return { ok: true, id: req?.id, leadId: newLeadId };
     }),
   /** Customer views their own service requests */
@@ -1950,6 +1978,39 @@ export const portalRouter = router({
       allMemberships: membershipDetails,
     };
   }),
+
+  /**
+   * Member toggles their Annual Home Health Report opt-in. The toggle lives
+   * on threeSixtyMemberships.annualValuationOptIn and defaults to OFF
+   * (Customer Success Charter §5). The AI Annual Valuation seat reads this
+   * flag to decide whether to schedule the report on the member's onboarding
+   * anniversary.
+   */
+  setAnnualValuationOptIn: portalProcedure
+    .input(z.object({ membershipId: z.number(), optIn: z.boolean() }))
+    .mutation(async ({ input, ctx }) => {
+      const { getDb } = await import('../db');
+      const { threeSixtyMemberships } = await import('../../drizzle/schema');
+      const { eq, and } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
+
+      // Verify the membership belongs to this portal customer (defense in depth).
+      const stripeCustomerId = ctx.portalCustomer.stripeCustomerId;
+      if (!stripeCustomerId) throw new TRPCError({ code: 'NOT_FOUND', message: 'No membership on file' });
+      const [m] = await db
+        .select()
+        .from(threeSixtyMemberships)
+        .where(and(eq(threeSixtyMemberships.id, input.membershipId), eq(threeSixtyMemberships.stripeCustomerId, stripeCustomerId)))
+        .limit(1);
+      if (!m) throw new TRPCError({ code: 'NOT_FOUND', message: 'Membership not found for this account' });
+
+      await db
+        .update(threeSixtyMemberships)
+        .set({ annualValuationOptIn: input.optIn })
+        .where(eq(threeSixtyMemberships.id, input.membershipId));
+      return { ok: true, optIn: input.optIn };
+    }),
 
   /**
    * Portal continuity: most recent completed project for the logged-in customer ONLY.
