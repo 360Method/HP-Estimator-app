@@ -1,5 +1,27 @@
 # HP Estimator — Integration Handoff Checklist
 
+## DONE — 2026-04-26 — Mobile-Responsive Admin Pass
+
+**PR #27:** `feat/mobile-responsive-admin` — admin UI for ~390px iPhone viewport.
+
+### What shipped
+- **AdminShell** — desktop horizontal nav was overflowing on mobile. Now: hamburger drawer (full-screen overlay) with 9 admin links, each 48px tall. Sticky top bar shows current section name + hamburger button (44×44px tap target).
+- **`/admin/agents/control`** — Activate-all CTA is now full-width and 48px on mobile (was a small `size="lg"` button buried in a `flex-wrap` row). Pause-all + System Integrity scan also full-width, stacked. Per-seat rows collapse to vertical layout: name on top, status badge + 40px select below. Per-department bulk controls grow to 40px.
+- **`/admin/org-chart`** — control strip stacks on mobile (Activate / Pause / Scan full-width inside the dark control card), Stat row becomes a 3-col grid on small screens. Per-dept All-on/All-off bumped from 22px to 36px tap targets and `e.stopPropagation()` so they don't trigger card click.
+- **`/admin/ai-agents/tasks`** (Approval Queue) — dual layout. Mobile: tappable cards with grid-2 Approve/Reject (44px each). Desktop: original table preserved.
+- **`/admin/agents/runs`** — filter buttons + inputs stack vertically on mobile, all 36-40px tall. Table scrolls horizontally (acceptable for an observability surface, vs. forcing card view that hides columns).
+- **CustomersListPage** — outer padding trimmed on mobile (`px-3 sm:px-6`), table given `min-w-[640px]` so horizontal scroll is predictable.
+
+All edits Tailwind-only. Mobile-first defaults, `sm:`/`md:` desktop overrides. TS clean.
+
+### Not yet mobile-friendly (P2 — surface in next pass)
+- Customer profile page (deep edit screens, 800+ line file — full rewrite)
+- /admin/jobs, /admin/invoices, /admin/leads list views
+- /admin/agents/charters editor
+- Settings sub-pages (most are forms — mostly fine but inputs not 44px)
+
+---
+
 ## DONE — 2026-04-25 — Agent Engine (Phase 5)
 
 **PR:** `feat/agent-engine` — *"Build the agent engine: multi-turn loop, missing event emits, self-optimization, one-click control"*
