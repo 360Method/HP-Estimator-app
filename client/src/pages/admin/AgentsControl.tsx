@@ -107,36 +107,40 @@ export default function AgentsControl() {
         </div>
 
         {/* ─── Big buttons ─── */}
-        <Card className="p-5">
-          <div className="flex flex-wrap items-center gap-4">
+        <Card className="p-4 sm:p-5">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3 sm:gap-4">
             <Button
               size="lg"
+              className="w-full sm:w-auto min-h-[48px] text-base"
               disabled={activate.isPending || counts.draft + counts.paused === 0}
               onClick={() => activate.mutate({})}
             >
               {activate.isPending ? "Activating…" : `Activate all (${counts.draft + counts.paused} ready)`}
             </Button>
             {confirmKill ? (
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
                 <span className="text-sm text-red-700 font-medium">
                   This pauses {counts.autonomous} live seat{counts.autonomous === 1 ? "" : "s"}. Sure?
                 </span>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  disabled={pauseAll.isPending}
-                  onClick={() => pauseAll.mutate()}
-                >
-                  Yes, pause everything
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => setConfirmKill(false)}>
-                  Cancel
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    variant="destructive"
+                    className="flex-1 sm:flex-none min-h-[44px]"
+                    disabled={pauseAll.isPending}
+                    onClick={() => pauseAll.mutate()}
+                  >
+                    Yes, pause everything
+                  </Button>
+                  <Button variant="outline" className="flex-1 sm:flex-none min-h-[44px]" onClick={() => setConfirmKill(false)}>
+                    Cancel
+                  </Button>
+                </div>
               </div>
             ) : (
               <Button
                 size="lg"
                 variant="destructive"
+                className="w-full sm:w-auto min-h-[44px]"
                 disabled={counts.autonomous === 0}
                 onClick={() => setConfirmKill(true)}
               >
@@ -144,12 +148,12 @@ export default function AgentsControl() {
               </Button>
             )}
             <Button
-              size="sm"
               variant="outline"
+              className="w-full sm:w-auto min-h-[44px]"
               disabled={runScan.isPending}
               onClick={() => runScan.mutate()}
             >
-              {runScan.isPending ? "Scanning…" : "Run System Integrity scan now"}
+              {runScan.isPending ? "Scanning…" : "Run System Integrity scan"}
             </Button>
           </div>
 
@@ -227,24 +231,24 @@ export default function AgentsControl() {
               .reduce((s, p) => s + p.cost24hUsd, 0);
             return (
               <Card key={g.slug} className="p-4">
-                <div className="flex items-center justify-between mb-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
                   <div>
                     <div className="text-sm font-medium">{g.label}</div>
                     <div className="text-xs text-muted-foreground">
                       {g.agents.length} seat{g.agents.length === 1 ? "" : "s"} · {live} live · {draft} draft · {formatUsd(dept24h)} (24h)
                     </div>
                   </div>
-                  <div className="flex gap-1">
+                  <div className="flex gap-2">
                     <Button
-                      size="sm"
                       variant="outline"
+                      className="flex-1 sm:flex-none min-h-[40px] text-xs sm:text-sm"
                       onClick={() => bulkSet.mutate({ ids, status: "autonomous" })}
                     >
                       All autonomous
                     </Button>
                     <Button
-                      size="sm"
                       variant="outline"
+                      className="flex-1 sm:flex-none min-h-[40px] text-xs sm:text-sm"
                       onClick={() => bulkSet.mutate({ ids, status: "paused" })}
                     >
                       All paused
@@ -257,7 +261,7 @@ export default function AgentsControl() {
                     return (
                       <div
                         key={a.id}
-                        className="flex items-center justify-between border rounded px-3 py-2 text-sm"
+                        className="flex flex-col sm:flex-row sm:items-center sm:justify-between border rounded px-3 py-3 text-sm gap-2"
                       >
                         <div className="flex-1 min-w-0">
                           <div className="font-medium truncate">{a.seatName}</div>
@@ -266,12 +270,12 @@ export default function AgentsControl() {
                             · {a.runsToday} runs · {a.queuedTasks} queued
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 sm:shrink-0">
                           <Badge variant="outline" className={STATUS_CLASS[a.status]}>
                             {STATUS_LABEL[a.status] ?? a.status}
                           </Badge>
                           <select
-                            className="border rounded px-1 py-0.5 text-xs bg-background"
+                            className="border rounded px-2 py-2 text-sm bg-background min-h-[40px] flex-1 sm:flex-none"
                             value={a.status}
                             onChange={(e) =>
                               setStatus.mutate({ id: a.id, status: e.target.value as never })
