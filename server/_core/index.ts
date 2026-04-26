@@ -597,6 +597,55 @@ async function ensureAppSettings() {
   }
 }
 
+/**
+ * ensureDepartmentHeadFlags — idempotent safety net so the org chart always
+ * shows one explicit Head per department. Seed file is canonical; this UPDATE
+ * just (re-)applies the flag on the 8 designated seats. Safe if seats are
+ * missing — affects 0 rows.
+ *
+ * Heads (must match seed-ai-agents.mjs and the static reference chart):
+ *   sales              → ai_sdr
+ *   operations         → ai_dispatch
+ *   marketing          → ai_content_seo
+ *   finance            → ai_bookkeeping
+ *   customer_success   → ai_onboarding
+ *   vendor_trades      → ai_vendor_outreach
+ *   technology         → ai_system_integrity
+ *   strategy_expansion → ai_market_research
+ */
+async function ensureDepartmentHeadFlags() {
+  try {
+    const { getDb } = await import("../db");
+    const { sql } = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return;
+
+    const heads = [
+      "ai_sdr",
+      "ai_dispatch",
+      "ai_content_seo",
+      "ai_bookkeeping",
+      "ai_onboarding",
+      "ai_vendor_outreach",
+      "ai_system_integrity",
+      "ai_market_research",
+    ];
+
+    // Lift the 8 designated seats to head, demote any others that drifted to head
+    // so the chart stays single-head-per-department.
+    await db.execute(
+      sql`UPDATE \`ai_agents\` SET \`isDepartmentHead\` = 1 WHERE \`seatName\` IN (${sql.join(heads.map((h) => sql`${h}`), sql`, `)})`
+    );
+    await db.execute(
+      sql`UPDATE \`ai_agents\` SET \`isDepartmentHead\` = 0 WHERE \`seatName\` NOT IN (${sql.join(heads.map((h) => sql`${h}`), sql`, `)}) AND \`department\` <> 'integrator' AND \`isDepartmentHead\` = 1`
+    );
+
+    console.log("[boot] ensureDepartmentHeadFlags OK");
+  } catch (err) {
+    console.warn("[boot] ensureDepartmentHeadFlags failed (non-fatal):", err);
+  }
+}
+
 async function startServer() {
   await ensurePhoneTables();
   await ensurePortalContinuityFlag();
@@ -611,6 +660,7 @@ async function startServer() {
   await ensureCharterTables();
   await ensureEmailManagerTables();
   await ensureAppSettings();
+  await ensureDepartmentHeadFlags();
   const app = express();
   const server = createServer(app);
 

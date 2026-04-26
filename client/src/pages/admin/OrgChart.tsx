@@ -97,6 +97,15 @@ export default function OrgChart() {
 
   const [selectedAgentId, setSelectedAgentId] = useState<number | null>(null);
   const [confirmKill, setConfirmKill] = useState(false);
+  // Mobile-only accordion state — collapsed dept slugs.
+  const [collapsedDepts, setCollapsedDepts] = useState<Set<string>>(() => new Set());
+  const toggleDept = (slug: string) =>
+    setCollapsedDepts((prev) => {
+      const next = new Set(prev);
+      if (next.has(slug)) next.delete(slug);
+      else next.add(slug);
+      return next;
+    });
 
   const activate = trpc.aiAgents.activateAll.useMutation({
     onSuccess: (res) => {
@@ -341,17 +350,31 @@ export default function OrgChart() {
                     borderColor: dept.slug === "strategy" ? "#f97316" : "#1a2235",
                   }}
                 >
-                  <div className="flex items-baseline justify-between pb-2 border-b mb-1" style={{ borderColor: "#1a2235" }}>
-                    <div>
-                      <div className="text-[10px] font-bold tracking-[2px]" style={{ color: dept.slug === "strategy" ? "#f97316" : "#64748b" }}>
-                        DEPT
-                      </div>
-                      <div className="text-sm font-extrabold text-white">{dept.label}</div>
-                      <div className="text-[10px]" style={{ color: "#94a3b8" }}>
-                        {deptAgents.length} seat · {liveCount} live · {formatUsd(dept24h)} (24h)
-                      </div>
-                    </div>
-                    <div className="flex flex-col gap-1.5">
+                  <div className="flex items-start justify-between pb-2 border-b mb-1 gap-3" style={{ borderColor: "#1a2235" }}>
+                    <button
+                      type="button"
+                      className="flex-1 text-left min-h-[44px] flex items-start gap-2"
+                      onClick={() => toggleDept(dept.slug)}
+                      aria-label={`Toggle ${dept.label}`}
+                    >
+                      <span
+                        className="md:hidden mt-0.5 text-[12px] select-none"
+                        style={{ color: "#94a3b8" }}
+                      >
+                        {collapsedDepts.has(dept.slug) ? "▸" : "▾"}
+                      </span>
+                      <span className="flex-1">
+                        <span className="block text-[10px] font-bold tracking-[2px]" style={{ color: dept.slug === "strategy" ? "#f97316" : "#64748b" }}>
+                          DEPT
+                        </span>
+                        <span className="block text-sm font-extrabold text-white">{dept.label}</span>
+                        <span className="block text-[10px]" style={{ color: "#94a3b8" }}>
+                          {deptAgents.length} seat{deptAgents.length === 1 ? "" : "s"} · {liveCount} live · {formatUsd(dept24h)} (24h)
+                          {!head && <span style={{ color: "#ef4444" }}> · no head</span>}
+                        </span>
+                      </span>
+                    </button>
+                    <div className="flex flex-col gap-1.5 shrink-0">
                       <button
                         className="text-xs px-3 py-2 min-h-[36px] rounded border hover:opacity-80"
                         style={{ borderColor: "#10b981", color: "#10b981" }}
@@ -370,29 +393,33 @@ export default function OrgChart() {
                       </button>
                     </div>
                   </div>
-                  {head && (
-                    <SeatCard
-                      kind={seatType(head)}
-                      agent={head}
-                      isHead
-                      onClick={() => setSelectedAgentId(head.id)}
-                      onStatusChange={(s) => setStatus.mutate({ id: head.id, status: s as never })}
-                    />
-                  )}
-                  {subs.map((s) => (
-                    <SeatCard
-                      key={s.id}
-                      kind={seatType(s)}
-                      agent={s}
-                      onClick={() => setSelectedAgentId(s.id)}
-                      onStatusChange={(st) => setStatus.mutate({ id: s.id, status: st as never })}
-                    />
-                  ))}
-                  {!head && subs.length === 0 && (
-                    <div className="text-[11px] italic" style={{ color: "#64748b" }}>
-                      No seats in this department yet.
-                    </div>
-                  )}
+                  {/* Head + sub-agents — hidden on mobile when collapsed; always visible on md+ */}
+                  <div className={(collapsedDepts.has(dept.slug) ? "hidden " : "") + "md:!flex md:flex-col gap-2"}>
+                    {head && (
+                      <SeatCard
+                        kind={seatType(head)}
+                        agent={head}
+                        isHead
+                        deptLabel={dept.label}
+                        onClick={() => setSelectedAgentId(head.id)}
+                        onStatusChange={(s) => setStatus.mutate({ id: head.id, status: s as never })}
+                      />
+                    )}
+                    {subs.map((s) => (
+                      <SeatCard
+                        key={s.id}
+                        kind={seatType(s)}
+                        agent={s}
+                        onClick={() => setSelectedAgentId(s.id)}
+                        onStatusChange={(st) => setStatus.mutate({ id: s.id, status: st as never })}
+                      />
+                    ))}
+                    {!head && subs.length === 0 && (
+                      <div className="text-[11px] italic" style={{ color: "#64748b" }}>
+                        No seats in this department yet.
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             })}
@@ -429,6 +456,7 @@ type SeatCardProps =
       onClick: () => void;
       disabled?: boolean;
       isHead?: boolean;
+      deptLabel?: string;
       agent?: undefined;
       onStatusChange?: undefined;
     }
@@ -439,6 +467,7 @@ type SeatCardProps =
       onStatusChange?: (s: string) => void;
       disabled?: boolean;
       isHead?: boolean;
+      deptLabel?: string;
       agentLike?: undefined;
     };
 
@@ -499,10 +528,18 @@ function SeatCard(props: SeatCardProps) {
     >
       {/* badge */}
       <span
-        className="absolute -top-2 left-2 text-[9px] font-extrabold tracking-[1px] px-1.5 py-0.5 rounded"
-        style={{ background: badgeBg, color: badgeText }}
+        className="absolute -top-2 left-2 text-[10px] font-extrabold tracking-[1.5px] px-2 py-0.5 rounded uppercase"
+        style={{
+          background: props.isHead ? "linear-gradient(90deg, #f5c26b, #c9913a)" : badgeBg,
+          color: props.isHead ? "#1a1000" : badgeText,
+          boxShadow: props.isHead ? "0 2px 6px rgba(245,194,107,0.3)" : undefined,
+        }}
       >
-        {props.isHead ? "DEPT HEAD" : badgeLabel}
+        {props.isHead && props.deptLabel
+          ? `Head · ${props.deptLabel}`
+          : props.isHead
+          ? "Department Head"
+          : badgeLabel}
       </span>
 
       <div className="flex items-start gap-2">
