@@ -247,7 +247,7 @@ export const aiAgentsRouter = router({
 
   // ── Runs + tasks ───────────────────────────────────────────────────────────
   triggerManualRun: adminProcedure
-    .input(z.object({ id: z.number(), payload: z.record(z.unknown()).optional() }))
+    .input(z.object({ id: z.number(), payload: z.record(z.string(), z.unknown()).optional() }))
     .mutation(async ({ input }) => {
       const result = await runAgent({
         agentId: input.id,

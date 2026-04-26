@@ -393,7 +393,7 @@ export const opportunitiesRouter = router({
         eventType: "stage_changed",
         fromStage,
         toStage: input.toStage,
-        triggeredBy: ctx.user?.id ? String(ctx.user.id) : "system",
+        triggeredBy: ctx.user?.id ?? null,
       });
 
       // Phase 4 agent trigger: stage transitions feed Margin Monitor (completed),

@@ -41,9 +41,9 @@ import {
   threeSixtyWorkOrders,
   DbThreeSixtyWorkOrder,
   InsertDbThreeSixtyWorkOrder,
-  aiAgents,
-  AiAgent,
-  InsertAiAgent,
+  aiAgentsLegacy,
+  AiAgentLegacy,
+  InsertAiAgentLegacy,
   gmailMessageLinks,
   GmailMessageLink,
   InsertGmailMessageLink,
@@ -392,18 +392,18 @@ export async function countPendingEmailDrafts(): Promise<number> {
 
 // ─── EMAIL MANAGER AI: AGENTS ────────────────────────────────────────────────
 
-export async function upsertAiAgent(agent: InsertAiAgent): Promise<void> {
+export async function upsertAiAgent(agent: InsertAiAgentLegacy): Promise<void> {
   const db = await getDb();
   if (!db) return;
-  await db.insert(aiAgents)
+  await db.insert(aiAgentsLegacy)
     .values(agent)
     .onDuplicateKeyUpdate({ set: { department: agent.department, reportsTo: agent.reportsTo, status: agent.status, systemPrompt: agent.systemPrompt ?? undefined } });
 }
 
-export async function getAiAgent(seatName: string): Promise<AiAgent | null> {
+export async function getAiAgent(seatName: string): Promise<AiAgentLegacy | null> {
   const db = await getDb();
   if (!db) return null;
-  const rows = await db.select().from(aiAgents).where(eq(aiAgents.seatName, seatName)).limit(1);
+  const rows = await db.select().from(aiAgentsLegacy).where(eq(aiAgentsLegacy.seatName, seatName)).limit(1);
   return rows[0] ?? null;
 }
 

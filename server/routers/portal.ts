@@ -521,7 +521,7 @@ export const portalRouter = router({
         phone: (ctx.portalCustomer as any).phone ?? undefined,
         referenceNumber: inv.invoiceNumber,
         amount: `$${(input.amountPaid / 100).toFixed(2)}`,
-        description: inv.title ?? undefined,
+        description: (inv as any).title ?? undefined,
       }).catch(() => null);
       return { ok: true };
     }),

@@ -117,13 +117,13 @@ async function executeAction(
       const convRows = await db
         .select()
         .from(conversations)
-        .where(andInner(eqInner(conversations.customerId, payload.customerId), eqInner(conversations.channels, "note")))
+        .where(andInner(eqInner(conversations.customerId, String(payload.customerId!)), eqInner(conversations.channels, "note")))
         .limit(1);
       let convId: number;
       if (convRows.length > 0) {
         convId = convRows[0].id;
       } else {
-        const ins = await db.insert(conversations).values({ customerId: payload.customerId, channels: "note" });
+        const ins = await db.insert(conversations).values({ customerId: String(payload.customerId!), channels: "note" });
         convId = (ins as any).insertId;
       }
       await db.insert(messages).values({
@@ -145,6 +145,7 @@ export async function runAutomationsForTrigger(
 ): Promise<void> {
   try {
     const db = await getDb();
+    if (!db) return;
 
     // Hydrate workspace-level variables from appSettings
     try {
@@ -218,6 +219,7 @@ async function logRuleExecution(
 ) {
   try {
     const db = await getDb();
+    if (!db) return;
     await db.insert(automationRuleLogs).values({
       ruleId,
       trigger,

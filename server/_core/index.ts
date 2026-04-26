@@ -27,7 +27,6 @@ import { randomUUID } from "crypto";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import multer from "multer";
 import { sdk } from "./sdk";
 import { registerAuthRoutes, seedDefaultAdminIfNeeded } from "./auth";
 
@@ -710,7 +709,7 @@ async function startServer() {
         // receipt email that checkout.session.completed sends. Customers who
         // pay via the in-page Payment Element (PaymentIntent flow) deserve
         // the same confirmation as the Checkout flow.
-        let portalInvoiceId: string | null = null;
+        let portalInvoiceId: number | null = null;
         try {
           const inv = await getPortalInvoiceByStripePaymentIntentId(pi.id);
           if (inv) {

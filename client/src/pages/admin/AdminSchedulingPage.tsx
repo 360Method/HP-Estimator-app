@@ -96,7 +96,7 @@ export default function AdminSchedulingPage() {
                 <Card key={day} className="p-4">
                   <p className="text-sm font-medium mb-3">{fmtDay(new Date(daySlots[0].startAt))}</p>
                   <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
-                    {daySlots.map((s) => {
+                    {daySlots.map((s: any) => {
                       const isBooked = s.bookedCount >= s.capacity;
                       return (
                         <div
@@ -152,7 +152,7 @@ export default function AdminSchedulingPage() {
                 </tr>
               </thead>
               <tbody>
-                {bookings.map((b) => (
+                {bookings.map((b: any) => (
                   <tr key={b.id} className="border-b last:border-0">
                     <td className="p-3">#{b.id}</td>
                     <td className="p-3 font-mono text-xs">{b.customerId}</td>
