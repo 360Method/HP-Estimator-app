@@ -154,8 +154,8 @@ export const bookingRouter = router({
         opportunityId: leadId,
         customerId: customer.id,
         title: `New online request — ${displayName}`,
-        source: input.serviceType,
-        priority: input.timeline === 'emergency' ? 'high' : 'normal',
+        source: 'book_consultation',
+        priority: input.timeline === 'ASAP' ? 'high' : 'normal',
       }).catch((e) => console.error('[leadRouting] onLeadCreated error:', e));
       return {
         success: true,
