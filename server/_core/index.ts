@@ -1,12 +1,14 @@
 import "dotenv/config";
-import express from "express";
+import express, { type Request, type Response } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import multer from "multer";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { appRouter } from "../routers";
+import { submitRoadmap } from "../lib/priorityTranslation/orchestrator";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import Stripe from "stripe";
@@ -150,10 +152,14 @@ async function startServer() {
   app.use("/api/", globalLimiter);
   app.use("/api/oauth/", authLimiter);
 
-  // ── CORS: allow 360 funnel and portal to call the pro API ──
+  // ── CORS: allow 360 funnel, portal, and the public marketing site ──
+  // handypioneers.com / www.handypioneers.com host the Roadmap Generator form,
+  // which posts the multipart PDF upload to /api/roadmap-generator/submit here.
   const allowedOrigins = [
     "https://360.handypioneers.com",
     "https://client.handypioneers.com",
+    "https://handypioneers.com",
+    "https://www.handypioneers.com",
   ];
   if (process.env.NODE_ENV === "development") {
     allowedOrigins.push("http://localhost:3001", "http://localhost:5173");
@@ -1055,6 +1061,71 @@ async function startServer() {
     });
     res.json({ ok: true });
   });
+
+  // ── Roadmap Generator (lead magnet) — multipart intake ─────────────────────
+  // Public, accepts a PDF upload + form fields from handypioneers.com. Returns
+  // 202 immediately; Claude processing + email delivery run in the background
+  // so the homeowner's browser doesn't hang for 30–60s. Failures are surfaced
+  // via priorityTranslations.failureReason + an internal email to help@.
+  // Alias /api/priority-translation/submit kept so legacy email links work.
+  const roadmapUploader = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 50 * 1024 * 1024 }, // 50 MB
+    fileFilter: (_req, file, cb) => {
+      if (file.mimetype === "application/pdf" || file.originalname.toLowerCase().endsWith(".pdf")) {
+        cb(null, true);
+      } else {
+        cb(new Error("Only PDF uploads are accepted"));
+      }
+    },
+  });
+
+  const roadmapIntake = async (req: Request, res: Response) => {
+    try {
+      const fields = (req.body ?? {}) as Record<string, string>;
+      const pdf = (req as Request & { file?: Express.Multer.File }).file;
+
+      const required = ["firstName", "lastName", "email", "phone", "propertyAddress"] as const;
+      for (const k of required) {
+        if (!fields[k] || fields[k].trim().length === 0) {
+          res.status(400).json({ error: `Missing required field: ${k}` });
+          return;
+        }
+      }
+      if (!pdf && !fields.reportUrl) {
+        res.status(400).json({ error: "Provide a PDF upload or reportUrl" });
+        return;
+      }
+
+      const result = await submitRoadmap({
+        firstName: fields.firstName,
+        lastName: fields.lastName,
+        email: fields.email,
+        phone: fields.phone,
+        propertyAddress: fields.propertyAddress,
+        notes: fields.notes,
+        pdfBuffer: pdf?.buffer,
+        pdfOriginalName: pdf?.originalname,
+        reportUrl: fields.reportUrl,
+      });
+
+      res.status(202).json({
+        ok: true,
+        id: result.id,
+        status: result.status,
+        message: "Submission received. Your 360° Priority Roadmap will arrive by email within a few minutes.",
+      });
+    } catch (err) {
+      console.error("[roadmap-generator] submit error", err);
+      res.status(500).json({
+        error: "Unable to accept submission",
+        detail: err instanceof Error ? err.message : String(err),
+      });
+    }
+  };
+
+  app.post("/api/roadmap-generator/submit", roadmapUploader.single("report_pdf"), roadmapIntake);
+  app.post("/api/priority-translation/submit", roadmapUploader.single("report_pdf"), roadmapIntake);
 
   // tRPC API
   app.use(
