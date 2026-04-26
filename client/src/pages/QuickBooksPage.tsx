@@ -27,7 +27,7 @@ export default function QuickBooksPage() {
   const { data: status, isLoading } = trpc.quickbooks.getStatus.useQuery();
 
   const { data: authUrlData } = trpc.quickbooks.getAuthUrl.useQuery(
-    { redirectUri: `${window.location.origin}/api/integrations/qbo/callback` },
+    { redirectUri: `${window.location.origin}/api/quickbooks/callback` },
     { enabled: !!(status?.configured && !status?.connected) }
   );
 
@@ -249,7 +249,7 @@ export default function QuickBooksPage() {
                 {
                   step: "2",
                   title: "Add redirect URI",
-                  desc: `In your QB app settings, add the redirect URI: ${window.location.origin}/api/integrations/qbo/callback`,
+                  desc: `In your QB app settings, add the redirect URI: ${window.location.origin}/api/quickbooks/callback`,
                 },
                 {
                   step: "3",

@@ -26,6 +26,7 @@ export const ENV = {
   qbClientId: process.env.QUICKBOOKS_CLIENT_ID ?? "",
   qbClientSecret: process.env.QUICKBOOKS_CLIENT_SECRET ?? "",
   qbEnvironment: (process.env.QUICKBOOKS_ENVIRONMENT ?? "sandbox") as "sandbox" | "production",
+  qbRedirectUri: process.env.QUICKBOOKS_REDIRECT_URI ?? "",
   googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY ?? "",
   anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
   // Legacy Forge vars — still referenced by non-LLM proxies (map.ts, voiceTranscription.ts,
