@@ -366,6 +366,57 @@ async function ensureCharterTables() {
   }
 }
 
+async function ensureAppSettings() {
+  try {
+    const { getDb } = await import("../db");
+    const { sql } = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return;
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`appSettings\` (
+      \`id\` int NOT NULL DEFAULT 1,
+      \`companyName\` varchar(120) DEFAULT 'Handy Pioneers',
+      \`logoUrl\` varchar(500) DEFAULT '',
+      \`brandColor\` varchar(20) DEFAULT '#1E3A5F',
+      \`timezone\` varchar(60) DEFAULT 'America/Los_Angeles',
+      \`estimatePrefix\` varchar(10) DEFAULT 'EST',
+      \`invoicePrefix\` varchar(10) DEFAULT 'INV',
+      \`jobPrefix\` varchar(10) DEFAULT 'JOB',
+      \`portalUrl\` varchar(300) DEFAULT 'https://client.handypioneers.com',
+      \`websiteUrl\` varchar(300) DEFAULT 'https://handypioneers.com',
+      \`supportEmail\` varchar(320) DEFAULT '',
+      \`supportPhone\` varchar(30) DEFAULT '',
+      \`addressLine1\` varchar(200) DEFAULT '',
+      \`addressLine2\` varchar(200) DEFAULT '',
+      \`defaultTaxBps\` int DEFAULT 875,
+      \`defaultDepositPct\` int DEFAULT 50,
+      \`documentFooter\` text,
+      \`termsText\` text,
+      \`googleReviewLink\` varchar(500) DEFAULT '',
+      \`internalLaborRateCents\` int DEFAULT 15000,
+      \`defaultMarkupPct\` int DEFAULT 20,
+      \`smsFromName\` varchar(30) DEFAULT 'HandyPioneers',
+      \`emailEstimateApprovedSubject\` varchar(300) DEFAULT 'Your estimate has been approved — Handy Pioneers',
+      \`emailEstimateApprovedBody\` text,
+      \`emailJobSignOffSubject\` varchar(300) DEFAULT 'Job complete — your final invoice is ready',
+      \`emailJobSignOffBody\` text,
+      \`emailChangeOrderApprovedSubject\` varchar(300) DEFAULT 'Change order approved — Handy Pioneers',
+      \`emailChangeOrderApprovedBody\` text,
+      \`emailMagicLinkSubject\` varchar(300) DEFAULT 'Your Handy Pioneers Customer Portal Login',
+      \`emailMagicLinkBody\` text,
+      \`updatedAt\` timestamp DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT \`appSettings_id\` PRIMARY KEY(\`id\`)
+    )`);
+
+    // Seed the single settings row if absent
+    await db.execute(sql`INSERT IGNORE INTO \`appSettings\` (\`id\`) VALUES (1)`);
+
+    console.log("[boot] ensureAppSettings OK");
+  } catch (err) {
+    console.warn("[boot] ensureAppSettings failed (non-fatal):", err);
+  }
+}
+
 async function startServer() {
   await ensurePhoneTables();
   await ensurePortalContinuityFlag();
@@ -376,6 +427,7 @@ async function startServer() {
   await ensureVendorTablesBoot();
   await ensurePasswordResetTokensTableBoot();
   await ensureCharterTables();
+  await ensureAppSettings();
   const app = express();
   const server = createServer(app);
 
