@@ -9,6 +9,10 @@ import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { appRouter } from "../routers";
 import { submitRoadmap } from "../lib/priorityTranslation/orchestrator";
+import {
+  backfillRoadmapCrmRows,
+  snapshotRoadmapPipeline,
+} from "../lib/priorityTranslation/backfill";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import Stripe from "stripe";
@@ -2030,6 +2034,40 @@ async function startServer() {
   app.post("/api/roadmap-generator/submit", roadmapUpload.single("report_pdf"), handleRoadmapSubmit);
   // Alias for the earlier endpoint name used by the marketing frontend.
   app.post("/api/priority-translation/submit", roadmapUpload.single("report_pdf"), handleRoadmapSubmit);
+
+  // ── Internal diagnostic + one-shot CRM backfill for Roadmap Generator ──
+  // Read-only snapshot + idempotent backfill for portalAccounts that landed
+  // before PR #31's CRM bridge. Gated by INTERNAL_WORKER_KEY so only the
+  // operator (or an authorized worker) can hit it. POST body:
+  //   { workerKey, runBackfill?: boolean, lookbackDays?: number, limit?: number }
+  app.post("/api/admin/roadmap-diagnostic", express.json(), async (req, res) => {
+    try {
+      const body = (req.body ?? {}) as {
+        workerKey?: string;
+        runBackfill?: boolean;
+        lookbackDays?: number;
+        limit?: number;
+      };
+      if (!process.env.INTERNAL_WORKER_KEY) {
+        res.status(500).json({ error: "INTERNAL_WORKER_KEY not set on server" });
+        return;
+      }
+      if (!body.workerKey || body.workerKey !== process.env.INTERNAL_WORKER_KEY) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+
+      const snapshot = await snapshotRoadmapPipeline({ limit: body.limit ?? 10 });
+      const backfill = body.runBackfill
+        ? await backfillRoadmapCrmRows({ lookbackDays: body.lookbackDays ?? 7 })
+        : null;
+
+      res.status(200).json({ snapshot, backfill });
+    } catch (err: any) {
+      console.error("[admin/roadmap-diagnostic] error:", err?.message ?? err);
+      res.status(500).json({ error: err?.message ?? "diagnostic failed" });
+    }
+  });
 
   // tRPC API
   app.use(
