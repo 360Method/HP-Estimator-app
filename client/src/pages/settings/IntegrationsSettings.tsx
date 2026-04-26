@@ -1,4 +1,4 @@
-import { ExternalLink, CheckCircle, XCircle, Plug, Loader2, AlertTriangle } from 'lucide-react';
+import { ExternalLink, CheckCircle, XCircle, Plug, Loader2, AlertTriangle, Phone } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
 import { useEffect } from 'react';
@@ -23,96 +23,48 @@ const STATIC_INTEGRATIONS: StaticIntegration[] = [
     connectUrl: 'https://dashboard.stripe.com',
   },
   {
-    id: 'google-calendar', name: 'Google Calendar', category: 'Scheduling',
-    description: 'Sync job appointments and schedules with Google Calendar.',
-    connected: false, logoText: 'GC', logoColor: 'bg-blue-500',
-  },
-  {
-    id: 'twilio', name: 'Twilio SMS', category: 'Communications',
-    description: 'Send automated SMS reminders and notifications to customers.',
-    connected: false, logoText: 'T', logoColor: 'bg-red-700',
-  },
-  {
     id: 'google-maps', name: 'Google Maps', category: 'Maps',
     description: 'Address autocomplete, map previews, and route planning.',
     connected: true, logoText: 'M', logoColor: 'bg-green-500',
   },
-  {
-    id: 'zapier', name: 'Zapier', category: 'Automation',
-    description: 'Connect Handy Pioneers to 5,000+ apps via Zapier workflows.',
-    connected: false, logoText: 'Z', logoColor: 'bg-orange-500',
-    connectUrl: 'https://zapier.com',
-  },
-  {
-    id: 'thumbtack', name: 'Thumbtack', category: 'Lead Generation',
-    description: 'Import leads directly from your Thumbtack pro account.',
-    connected: false, logoText: 'TT', logoColor: 'bg-blue-700',
-    connectUrl: 'https://www.thumbtack.com',
-  },
-  {
-    id: 'angi', name: 'Angi (HomeAdvisor)', category: 'Lead Generation',
-    description: 'Import leads from Angi and HomeAdvisor.',
-    connected: false, logoText: 'A', logoColor: 'bg-green-700',
-    connectUrl: 'https://www.angi.com',
-  },
 ];
 
-// ── Gmail ─────────────────────────────────────────────────────────────────────
-function GmailRow() {
-  const { data: gmailStatus, isLoading, refetch } = trpc.gmail.status.useQuery();
-  const { data: authUrlData, isLoading: loadingUrl } = trpc.gmail.getAuthUrl.useQuery(
-    { origin: typeof window !== 'undefined' ? window.location.origin : undefined },
-    { enabled: gmailStatus?.configured === true && !gmailStatus?.connected }
-  );
-  const [location] = useLocation();
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const gmailParam = params.get('gmail');
-    if (gmailParam === 'connected') {
-      toast.success('Gmail connected successfully!');
-      refetch();
-      window.history.replaceState({}, '', window.location.pathname);
-    } else if (gmailParam === 'error') {
-      toast.error('Gmail connection failed. Please try again.');
-      window.history.replaceState({}, '', window.location.pathname);
-    }
-  }, [location]);
-
-  const isConnected = gmailStatus?.connected ?? false;
-  const connectedEmail = gmailStatus?.email;
+// ── Twilio ────────────────────────────────────────────────────────────────────
+function TwilioRow() {
+  const { data: settings, isLoading } = trpc.phone.getSettings.useQuery();
+  const phoneNumber = settings?.twilioPhoneNumber;
+  const isConfigured = !!phoneNumber;
 
   return (
     <div className="flex items-center gap-4 py-3 first:pt-0 last:pb-0">
-      <div className="w-10 h-10 rounded-xl bg-red-500 flex items-center justify-center text-white text-xs font-bold shrink-0">G</div>
+      <div className="w-10 h-10 rounded-xl bg-red-700 flex items-center justify-center text-white text-xs font-bold shrink-0">T</div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <p className="text-sm font-bold text-foreground">Gmail</p>
+          <p className="text-sm font-bold text-foreground">Twilio SMS &amp; Voice</p>
           {isLoading ? (
             <span className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground"><Loader2 size={10} className="animate-spin" /> Checking...</span>
-          ) : isConnected ? (
+          ) : isConfigured ? (
             <span className="flex items-center gap-1 text-[10px] font-bold text-green-600"><CheckCircle size={10} /> Connected</span>
           ) : (
-            <span className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground"><XCircle size={10} /> Not connected</span>
+            <span className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground"><XCircle size={10} /> Not configured</span>
           )}
         </div>
         <p className="text-xs text-muted-foreground">
-          {isConnected && connectedEmail ? `Sending from ${connectedEmail}` : 'Send estimates and invoices directly from your Gmail account.'}
+          {phoneNumber
+            ? `Active on ${phoneNumber} — signature verification + call routing live.`
+            : 'Automated SMS reminders, call routing, and voicemail transcription.'}
         </p>
       </div>
-      {isConnected ? (
-        <span className="px-3 py-1.5 border border-border rounded-lg text-xs font-semibold text-green-700 bg-green-50">Active</span>
-      ) : !gmailStatus?.configured ? (
-        <span className="px-3 py-1.5 border border-amber-300 rounded-lg text-xs font-semibold text-amber-700 bg-amber-50">Setup required</span>
-      ) : loadingUrl ? (
-        <button disabled className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/60 text-primary-foreground rounded-lg text-xs font-semibold cursor-not-allowed">
-          <Loader2 size={10} className="animate-spin" /> Loading...
-        </button>
-      ) : authUrlData?.url ? (
-        <a href={authUrlData.url} className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-semibold hover:bg-primary/90 transition-colors">
-          Connect <ExternalLink size={10} />
-        </a>
-      ) : null}
+      <button
+        onClick={() => {
+          // Settings is an overlay; Phone tab is in the Settings sidebar
+          const event = new CustomEvent('open-settings', { detail: { section: 'phone' } });
+          window.dispatchEvent(event);
+        }}
+        className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-semibold text-muted-foreground hover:bg-muted transition-colors whitespace-nowrap"
+      >
+        <Phone size={10} /> Phone Settings
+      </button>
     </div>
   );
 }
@@ -320,8 +272,6 @@ function GoogleAdsRow() {
   );
 }
 
-const CATEGORIES = ['Accounting', 'Payments', 'Scheduling', 'Communications', 'Marketing', 'Maps', 'Automation', 'Lead Generation'];
-
 export default function IntegrationsSettings() {
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
@@ -360,26 +310,19 @@ export default function IntegrationsSettings() {
       <section className="card-section">
         <div className="card-section-header"><Plug size={13} /><span className="text-xs font-bold uppercase tracking-wider">Communications</span></div>
         <div className="card-section-body divide-y divide-border/60">
-          <GmailRow />
-          {STATIC_INTEGRATIONS.filter(i => i.category === 'Communications').map(intg => (
+          <TwilioRow />
+        </div>
+      </section>
+
+      {/* ── Maps ───────────────────────────────────────────────────────────── */}
+      <section className="card-section">
+        <div className="card-section-header"><Plug size={13} /><span className="text-xs font-bold uppercase tracking-wider">Maps</span></div>
+        <div className="card-section-body divide-y divide-border/60">
+          {STATIC_INTEGRATIONS.filter(i => i.category === 'Maps').map(intg => (
             <StaticRow key={intg.id} intg={intg} />
           ))}
         </div>
       </section>
-
-      {/* ── Other categories ───────────────────────────────────────────────── */}
-      {['Scheduling', 'Maps', 'Automation', 'Lead Generation'].map(cat => {
-        const items = STATIC_INTEGRATIONS.filter(i => i.category === cat);
-        if (items.length === 0) return null;
-        return (
-          <section key={cat} className="card-section">
-            <div className="card-section-header"><Plug size={13} /><span className="text-xs font-bold uppercase tracking-wider">{cat}</span></div>
-            <div className="card-section-body divide-y divide-border/60">
-              {items.map(intg => <StaticRow key={intg.id} intg={intg} />)}
-            </div>
-          </section>
-        );
-      })}
     </div>
   );
 }
