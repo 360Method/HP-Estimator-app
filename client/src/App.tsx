@@ -1,9 +1,31 @@
 import { Toaster } from "@/components/ui/sonner";
-import { PwaInstallBanner } from "@/components/PwaInstallBanner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch, useLocation } from "wouter";
 import { useEffect } from "react";
+
+// ── GA4 helpers ───────────────────────────────────────────────────────────────
+declare global {
+  interface Window {
+    gtag?: (...args: any[]) => void;
+    dataLayer?: any[];
+  }
+}
+
+export function trackPageview(path: string) {
+  if (typeof window !== "undefined" && window.gtag) {
+    window.gtag("event", "page_view", {
+      page_path: path,
+      page_location: window.location.href,
+    });
+  }
+}
+
+export function trackEvent(eventName: string, params?: Record<string, any>) {
+  if (typeof window !== "undefined" && window.gtag) {
+    window.gtag("event", eventName, params);
+  }
+}
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { EstimatorProvider } from "./contexts/EstimatorContext";
@@ -36,8 +58,25 @@ import PortalReports from "./pages/portal/PortalReports";
 import PortalReportDetail from "./pages/portal/PortalReportDetail";
 import Portal360Membership from "./pages/portal/Portal360Membership";
 import PortalEnrollmentConfirmation from "./pages/portal/PortalEnrollmentConfirmation";
+import PortalSchedule from "./pages/portal/PortalSchedule";
 import WorkOrderDetail from "./pages/WorkOrderDetail";
 import Welcome360Page from "./pages/Welcome360Page";
+
+// Admin pages (Phase 1 AI agent runtime + KPI dashboard)
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import AiAgentsList from "./pages/admin/AiAgentsList";
+import AiAgentDetail from "./pages/admin/AiAgentDetail";
+import AiAgentTasks from "./pages/admin/AiAgentTasks";
+import DepartmentDetail from "./pages/admin/DepartmentDetail";
+import AdminSchedulingPage from "./pages/admin/AdminSchedulingPage";
+import IntegratorChat from "./pages/admin/IntegratorChat";
+import AdminVendorsList from "./pages/admin/AdminVendorsList";
+import AdminVendorDetail from "./pages/admin/AdminVendorDetail";
+import AdminVendorNew from "./pages/admin/AdminVendorNew";
+
+// Self-serve password reset (public)
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 
 // Domains that should serve only the customer portal (no admin app)
 const PORTAL_HOSTNAMES = ["client.handypioneers.com"];
@@ -46,7 +85,7 @@ const isPortalDomain = PORTAL_HOSTNAMES.includes(window.location.hostname);
 
 /**
  * On portal domains, redirect root "/" to "/portal/login" so customers
- * never load the admin app and never trigger Manus OAuth.
+ * never load the admin app and never hit the staff login gate.
  */
 function PortalDomainRoot() {
   const [, navigate] = useLocation();
@@ -57,6 +96,11 @@ function PortalDomainRoot() {
 }
 
 function Router() {
+  const [location] = useLocation();
+  useEffect(() => {
+    trackPageview(location);
+  }, [location]);
+
   return (
     <Switch>
       {/* Main app — on portal domains, root redirects to portal login */}
@@ -64,6 +108,10 @@ function Router() {
 
         {/* Public booking wizard — no login required */}
       <Route path="/book" component={BookingWizard} />
+
+      {/* Self-serve password reset (public) */}
+      <Route path="/forgot-password" component={ForgotPassword} />
+      <Route path="/reset-password" component={ResetPassword} />
 
       {/* Customer portal — public (no login required) */}
       <Route path="/portal/login" component={PortalLogin} />
@@ -90,6 +138,7 @@ function Router() {
       <Route path="/portal/reports" component={PortalReports} />
       <Route path="/portal/360-membership" component={Portal360Membership} />
       <Route path="/portal/360-confirmation" component={PortalEnrollmentConfirmation} />
+      <Route path="/portal/schedule" component={PortalSchedule} />
 
       {/* 360° Method post-checkout confirmation (public) */}
       <Route path="/360-welcome" component={Welcome360Page} />
@@ -99,6 +148,18 @@ function Router() {
 
       {/* Data migration onboarding wizard */}
       <Route path="/onboarding" component={() => <DataMigrationPage />} />
+
+      {/* Admin — AI agent runtime + KPI dashboard (Phase 1) */}
+      <Route path="/admin/dashboard" component={AdminDashboard} />
+      <Route path="/admin/chat" component={IntegratorChat} />
+      <Route path="/admin/ai-agents/tasks" component={AiAgentTasks} />
+      <Route path="/admin/ai-agents/:id" component={AiAgentDetail} />
+      <Route path="/admin/ai-agents" component={AiAgentsList} />
+      <Route path="/admin/departments/:slug" component={DepartmentDetail} />
+      <Route path="/admin/scheduling" component={AdminSchedulingPage} />
+      <Route path="/admin/vendors/new" component={AdminVendorNew} />
+      <Route path="/admin/vendors/:id" component={AdminVendorDetail} />
+      <Route path="/admin/vendors" component={AdminVendorsList} />
 
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
@@ -114,7 +175,6 @@ function App() {
           <PortalProvider>
             <TooltipProvider>
               <Toaster />
-              <PwaInstallBanner />
               <Router />
             </TooltipProvider>
           </PortalProvider>
