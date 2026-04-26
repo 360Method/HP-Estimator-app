@@ -2,7 +2,7 @@ import { z } from "zod";
 import { adminProcedure, protectedProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
 import { aiAgents, agentCharters, agentKpis } from "../../drizzle/schema";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 
 export const agentsRouter = router({
   /** List all agent seats, optionally filtered by department */
@@ -117,6 +117,16 @@ export const agentsRouter = router({
     .query(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
+      // Department query: resolve dept → seat names → KPIs
+      if (input?.scopeType === "department" && input?.scopeId) {
+        const seats = await db
+          .select({ seatName: aiAgents.seatName })
+          .from(aiAgents)
+          .where(eq(aiAgents.department, input.scopeId as any));
+        if (seats.length === 0) return [];
+        const seatNames = seats.map(s => s.seatName);
+        return db.select().from(agentKpis).where(inArray(agentKpis.scopeId, seatNames));
+      }
       if (input?.scopeId) {
         return db.select().from(agentKpis).where(eq(agentKpis.scopeId, input.scopeId));
       }
