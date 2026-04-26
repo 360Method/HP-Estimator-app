@@ -87,12 +87,13 @@ export default function AgentsRuns() {
 
         {/* Filters */}
         <Card className="p-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex gap-1">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-2">
+            <div className="flex flex-wrap gap-1">
               {STATUS_FILTERS.map((f) => (
                 <Button
                   key={f.value}
                   size="sm"
+                  className="min-h-[36px]"
                   variant={statusFilter === f.value ? "default" : "outline"}
                   onClick={() => setStatusFilter(f.value as RunStatus | "")}
                 >
@@ -104,22 +105,22 @@ export default function AgentsRuns() {
               placeholder="Filter seatName"
               value={seatFilter}
               onChange={(e) => setSeatFilter(e.target.value)}
-              className="w-44"
+              className="w-full sm:w-44 min-h-[40px]"
             />
             <Input
               placeholder="Search output / error"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="flex-1 min-w-[200px]"
+              className="w-full sm:flex-1 sm:min-w-[200px] min-h-[40px]"
             />
-            <Button size="sm" variant="ghost" onClick={() => runsQ.refetch()}>
+            <Button variant="ghost" className="w-full sm:w-auto min-h-[40px]" onClick={() => runsQ.refetch()}>
               Refresh
             </Button>
           </div>
         </Card>
 
-        {/* Runs table */}
-        <Card className="overflow-hidden">
+        {/* Runs table — scrolls horizontally on mobile */}
+        <Card className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="border-b bg-muted/40">
               <tr>

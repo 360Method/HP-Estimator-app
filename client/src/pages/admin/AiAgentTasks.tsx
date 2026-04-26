@@ -35,25 +35,25 @@ export default function AiAgentTasks() {
 
   return (
     <AdminShell>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
+      <div className="space-y-4 sm:space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold">Approval Queue</h1>
+            <h1 className="text-xl sm:text-2xl font-semibold">Approval Queue</h1>
             <p className="text-sm text-muted-foreground mt-1">
               Runs parked awaiting human approval. Customer-facing outputs always land here first.
             </p>
           </div>
-          <div className="flex gap-2 text-sm">
+          <div className="grid grid-cols-2 sm:flex gap-2 text-sm">
             <Button
               variant={filter === "awaiting_approval" ? "default" : "outline"}
-              size="sm"
+              className="min-h-[40px]"
               onClick={() => setFilter("awaiting_approval")}
             >
-              Awaiting approval
+              Awaiting
             </Button>
             <Button
               variant={filter === "all" ? "default" : "outline"}
-              size="sm"
+              className="min-h-[40px]"
               onClick={() => setFilter("all")}
             >
               All tasks
@@ -64,51 +64,86 @@ export default function AiAgentTasks() {
         {tasks.length === 0 ? (
           <Card className="p-8 text-center text-muted-foreground">Nothing pending.</Card>
         ) : (
-          <Card>
-            <table className="w-full text-sm">
-              <thead className="border-b bg-muted/40">
-                <tr>
-                  <th className="text-left p-3 font-medium">Task</th>
-                  <th className="text-left p-3 font-medium">Agent</th>
-                  <th className="text-left p-3 font-medium">Trigger</th>
-                  <th className="text-left p-3 font-medium">Status</th>
-                  <th className="text-left p-3 font-medium">Created</th>
-                  <th className="text-right p-3 font-medium"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {tasks.map((t) => (
-                  <tr key={t.id} className="border-b last:border-0">
-                    <td className="p-3">#{t.id}</td>
-                    <td className="p-3">{t.seatName}</td>
-                    <td className="p-3 text-xs">{t.triggerType}</td>
-                    <td className="p-3">
-                      <Badge variant="outline">{t.status}</Badge>
-                    </td>
-                    <td className="p-3 text-xs text-muted-foreground">
-                      {new Date(t.createdAt as never).toLocaleString()}
-                    </td>
-                    <td className="p-3 text-right">
-                      {t.status === "awaiting_approval" && (
-                        <div className="flex gap-2 justify-end">
-                          <Button size="sm" onClick={() => approve.mutate({ taskId: t.id })}>
-                            Approve
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => reject.mutate({ taskId: t.id })}
-                          >
-                            Reject
-                          </Button>
-                        </div>
-                      )}
-                    </td>
+          <>
+            {/* Mobile: card list */}
+            <div className="sm:hidden space-y-3">
+              {tasks.map((t) => (
+                <Card key={t.id} className="p-4 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold truncate">{t.seatName}</div>
+                      <div className="text-xs text-muted-foreground">#{t.id} · {t.triggerType}</div>
+                    </div>
+                    <Badge variant="outline" className="shrink-0">{t.status}</Badge>
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {new Date(t.createdAt as never).toLocaleString()}
+                  </div>
+                  {t.status === "awaiting_approval" && (
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <Button className="min-h-[44px]" onClick={() => approve.mutate({ taskId: t.id })}>
+                        Approve
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="min-h-[44px]"
+                        onClick={() => reject.mutate({ taskId: t.id })}
+                      >
+                        Reject
+                      </Button>
+                    </div>
+                  )}
+                </Card>
+              ))}
+            </div>
+
+            {/* Desktop: table */}
+            <Card className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="border-b bg-muted/40">
+                  <tr>
+                    <th className="text-left p-3 font-medium">Task</th>
+                    <th className="text-left p-3 font-medium">Agent</th>
+                    <th className="text-left p-3 font-medium">Trigger</th>
+                    <th className="text-left p-3 font-medium">Status</th>
+                    <th className="text-left p-3 font-medium">Created</th>
+                    <th className="text-right p-3 font-medium"></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </Card>
+                </thead>
+                <tbody>
+                  {tasks.map((t) => (
+                    <tr key={t.id} className="border-b last:border-0">
+                      <td className="p-3">#{t.id}</td>
+                      <td className="p-3">{t.seatName}</td>
+                      <td className="p-3 text-xs">{t.triggerType}</td>
+                      <td className="p-3">
+                        <Badge variant="outline">{t.status}</Badge>
+                      </td>
+                      <td className="p-3 text-xs text-muted-foreground">
+                        {new Date(t.createdAt as never).toLocaleString()}
+                      </td>
+                      <td className="p-3 text-right">
+                        {t.status === "awaiting_approval" && (
+                          <div className="flex gap-2 justify-end">
+                            <Button size="sm" onClick={() => approve.mutate({ taskId: t.id })}>
+                              Approve
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => reject.mutate({ taskId: t.id })}
+                            >
+                              Reject
+                            </Button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Card>
+          </>
         )}
       </div>
     </AdminShell>

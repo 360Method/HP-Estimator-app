@@ -212,51 +212,55 @@ export default function OrgChart() {
 
         {/* CONTROL STRIP */}
         <div
-          className="max-w-5xl mx-auto rounded-xl border p-4 mb-6 flex flex-wrap items-center gap-3"
+          className="max-w-5xl mx-auto rounded-xl border p-3 sm:p-4 mb-6 flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3"
           style={{ background: "rgba(255,255,255,0.02)", borderColor: "#1a2235" }}
         >
-          <Button
-            size="sm"
-            disabled={activate.isPending || counts.draft + counts.paused === 0}
-            onClick={() => activate.mutate({})}
-            style={{ background: "#c9913a", color: "#1a1000", borderColor: "#c9913a" }}
-          >
-            {activate.isPending
-              ? "Activating…"
-              : `Activate all (${counts.draft + counts.paused})`}
-          </Button>
-          {confirmKill ? (
-            <div className="flex items-center gap-2">
-              <span className="text-xs" style={{ color: "#fca5a5" }}>
-                Pause {counts.autonomous} live seat{counts.autonomous === 1 ? "" : "s"}?
-              </span>
-              <Button
-                size="sm"
-                variant="destructive"
-                disabled={pauseAll.isPending}
-                onClick={() => pauseAll.mutate()}
-              >
-                Yes, pause all
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => setConfirmKill(false)}>
-                Cancel
-              </Button>
-            </div>
-          ) : (
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
             <Button
-              size="sm"
-              variant="destructive"
-              disabled={counts.autonomous === 0}
-              onClick={() => setConfirmKill(true)}
+              className="w-full sm:w-auto min-h-[48px] text-base font-semibold"
+              disabled={activate.isPending || counts.draft + counts.paused === 0}
+              onClick={() => activate.mutate({})}
+              style={{ background: "#c9913a", color: "#1a1000", borderColor: "#c9913a" }}
             >
-              Pause all
+              {activate.isPending
+                ? "Activating…"
+                : `Activate all (${counts.draft + counts.paused})`}
             </Button>
-          )}
-          <Button size="sm" variant="outline" onClick={() => runScan.mutate()} disabled={runScan.isPending}>
-            {runScan.isPending ? "Scanning…" : "System Integrity scan"}
-          </Button>
-          <div className="flex-1" />
-          <div className="flex items-center gap-4 text-xs" style={{ color: "#94a3b8" }}>
+            {confirmKill ? (
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
+                <span className="text-xs" style={{ color: "#fca5a5" }}>
+                  Pause {counts.autonomous} live seat{counts.autonomous === 1 ? "" : "s"}?
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    variant="destructive"
+                    className="flex-1 sm:flex-none min-h-[44px]"
+                    disabled={pauseAll.isPending}
+                    onClick={() => pauseAll.mutate()}
+                  >
+                    Yes, pause all
+                  </Button>
+                  <Button variant="ghost" className="flex-1 sm:flex-none min-h-[44px]" onClick={() => setConfirmKill(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button
+                variant="destructive"
+                className="w-full sm:w-auto min-h-[44px]"
+                disabled={counts.autonomous === 0}
+                onClick={() => setConfirmKill(true)}
+              >
+                Pause all
+              </Button>
+            )}
+            <Button variant="outline" className="w-full sm:w-auto min-h-[44px]" onClick={() => runScan.mutate()} disabled={runScan.isPending}>
+              {runScan.isPending ? "Scanning…" : "System Integrity scan"}
+            </Button>
+          </div>
+          <div className="hidden sm:block flex-1" />
+          <div className="grid grid-cols-3 sm:flex sm:items-center gap-3 sm:gap-4 text-xs w-full sm:w-auto" style={{ color: "#94a3b8" }}>
             <Stat label="Seats" value={counts.total} />
             <Stat label="Live" value={counts.autonomous} color="#10b981" />
             <Stat label="Draft" value={counts.draft} color="#f59e0b" />
@@ -347,19 +351,19 @@ export default function OrgChart() {
                         {deptAgents.length} seat · {liveCount} live · {formatUsd(dept24h)} (24h)
                       </div>
                     </div>
-                    <div className="flex flex-col gap-1">
+                    <div className="flex flex-col gap-1.5">
                       <button
-                        className="text-[10px] px-2 py-0.5 rounded border hover:opacity-80"
+                        className="text-xs px-3 py-2 min-h-[36px] rounded border hover:opacity-80"
                         style={{ borderColor: "#10b981", color: "#10b981" }}
-                        onClick={() => bulkSet.mutate({ ids: deptIds, status: "autonomous" })}
+                        onClick={(e) => { e.stopPropagation(); bulkSet.mutate({ ids: deptIds, status: "autonomous" }); }}
                         disabled={deptIds.length === 0}
                       >
                         All on
                       </button>
                       <button
-                        className="text-[10px] px-2 py-0.5 rounded border hover:opacity-80"
+                        className="text-xs px-3 py-2 min-h-[36px] rounded border hover:opacity-80"
                         style={{ borderColor: "#94a3b8", color: "#94a3b8" }}
-                        onClick={() => bulkSet.mutate({ ids: deptIds, status: "paused" })}
+                        onClick={(e) => { e.stopPropagation(); bulkSet.mutate({ ids: deptIds, status: "paused" }); }}
                         disabled={deptIds.length === 0}
                       >
                         All off
