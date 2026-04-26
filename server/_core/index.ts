@@ -1,12 +1,14 @@
 import "dotenv/config";
-import express from "express";
+import express, { type Request, type Response } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import multer from "multer";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { appRouter } from "../routers";
+import { submitRoadmap } from "../lib/priorityTranslation/orchestrator";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import Stripe from "stripe";
@@ -115,6 +117,94 @@ async function ensurePhoneTables() {
     console.log("[boot] phoneSettings + callLogs ensured");
   } catch (err) {
     console.warn("[boot] ensurePhoneTables failed (non-fatal):", err);
+  }
+}
+
+async function ensurePriorityTranslationTables() {
+  // Migration 0058 created these for the Roadmap Generator lead magnet but
+  // the drizzle tracker diverges from prod (see memory note: migration drift
+  // is a known issue), so the tables aren't actually present in production.
+  // Create them at boot if missing — same pattern as ensurePhoneTables().
+  try {
+    const { getDb } = await import("../db");
+    const { sql } = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return;
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`portalAccounts\` (
+      \`id\` varchar(64) NOT NULL,
+      \`email\` varchar(320) NOT NULL,
+      \`firstName\` varchar(128) NOT NULL DEFAULT '',
+      \`lastName\` varchar(128) NOT NULL DEFAULT '',
+      \`phone\` varchar(32) NOT NULL DEFAULT '',
+      \`customerId\` varchar(64),
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      \`lastLoginAt\` timestamp NULL,
+      CONSTRAINT \`portalAccounts_id\` PRIMARY KEY(\`id\`),
+      CONSTRAINT \`portalAccounts_email_unique\` UNIQUE(\`email\`)
+    )`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS \`portalAccounts_email_idx\` ON \`portalAccounts\` (\`email\`)`).catch(() => null);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS \`portalAccounts_customerId_idx\` ON \`portalAccounts\` (\`customerId\`)`).catch(() => null);
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`portalMagicLinks\` (
+      \`token\` varchar(128) NOT NULL,
+      \`portalAccountId\` varchar(64) NOT NULL,
+      \`expiresAt\` timestamp NOT NULL,
+      \`consumedAt\` timestamp NULL,
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      CONSTRAINT \`portalMagicLinks_token\` PRIMARY KEY(\`token\`)
+    )`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS \`portalMagicLinks_account_idx\` ON \`portalMagicLinks\` (\`portalAccountId\`)`).catch(() => null);
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`portalProperties\` (
+      \`id\` varchar(64) NOT NULL,
+      \`portalAccountId\` varchar(64) NOT NULL,
+      \`street\` varchar(255) NOT NULL DEFAULT '',
+      \`unit\` varchar(64) NOT NULL DEFAULT '',
+      \`city\` varchar(128) NOT NULL DEFAULT '',
+      \`state\` varchar(64) NOT NULL DEFAULT '',
+      \`zip\` varchar(10) NOT NULL DEFAULT '',
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      CONSTRAINT \`portalProperties_id\` PRIMARY KEY(\`id\`)
+    )`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS \`portalProperties_account_idx\` ON \`portalProperties\` (\`portalAccountId\`)`).catch(() => null);
+    await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS \`portalProperties_account_zip_street_idx\` ON \`portalProperties\`(\`portalAccountId\`, \`street\`, \`zip\`)`).catch(() => null);
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`homeHealthRecords\` (
+      \`id\` varchar(64) NOT NULL,
+      \`propertyId\` varchar(64) NOT NULL,
+      \`portalAccountId\` varchar(64) NOT NULL,
+      \`findings\` json NOT NULL,
+      \`summary\` text,
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT \`homeHealthRecords_id\` PRIMARY KEY(\`id\`)
+    )`);
+    await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS \`homeHealthRecords_property_idx\` ON \`homeHealthRecords\`(\`propertyId\`)`).catch(() => null);
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`priorityTranslations\` (
+      \`id\` varchar(64) NOT NULL,
+      \`portalAccountId\` varchar(64) NOT NULL,
+      \`propertyId\` varchar(64) NOT NULL,
+      \`homeHealthRecordId\` varchar(64),
+      \`pdfStoragePath\` text,
+      \`reportUrl\` text,
+      \`notes\` text,
+      \`status\` varchar(32) NOT NULL DEFAULT 'submitted',
+      \`claudeResponse\` json,
+      \`outputPdfPath\` text,
+      \`deliveredAt\` timestamp NULL,
+      \`failureReason\` text,
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT \`priorityTranslations_id\` PRIMARY KEY(\`id\`)
+    )`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS \`priorityTranslations_account_idx\` ON \`priorityTranslations\` (\`portalAccountId\`)`).catch(() => null);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS \`priorityTranslations_property_idx\` ON \`priorityTranslations\` (\`propertyId\`)`).catch(() => null);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS \`priorityTranslations_status_idx\` ON \`priorityTranslations\` (\`status\`)`).catch(() => null);
+
+    console.log("[boot] priorityTranslation tables ensured");
+  } catch (err) {
+    console.warn("[boot] ensurePriorityTranslationTables failed (non-fatal):", err);
   }
 }
 
@@ -369,6 +459,7 @@ async function ensureCharterTables() {
 async function startServer() {
   await ensurePhoneTables();
   await ensurePortalContinuityFlag();
+  await ensurePriorityTranslationTables();
   await ensureOAuthIntegrationTables();
   await ensureMagicLinkTokenHash();
   await ensureSchedulingTablesBoot();
@@ -412,7 +503,9 @@ async function startServer() {
   app.use("/api/360/checkout", publicWriteLimiter);
   app.use("/api/360/portfolio-checkout", publicWriteLimiter);
 
-  // ── CORS: allow 360 funnel, portal, and marketing site to call the pro API ──
+  // ── CORS: allow 360 funnel, portal, and the public marketing site ──
+  // handypioneers.com / www.handypioneers.com host the Roadmap Generator form,
+  // which posts the multipart PDF upload to /api/roadmap-generator/submit here.
   const allowedOrigins = [
     "https://360.handypioneers.com",
     "https://client.handypioneers.com",
@@ -1531,9 +1624,11 @@ async function startServer() {
   // ── Roadmap Generator / Priority Translation: multipart PDF intake ──
   // Inspection report PDFs can legitimately run 50-80 MB (Spectora exports
   // with embedded photos). Limit is 100 MB to keep a buffer without letting
-  // arbitrary huge payloads through. Writes the file to UPLOAD_VOLUME_PATH
-  // (Railway volume) if configured, else to the OS temp dir, then dispatches
-  // to the tRPC `priorityTranslation.submit` procedure with the storage path.
+  // arbitrary huge payloads through. Returns 202 immediately; Claude + PDF
+  // render + Resend email run in the background via submitRoadmap() so the
+  // homeowner's browser doesn't hang for 30–60s. Processing failures land in
+  // priorityTranslations.failureReason and trigger an internal email to help@.
+  // Alias /api/priority-translation/submit kept so legacy email links work.
   const ROADMAP_UPLOAD_MAX_BYTES = 100 * 1024 * 1024;
   const roadmapUpload = multer({
     storage: multer.memoryStorage(),
@@ -1547,49 +1642,60 @@ async function startServer() {
 
   async function handleRoadmapSubmit(req: express.Request, res: express.Response) {
     try {
+      const fields = (req.body ?? {}) as Record<string, string>;
       const file = (req as any).file as Express.Multer.File | undefined;
-      let storagePath: string | undefined;
-      if (file) {
-        const uploadDir = process.env.UPLOAD_VOLUME_PATH || path.join(os.tmpdir(), "handy-uploads");
-        await fs.promises.mkdir(uploadDir, { recursive: true });
-        const filename = `priority-translation-${randomUUID()}.pdf`;
-        const fullPath = path.join(uploadDir, filename);
-        await fs.promises.writeFile(fullPath, file.buffer);
-        storagePath = fullPath;
+
+      const required = ["firstName", "lastName", "email", "phone", "propertyAddress"] as const;
+      for (const k of required) {
+        if (!fields[k] || fields[k].trim().length === 0) {
+          res.status(400).json({ error: `Missing required field: ${k}` });
+          return;
+        }
       }
-      const caller = appRouter.createCaller({ req, res, user: null } as any);
-      const result = await caller.priorityTranslation.submit({
-        firstName: req.body.firstName,
-        lastName: req.body.lastName,
-        email: req.body.email,
-        phone: req.body.phone,
-        propertyAddress: req.body.propertyAddress,
-        notes: req.body.notes,
-        pdfStoragePath: storagePath,
-        reportUrl: req.body.reportUrl,
-        source: req.body.source || "roadmap_generator",
+      if (!file && !fields.reportUrl) {
+        res.status(400).json({ error: "Provide a PDF upload or reportUrl" });
+        return;
+      }
+
+      const result = await submitRoadmap({
+        firstName: fields.firstName,
+        lastName: fields.lastName,
+        email: fields.email,
+        phone: fields.phone,
+        propertyAddress: fields.propertyAddress,
+        notes: fields.notes,
+        pdfBuffer: file?.buffer,
+        pdfOriginalName: file?.originalname,
+        reportUrl: fields.reportUrl,
       });
+
       // Phase 4 agent trigger: a Roadmap Generator submission is a hot inbound
       // lead. Fans out to whichever agent subscribes (default: Lead Nurturer).
       try {
         const { emitAgentEvent } = await import("../lib/agentRuntime/triggerBus");
         emitAgentEvent("roadmap_generator.submitted", {
-          firstName: req.body.firstName,
-          lastName: req.body.lastName,
-          email: req.body.email,
-          phone: req.body.phone,
-          propertyAddress: req.body.propertyAddress,
-          notes: req.body.notes,
-          source: req.body.source || "roadmap_generator",
-          submissionId: (result as { id?: string | number } | null)?.id ?? null,
+          firstName: fields.firstName,
+          lastName: fields.lastName,
+          email: fields.email,
+          phone: fields.phone,
+          propertyAddress: fields.propertyAddress,
+          notes: fields.notes,
+          source: fields.source || "roadmap_generator",
+          submissionId: result.id,
         }).catch(() => null);
       } catch (emitErr) {
         console.warn("[Roadmap Generator] event emit failed:", emitErr);
       }
-      res.json(result);
+
+      res.status(202).json({
+        ok: true,
+        id: result.id,
+        status: result.status,
+        message: "Submission received. Your 360° Priority Roadmap will arrive by email within a few minutes.",
+      });
     } catch (err: any) {
       if (err?.code === "LIMIT_FILE_SIZE") {
-        res.status(413).json({ error: "File too large \u2014 max 100MB" });
+        res.status(413).json({ error: "File too large — max 100MB" });
         return;
       }
       console.error("[Roadmap Generator] submit error:", err?.message ?? err);

@@ -1,5 +1,43 @@
 # Morning Brief — 2026-04-25
 
+## Late-Evening P0 — Roadmap Generator pipeline (PR pending merge)
+
+The customer-facing Roadmap Generator on `handypioneers.com` has been silently
+dropping every submission. Marcin uploaded a test inspection report and never
+received a roadmap email; investigation revealed the canonical worker was a
+stub. Branch `claude/roadmap-generator-fix` ships the fix; **PR not yet
+created** (gh CLI not authenticated in this session — see
+https://github.com/360Method/HP-Estimator-app/pull/new/claude/roadmap-generator-fix
+to open it). After merge, Railway redeploys HP-Estimator-app and the synthetic
+test against `/api/roadmap-generator/submit` should produce a deliverable email
+within ~2 minutes.
+
+Root cause: `priorityTranslation.submit()` created the row and flipped status
+to `processing` but never enqueued or invoked the worker. `process()` had the
+real Claude/PDF/email logic but was only callable with `INTERNAL_WORKER_KEY`
+and nothing called it. Express multipart wrapper existed (good) but routed
+into the broken submit-without-process pattern.
+
+Fix: new `server/lib/priorityTranslation/orchestrator.ts` runs the full
+pipeline inline (account → property → DB row → Claude with PDF as document
+block → render PDF → magic link → Resend → mark completed). Express handler
+now calls `submitRoadmap()` directly instead of the tRPC submit. Failures land
+in `priorityTranslations.failureReason` and trigger an internal email to
+help@handypioneers.com so failed roadmaps don't disappear silently.
+
+Out-of-scope follow-ups (P1):
+- The deliverable PDF rendering quality may need tuning — verify after first
+  real customer submission lands.
+- No queue infrastructure: relies on `setImmediate` background processing. If
+  HP-Estimator-app restarts mid-process the row stays `processing` forever.
+  Worth a real queue once volume warrants it.
+- `handy-pioneers-www-V2` still has the same-origin fallback intake but no
+  `RESEND_API_KEY`/`ANTHROPIC_API_KEY` set, so its fallback is a black hole.
+  Once the canonical endpoint is verified working, the fallback can be
+  removed from the frontend.
+
+---
+
 ## Done
 
 - **Deploy loop resolved.** `railway.json` `&&` → `;` — server now starts
