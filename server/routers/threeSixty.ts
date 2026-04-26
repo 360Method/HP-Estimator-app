@@ -182,6 +182,7 @@ const membershipRouter = router({
         stripeSubscriptionId: z.string().optional(),
         annualScanCompleted: z.boolean().optional(),
         annualScanDate: z.number().optional(),
+        annualValuationOptIn: z.boolean().optional(),
       })
     )
     .mutation(async ({ input }) => {
