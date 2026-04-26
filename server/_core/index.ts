@@ -2003,11 +2003,18 @@ async function startServer() {
         console.warn("[Roadmap Generator] event emit failed:", emitErr);
       }
 
+      // confirmationUrl is what the marketing site (handypioneers.com) should
+      // redirect the homeowner to after submit. Lives on the portal app where
+      // the polling status endpoint and PortalRoadmapSubmitted page exist.
+      const portalBase = process.env.PORTAL_BASE_URL || "https://pro.handypioneers.com";
+      const confirmationUrl = `${portalBase}/portal/roadmap/submitted/${result.id}`;
+
       res.status(202).json({
         ok: true,
         id: result.id,
         status: result.status,
         message: "Submission received. Your 360° Priority Roadmap will arrive by email within a few minutes.",
+        confirmationUrl,
       });
     } catch (err: any) {
       if (err?.code === "LIMIT_FILE_SIZE") {

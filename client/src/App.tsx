@@ -58,6 +58,7 @@ import PortalReports from "./pages/portal/PortalReports";
 import PortalReportDetail from "./pages/portal/PortalReportDetail";
 import Portal360Membership from "./pages/portal/Portal360Membership";
 import PortalEnrollmentConfirmation from "./pages/portal/PortalEnrollmentConfirmation";
+import PortalRoadmapSubmitted from "./pages/portal/PortalRoadmapSubmitted";
 import PortalSchedule from "./pages/portal/PortalSchedule";
 import WorkOrderDetail from "./pages/WorkOrderDetail";
 import Welcome360Page from "./pages/Welcome360Page";
@@ -119,6 +120,9 @@ function Router() {
       {/* Customer portal — public (no login required) */}
       <Route path="/portal/login" component={PortalLogin} />
       <Route path="/portal/auth" component={PortalLogin} />
+
+      {/* Roadmap Generator post-submit confirmation — public, polls status */}
+      <Route path="/portal/roadmap/submitted/:id" component={PortalRoadmapSubmitted} />
 
       {/* Customer portal — session-gated (PortalProvider handles redirect) */}
       <Route path="/portal/home" component={PortalHome} />
