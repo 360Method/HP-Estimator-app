@@ -1,0 +1,116 @@
+# Morning Brief — 2026-04-26
+
+## Production Status
+
+```
+/api/health → 200 OK
+gbp.configured: true  | gbp.connected: true   ✅ (Marcin completed OAuth)
+meta.configured: true | meta.connected: true  ✅
+googleAds.configured: true | googleAds.connected: true ✅
+quickbooks.configured: true | quickbooks.connected: false (needs OAuth)
+```
+
+**Smoke tests (run ~07:35 UTC):**
+
+| Endpoint | Result | Notes |
+|----------|--------|-------|
+| GET /api/health | 200 311ms | All integrations nominal |
+| GET / | 200 130ms | SPA served |
+| GET /api/trpc/appSettings.getSettings | 401 | Auth guard working |
+| GET /api/roadmap-generator/status | 200 | PR #20 live |
+| OPTIONS /api/roadmap-generator/submit (Origin: handypioneers.com) | 204 | CORS fixed |
+| GET /api/integrations/qbo/callback?code=test | 302 | PR #16 live, redirects |
+
+### Hourly Health Log
+
+| Time (UTC) | Health | Notes |
+|------------|--------|-------|
+| 07:35 | ✅ 200 | All integrations nominal. GBP+Meta+Google Ads connected. QBO needs OAuth. |
+
+## Done Overnight (Autonomous)
+
+- **PRs 20–25 all merged to main.**
+  - PR 20: Roadmap Generator pipeline (upload → Claude → Resend) fully repaired
+  - PR 21: 6 silent-lead and receipt gaps closed from lifecycle audit
+  - PR 22: Email Manager AI Phase 1 (classify + draft Gmail replies)
+  - PR 23/24: Agent engine — multi-turn loop, optimization tasks, org-chart UI
+  - PR 25: Customer success charter + auto-ack wires + valuation opt-in + invoice reminder pause
+
+- **8/9 departments green.** Operations and Marketing fixed (charter KPI/playbook
+  gaps promoted). Strategy still yellow — `ai_expansion_playbook` has no playbooks
+  (pre-existing, not in scope for overnight pass).
+
+- **25 agents flipped to `autonomous`** in DB (direct SQL update during the session).
+
+## Railway Deploy Investigation
+
+Last 2 deploys at ~06:00 UTC **failed** with a migration loop pattern:
+`pnpm drizzle-kit migrate` completed but `node dist/index.js` crashed silently
+before printing any output → Railway ON_FAILURE restarts → repeat.
+
+**Root cause not fully confirmed.** The esbuild build itself succeeds (669–884 kB,
+no missing imports). Railway rolled back to the 05:25 UTC successful deploy.
+Production is currently healthy and serving that rollback.
+
+**Action needed from Marcin:**
+1. Check Railway dashboard for the latest deploy error detail
+2. If deploys are still failing, the logs for the last failed deploy will show
+   the startup crash. Look for a line like `ERR_MODULE_NOT_FOUND` or an exception
+   in the first few milliseconds after `node dist/index.js`.
+
+## P1 — Branch Ready to Merge (Needs Marcin to Push or Approve)
+
+Branch **`fix/company-settings-kpi-display`** is prepared locally in the worktree
+`amazing-lederberg-e13634` but **could not be pushed** — no GitHub credentials
+available in the shell. The branch contains:
+
+1. `fix(settings+agents): ensureAppSettings boot table + listKpis dept resolution`
+   - **Creates `appSettings` table at boot** — Company Settings page currently crashes
+     without this (table doesn't exist in prod DB, `getOrCreateAppSettings` throws).
+   - Fixes Agent Charters KPI display: `listKpis` now resolves department → seat names.
+
+2. `settings(integrations): remove stale cards + fix Twilio status`
+   - Removes 5 stale integration cards (Google Calendar, Zapier, Thumbtack, Angi, Gmail)
+   - Adds Twilio card showing real `Connected` status + phone number
+   - Adds `open-settings` custom event so "Phone Settings" button opens Phone tab directly
+
+3. Charter gap content already in `docs/agents/operations.md` and `marketing.md`
+   (KPIs + playbooks for `external_contractor_network` and `ai_paid_ads`).
+
+4. `fix(automation+routing)`: bug fixes for real runtime failures:
+   - `automationEngine.ts`: `isHtml` → removed (wrong field), `conversations.channel` → `.channels`, removed `senderRole` (not in schema), added db null guard
+   - `leadRouting.ts`: `triggeredBy: "system"` → `null` (int column can't store "system"), `readAt: new Date()` → `.toISOString()` (varchar column)
+   - `schema.ts`: `notifications.userId` made nullable (role-based notifications have no userId)
+
+**To push:**
+```bash
+cd ".claude/worktrees/amazing-lederberg-e13634"
+GH_TOKEN=<your_token> git push origin fix/company-settings-kpi-display
+```
+Then open a PR from `fix/company-settings-kpi-display` → `main` and merge.
+
+## Marcin's Action Items
+
+1. **Push `fix/company-settings-kpi-display` and merge** (5 min) — fixes Company Settings crash + KPIs display.
+2. **QBO OAuth connect** — Settings → Integrations → Connect QuickBooks (after Intuit App Details redirect flow).
+3. **Railway deploy investigation** — Check if latest deploys are still failing (see above).
+4. **Agent runtime dry-run** — Run in Railway shell when ready:
+   ```bash
+   node scripts/dry-run-agent.mjs
+   ```
+   Estimated cost ~$0.002. Results → `docs/agents/RUNTIME_DRY_RUN.md`.
+
+## Strategy Department (9th Green Dot)
+
+`ai_expansion_playbook` seat has KPIs but zero playbooks — still yellow.
+To fix: add a playbook to `docs/agents/strategy.md` → re-run `node scripts/seed-charters.mjs`.
+Suggested: "Market Expansion Opportunity Brief" — weekly scan for adjacent markets.
+
+## Security Baseline
+
+All Snyk P1 items shipped (drizzle-orm 0.45.2, axios 1.15.2).
+18 high-severity items remain — all build-toolchain-only (not production-reachable).
+
+---
+
+*Brief generated by Claude autonomous overnight session — 2026-04-26*

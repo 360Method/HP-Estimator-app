@@ -267,3 +267,44 @@ Flags:
 {{flags}}
 
 ---
+
+### Playbook: Paid Ad Daily Brief
+**Slug:** `paid-ad-daily-brief`
+**Category:** internal-memo
+**Owner:** `ai_paid_ads`
+**Variables:** `{{date}}`, `{{campaigns}}`, `{{total_spend}}`, `{{cpl}}`, `{{flags}}`
+
+Paid Ad Brief — {{date}}
+
+| Campaign | Spend | Leads | CPL |
+|----------|-------|-------|-----|
+{{campaigns}}
+
+**Total spend:** {{total_spend}}
+**Avg CPL:** {{cpl}}
+
+**Flags:**
+{{flags}}
+
+No action required if no flags. Reply to pause any campaign.
+
+---
+
+### Playbook: Budget Reallocation Recommendation
+**Slug:** `budget-reallocation-rec`
+**Category:** internal-memo
+**Owner:** `ai_paid_ads`
+**Variables:** `{{week_of}}`, `{{top_performer}}`, `{{underperformer}}`, `{{recommendation}}`, `{{projected_cpl_improvement}}`
+
+Budget Reallocation — Week of {{week_of}}
+
+**Top performer:** {{top_performer}}
+**Underperformer:** {{underperformer}}
+
+**Recommendation:** {{recommendation}}
+
+Projected CPL improvement if approved: {{projected_cpl_improvement}}
+
+ACTION: Reply "approve" to reallocate or "hold" to keep current budget.
+
+---

@@ -318,7 +318,7 @@ export async function onLeadCreated(params: {
       eventType: "lead_created",
       toRole: "nurturer",
       toUserId: nurturerId ?? null,
-      triggeredBy: "system",
+      triggeredBy: null,
       payloadJson: JSON.stringify({ source: params.source }),
     });
 
@@ -376,7 +376,7 @@ export async function onAppointmentBooked(params: {
       toRole: "consultant",
       fromUserId: current?.assignedUserId ?? null,
       toUserId: consultantId ?? null,
-      triggeredBy: params.triggeredByUserId ? String(params.triggeredByUserId) : "system",
+      triggeredBy: params.triggeredByUserId ?? null,
       payloadJson: JSON.stringify({ when: params.when, appointmentType: params.appointmentType }),
     });
 
@@ -551,7 +551,7 @@ export async function onSaleSigned(params: {
       toRole: "project_manager",
       fromUserId: current?.assignedUserId ?? null,
       toUserId: pmId ?? null,
-      triggeredBy: params.triggeredByUserId ? String(params.triggeredByUserId) : "system",
+      triggeredBy: params.triggeredByUserId ?? null,
       payloadJson: JSON.stringify({ value: params.value }),
     });
 
@@ -602,7 +602,7 @@ export async function onReassign(params: {
       toRole: params.toRole,
       fromUserId: current?.assignedUserId ?? null,
       toUserId: params.toUserId,
-      triggeredBy: params.triggeredByUserId ? String(params.triggeredByUserId) : "system",
+      triggeredBy: params.triggeredByUserId ?? null,
     });
 
     const customerName = await resolveCustomerName(current?.customerId ?? null);
@@ -708,7 +708,7 @@ export async function markNotificationRead(id: number) {
   if (!db) return;
   await db
     .update(notifications)
-    .set({ readAt: new Date() })
+    .set({ readAt: new Date().toISOString() })
     .where(eq(notifications.id, id));
 }
 
@@ -717,7 +717,7 @@ export async function markAllNotificationsReadForUser(userId: number) {
   if (!db) return;
   await db
     .update(notifications)
-    .set({ readAt: new Date() })
+    .set({ readAt: new Date().toISOString() })
     .where(and(eq(notifications.userId, userId), isNull(notifications.readAt)));
 }
 

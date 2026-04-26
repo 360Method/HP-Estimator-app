@@ -1,14 +1,14 @@
 # Agent Seat Audit
 
-Generated: 2026-04-25
+Generated: 2026-04-26
 
 ## Summary
 - **Total expected seats:** 31
 - **Found in ai_agents:** 31
-- **Operational:** 22
-- **Incomplete:** 9
-- **Total KPIs seeded:** 105
-- **Total playbooks seeded:** 36
+- **Operational:** 24
+- **Incomplete:** 7
+- **Total KPIs seeded:** 108
+- **Total playbooks seeded:** 38
 
 ## Seat Status
 
@@ -22,9 +22,9 @@ Generated: 2026-04-25
 | ai_dispatch | operations | ✓ | ✓ | 5 | 2 | event+cron | **operational** |
 | ai_qa | operations | ✓ | ✓ | 3 | 1 | event | **operational** |
 | internal_tradesmen | operations | ✓ | ✓ | 0 | 0 | none | **incomplete** (0 KPIs, 0 playbooks) |
-| external_contractor_network | operations | ✓ | ✓ | 0 | 1 | event | **incomplete** (0 KPIs) |
+| external_contractor_network | operations | ✓ | ✓ | 3 | 1 | event | **operational** |
 | ai_content_seo | marketing | ✓ | ✓ | 8 | 1 | cron | **operational** |
-| ai_paid_ads | marketing | ✓ | ✓ | 3 | 0 | none | **incomplete** (0 playbooks) |
+| ai_paid_ads | marketing | ✓ | ✓ | 3 | 2 | none | **operational** |
 | ai_brand_guardian | marketing | ✓ | ✓ | 2 | 1 | cron | **operational** |
 | ai_community_reviews | marketing | ✓ | ✓ | 3 | 3 | event | **operational** |
 | ai_bookkeeping | finance | ✓ | ✓ | 5 | 2 | event+cron | **operational** |
@@ -51,8 +51,6 @@ Generated: 2026-04-25
 - cx_lead: 0 KPIs, 0 playbooks
 - project_manager: 0 KPIs, 0 playbooks
 - internal_tradesmen: 0 KPIs, 0 playbooks
-- external_contractor_network: 0 KPIs
-- ai_paid_ads: 0 playbooks
 - cpa_tax: 0 KPIs, 0 playbooks
 - member_concierge: 0 KPIs, 0 playbooks
 - software_engineer: 0 KPIs, 0 playbooks

@@ -706,7 +706,7 @@ registerTool({
       tradeSlug: input.tradeSlug as string | undefined,
       limit: (input.limit as number) ?? 50,
     });
-    return rows.map((v) => ({
+    return rows.map((v: any) => ({
       id: v.id,
       name: v.name,
       companyName: v.companyName,

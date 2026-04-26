@@ -37,6 +37,7 @@ const DEFAULT_SETTINGS = {
 
 async function getOrCreateAppSettings() {
   const db = await getDb();
+  if (!db) throw new Error("Database not available");
   const rows = await db
     .select()
     .from(appSettings)
@@ -115,6 +116,7 @@ export const appSettingsRouter = router({
     )
     .mutation(async ({ input }) => {
       const db = await getDb();
+      if (!db) throw new Error("Database not available");
       // Ensure row exists first
       await getOrCreateAppSettings();
       await db

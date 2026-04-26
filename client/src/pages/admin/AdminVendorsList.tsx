@@ -31,7 +31,7 @@ export default function AdminVendorsList() {
     if (!q.trim()) return all;
     const needle = q.toLowerCase();
     return all.filter(
-      (v) =>
+      (v: any) =>
         v.name?.toLowerCase().includes(needle) ||
         v.companyName?.toLowerCase().includes(needle) ||
         v.email?.toLowerCase().includes(needle) ||
@@ -113,7 +113,7 @@ export default function AdminVendorsList() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((v) => (
+                {filtered.map((v: any) => (
                   <tr key={v.id} className="border-b last:border-0 hover:bg-muted/40">
                     <td className="p-3">
                       <Link href={`/admin/vendors/${v.id}`} className="text-primary hover:underline">

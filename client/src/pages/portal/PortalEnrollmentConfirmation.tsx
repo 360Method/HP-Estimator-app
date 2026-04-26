@@ -59,7 +59,7 @@ export default function PortalEnrollmentConfirmation() {
   const membership = membershipData?.membership;
   const tierKey = (membership?.tier ?? "bronze") as keyof typeof TIER_DEFINITIONS;
   const tierDef = TIER_DEFINITIONS[tierKey] ?? TIER_DEFINITIONS.bronze;
-  const cadence = membership?.cadence ?? "monthly";
+  const cadence = (membership as any)?.cadence ?? "monthly";
 
   const cadenceLabel: Record<string, string> = {
     monthly: "Monthly",
@@ -113,24 +113,24 @@ export default function PortalEnrollmentConfirmation() {
                 <div>
                   <p className="text-xs text-muted-foreground uppercase tracking-wide">Your Plan</p>
                   <p className={`font-bold text-lg ${tierColor[tierKey] ?? "text-foreground"}`}>
-                    {tierDef.name} — {cadenceLabel[cadence] ?? cadence}
+                    {tierDef.label} — {cadenceLabel[cadence] ?? cadence}
                   </p>
                 </div>
               </div>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Seasonal visits</span>
-                  <span className="font-medium">{tierDef.visitsPerYear}× per year</span>
+                  <span className="font-medium">{tierDef.seasonalVisits}× per year</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Labor bank credit</span>
                   <span className="font-medium text-green-700">
-                    ${(tierDef.laborBankCredit / 100).toFixed(0)}/yr
+                    ${(tierDef.laborBankCreditCents / 100).toFixed(0)}/yr
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Member discount</span>
-                  <span className="font-medium text-green-700">{tierDef.discountPct}% off all work</span>
+                  <span className="font-medium text-green-700">{Math.round((tierDef.discountBrackets[0]?.rate ?? 0) * 100)}% off all work</span>
                 </div>
               </div>
             </div>

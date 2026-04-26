@@ -1946,7 +1946,7 @@ export default function CustomerSection() {
       )}
 
       {/* ── Stub Merge Banner ── */}
-      {activeCustomer?.leadSource === 'inbound_call' && !activeCustomer?.firstName && !activeCustomer?.email && activeCustomerId && (
+      {(activeCustomer?.leadSource as string) === 'inbound_call' && !activeCustomer?.firstName && !activeCustomer?.email && activeCustomerId && (
         <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-sm text-amber-800">
             <PhoneCall size={14} className="shrink-0 text-amber-600" />

@@ -138,7 +138,9 @@ export const gmailTokens = mysqlTable("gmailTokens", {
 export type GmailToken = typeof gmailTokens.$inferSelect;
 
 // ─── EMAIL MANAGER AI: AGENTS (virtual seats) ────────────────────────────────
-export const aiAgents = mysqlTable("aiAgents", {
+// Legacy table "aiAgents" (camelCase) — used by Email Manager AI only.
+// The agent runtime uses "ai_agents" (snake_case) exported as `aiAgents` below.
+export const aiAgentsLegacy = mysqlTable("aiAgents", {
   id: int("id").autoincrement().primaryKey(),
   seatName: varchar("seatName", { length: 80 }).notNull().unique(),
   department: varchar("department", { length: 80 }).notNull().default("integrator_visionary"),
@@ -149,8 +151,8 @@ export const aiAgents = mysqlTable("aiAgents", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
-export type AiAgent = typeof aiAgents.$inferSelect;
-export type InsertAiAgent = typeof aiAgents.$inferInsert;
+export type AiAgentLegacy = typeof aiAgentsLegacy.$inferSelect;
+export type InsertAiAgentLegacy = typeof aiAgentsLegacy.$inferInsert;
 
 // ─── EMAIL MANAGER AI: MESSAGE LINKS ─────────────────────────────────────────
 // One row per inbound Gmail message processed by the Email Manager AI.
@@ -1562,7 +1564,7 @@ export type InsertDbCampaignSend = typeof campaignSends.$inferInsert;
 
 export const notifications = mysqlTable("notifications", {
   id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
+  userId: int("userId"),
   role: varchar("role", { length: 32 }),
   eventType: varchar("eventType", { length: 64 }).notNull(),
   title: varchar("title", { length: 255 }).notNull(),
