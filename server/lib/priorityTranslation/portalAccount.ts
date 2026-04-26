@@ -119,7 +119,9 @@ export async function issueMagicLink(
   });
 
   const base = args.portalBaseUrl.replace(/\/+$/, "");
-  const url = `${base}/portal/authenticate?token=${encodeURIComponent(token)}`;
+  // Wouter route in App.tsx is /portal/auth (not /portal/authenticate); the
+  // older path rendered the catch-all NotFound, which homeowners read as 404.
+  const url = `${base}/portal/auth?token=${encodeURIComponent(token)}`;
   return { token, url, expiresAt };
 }
 

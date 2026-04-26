@@ -12,6 +12,7 @@ import { submitRoadmap } from "../lib/priorityTranslation/orchestrator";
 import {
   backfillRoadmapCrmRows,
   snapshotRoadmapPipeline,
+  sendRoadmapTestEmail,
 } from "../lib/priorityTranslation/backfill";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
@@ -2062,7 +2063,16 @@ async function startServer() {
         ? await backfillRoadmapCrmRows({ lookbackDays: body.lookbackDays ?? 7 })
         : null;
 
-      res.status(200).json({ snapshot, backfill });
+      const sendTestEmailTo = (body as any).sendTestEmailTo as string | undefined;
+      const testEmail = sendTestEmailTo
+        ? await sendRoadmapTestEmail({
+            to: sendTestEmailTo,
+            firstName: (body as any).testFirstName,
+            propertyAddress: (body as any).testPropertyAddress,
+          })
+        : null;
+
+      res.status(200).json({ snapshot, backfill, testEmail });
     } catch (err: any) {
       console.error("[admin/roadmap-diagnostic] error:", err?.message ?? err);
       res.status(500).json({ error: err?.message ?? "diagnostic failed" });

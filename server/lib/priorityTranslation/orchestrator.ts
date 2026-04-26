@@ -306,12 +306,31 @@ async function processRoadmap(args: ProcessArgs): Promise<void> {
       claudeResponse,
     });
 
-    // 4. Magic link + email.
-    const portalBaseUrl = process.env.PORTAL_BASE_URL || "https://pro.handypioneers.com";
-    const link = await issueMagicLink(db, {
+    // 4. Email + roadmap-page link.
+    //
+    // The magic link issued via issueMagicLink writes to portalMagicLinks
+    // (the priorityTranslation token table) and generates a /portal/auth?token=
+    // URL. That URL currently doesn't work end-to-end: the portal's verifyToken
+    // procedure only checks the legacy portalTokens table, so priorityTranslation
+    // tokens fail verification. Bridging the two token systems is a separate
+    // change (the portal session model uses int customerId, the priorityTranslation
+    // tokens FK to varchar portalAccountId).
+    //
+    // Until that bridge ships, the email CTA points at the public confirmation
+    // page /portal/roadmap/submitted/:id — no auth required, page reads live
+    // status. The token is still issued + persisted so the bridge can use it
+    // later. Using pro.handypioneers.com explicitly because PORTAL_BASE_URL on
+    // Railway currently points at client.handypioneers.com which serves the
+    // same SPA but isn't where the marketing site directs homeowners.
+    const portalBaseUrl = "https://pro.handypioneers.com";
+    await issueMagicLink(db, {
       portalAccountId: args.portalAccountId,
       portalBaseUrl,
-    });
+    }).catch((err) =>
+      console.warn(`[roadmap-generator] issueMagicLink failed for ${args.id}`, err),
+    );
+    const roadmapPageUrl = `${portalBaseUrl}/portal/roadmap/submitted/${args.id}`;
+
     const resendKey = process.env.RESEND_API_KEY;
     if (!resendKey) throw new Error("RESEND_API_KEY not set");
 
@@ -319,7 +338,7 @@ async function processRoadmap(args: ProcessArgs): Promise<void> {
       apiKey: resendKey,
       to: args.email,
       firstName: args.firstName,
-      magicLinkUrl: link.url,
+      magicLinkUrl: roadmapPageUrl,
       pdfBuffer,
       propertyAddress: args.propertyAddress,
     });
