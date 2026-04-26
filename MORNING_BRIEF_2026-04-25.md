@@ -108,3 +108,35 @@ quickbooks.configured: true | quickbooks.connected: false (connect after deploy)
 
 Railway builds in progress (~23:16 UTC): PRs 14, 15, 16 each triggered a deploy.
 All deploying to production; 7/9 dept dots confirmed green (unchanged).
+
+### Hourly Health Log
+
+| Time (UTC) | Health | Railway | Notes |
+|------------|--------|---------|-------|
+| 00:23 | ✅ 200 | ✅ SUCCESS (23:21 UTC) | PRs 14/15/16 deployed cleanly; all integrations nominal |
+| 01:25 | ✅ 200 | ✅ SUCCESS | No change from baseline |
+| 02:26 | ✅ 200 | ✅ SUCCESS | PR #19 (QBO registered URI fix) deployed; all integrations nominal |
+
+## Charter Gap Promotion — 2026-04-25 (afternoon)
+
+### Done
+
+- **Charter gaps promoted into charter files.**
+  - `docs/agents/operations.md`: 3 KPIs added to `external_contractor_network`
+  - `docs/agents/marketing.md`: 2 playbooks added to `ai_paid_ads`
+  - Re-seeded: 108 KPIs, 38 playbooks total across 9 departments
+
+- **8/9 departments now green** (was 7/9):
+  - Operations: ✅ green (external_contractor_network now operational — 3 KPIs, 1 playbook)
+  - Marketing: ✅ green (ai_paid_ads now operational — 3 KPIs, 2 playbooks)
+  - Strategy: 🟡 still yellow — `ai_expansion_playbook` has KPIs but no playbooks (pre-existing gap, not in scope)
+
+- **Branch `feat/promote-charter-gaps` pushed.**
+  PR: https://github.com/360Method/HP-Estimator-app/pull/new/feat/promote-charter-gaps
+  (gh CLI not authenticated — Marcin to open/merge, or run `gh auth login`)
+
+### Still Pending
+
+- **Agent runtime dry-runs** — needs Railway shell with ANTHROPIC_API_KEY
+- **GBP OAuth connect** — Marcin's action: click Connect at /admin/settings
+- **QBO OAuth connect** — Marcin's action after Intuit App Details flow
