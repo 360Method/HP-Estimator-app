@@ -13,6 +13,15 @@ import {
   deleteScheduleEvent,
   deleteScheduleEventsByOpportunity,
 } from "../db";
+import { onAppointmentBooked } from "../leadRouting";
+
+/** Map a schedule event type string to an appointment kind, or null if not an appointment. */
+function resolveAppointmentType(eventType: string): "baseline" | "consultation" | null {
+  const lower = eventType.toLowerCase();
+  if (lower.includes("baseline") || lower.includes("walkthrough")) return "baseline";
+  if (lower.includes("consultation")) return "consultation";
+  return null;
+}
 
 const RecurrenceRuleInput = z.object({
   freq: z.enum(["daily", "weekly", "biweekly", "monthly"]),
@@ -64,8 +73,24 @@ export const scheduleRouter = router({
   /** Create a new schedule event */
   create: protectedProcedure
     .input(ScheduleEventInput)
-    .mutation(async ({ input }) => {
-      return createScheduleEvent(input);
+    .mutation(async ({ input, ctx }) => {
+      const ev = await createScheduleEvent(input);
+
+      if (input.opportunityId && input.customerId) {
+        const appointmentType = resolveAppointmentType(input.type);
+        if (appointmentType) {
+          onAppointmentBooked({
+            opportunityId: input.opportunityId,
+            customerId: input.customerId,
+            title: input.title,
+            when: input.start,
+            appointmentType,
+            triggeredByUserId: ctx.user.id,
+          }).catch((e) => console.error("[schedule] onAppointmentBooked error:", e));
+        }
+      }
+
+      return ev;
     }),
 
   /** Update an existing event */
