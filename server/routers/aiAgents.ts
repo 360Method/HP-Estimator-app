@@ -50,6 +50,7 @@ export const aiAgentsRouter = router({
     const d = await db();
     const agents = await d.select().from(aiAgents).orderBy(aiAgents.id);
     // Per-agent cost today + task counts — small enough set (<100) that N queries are fine in Phase 1.
+    // Also include toolCount + pendingDrafts for the org-chart card surface.
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const rollups = await Promise.all(
       agents.map(async (a) => {
@@ -62,17 +63,31 @@ export const aiAgentsRouter = router({
             .from(aiAgentRuns)
             .where(and(eq(aiAgentRuns.agentId, a.id), gte(aiAgentRuns.createdAt, since)))
         )[0];
-        const tasks = (
+        const queued = (
           await d
             .select({ count: sql<number>`COUNT(*)` })
             .from(aiAgentTasks)
             .where(and(eq(aiAgentTasks.agentId, a.id), eq(aiAgentTasks.status, "queued")))
         )[0];
+        const drafts = (
+          await d
+            .select({ count: sql<number>`COUNT(*)` })
+            .from(aiAgentTasks)
+            .where(and(eq(aiAgentTasks.agentId, a.id), eq(aiAgentTasks.status, "awaiting_approval")))
+        )[0];
+        const tools = (
+          await d
+            .select({ count: sql<number>`COUNT(*)` })
+            .from(aiAgentTools)
+            .where(and(eq(aiAgentTools.agentId, a.id), eq(aiAgentTools.authorized, true)))
+        )[0];
         return {
           ...a,
           costTodayUsd: Number(runAgg?.costSum ?? 0),
           runsToday: Number(runAgg?.runs ?? 0),
-          queuedTasks: Number(tasks?.count ?? 0),
+          queuedTasks: Number(queued?.count ?? 0),
+          pendingDrafts: Number(drafts?.count ?? 0),
+          toolCount: Number(tools?.count ?? 0),
         };
       })
     );

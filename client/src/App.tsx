@@ -75,6 +75,7 @@ import AdminVendorDetail from "./pages/admin/AdminVendorDetail";
 import AdminVendorNew from "./pages/admin/AdminVendorNew";
 import AgentsControl from "./pages/admin/AgentsControl";
 import AgentsRuns from "./pages/admin/AgentsRuns";
+import OrgChart from "./pages/admin/OrgChart";
 
 // Self-serve password reset (public)
 import ForgotPassword from "./pages/ForgotPassword";
@@ -154,6 +155,7 @@ function Router() {
       {/* Admin — AI agent runtime + KPI dashboard (Phase 1) */}
       <Route path="/admin/dashboard" component={AdminDashboard} />
       <Route path="/admin/chat" component={IntegratorChat} />
+      <Route path="/admin/org-chart" component={OrgChart} />
       <Route path="/admin/agents/control" component={AgentsControl} />
       <Route path="/admin/agents/runs" component={AgentsRuns} />
       <Route path="/admin/ai-agents/tasks" component={AiAgentTasks} />

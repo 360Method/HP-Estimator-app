@@ -10,7 +10,8 @@
 - **5 missing event emit sites** wired: `invoice.created` (`portal.ts`), `call.missed` (`twilio.ts`), `customer.portal_account_created` (`portalDb.ts`), `subscription.renewed` + `subscription.cancelled` (Stripe webhook in `_core/index.ts`).
 - **System Integrity self-optimization** (`server/lib/agentRuntime/systemIntegrity.ts`) — hourly anomaly scan + admin-inbox drafts. NEVER auto-modifies prompts (Marcin-rule hard stop).
 - **`agent_optimization_tasks`** table — migration 0073 + boot-time `ensureOptimizationTasksTable`.
-- **`/admin/agents/control`** — one-click **Activate all** + **Emergency: pause all** + per-seat/per-dept toggles + live cost rollup + System Integrity flag inbox.
+- **`/admin/org-chart`** — **canonical operations dashboard.** Live, data-driven Visionary → Integrator → 8 Department Heads → sub-agents tree. Visual style mirrors the static `hp-org-chart-v2.html` reference (gold = AI, blue = human, orange = Visionary, gradient = hybrid; status dot per seat). Click any seat → modal with charter excerpt + KPIs + authorized tools + recent runs + status toggle + "Test run" button. Per-seat status toggle inline; per-department "All on / All off" buttons. Mobile-responsive. **This is the page Marcin opens to see if the org is running.** Replaces the static reference HTML.
+- **`/admin/agents/control`** — flatter operator view: one-click **Activate all** + **Emergency: pause all** kill switch + System Integrity flag inbox + per-department control rows.
 - **`/admin/agents/runs`** — live observability page, filterable, expandable.
 - **Synthetic E2E test** — `node scripts/agent-engine-e2e.mjs` fires lead.created, polls task→run→meta-event chain.
 - **Phase 5 subscription seed** — `node scripts/seed-phase5-subscriptions.mjs` adds the 8 new subscriptions for the new events.
@@ -23,9 +24,9 @@ node scripts/agent-engine-e2e.mjs            # smoke test — should print "✓ 
 ```
 
 ### Then — Marcin's one-click activation
-1. Open `https://app.handypioneers.com/admin/agents/control`
-2. Click **Activate all (N ready)**
-3. Watch the cost rollup + System Integrity flag list. **Emergency: pause all** is right there if anything goes sideways.
+1. Open `https://app.handypioneers.com/admin/org-chart` (or `/admin/agents/control`)
+2. Click **Activate all (N ready)** at the top of the chart
+3. Watch each seat's status dot turn green; cost rollup ticks live; System Integrity flags appear inline if anything goes sideways.
 
 ---
 

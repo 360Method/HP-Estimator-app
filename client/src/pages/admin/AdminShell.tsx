@@ -9,6 +9,7 @@ import AdminLogin from "@/pages/AdminLogin";
 import AdminAccessDenied from "@/pages/AdminAccessDenied";
 
 const NAV = [
+  { href: "/admin/org-chart", label: "Org Chart" },
   { href: "/admin/dashboard", label: "Dashboard" },
   { href: "/admin/chat", label: "Integrator Chat" },
   { href: "/admin/agents/control", label: "Engine Control" },
