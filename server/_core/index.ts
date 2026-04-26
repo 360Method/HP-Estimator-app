@@ -681,6 +681,53 @@ async function startServer() {
         console.log(`[Webhook] PaymentIntent failed: ${pi.id}`);
         break;
       }
+      case "invoice.payment_succeeded": {
+        // Stripe Subscriptions fire this on every renewal cycle. Routes to
+        // the Customer Success "renewal acknowledged" path + Cash Flow.
+        // Stripe Invoice.subscription is on the v1 path; in newer SDK types
+        // it lives on parent.subscription_details. Read both defensively
+        // (the API response shape didn't change, only the type narrowing).
+        const inv = event.data.object as Stripe.Invoice & {
+          subscription?: string | { id?: string } | null;
+          parent?: { subscription_details?: { subscription?: string | { id?: string } | null } | null };
+        };
+        const rawSub = inv.subscription ?? inv.parent?.subscription_details?.subscription ?? null;
+        const subscriptionId =
+          typeof rawSub === "string"
+            ? rawSub
+            : (rawSub && typeof rawSub === "object" ? rawSub.id ?? null : null);
+        try {
+          const { emitAgentEvent } = await import("../lib/agentRuntime/triggerBus");
+          emitAgentEvent("subscription.renewed", {
+            invoiceId: inv.id,
+            subscriptionId,
+            stripeCustomerId: typeof inv.customer === "string" ? inv.customer : inv.customer?.id ?? null,
+            amountPaidCents: inv.amount_paid ?? 0,
+            currency: inv.currency,
+            periodStart: inv.period_start,
+            periodEnd: inv.period_end,
+          }).catch(() => null);
+        } catch (emitErr) {
+          console.warn("[Webhook] subscription.renewed emit failed:", emitErr);
+        }
+        break;
+      }
+      case "customer.subscription.deleted": {
+        const sub = event.data.object as Stripe.Subscription;
+        try {
+          const { emitAgentEvent } = await import("../lib/agentRuntime/triggerBus");
+          emitAgentEvent("subscription.cancelled", {
+            subscriptionId: sub.id,
+            stripeCustomerId: typeof sub.customer === "string" ? sub.customer : sub.customer?.id ?? null,
+            cancelAtPeriodEnd: sub.cancel_at_period_end ?? false,
+            cancelledAt: sub.canceled_at ?? Math.floor(Date.now() / 1000),
+            status: sub.status,
+          }).catch(() => null);
+        } catch (emitErr) {
+          console.warn("[Webhook] subscription.cancelled emit failed:", emitErr);
+        }
+        break;
+      }
       default:
         console.log(`[Webhook] Unhandled event type: ${event.type}`);
     }
@@ -1742,12 +1789,20 @@ async function startServer() {
     const { startScheduler } = await import("../lib/agentRuntime/scheduler");
     const { startKpiCron } = await import("../lib/agentRuntime/kpiRollup");
     const { auditRoster } = await import("../lib/agentRuntime/hierarchy");
+    const {
+      ensureOptimizationTasksTable,
+      startSystemIntegrityCron,
+    } = await import("../lib/agentRuntime/systemIntegrity");
     const { getDb } = await import("../db");
     const { aiAgents } = await import("../../drizzle/schema");
     // Phase 2: register all 15 tool wrappers. Import for side-effects.
     await import("../lib/agentRuntime/phase2Tools");
+    // Phase 5: ensure System Integrity table + start the hourly anomaly scan.
+    // Tables are idempotent CREATE IF NOT EXISTS so this is safe on every boot.
+    await ensureOptimizationTasksTable();
     startScheduler();
     startKpiCron();
+    startSystemIntegrityCron();
     const db = await getDb();
     if (db) {
       const roster = await db.select().from(aiAgents);

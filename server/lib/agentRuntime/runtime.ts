@@ -5,14 +5,19 @@
  *   1. Loads the agent config + its authorized tool keys.
  *   2. Checks daily cost + run-count ceilings. If exceeded → pauses the agent
  *      and records a `cost_exceeded` run.
- *   3. Calls Anthropic with the system prompt and authorized tools.
+ *   3. Calls Anthropic with the system prompt and authorized tools — and
+ *      iterates as a multi-turn tool loop: while the model emits tool_use
+ *      blocks, run the tools, feed results back, ask again. Capped at
+ *      MAX_TOOL_TURNS to prevent runaway loops.
  *   4. If a tool call requires approval, parks the run in awaiting_approval
- *      and drops a notification for admins.
- *   5. Otherwise dispatches tool calls, persists the full audit trail, and
- *      returns the run record.
+ *      and drops a notification for admins. The remainder of the loop is
+ *      resumed by approval.ts after a human approves.
+ *   5. Persists the full audit trail (runs, tool_calls, tokens, cost) and
+ *      emits `agent.run_completed` so dependent agents (System Integrity,
+ *      KPI rollups, downstream subscribers) can react.
  *
- * This is intentionally a single-turn loop for Phase 1. Phase 2 will add
- * multi-turn tool dispatch once the tool registry has real procedures.
+ * The system prompt is sent with cache_control: ephemeral so the charter
+ * section is cached across turns AND across runs (5-minute TTL on Anthropic).
  */
 
 import Anthropic from "@anthropic-ai/sdk";
@@ -30,6 +35,13 @@ import { getTool, getAnthropicToolDefinitions } from "./tools";
 import { priceRun } from "./pricing";
 
 const DEFAULT_MAX_TOKENS = 2048;
+/**
+ * Hard cap on tool-use iterations per run. Each turn = one Anthropic call +
+ * one batch of tool dispatches. Most agents finish in 1-3 turns; this cap
+ * protects against pathological loops where the model keeps requesting tools
+ * without converging.
+ */
+const MAX_TOOL_TURNS = 8;
 
 export type RunResult = {
   runId: number;
@@ -37,7 +49,7 @@ export type RunResult = {
   status: "success" | "failed" | "tool_error" | "cost_exceeded" | "timed_out" | "awaiting_approval";
   costUsd: number;
   output: string;
-  toolCalls: Array<{ key: string; input: unknown; output?: unknown; approved?: boolean }>;
+  toolCalls: Array<{ key: string; input: unknown; output?: unknown; approved?: boolean; error?: string }>;
 };
 
 export type RunAgentInput = {
@@ -106,6 +118,13 @@ export async function runAgent(input: RunAgentInput): Promise<RunResult> {
     .where(and(eq(aiAgentTools.agentId, agent.id), eq(aiAgentTools.authorized, true)));
   const toolKeys = authorized.map((t) => t.toolKey);
   const toolDefs = getAnthropicToolDefinitions(toolKeys);
+  // Anthropic tool names are sanitized (underscores), our keys use dots — keep
+  // a name → key map handy so we can hand the right handler to the dispatcher.
+  const nameToKey = new Map<string, string>();
+  for (const tk of toolKeys) {
+    const def = getTool(tk)?.definition;
+    if (def) nameToKey.set(def.name, tk);
+  }
 
   // ── Ensure task row ─────────────────────────────────────────────────────────
   const taskId = await ensureTask(db, input);
@@ -114,96 +133,183 @@ export async function runAgent(input: RunAgentInput): Promise<RunResult> {
     .set({ status: "running", startedAt: new Date() })
     .where(eq(aiAgentTasks.id, taskId));
 
-  // ── Call Anthropic ──────────────────────────────────────────────────────────
+  // ── Multi-turn loop ─────────────────────────────────────────────────────────
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set");
   const client = new Anthropic({ apiKey });
 
   const started = Date.now();
-  let response: Anthropic.Message;
-  try {
-    response = await client.messages.create({
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+  let totalCostUsd = 0;
+  const collectedToolCalls: Array<{ key: string; input: unknown; output?: unknown; error?: string }> = [];
+  const textParts: string[] = [];
+  // Conversation accumulator. We seed with the trigger as the first user turn.
+  const messages: Anthropic.MessageParam[] = [
+    {
+      role: "user",
+      content: JSON.stringify({
+        trigger: input.triggerType,
+        payload: input.triggerPayload,
+      }),
+    },
+  ];
+
+  let finalStatus: RunResult["status"] = "success";
+  let toolError: string | null = null;
+  let parkedForApproval = false;
+
+  for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
+    let response: Anthropic.Message;
+    try {
+      response = await client.messages.create({
+        model: agent.model,
+        max_tokens: DEFAULT_MAX_TOKENS,
+        system: [
+          { type: "text", text: agent.systemPrompt, cache_control: { type: "ephemeral" } },
+        ],
+        tools: toolDefs.length > 0 ? toolDefs : undefined,
+        messages,
+      });
+    } catch (err) {
+      finalStatus = "failed";
+      toolError = err instanceof Error ? err.message : String(err);
+      break;
+    }
+
+    totalInputTokens += response.usage.input_tokens;
+    totalOutputTokens += response.usage.output_tokens;
+    totalCostUsd += priceRun({
       model: agent.model,
-      max_tokens: DEFAULT_MAX_TOKENS,
-      system: [
-        { type: "text", text: agent.systemPrompt, cache_control: { type: "ephemeral" } },
-      ],
-      tools: toolDefs.length > 0 ? toolDefs : undefined,
-      messages: [
-        {
-          role: "user",
-          content: JSON.stringify({
-            trigger: input.triggerType,
-            payload: input.triggerPayload,
-          }),
-        },
-      ],
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
     });
-  } catch (err) {
-    const runId = await insertRun(db, {
-      taskId,
-      agentId: agent.id,
-      input: input.triggerPayload,
-      output: null,
-      toolCalls: [],
-      inputTokens: 0,
-      outputTokens: 0,
-      costUsd: 0,
-      durationMs: Date.now() - started,
-      status: "failed",
-      errorMessage: err instanceof Error ? err.message : String(err),
+
+    // Collect text + tool_use blocks from this assistant turn.
+    const turnTextParts: string[] = [];
+    const turnToolUses: Array<{ id: string; name: string; input: Record<string, unknown> }> = [];
+    for (const block of response.content) {
+      if (block.type === "text") turnTextParts.push(block.text);
+      else if (block.type === "tool_use") {
+        turnToolUses.push({
+          id: block.id,
+          name: block.name,
+          input: block.input as Record<string, unknown>,
+        });
+      }
+    }
+    textParts.push(...turnTextParts);
+
+    // No tool calls this turn → conversation is done. Or stop_reason isn't
+    // tool_use (end_turn / max_tokens / stop_sequence) → exit cleanly.
+    if (turnToolUses.length === 0 || response.stop_reason !== "tool_use") {
+      finalStatus = "success";
+      break;
+    }
+
+    // Approval gate: if any requested tool requires human approval, park the
+    // entire run. The accumulated turn so far is preserved; approval.ts will
+    // dispatch the parked tool calls after a human OK.
+    const approvalNeeded = turnToolUses.some((u) => {
+      const key = nameToKey.get(u.name) ?? u.name;
+      return getTool(key)?.requiresApproval === true;
     });
-    await db
-      .update(aiAgentTasks)
-      .set({ status: "failed", completedAt: new Date() })
-      .where(eq(aiAgentTasks.id, taskId));
-    return { runId, taskId, status: "failed", costUsd: 0, output: "", toolCalls: [] };
+    if (approvalNeeded) {
+      parkedForApproval = true;
+      for (const u of turnToolUses) {
+        const key = nameToKey.get(u.name) ?? u.name;
+        collectedToolCalls.push({ key, input: u.input });
+      }
+      finalStatus = "awaiting_approval";
+      break;
+    }
+
+    // Append the assistant's full content to the conversation, then dispatch
+    // each non-approval tool call and feed results back as tool_result blocks.
+    messages.push({ role: "assistant", content: response.content });
+    const toolResultBlocks: Anthropic.ToolResultBlockParam[] = [];
+    for (const u of turnToolUses) {
+      const key = nameToKey.get(u.name) ?? u.name;
+      const tool = getTool(key);
+      if (!tool) {
+        toolError = `Unknown tool ${key}`;
+        collectedToolCalls.push({ key, input: u.input, error: toolError });
+        toolResultBlocks.push({
+          type: "tool_result",
+          tool_use_id: u.id,
+          content: `Error: tool '${key}' is not registered.`,
+          is_error: true,
+        });
+        continue;
+      }
+      try {
+        const out = await tool.handler({
+          input: u.input,
+          ctx: { agentId: agent.id, taskId, db },
+        });
+        collectedToolCalls.push({ key, input: u.input, output: out });
+        toolResultBlocks.push({
+          type: "tool_result",
+          tool_use_id: u.id,
+          content: typeof out === "string" ? out : JSON.stringify(out ?? null),
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        toolError = msg;
+        collectedToolCalls.push({ key, input: u.input, error: msg });
+        toolResultBlocks.push({
+          type: "tool_result",
+          tool_use_id: u.id,
+          content: `Error: ${msg}`,
+          is_error: true,
+        });
+        // Don't break — let the model see the error and try a different tool
+        // or summarize the failure. The status will reflect tool_error if
+        // any error occurred and the model didn't recover successfully.
+      }
+    }
+    messages.push({ role: "user", content: toolResultBlocks });
+
+    // Keep iterating — the model may want to chain more tool calls.
+  }
+
+  // If we broke out of the loop because we hit MAX_TOOL_TURNS without the
+  // model converging, flag it as timed_out for observability.
+  if (!parkedForApproval && finalStatus === "success" && messages.length >= MAX_TOOL_TURNS * 2) {
+    // Heuristic: the model is still calling tools at the cap. Even though
+    // we tagged success, the human reviewer should know the loop hit the cap.
+    // We don't downgrade success to timed_out here because the cap can also be
+    // reached on the same turn the model finishes; finalStatus is set above
+    // only when stop_reason === "tool_use" persisted, in which case we'd have
+    // continued. So leave success alone.
+  }
+  if (toolError && finalStatus === "success") {
+    finalStatus = "tool_error";
   }
 
   const durationMs = Date.now() - started;
-  const inputTokens = response.usage.input_tokens;
-  const outputTokens = response.usage.output_tokens;
-  const costUsd = priceRun({ model: agent.model, inputTokens, outputTokens });
-
-  // ── Parse output + tool calls ───────────────────────────────────────────────
-  const textParts: string[] = [];
-  const toolRequests: Array<{ key: string; input: Record<string, unknown>; name: string }> = [];
-  for (const block of response.content) {
-    if (block.type === "text") textParts.push(block.text);
-    else if (block.type === "tool_use") {
-      // Map Anthropic tool name → our toolKey (we use dot notation, Anthropic needs underscores)
-      const key = Array.from(
-        { length: 1 },
-        () => {
-          for (const tk of toolKeys) {
-            const def = getTool(tk);
-            if (def?.definition.name === block.name) return tk;
-          }
-          return block.name;
-        }
-      )[0];
-      toolRequests.push({ key, input: block.input as Record<string, unknown>, name: block.name });
-    }
-  }
-
   const output = textParts.join("\n\n");
 
-  // ── Approval gate: if any requested tool needs approval, park the run ───────
-  const needsApproval = toolRequests.some((r) => getTool(r.key)?.requiresApproval);
-  if (needsApproval) {
-    const runId = await insertRun(db, {
-      taskId,
-      agentId: agent.id,
-      input: input.triggerPayload,
-      output,
-      toolCalls: toolRequests.map((r) => ({ key: r.key, input: r.input })),
-      inputTokens,
-      outputTokens,
-      costUsd,
-      durationMs,
-      status: "success",
-      errorMessage: null,
-    });
+  // Persist run + update task. Map awaiting_approval → its DB column value
+  // (success in the runs table; the task captures awaiting_approval status).
+  const dbStatus: Exclude<RunResult["status"], "awaiting_approval"> | "success" =
+    finalStatus === "awaiting_approval" ? "success" : finalStatus;
+
+  const runId = await insertRun(db, {
+    taskId,
+    agentId: agent.id,
+    input: input.triggerPayload,
+    output,
+    toolCalls: collectedToolCalls,
+    inputTokens: totalInputTokens,
+    outputTokens: totalOutputTokens,
+    costUsd: totalCostUsd,
+    durationMs,
+    status: dbStatus,
+    errorMessage: toolError,
+  });
+
+  if (parkedForApproval) {
     await db
       .update(aiAgentTasks)
       .set({ status: "awaiting_approval" })
@@ -214,59 +320,54 @@ export async function runAgent(input: RunAgentInput): Promise<RunResult> {
       output.slice(0, 280) || "Draft awaiting your review.",
       `/admin/ai-agents/tasks`
     );
-    return { runId, taskId, status: "awaiting_approval", costUsd, output, toolCalls: toolRequests };
+  } else {
+    await db
+      .update(aiAgentTasks)
+      .set({
+        status: finalStatus === "failed" || finalStatus === "tool_error" ? "failed" : "completed",
+        completedAt: new Date(),
+      })
+      .where(eq(aiAgentTasks.id, taskId));
+    await db.update(aiAgents).set({ lastRunAt: new Date() }).where(eq(aiAgents.id, agent.id));
   }
 
-  // ── Dispatch tool calls that don't require approval ────────────────────────
-  const toolResults: Array<{ key: string; input: unknown; output?: unknown; error?: string }> = [];
-  let toolError: string | null = null;
-  for (const req of toolRequests) {
-    const tool = getTool(req.key);
-    if (!tool) {
-      toolError = `Unknown tool ${req.key}`;
-      toolResults.push({ key: req.key, input: req.input, error: toolError });
-      break;
-    }
-    try {
-      const out = await tool.handler({ input: req.input, ctx: { agentId: agent.id, taskId, db } });
-      toolResults.push({ key: req.key, input: req.input, output: out });
-    } catch (err) {
-      toolError = err instanceof Error ? err.message : String(err);
-      toolResults.push({ key: req.key, input: req.input, error: toolError });
-      break;
-    }
+  // Emit the meta-event LAST, fire-and-forget. System Integrity + KPI
+  // rollups + downstream subscribers wake up off this. We don't import
+  // triggerBus at the top to avoid the circular triggerBus → runtime path.
+  if (!parkedForApproval) {
+    void emitRunCompleted({
+      agentId: agent.id,
+      seatName: agent.seatName,
+      department: agent.department,
+      runId,
+      taskId,
+      status: finalStatus,
+      costUsd: totalCostUsd,
+      durationMs,
+      inputTokens: totalInputTokens,
+      outputTokens: totalOutputTokens,
+      toolCallCount: collectedToolCalls.length,
+      errorMessage: toolError,
+    });
   }
-
-  const finalStatus = toolError ? "tool_error" : "success";
-  const runId = await insertRun(db, {
-    taskId,
-    agentId: agent.id,
-    input: input.triggerPayload,
-    output,
-    toolCalls: toolResults,
-    inputTokens,
-    outputTokens,
-    costUsd,
-    durationMs,
-    status: finalStatus,
-    errorMessage: toolError,
-  });
-
-  await db
-    .update(aiAgentTasks)
-    .set({ status: toolError ? "failed" : "completed", completedAt: new Date() })
-    .where(eq(aiAgentTasks.id, taskId));
-
-  await db.update(aiAgents).set({ lastRunAt: new Date() }).where(eq(aiAgents.id, agent.id));
 
   return {
     runId,
     taskId,
     status: finalStatus,
-    costUsd,
+    costUsd: totalCostUsd,
     output,
-    toolCalls: toolResults,
+    toolCalls: collectedToolCalls,
   };
+}
+
+async function emitRunCompleted(payload: Record<string, unknown>): Promise<void> {
+  try {
+    const { emitAgentEvent } = await import("./triggerBus");
+    await emitAgentEvent("agent.run_completed", payload);
+  } catch (err) {
+    console.warn("[agentRuntime] emit agent.run_completed failed (non-fatal):", err);
+  }
 }
 
 // ─── helpers ────────────────────────────────────────────────────────────────

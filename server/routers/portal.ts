@@ -763,6 +763,25 @@ export const portalRouter = router({
         sentAt: new Date(),
       });
 
+      // Phase 5 trigger: invoice.created fans out to Cash Flow AI (forecast
+      // update) and Customer Success (post-create receipt draft). Per Marcin's
+      // decision: AT-CREATE only, no due/overdue chasers.
+      try {
+        const { emitAgentEvent } = await import("../lib/agentRuntime/triggerBus");
+        emitAgentEvent("invoice.created", {
+          invoiceId: invoice?.id,
+          invoiceNumber: input.invoiceNumber,
+          customerId: input.hpCustomerId ?? null,
+          portalCustomerId: customer.id,
+          customerEmail: customer.email,
+          customerName: customer.name,
+          amountDue: input.amountDue,
+          jobTitle: input.jobTitle,
+        }).catch(() => null);
+      } catch {
+        /* never break invoice creation because of agent fan-out */
+      }
+
       // Send magic link email
       const token = randomBytes(32).toString("hex");
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);

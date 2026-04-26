@@ -313,4 +313,186 @@ export const aiAgentsRouter = router({
     .mutation(async ({ ctx, input }) => {
       return rejectTask({ taskId: input.taskId, userId: ctx.user.id, reason: input.reason });
     }),
+
+  // ── Phase 5: bulk control + observability ──────────────────────────────────
+  /**
+   * Flip every AI seat that's currently in `draft_queue` to `autonomous`.
+   * Skips human seats (model='human' or department='integrator-human') and
+   * already-disabled seats so this is idempotent and safe to click again.
+   * Returns the count of agents actually transitioned.
+   */
+  activateAll: adminProcedure
+    .input(z.object({ from: z.array(z.enum(STATUSES)).optional() }))
+    .mutation(async ({ input }) => {
+      const d = await db();
+      const fromStatuses = input.from ?? ["draft_queue", "paused"];
+      const all = await d.select().from(aiAgents);
+      const candidates = all.filter((a) => fromStatuses.includes(a.status as typeof STATUSES[number]));
+      let updated = 0;
+      for (const a of candidates) {
+        await d.update(aiAgents).set({ status: "autonomous" }).where(eq(aiAgents.id, a.id));
+        updated++;
+      }
+      return { updated, total: all.length };
+    }),
+
+  /**
+   * Emergency kill switch. Flips every autonomous seat to `paused` —
+   * scheduler.ts will skip every queued task for these seats on the next
+   * tick. Existing draft_queue/disabled seats are left alone.
+   */
+  pauseAll: adminProcedure.mutation(async () => {
+    const d = await db();
+    const all = await d.select().from(aiAgents);
+    const live = all.filter((a) => a.status === "autonomous");
+    for (const a of live) {
+      await d.update(aiAgents).set({ status: "paused" }).where(eq(aiAgents.id, a.id));
+    }
+    return { paused: live.length, total: all.length };
+  }),
+
+  /**
+   * Set the same status across multiple seats at once. Used by the control
+   * page when the operator selects a department and toggles its agents.
+   */
+  bulkSetStatus: adminProcedure
+    .input(z.object({ ids: z.array(z.number()).min(1), status: z.enum(STATUSES) }))
+    .mutation(async ({ input }) => {
+      const d = await db();
+      let updated = 0;
+      for (const id of input.ids) {
+        await d.update(aiAgents).set({ status: input.status }).where(eq(aiAgents.id, id));
+        updated++;
+      }
+      return { updated };
+    }),
+
+  /**
+   * Cost rollups for the AdminDashboard tile + the control page header.
+   * Returns total spend last 24h and 7d, plus a per-seat breakdown.
+   */
+  costSummary: adminProcedure.query(async () => {
+    const d = await db();
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const since7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const [tot24] = await d
+      .select({
+        cost: sql<number>`COALESCE(SUM(${aiAgentRuns.costUsd}), 0)`,
+        runs: sql<number>`COUNT(*)`,
+      })
+      .from(aiAgentRuns)
+      .where(gte(aiAgentRuns.createdAt, since24h));
+    const [tot7] = await d
+      .select({
+        cost: sql<number>`COALESCE(SUM(${aiAgentRuns.costUsd}), 0)`,
+        runs: sql<number>`COUNT(*)`,
+      })
+      .from(aiAgentRuns)
+      .where(gte(aiAgentRuns.createdAt, since7d));
+    const perSeat = await d
+      .select({
+        agentId: aiAgentRuns.agentId,
+        cost: sql<number>`COALESCE(SUM(${aiAgentRuns.costUsd}), 0)`,
+        runs: sql<number>`COUNT(*)`,
+      })
+      .from(aiAgentRuns)
+      .where(gte(aiAgentRuns.createdAt, since24h))
+      .groupBy(aiAgentRuns.agentId);
+    const agents = await d.select().from(aiAgents);
+    const byId = new Map(agents.map((a) => [a.id, a] as const));
+    return {
+      totalCost24hUsd: Number(tot24?.cost ?? 0),
+      totalRuns24h: Number(tot24?.runs ?? 0),
+      totalCost7dUsd: Number(tot7?.cost ?? 0),
+      totalRuns7d: Number(tot7?.runs ?? 0),
+      perSeat: perSeat.map((p) => ({
+        agentId: p.agentId,
+        seatName: byId.get(p.agentId)?.seatName ?? `#${p.agentId}`,
+        department: byId.get(p.agentId)?.department ?? "?",
+        cost24hUsd: Number(p.cost ?? 0),
+        runs24h: Number(p.runs ?? 0),
+        capUsd: Number(byId.get(p.agentId)?.costCapDailyUsd ?? 0),
+        status: byId.get(p.agentId)?.status ?? "?",
+      })),
+    };
+  }),
+
+  /**
+   * Live runs feed for /admin/agents/runs — joins seatName, supports filters.
+   */
+  runsFeed: adminProcedure
+    .input(
+      z.object({
+        seat: z.string().optional(),
+        status: z.enum(["success", "failed", "tool_error", "cost_exceeded", "timed_out"]).optional(),
+        limit: z.number().int().min(1).max(500).default(100),
+      })
+    )
+    .query(async ({ input }) => {
+      const d = await db();
+      const conds = [] as any[];
+      if (input.status) conds.push(eq(aiAgentRuns.status, input.status));
+      const rows = conds.length
+        ? await d
+            .select()
+            .from(aiAgentRuns)
+            .where(and(...conds))
+            .orderBy(desc(aiAgentRuns.createdAt))
+            .limit(input.limit)
+        : await d
+            .select()
+            .from(aiAgentRuns)
+            .orderBy(desc(aiAgentRuns.createdAt))
+            .limit(input.limit);
+      const agents = await d.select().from(aiAgents);
+      const byId = new Map(agents.map((a) => [a.id, a] as const));
+      const filtered = input.seat
+        ? rows.filter((r) => byId.get(r.agentId)?.seatName === input.seat)
+        : rows;
+      return filtered.map((r) => ({
+        ...r,
+        seatName: byId.get(r.agentId)?.seatName ?? `#${r.agentId}`,
+        department: byId.get(r.agentId)?.department ?? "?",
+      }));
+    }),
+
+  /**
+   * Optimization tasks (System Integrity) — read + review.
+   */
+  listOptimizationTasks: adminProcedure
+    .input(
+      z
+        .object({
+          status: z.enum(["open", "acknowledged", "dismissed", "applied"]).optional(),
+          limit: z.number().int().min(1).max(200).optional(),
+        })
+        .optional()
+    )
+    .query(async ({ input }) => {
+      const { listOptimizationTasks } = await import("../lib/agentRuntime/systemIntegrity");
+      return listOptimizationTasks({ status: input?.status, limit: input?.limit });
+    }),
+
+  reviewOptimizationTask: adminProcedure
+    .input(
+      z.object({
+        id: z.number(),
+        status: z.enum(["acknowledged", "dismissed", "applied"]),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { reviewOptimizationTask } = await import("../lib/agentRuntime/systemIntegrity");
+      await reviewOptimizationTask({ id: input.id, status: input.status, userId: ctx.user.id });
+      return { ok: true };
+    }),
+
+  /**
+   * On-demand: run System Integrity scan now (rather than wait for the hourly
+   * cron). Useful for the /admin/agents/control "Scan now" button.
+   */
+  runSystemIntegrityScanNow: adminProcedure.mutation(async () => {
+    const { scanForOptimizations } = await import("../lib/agentRuntime/systemIntegrity");
+    const flags = await scanForOptimizations();
+    return { flagsRaised: flags.length };
+  }),
 });

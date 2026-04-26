@@ -1,5 +1,34 @@
 # HP Estimator — Integration Handoff Checklist
 
+## DONE — 2026-04-25 — Agent Engine (Phase 5)
+
+**PR:** `feat/agent-engine` — *"Build the agent engine: multi-turn loop, missing event emits, self-optimization, one-click control"*
+
+### What shipped
+- **Multi-turn tool loop** in `server/lib/agentRuntime/runtime.ts` (was single-turn). Cap at 8 turns, prompt-caches the system prompt, pricing rolled up across all turns.
+- **`agent.run_completed`** meta-event emitted by runtime after every run. Subscribers (System Integrity, downstream agents, KPI rollups) wake up off this.
+- **5 missing event emit sites** wired: `invoice.created` (`portal.ts`), `call.missed` (`twilio.ts`), `customer.portal_account_created` (`portalDb.ts`), `subscription.renewed` + `subscription.cancelled` (Stripe webhook in `_core/index.ts`).
+- **System Integrity self-optimization** (`server/lib/agentRuntime/systemIntegrity.ts`) — hourly anomaly scan + admin-inbox drafts. NEVER auto-modifies prompts (Marcin-rule hard stop).
+- **`agent_optimization_tasks`** table — migration 0073 + boot-time `ensureOptimizationTasksTable`.
+- **`/admin/agents/control`** — one-click **Activate all** + **Emergency: pause all** + per-seat/per-dept toggles + live cost rollup + System Integrity flag inbox.
+- **`/admin/agents/runs`** — live observability page, filterable, expandable.
+- **Synthetic E2E test** — `node scripts/agent-engine-e2e.mjs` fires lead.created, polls task→run→meta-event chain.
+- **Phase 5 subscription seed** — `node scripts/seed-phase5-subscriptions.mjs` adds the 8 new subscriptions for the new events.
+
+### To activate after deploy — three commands via Railway shell
+```bash
+node scripts/seed-ai-agents.mjs              # idempotent — only the missing seats
+node scripts/seed-phase5-subscriptions.mjs   # NEW — adds the Phase 5 event subscriptions
+node scripts/agent-engine-e2e.mjs            # smoke test — should print "✓ E2E PASS"
+```
+
+### Then — Marcin's one-click activation
+1. Open `https://app.handypioneers.com/admin/agents/control`
+2. Click **Activate all (N ready)**
+3. Watch the cost rollup + System Integrity flag list. **Emergency: pause all** is right there if anything goes sideways.
+
+---
+
 ## DONE — 2026-04-24 — Agent Runtime Fully Wired
 
 **PR merged:** "Wire department charters into agent runtime"
