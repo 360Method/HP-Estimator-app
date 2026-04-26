@@ -20,6 +20,8 @@ import {
 } from 'lucide-react';
 import { Customer, Opportunity, Invoice } from '@/lib/types';
 import { trpc } from '@/lib/trpc';
+import { brandPhrases, greetingForNow } from '@/lib/brand';
+import VisionBanner from '@/components/VisionBanner';
 
 // ── Helpers ──────────────────────────────────────────────────
 const fmt$ = (n: number) =>
@@ -166,7 +168,7 @@ function SectionHeader({ title, sub, action, onAction }: { title: string; sub?: 
   return (
     <div className="flex items-center justify-between mb-4">
       <div>
-        <h2 className="text-base font-semibold text-foreground">{title}</h2>
+        <h2 className="hp-serif text-lg" style={{ color: 'var(--hp-ink)' }}>{title}</h2>
         {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
       </div>
       {action && (
@@ -354,27 +356,31 @@ export default function EstimatorDashboard() {
   const showOnboardingBanner = !onboardingDismissed && state.customers.length === 0;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen" style={{ background: 'var(--hp-cream)' }}>
+
+      {/* ── Vision banner (operator reminder of the standard) ── */}
+      <VisionBanner />
 
       {/* ── Onboarding banner (shown when no customers exist) ── */}
       {showOnboardingBanner && (
-        <div className="bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-800 px-4 py-3">
+        <div className="border-b px-4 py-3" style={{ background: 'var(--hp-caution-bg)', borderColor: 'var(--hp-hairline)' }}>
           <div className="max-w-7xl mx-auto flex items-center justify-between gap-4 flex-wrap">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center shrink-0">
-                <Users className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: 'rgba(200,146,42,0.18)' }}>
+                <Users className="w-4 h-4" style={{ color: 'var(--hp-gold-deep)' }} />
               </div>
               <div>
-                <p className="text-sm font-medium text-amber-900 dark:text-amber-100">Welcome! Import your existing clients and job history to get started.</p>
-                <p className="text-xs text-amber-700 dark:text-amber-300">Supports HouseCall Pro exports, Google Contacts, and generic CSV files.</p>
+                <p className="text-sm font-medium" style={{ color: 'var(--hp-charcoal)' }}>Your customer roster awaits its first steward — bring in existing clients to begin.</p>
+                <p className="text-xs" style={{ color: 'var(--hp-slate)' }}>HouseCall Pro exports, Google Contacts, and generic CSV files all welcome.</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <a
                 href="/onboarding"
-                className="inline-flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium px-3 py-1.5 rounded-md transition-colors"
+                className="inline-flex items-center gap-1.5 hp-button-gold text-xs"
+                style={{ padding: '8px 14px', minHeight: 0 }}
               >
-                <Upload className="w-3.5 h-3.5" /> Import Data
+                <Upload className="w-3.5 h-3.5" /> Welcome them
               </a>
               <button
                 type="button"
@@ -382,9 +388,10 @@ export default function EstimatorDashboard() {
                   try { localStorage.setItem('hp_onboarding_dismissed', '1'); } catch {}
                   setOnboardingDismissed(true);
                 }}
-                className="text-xs text-amber-700 dark:text-amber-300 hover:text-amber-900 dark:hover:text-amber-100 underline"
+                className="text-xs underline"
+                style={{ color: 'var(--hp-slate)' }}
               >
-                Dismiss
+                Later
               </button>
             </div>
           </div>
@@ -392,25 +399,28 @@ export default function EstimatorDashboard() {
       )}
 
       {/* ── Hero header ──────────────────────────────────────── */}
-      <div className="bg-gradient-to-r from-[oklch(0.32_0.14_255)] to-[oklch(0.42_0.14_255)] text-white px-6 py-6">
+      <div className="px-6 py-7" style={{ background: 'var(--hp-ink)', color: 'white' }}>
         <div className="max-w-7xl mx-auto">
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight">Good {new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 17 ? 'afternoon' : 'evening'}, Estimator 👋</h1>
-              <p className="text-white/70 text-sm mt-1">{today}</p>
+              <p className="hp-eyebrow" style={{ color: 'var(--hp-gold-soft)' }}>The Concierge Desk</p>
+              <h1 className="hp-serif mt-1" style={{ fontSize: '1.85rem', color: 'white' }}>
+                {greetingForNow()}. Here is the day before you.
+              </h1>
+              <p className="text-white/60 text-sm mt-1">{today}</p>
             </div>
             <div className="flex items-center gap-3 flex-wrap">
-              <div className="bg-white/10 rounded-lg px-4 py-2 text-center">
+              <div className="rounded-lg px-4 py-2 text-center" style={{ background: 'rgba(255,255,255,0.08)' }}>
                 <div className="text-xl font-bold font-mono">{activeJobsCount}</div>
-                <div className="text-xs text-white/70">Active Jobs</div>
+                <div className="text-[10px] uppercase tracking-wider text-white/60">In Motion</div>
               </div>
-              <div className="bg-white/10 rounded-lg px-4 py-2 text-center">
+              <div className="rounded-lg px-4 py-2 text-center" style={{ background: 'rgba(255,255,255,0.08)' }}>
                 <div className="text-xl font-bold font-mono">{openEstimatesCount}</div>
-                <div className="text-xs text-white/70">Open Estimates</div>
+                <div className="text-[10px] uppercase tracking-wider text-white/60">Awaiting Reply</div>
               </div>
-              <div className="bg-white/10 rounded-lg px-4 py-2 text-center">
-                <div className="text-xl font-bold font-mono">{fmt$(outstandingBalance)}</div>
-                <div className="text-xs text-white/70">Outstanding</div>
+              <div className="rounded-lg px-4 py-2 text-center" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                <div className="text-xl font-bold font-mono" style={{ color: 'var(--hp-gold-soft)' }}>{fmt$(outstandingBalance)}</div>
+                <div className="text-[10px] uppercase tracking-wider text-white/60">Outstanding</div>
               </div>
             </div>
           </div>
@@ -424,9 +434,9 @@ export default function EstimatorDashboard() {
           <KpiCard
             icon={Target}
             iconColor="bg-blue-100 text-blue-600"
-            label="Pipeline Value"
+            label="Stewardship Value"
             value={fmt$(pipelineValue)}
-            sub={`${leads.length + estimates.length + jobs.length} opportunities`}
+            sub={`${leads.length + estimates.length + jobs.length} opportunities under care`}
             trend="up"
             trendLabel="active"
             sparkData={revenueByMonth.map(m => m.invoiced)}
@@ -566,7 +576,7 @@ export default function EstimatorDashboard() {
             {urgentJobs.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <Briefcase className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">No active jobs right now</p>
+                <p className="text-sm hp-serif italic" style={{ color: 'var(--hp-slate)' }}>{brandPhrases.emptyJobs}</p>
               </div>
             ) : (
               <div className="space-y-2">
@@ -603,15 +613,15 @@ export default function EstimatorDashboard() {
           {/* Estimates needing attention */}
           <div className="bg-white rounded-xl border border-border p-5 shadow-sm">
             <SectionHeader
-              title="Estimates Needing Attention"
-              sub="Sent, Verbal Acceptance, Return Call Needed"
-              action="All Estimates"
+              title="Awaiting Your Reply"
+              sub="Proposals sent — a homeowner is waiting"
+              action="All proposals"
               onAction={() => setSection('pipeline')}
             />
             {needsAttention.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <FileText className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">No estimates pending follow-up</p>
+                <p className="text-sm hp-serif italic" style={{ color: 'var(--hp-slate)' }}>{brandPhrases.emptyEstimates}</p>
               </div>
             ) : (
               <div className="space-y-2">
@@ -661,7 +671,7 @@ export default function EstimatorDashboard() {
             {recentActivity.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <Activity className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">No activity yet — start by adding a customer</p>
+                <p className="text-sm hp-serif italic" style={{ color: 'var(--hp-slate)' }}>{brandPhrases.emptyActivity}</p>
               </div>
             ) : (
               <div className="space-y-1">

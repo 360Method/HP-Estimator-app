@@ -1,5 +1,33 @@
 # HP Field Estimator — TODO
 
+## Ritz-Carlton Experience Pass — P1 follow-ups (deferred from PR #ritz-experience-pass-1)
+
+> See `docs/EXPERIENCE_STANDARDS.md` for the operating doc.
+> All P1 items are deliberate scope deferrals — not failures.
+
+- [ ] **CustomerSection redesign** — concierge brief: single-column calm
+      flow, recent activity, current opportunities, last contact, owner
+      notes — all in one quiet scroll. Currently a tab maze.
+- [ ] **InboxPage concierge desk** — AI draft visual language, large
+      approve/refine/send actions, "The desk is quiet" empty state.
+- [ ] **Email shell migration** — port the inline shells in
+      `server/routers/{estimate,gmail,portal}.ts` and
+      `server/threeSixtyWebhook.ts` to `wrapEmailHtml()` from
+      `server/_core/emailShell.ts`.
+- [ ] **Settings → Branding page** — make `--hp-*` tokens DB-editable
+      per tenant (nucleus / white-label requirement).
+- [ ] **Vision banner quote rotation** — pull weekly from
+      BRAND_TONALITY_AND_DIRECTION.md.
+- [ ] **360° member portal home** — apply concierge polish beyond the
+      welcome banner (currently only the hero is updated).
+- [ ] **Roadmap confirmation page** — tighten to design system.
+- [ ] **Status badge palette audit** — unify estimates / invoices /
+      appointments badges on restrained semantic flags from `--hp-*`.
+- [ ] **MetricsBar wordmark** — refine "Field Estimator" wordmark to
+      serif treatment to match the new admin hero.
+- [ ] **PortalLayout chrome** — apply cream/parchment background +
+      hairline borders sitewide.
+
 ## Completed Features
 
 - [x] Estimate Calculator (phases, line items, GM enforcement)
