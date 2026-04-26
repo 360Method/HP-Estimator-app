@@ -7,9 +7,9 @@
  * Run: node scripts/seed-email-templates.mjs
  * Staging: DATABASE_URL=$STAGING_DATABASE_URL node scripts/seed-email-templates.mjs
  *
- * Categories (total = 55 templates):
+ * Categories (total = 58 templates):
  *   Account & Portal          6
- *   Appointments & Visits     7
+ *   Appointments & Visits    10  (3 affluent-voice acks + 7 schedule lifecycle)
  *   Scope & Estimates         4
  *   Invoicing & Payment       5
  *   Membership                7
@@ -176,35 +176,140 @@ ${SIG_TEXT}`,
 
 // ─── APPOINTMENTS & VISITS ───────────────────────────────────────────────────
 const APPT = [
+  // ── Customer-facing intake acknowledgments ─────────────────────────────────
+  // These three templates establish the affluent stewardship voice for the
+  // first three customer-facing touchpoints. They replace earlier transactional
+  // copy (per the Customer Success Charter, 2026-04-25). Vocabulary rules:
+  // never "estimate / free / cheap / handyman / fix / repair / save / discount".
   {
-    key: 'appt_consultation_scheduled',
-    name: 'Consultation Scheduled',
-    subject: 'Your free consultation is scheduled — {{appointmentDate}}',
-    preheader: 'What to expect and how to prep',
-    html: `<p>Hi {{customerFirstName}},</p>
-<p>Your free consultation with Handy Pioneers is on the books:</p>
+    key: 'booking_inquiry_received',
+    name: 'Booking Inquiry Received',
+    subject: 'Your inquiry is in our care, {{customerFirstName}}',
+    preheader: 'Your Concierge will be in touch within one business day',
+    html: `<p>{{customerFirstName}},</p>
+<p>Your inquiry has reached us at Handy Pioneers, and it is in our care.</p>
+<p>Here is what happens next: a member of our Concierge team will reach out personally — by text or by email — within one business day to learn more about your home, understand the project you have in mind, and find a window of time that fits your schedule for a walkthrough conversation.</p>
+<p>Nothing further is needed from you in the meantime. We come to you.</p>
+<p>If anything time-sensitive surfaces, you are always welcome to call us directly at (360) 241-5718.</p>
+${SIG_HTML}`,
+    text: `{{customerFirstName}},
+
+Your inquiry has reached us at Handy Pioneers, and it is in our care.
+
+Here is what happens next: a member of our Concierge team will reach out personally — by text or by email — within one business day to learn more about your home, understand the project you have in mind, and find a window of time that fits your schedule for a walkthrough conversation.
+
+Nothing further is needed from you in the meantime. We come to you.
+
+If anything time-sensitive surfaces, you are welcome to call us directly at (360) 241-5718.
+
+${SIG_TEXT}`,
+    mergeTagSchema: [CUSTOMER, PORTAL],
+  },
+  {
+    key: 'service_request_acknowledged',
+    name: 'Portal Service Request Acknowledged',
+    subject: 'Your request is in our care, {{customerFirstName}}',
+    preheader: 'We are already reviewing it on your behalf',
+    html: `<p>{{customerFirstName}},</p>
+<p>We have received your request and added it to your home's standard-of-care file.</p>
+<p>Here is what happens next: your Concierge will review the details, gather what is needed from our records, and reach out personally to align on next steps and timing. Expect to hear from them within one business day.</p>
+<p>Your full home history is always available in your portal:</p>
+${btn('{{portalUrl}}', 'Open my portal →')}
+<p>For anything time-sensitive, call us directly at (360) 241-5718.</p>
+${SIG_HTML}`,
+    text: `{{customerFirstName}},
+
+We have received your request and added it to your home's standard-of-care file.
+
+Here is what happens next: your Concierge will review the details, gather what is needed from our records, and reach out personally to align on next steps and timing. Expect to hear from them within one business day.
+
+Open your portal: {{portalUrl}}
+
+For anything time-sensitive, call us directly at (360) 241-5718.
+
+${SIG_TEXT}`,
+    mergeTagSchema: [CUSTOMER, PORTAL],
+  },
+  {
+    key: 'appointment_confirmed',
+    name: 'Appointment Confirmed (customer-facing)',
+    subject: 'Your visit on {{appointmentDate}} is confirmed',
+    preheader: 'What we will attend to and how to prepare',
+    html: `<p>{{customerFirstName}},</p>
+<p>Your visit with Handy Pioneers is confirmed.</p>
 <ul>
   <li><strong>When:</strong> {{appointmentDate}} at {{appointmentTime}}</li>
   <li><strong>Where:</strong> {{appointmentAddress}}</li>
-  <li><strong>How long:</strong> about 45–60 minutes</li>
+  <li><strong>Visiting:</strong> {{consultantName}}</li>
+  <li><strong>Length:</strong> approximately {{appointmentDuration}}</li>
 </ul>
-<p>We'll walk your project together, talk through your goals, and leave you with a clear sense of scope and ballpark cost. You don't need to prep anything — just be home.</p>
+<p>This is a stewardship conversation, not a presentation. We will walk your home with you, listen to what you have in mind, and share what a proper standard of care looks like for the project ahead.</p>
+<p>Nothing to prepare on your end — though if there is anything you have been watching or wondering about, jot it down so we can attend to it together.</p>
 ${btn('{{portalUrl}}/appointments', 'View in portal →')}
-<p>Need to reschedule? Reply to this email or call (360) 241-5718.</p>
+<p>Need to adjust the time? Reply to this email or call (360) 241-5718.</p>
 ${SIG_HTML}`,
-    text: `Hi {{customerFirstName}},
+    text: `{{customerFirstName}},
 
-Your free consultation with Handy Pioneers is on the books:
+Your visit with Handy Pioneers is confirmed.
 
 - When: {{appointmentDate}} at {{appointmentTime}}
 - Where: {{appointmentAddress}}
-- How long: about 45–60 minutes
+- Visiting: {{consultantName}}
+- Length: approximately {{appointmentDuration}}
 
-We'll walk your project together, talk through your goals, and leave you with a clear sense of scope and ballpark cost. You don't need to prep anything — just be home.
+This is a stewardship conversation, not a presentation. We will walk your home with you, listen to what you have in mind, and share what a proper standard of care looks like for the project ahead.
+
+Nothing to prepare on your end — though if there is anything you have been watching or wondering about, jot it down so we can attend to it together.
 
 View in portal: {{portalUrl}}/appointments
 
-Need to reschedule? Reply to this email or call (360) 241-5718.
+Need to adjust the time? Reply to this email or call (360) 241-5718.
+
+${SIG_TEXT}`,
+    mergeTagSchema: [
+      CUSTOMER,
+      { tag: 'appointmentDate', description: 'Formatted appointment date' },
+      { tag: 'appointmentTime', description: 'Formatted appointment time' },
+      { tag: 'appointmentAddress', description: 'Full street address of visit' },
+      { tag: 'consultantName', description: 'Name of the consultant/PM visiting' },
+      { tag: 'appointmentDuration', description: 'Human-readable duration, e.g. "60 minutes" or "two hours"' },
+      PORTAL,
+    ],
+  },
+  // ── Detailed appointment templates (used by the schedule subsystem when
+  //    type-specific copy is preferred over the generic appointment_confirmed). ──
+  {
+    key: 'appt_consultation_scheduled',
+    name: 'Consultation Scheduled',
+    subject: 'Your consultation on {{appointmentDate}} is confirmed',
+    preheader: 'A stewardship conversation, not a presentation',
+    html: `<p>{{customerFirstName}},</p>
+<p>Your consultation with Handy Pioneers is confirmed.</p>
+<ul>
+  <li><strong>When:</strong> {{appointmentDate}} at {{appointmentTime}}</li>
+  <li><strong>Where:</strong> {{appointmentAddress}}</li>
+  <li><strong>Length:</strong> approximately 45 to 60 minutes</li>
+</ul>
+<p>This is a stewardship conversation, not a presentation. We will walk your home with you, listen to what you have in mind, and share what a proper standard of care looks like for the project ahead. You will leave with clarity on the scope, the sequence, and the considerations that matter for your home specifically.</p>
+<p>Nothing to prepare on your end — just be home.</p>
+${btn('{{portalUrl}}/appointments', 'View in portal →')}
+<p>If anything changes, reply to this email or call (360) 241-5718.</p>
+${SIG_HTML}`,
+    text: `{{customerFirstName}},
+
+Your consultation with Handy Pioneers is confirmed.
+
+- When: {{appointmentDate}} at {{appointmentTime}}
+- Where: {{appointmentAddress}}
+- Length: approximately 45 to 60 minutes
+
+This is a stewardship conversation, not a presentation. We will walk your home with you, listen to what you have in mind, and share what a proper standard of care looks like for the project ahead. You will leave with clarity on the scope, the sequence, and the considerations that matter for your home specifically.
+
+Nothing to prepare on your end — just be home.
+
+View in portal: {{portalUrl}}/appointments
+
+If anything changes, reply to this email or call (360) 241-5718.
 
 ${SIG_TEXT}`,
     mergeTagSchema: [
@@ -218,30 +323,30 @@ ${SIG_TEXT}`,
   {
     key: 'appt_baseline_scheduled',
     name: '360° Baseline Walkthrough Scheduled',
-    subject: 'Your 360° Baseline Walkthrough is scheduled — {{appointmentDate}}',
-    preheader: 'The most important visit of your membership',
-    html: `<p>Hi {{customerFirstName}},</p>
-<p>Your 360° Baseline Walkthrough is scheduled:</p>
+    subject: 'Your 360° Baseline Walkthrough on {{appointmentDate}} is confirmed',
+    preheader: 'The foundation of your stewardship year',
+    html: `<p>{{customerFirstName}},</p>
+<p>Your 360° Baseline Walkthrough is confirmed.</p>
 <ul>
   <li><strong>When:</strong> {{appointmentDate}} at {{appointmentTime}}</li>
   <li><strong>Where:</strong> {{appointmentAddress}}</li>
-  <li><strong>How long:</strong> 90 minutes to 2 hours</li>
+  <li><strong>Length:</strong> 90 minutes to two hours</li>
 </ul>
-<p>This is the foundation of your membership. We'll inspect every system in your home — roof, siding, attic, plumbing, electrical, HVAC, foundation — and build a prioritized roadmap you'll use to plan upgrades and maintenance for years.</p>
-<p><strong>Before we arrive:</strong> please clear access to your attic, crawlspace, and electrical panel, and have a list of any issues you've noticed ready to walk us through.</p>
+<p>This is the foundation of your membership and the most consequential visit of the year. We will walk every system of your home — roof, siding, attic, plumbing, electrical, HVAC, and foundation — and build a prioritized roadmap of stewardship that will guide care, upgrades, and timing for years to come.</p>
+<p><strong>Before we arrive,</strong> please clear access to your attic, crawlspace, and electrical panel, and have on hand a short list of any concerns you have been watching so we can attend to them together.</p>
 ${btn('{{portalUrl}}/appointments', 'View in portal →')}
 ${SIG_HTML}`,
-    text: `Hi {{customerFirstName}},
+    text: `{{customerFirstName}},
 
-Your 360° Baseline Walkthrough is scheduled:
+Your 360° Baseline Walkthrough is confirmed.
 
 - When: {{appointmentDate}} at {{appointmentTime}}
 - Where: {{appointmentAddress}}
-- How long: 90 minutes to 2 hours
+- Length: 90 minutes to two hours
 
-This is the foundation of your membership. We'll inspect every system in your home and build a prioritized roadmap.
+This is the foundation of your membership and the most consequential visit of the year. We will walk every system of your home — roof, siding, attic, plumbing, electrical, HVAC, and foundation — and build a prioritized roadmap of stewardship that will guide care, upgrades, and timing for years to come.
 
-Before we arrive: please clear access to your attic, crawlspace, and electrical panel, and have a list of any issues ready.
+Before we arrive: please clear access to your attic, crawlspace, and electrical panel, and have on hand a short list of any concerns you have been watching so we can attend to them together.
 
 View in portal: {{portalUrl}}/appointments
 
