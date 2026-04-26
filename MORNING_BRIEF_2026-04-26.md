@@ -77,6 +77,11 @@ available in the shell. The branch contains:
 3. Charter gap content already in `docs/agents/operations.md` and `marketing.md`
    (KPIs + playbooks for `external_contractor_network` and `ai_paid_ads`).
 
+4. `fix(automation+routing)`: bug fixes for real runtime failures:
+   - `automationEngine.ts`: `isHtml` → removed (wrong field), `conversations.channel` → `.channels`, removed `senderRole` (not in schema), added db null guard
+   - `leadRouting.ts`: `triggeredBy: "system"` → `null` (int column can't store "system"), `readAt: new Date()` → `.toISOString()` (varchar column)
+   - `schema.ts`: `notifications.userId` made nullable (role-based notifications have no userId)
+
 **To push:**
 ```bash
 cd ".claude/worktrees/amazing-lederberg-e13634"

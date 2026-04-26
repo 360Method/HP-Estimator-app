@@ -1562,7 +1562,7 @@ export type InsertDbCampaignSend = typeof campaignSends.$inferInsert;
 
 export const notifications = mysqlTable("notifications", {
   id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
+  userId: int("userId"),
   role: varchar("role", { length: 32 }),
   eventType: varchar("eventType", { length: 64 }).notNull(),
   title: varchar("title", { length: 255 }).notNull(),
