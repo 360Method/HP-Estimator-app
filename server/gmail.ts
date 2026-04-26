@@ -208,12 +208,20 @@ export async function sendEmail(params: {
 // ─── Poll Inbound Emails ──────────────────────────────────────────────────────
 // Called on a schedule (e.g. every 2 minutes) to check for new emails.
 
+// Track whether we've already logged the "not connected" state — repeating it
+// every poll tick floods Railway logs (and at warn level it shows as an error).
+let gmailNotConnectedLogged = false;
+
 export async function pollInboundEmails(fromEmail: string, afterHistoryId?: string): Promise<void> {
   let gmail: ReturnType<typeof google.gmail>;
   try {
     gmail = await getGmailClient(fromEmail);
+    gmailNotConnectedLogged = false;
   } catch {
-    console.warn("[Gmail] Not connected, skipping poll");
+    if (!gmailNotConnectedLogged) {
+      console.log("[Gmail] Not connected, skipping poll (further notices suppressed until reconnected)");
+      gmailNotConnectedLogged = true;
+    }
     return;
   }
 

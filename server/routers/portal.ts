@@ -1079,11 +1079,42 @@ export const portalRouter = router({
 
       // Auto-create CRM lead opportunity
       let newLeadId: string | undefined;
+      let hpCustomerIdForLead: string | undefined;
       try {
-        const { createOpportunity } = await import('../db');
+        const { createOpportunity, findCustomerByEmail, createCustomer } = await import('../db');
         const { randomBytes } = await import('crypto');
         newLeadId = randomBytes(8).toString('hex');
-        const hpCustomerId = ctx.portalCustomer.hpCustomerId ?? `portal-${ctx.portalCustomer.id}`;
+
+        // Bridge portal-only customers to a real CRM customer row so lead routing
+        // (and every downstream "open the customer profile" link) has something
+        // to resolve. If a portal customer has no hpCustomerId, find or create
+        // one by email.
+        let hpCustomerId = ctx.portalCustomer.hpCustomerId ?? null;
+        if (!hpCustomerId && ctx.portalCustomer.email) {
+          const existing = await findCustomerByEmail(ctx.portalCustomer.email);
+          if (existing) {
+            hpCustomerId = existing.id;
+          } else {
+            const newId = randomBytes(8).toString('hex');
+            const [first, ...rest] = (ctx.portalCustomer.name ?? '').trim().split(/\s+/);
+            const created = await createCustomer({
+              id: newId,
+              firstName: first ?? '',
+              lastName: rest.join(' '),
+              displayName: ctx.portalCustomer.name ?? ctx.portalCustomer.email,
+              email: ctx.portalCustomer.email.toLowerCase().trim(),
+              mobilePhone: ctx.portalCustomer.phone ?? '',
+              sendNotifications: true,
+              customerType: 'homeowner',
+              tags: '[]',
+              leadSource: 'Portal Service Request',
+            });
+            hpCustomerId = created.id;
+          }
+        }
+        if (!hpCustomerId) hpCustomerId = `portal-${ctx.portalCustomer.id}`;
+        hpCustomerIdForLead = hpCustomerId;
+
         const timelineLabel = input.timeline === 'asap' ? 'ASAP' : input.timeline === 'within_week' ? 'Within a week' : 'Flexible';
         await createOpportunity({
           id: newLeadId,
@@ -1101,6 +1132,29 @@ export const portalRouter = router({
         }
       } catch (e) {
         console.error('[Portal] Failed to create CRM lead from service request:', e);
+      }
+
+      // Route the lead through the standard pipeline so the Nurturer is
+      // assigned + notified, and any user-configured `lead_created`
+      // automations (auto-ack SMS, drip sequences, etc.) fire.
+      if (newLeadId && hpCustomerIdForLead) {
+        const { onLeadCreated } = await import('../leadRouting');
+        onLeadCreated({
+          opportunityId: newLeadId,
+          customerId: hpCustomerIdForLead,
+          title: `Portal service request — ${ctx.portalCustomer.name}`,
+          source: 'book_consultation',
+          priority: input.timeline === 'asap' ? 'high' : 'normal',
+        }).catch((e) => console.error('[leadRouting] onLeadCreated error:', e));
+
+        runAutomationsForTrigger('lead_created', {
+          customerName: ctx.portalCustomer.name,
+          customerFirstName: (ctx.portalCustomer.name ?? '').split(' ')[0] ?? '',
+          phone: ctx.portalCustomer.phone ?? '',
+          email: ctx.portalCustomer.email ?? '',
+          description: input.description,
+          referenceNumber: newLeadId,
+        }).catch((e) => console.error('[automation] lead_created error:', e));
       }
 
       // Notify HP team (in-app + SMS)

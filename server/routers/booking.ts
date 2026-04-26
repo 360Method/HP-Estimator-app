@@ -149,13 +149,15 @@ export const bookingRouter = router({
         referenceNumber: leadId,
       }).catch(e => console.error('[automation] new_booking error:', e));
 
-      // Fire lead-routing notification to the Nurturer (non-blocking)
+      // Fire lead-routing notification to the Nurturer (non-blocking).
+      // `source` must match the typed LeadSource union; the free-text
+      // serviceType lives in the opportunity title/notes already.
       onLeadCreated({
         opportunityId: leadId,
         customerId: customer.id,
         title: `New online request — ${displayName}`,
-        source: input.serviceType,
-        priority: input.timeline === 'emergency' ? 'high' : 'normal',
+        source: 'book_consultation',
+        priority: input.timeline === 'ASAP' ? 'high' : 'normal',
       }).catch((e) => console.error('[leadRouting] onLeadCreated error:', e));
       return {
         success: true,

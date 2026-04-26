@@ -561,7 +561,10 @@ async function startServer() {
       case "payment_intent.succeeded": {
         const pi = event.data.object as Stripe.PaymentIntent;
         console.log(`[Webhook] PaymentIntent succeeded: ${pi.id} amount=${pi.amount}`);
-        // Sync portal invoice status to 'paid'
+        // Sync portal invoice status to 'paid' AND send the same branded
+        // receipt email that checkout.session.completed sends. Customers who
+        // pay via the in-page Payment Element (PaymentIntent flow) deserve
+        // the same confirmation as the Checkout flow.
         let portalInvoiceId: string | null = null;
         try {
           const inv = await getPortalInvoiceByStripePaymentIntentId(pi.id);
@@ -569,6 +572,35 @@ async function startServer() {
             await updatePortalInvoicePaid(inv.id, pi.amount_received, pi.id);
             portalInvoiceId = inv.id;
             console.log(`[Webhook] Portal invoice ${inv.id} marked paid via PI ${pi.id}`);
+            try {
+              const customer = await findPortalCustomerById(inv.customerId);
+              if (customer) {
+                const amountStr = `$${(pi.amount_received / 100).toFixed(2)}`;
+                const baseUrl = process.env.PORTAL_BASE_URL ?? 'https://client.handypioneers.com';
+                const invoiceUrl = `${baseUrl}/portal/invoices/${inv.id}`;
+                const firstName = customer.name.split(' ')[0];
+                const receiptHtml = `<!DOCTYPE html><html><body style="font-family:Helvetica,Arial,sans-serif;background:#f4f5f7;padding:32px 16px;">
+<table width="600" style="max-width:600px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;">
+<tr><td style="background:linear-gradient(135deg,#1a2e1a,#2d4a2d);padding:28px 40px;text-align:center;">
+  <p style="color:#fff;font-size:20px;font-weight:700;margin:0;">Payment Received</p>
+  <p style="color:rgba(255,255,255,0.65);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;margin:6px 0 0;">Handy Pioneers</p>
+</td></tr>
+<tr><td style="padding:36px 40px;color:#1a1a1a;font-size:15px;line-height:1.6;">
+  <p>Hi ${firstName},</p>
+  <p>We received your payment of <strong>${amountStr}</strong> for invoice <strong>${inv.invoiceNumber}</strong>. Thank you!</p>
+  <table width="100%" style="margin:20px 0;"><tr><td style="background:#f8f9fa;border:1px solid #e8e8e8;border-radius:6px;padding:16px 24px;text-align:center;">
+    <p style="margin:0;font-size:13px;color:#888;text-transform:uppercase;">Amount Paid</p>
+    <p style="margin:4px 0 0;font-size:28px;font-weight:700;color:#2D5016;">${amountStr}</p>
+  </td></tr></table>
+  <p style="text-align:center;"><a href="${invoiceUrl}" style="display:inline-block;background:#c8922a;color:#fff;font-weight:700;padding:12px 32px;border-radius:6px;text-decoration:none;">View Invoice</a></p>
+  <p style="font-size:13px;color:#888;text-align:center;">Questions? <a href="mailto:help@handypioneers.com" style="color:#c8922a;">help@handypioneers.com</a> | (360) 544-9858</p>
+</td></tr></table></body></html>`;
+                await sendEmail({ to: customer.email, subject: `Payment Received — Invoice ${inv.invoiceNumber}`, html: receiptHtml }).catch(() => null);
+                await notifyOwner({ title: `💳 Invoice Paid: ${inv.invoiceNumber}`, content: `${customer.name} paid ${amountStr} for invoice ${inv.invoiceNumber} via Stripe PaymentIntent.` }).catch(() => null);
+              }
+            } catch (emailErr) {
+              console.error('[Webhook] PI receipt email failed:', emailErr);
+            }
           } else {
             console.log(`[Webhook] No portal invoice found for PI ${pi.id} — may be client-side only`);
           }
