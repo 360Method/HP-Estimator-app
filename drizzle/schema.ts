@@ -2025,3 +2025,26 @@ export const agentPlaybooks = mysqlTable("agentPlaybooks", {
 });
 export type DbAgentPlaybook = typeof agentPlaybooks.$inferSelect;
 export type InsertDbAgentPlaybook = typeof agentPlaybooks.$inferInsert;
+
+// ─── AGENT OPTIMIZATION TASKS (Phase 5 — System Integrity self-optimization) ─
+// Migration 0073. One row per (agent, anomaly kind, day) — UNIQUE keeps the
+// hourly cron from spamming the same flag. Marcin reviews from
+// /admin/agents/control.
+export const agentOptimizationTasks = mysqlTable("agent_optimization_tasks", {
+  id:                int("id").autoincrement().primaryKey(),
+  agentId:           int("agentId").notNull(),
+  seatName:          varchar("seatName", { length: 80 }).notNull(),
+  kind:              varchar("kind", { length: 40 }).notNull(),
+  title:             varchar("title", { length: 255 }).notNull(),
+  details:           text("details"),
+  severity:          mysqlEnum("severity", ["info", "warn", "critical"]).notNull().default("info"),
+  dayKey:            varchar("dayKey", { length: 10 }).notNull(),
+  status:            mysqlEnum("status", ["open", "acknowledged", "dismissed", "applied"])
+                       .notNull()
+                       .default("open"),
+  reviewedByUserId:  int("reviewedByUserId"),
+  reviewedAt:        timestamp("reviewedAt"),
+  createdAt:         timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbAgentOptimizationTask = typeof agentOptimizationTasks.$inferSelect;
+export type InsertDbAgentOptimizationTask = typeof agentOptimizationTasks.$inferInsert;

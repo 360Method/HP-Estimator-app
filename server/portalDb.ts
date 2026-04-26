@@ -89,7 +89,23 @@ export async function upsertPortalCustomer(data: InsertPortalCustomer) {
   const db = await d();
   const result = await db.insert(portalCustomers).values(data);
   const newId = Number((result as any).insertId ?? (result as any)[0]?.insertId);
-  return findPortalCustomerById(newId);
+  const created = await findPortalCustomerById(newId);
+  // Phase 5 trigger: customer.portal_account_created — fans out to Onboarding
+  // AI (welcome sequence) and Member Concierge. Fire-and-forget; never blocks
+  // the upsert. Only fires for genuinely-new accounts (the existing branch
+  // above is an update, not a creation).
+  if (created) {
+    import("./lib/agentRuntime/triggerBus").then(({ emitAgentEvent }) =>
+      emitAgentEvent("customer.portal_account_created", {
+        portalCustomerId: created.id,
+        customerId: created.hpCustomerId ?? null,
+        email: created.email,
+        name: created.name,
+        phone: created.phone ?? null,
+      }).catch(() => null)
+    ).catch(() => null);
+  }
+  return created;
 }
 
 export async function updatePortalCustomerStripeId(customerId: number, stripeCustomerId: string) {

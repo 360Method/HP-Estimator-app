@@ -11,6 +11,8 @@ import AdminAccessDenied from "@/pages/AdminAccessDenied";
 const NAV = [
   { href: "/admin/dashboard", label: "Dashboard" },
   { href: "/admin/chat", label: "Integrator Chat" },
+  { href: "/admin/agents/control", label: "Engine Control" },
+  { href: "/admin/agents/runs", label: "Runs" },
   { href: "/admin/ai-agents", label: "AI Agents" },
   { href: "/admin/ai-agents/tasks", label: "Approval Queue" },
   { href: "/admin/scheduling", label: "Scheduling" },

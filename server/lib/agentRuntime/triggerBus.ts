@@ -24,6 +24,7 @@ import { aiAgentEventSubscriptions, aiAgentTasks } from "../../../drizzle/schema
 export const AGENT_EVENTS = [
   "lead.created",
   "opportunity.stage_changed",
+  "invoice.created",
   "invoice.overdue",
   "customer.portal_account_created",
   "visit.scheduled",
@@ -35,6 +36,14 @@ export const AGENT_EVENTS = [
   "subscription.renewed",
   "subscription.cancelled",
   "review.received",
+  "email.received",
+  /**
+   * Meta-event — fires from runtime.ts after every agent run completes
+   * (success, fail, or tool_error). System Integrity subscribes to this for
+   * anomaly detection and KPI rollups; downstream agents can subscribe with
+   * a filter (e.g. {agentId: <upstream-seat-id>}) to chain handoffs.
+   */
+  "agent.run_completed",
 ] as const;
 
 export type AgentEventName = (typeof AGENT_EVENTS)[number] | (string & {});
