@@ -125,11 +125,59 @@ export const gmailTokens = mysqlTable("gmailTokens", {
   accessToken: text("accessToken"),
   refreshToken: text("refreshToken"),
   expiresAt: bigint("expiresAt", { mode: "number" }),
+  // ── Email Manager AI additions (migration 0065) ───────────────────────────
+  staffUserId: int("staffUserId"),
+  scopesGranted: text("scopesGranted"),
+  connectedAt: timestamp("connectedAt"),
+  lastSyncedAt: timestamp("lastSyncedAt"),
+  lastMessageIdSeen: varchar("lastMessageIdSeen", { length: 128 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
 export type GmailToken = typeof gmailTokens.$inferSelect;
+
+// ─── EMAIL MANAGER AI: AGENTS (virtual seats) ────────────────────────────────
+export const aiAgents = mysqlTable("aiAgents", {
+  id: int("id").autoincrement().primaryKey(),
+  seatName: varchar("seatName", { length: 80 }).notNull().unique(),
+  department: varchar("department", { length: 80 }).notNull().default("integrator_visionary"),
+  reportsTo: varchar("reportsTo", { length: 80 }).notNull().default("Integrator"),
+  status: mysqlEnum("status", ["active", "draft_queue", "paused"]).notNull().default("draft_queue"),
+  systemPrompt: text("systemPrompt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type AiAgent = typeof aiAgents.$inferSelect;
+export type InsertAiAgent = typeof aiAgents.$inferInsert;
+
+// ─── EMAIL MANAGER AI: MESSAGE LINKS ─────────────────────────────────────────
+// One row per inbound Gmail message processed by the Email Manager AI.
+// Links each message to a customer profile (if matched) and stores the AI draft.
+export const gmailMessageLinks = mysqlTable("gmailMessageLinks", {
+  id: int("id").autoincrement().primaryKey(),
+  gmailMessageId: varchar("gmailMessageId", { length: 128 }).notNull().unique(),
+  gmailThreadId: varchar("gmailThreadId", { length: 128 }),
+  staffGmailEmail: varchar("staffGmailEmail", { length: 320 }).notNull(),
+  customerId: varchar("customerId", { length: 64 }),
+  classification: mysqlEnum("classification", [
+    "customer", "urgent", "promo", "spam", "personal", "lead_inquiry", "unclassified",
+  ]).notNull().default("unclassified"),
+  classificationScore: int("classificationScore").notNull().default(0),
+  aiDraftReplyId: int("aiDraftReplyId"),
+  gmailDraftId: varchar("gmailDraftId", { length: 128 }),
+  fromEmail: varchar("fromEmail", { length: 320 }).notNull().default(""),
+  fromName: varchar("fromName", { length: 255 }).notNull().default(""),
+  subject: varchar("subject", { length: 512 }).notNull().default(""),
+  bodyPreview: varchar("bodyPreview", { length: 500 }).notNull().default(""),
+  archived: boolean("archived").notNull().default(false),
+  processedAt: timestamp("processedAt").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type GmailMessageLink = typeof gmailMessageLinks.$inferSelect;
+export type InsertGmailMessageLink = typeof gmailMessageLinks.$inferInsert;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // CUSTOMER PORTAL TABLES

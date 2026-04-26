@@ -14,7 +14,8 @@ import { serveStatic, setupVite } from "./vite";
 import Stripe from "stripe";
 import { handleInboundSms, handleCallStatusUpdate, generateVoiceToken, isTwilioConfigured, downloadAndStoreRecording } from "../twilio";
 import twilio from "twilio";
-import { exchangeGmailCode, pollInboundEmails, sendOverdueReminderEmail } from "../gmail";
+import { exchangeGmailCode, pollInboundEmails, sendOverdueReminderEmail, isGmailConfigured } from "../gmail";
+import { runEmailManagerPipeline } from "../emailManagerAI";
 import { getFirstGmailToken, listOpportunities, updateOpportunity } from "../db";
 import { addSSEClient, broadcastNewMessage } from "../sse";
 import { getPortalInvoiceByStripePaymentIntentId, updatePortalInvoicePaid, getPortalInvoiceByCheckoutSessionId, findPortalCustomerById, getOverdueInvoicesForReminder, markPortalInvoiceReminderSent, getSignOffsEligibleForReviewRequest, getSignOffsEligibleForReviewReminder, markReviewRequestSent, markReviewReminderSent } from "../portalDb";
@@ -456,6 +457,70 @@ async function ensureCharterTables() {
   }
 }
 
+async function ensureEmailManagerTables() {
+  try {
+    const { getDb } = await import("../db");
+    const { sql } = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return;
+
+    // aiAgents
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`aiAgents\` (
+      \`id\`           int            NOT NULL AUTO_INCREMENT,
+      \`seatName\`     varchar(80)    NOT NULL,
+      \`department\`   varchar(80)    NOT NULL DEFAULT 'integrator_visionary',
+      \`reportsTo\`    varchar(80)    NOT NULL DEFAULT 'Integrator',
+      \`status\`       enum('active','draft_queue','paused') NOT NULL DEFAULT 'draft_queue',
+      \`systemPrompt\` text           NULL,
+      \`createdAt\`    timestamp      NOT NULL DEFAULT (now()),
+      \`updatedAt\`    timestamp      NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT \`aiAgents_id\` PRIMARY KEY (\`id\`),
+      UNIQUE KEY \`aiAgents_seatName_uidx\` (\`seatName\`)
+    )`);
+
+    // gmailMessageLinks
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`gmailMessageLinks\` (
+      \`id\`                  int            NOT NULL AUTO_INCREMENT,
+      \`gmailMessageId\`      varchar(128)   NOT NULL,
+      \`gmailThreadId\`       varchar(128)   NULL,
+      \`staffGmailEmail\`     varchar(320)   NOT NULL,
+      \`customerId\`          varchar(64)    NULL,
+      \`classification\`      enum('customer','urgent','promo','spam','personal','lead_inquiry','unclassified') NOT NULL DEFAULT 'unclassified',
+      \`classificationScore\` int            NOT NULL DEFAULT 0,
+      \`aiDraftReplyId\`      int            NULL,
+      \`gmailDraftId\`        varchar(128)   NULL,
+      \`fromEmail\`           varchar(320)   NOT NULL DEFAULT '',
+      \`fromName\`            varchar(255)   NOT NULL DEFAULT '',
+      \`subject\`             varchar(512)   NOT NULL DEFAULT '',
+      \`bodyPreview\`         varchar(500)   NOT NULL DEFAULT '',
+      \`archived\`            tinyint(1)     NOT NULL DEFAULT 0,
+      \`processedAt\`         timestamp      NOT NULL DEFAULT (now()),
+      \`createdAt\`           timestamp      NOT NULL DEFAULT (now()),
+      CONSTRAINT \`gmailMessageLinks_id\` PRIMARY KEY (\`id\`),
+      UNIQUE KEY \`gmailMessageLinks_msgId_uidx\` (\`gmailMessageId\`)
+    )`);
+
+    // gmailTokens extra columns (idempotent ALTER)
+    const [[scopeRow]]: any = await db.execute(sql`
+      SELECT COUNT(*) AS c FROM information_schema.columns
+      WHERE table_schema = DATABASE() AND table_name = 'gmailTokens' AND column_name = 'lastSyncedAt'
+    `);
+    if (Number(scopeRow?.c ?? 0) === 0) {
+      await db.execute(sql`ALTER TABLE \`gmailTokens\`
+        ADD COLUMN \`staffUserId\`       int            NULL,
+        ADD COLUMN \`scopesGranted\`     text           NULL,
+        ADD COLUMN \`connectedAt\`       timestamp      NULL,
+        ADD COLUMN \`lastSyncedAt\`      timestamp      NULL,
+        ADD COLUMN \`lastMessageIdSeen\` varchar(128)   NULL`);
+      console.log("[boot] gmailTokens columns added for Email Manager AI");
+    }
+
+    console.log("[boot] Email Manager AI tables ensured");
+  } catch (err) {
+    console.warn("[boot] ensureEmailManagerTables failed (non-fatal):", err);
+  }
+}
+
 async function startServer() {
   await ensurePhoneTables();
   await ensurePortalContinuityFlag();
@@ -467,6 +532,7 @@ async function startServer() {
   await ensureVendorTablesBoot();
   await ensurePasswordResetTokensTableBoot();
   await ensureCharterTables();
+  await ensureEmailManagerTables();
   const app = express();
   const server = createServer(app);
 
@@ -1048,6 +1114,19 @@ async function startServer() {
     addSSEClient(clientId, res);
   });
 
+  // ── Health check ─────────────────────────────────────────────────────────────
+  app.get("/api/health", async (req, res) => {
+    const { getDb } = await import("../db");
+    const db = await getDb();
+    const gmailConfigured = isGmailConfigured();
+    const gmailConnected = !!(process.env.GMAIL_CONNECTED_EMAIL);
+    res.json({
+      status: "ok",
+      db: db ? "connected" : "unavailable",
+      gmail: { configured: gmailConfigured, connected: gmailConnected },
+    });
+  });
+
   // ── Gmail diagnostic endpoint (admin only) ─────────────────────────────────────
   app.get("/api/gmail/debug", async (req, res) => {
     try {
@@ -1384,7 +1463,24 @@ async function startServer() {
         console.error("[Gmail] Poll error:", err)
       );
     }
-  }, 2 * 60 * 1000); // every 2 minutes
+  }, 2 * 60 * 1000);
+
+  // ── Email Manager AI pipeline (every 15 minutes) ──────────────────────────
+  const runEmailManagerJob = async () => {
+    const email = process.env.GMAIL_CONNECTED_EMAIL;
+    if (!email) return;
+    if (!process.env.ANTHROPIC_API_KEY) {
+      console.warn("[EmailManagerAI] ANTHROPIC_API_KEY not set — skipping AI pipeline");
+      return;
+    }
+    await runEmailManagerPipeline(email).catch(err =>
+      console.error("[EmailManagerAI] Pipeline error:", err)
+    );
+  };
+  // Run once on startup, then every 15 min
+  runEmailManagerJob().catch(console.error);
+  setInterval(runEmailManagerJob, 15 * 60 * 1000);
+  console.log("[EmailManagerAI] AI email pipeline started (runs every 15 min)");
 
   // ── Overdue invoice reminder (daily at 9 AM server time) ─────────────────────
   const runOverdueReminders = async () => {
