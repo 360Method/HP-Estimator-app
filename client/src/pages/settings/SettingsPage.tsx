@@ -9,6 +9,7 @@ import {
   FileText, Receipt, Briefcase, UserPlus, GitBranch,
   BookOpen, CheckSquare, Tag, Zap, ChevronDown, ChevronRight,
   DollarSign, Layers, Settings, ShieldCheck, MapPin, Upload, Phone, Bot,
+  Network, Power,
 } from 'lucide-react';
 
 // Sub-page imports
@@ -44,7 +45,7 @@ export type SettingsSection =
 
 interface NavGroup {
   label: string;
-  items: { id: SettingsSection; label: string; icon: React.ElementType }[];
+  items: { id: SettingsSection; label: string; icon: React.ElementType; href?: string }[];
 }
 
 const NAV_GROUPS: NavGroup[] = [
@@ -98,6 +99,8 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'AI Agents',
     items: [
       { id: 'agent-charters', label: 'Charters & Playbooks', icon: Bot },
+      { id: 'agent-charters', label: 'Org Chart',           icon: Network, href: '/admin/org-chart' },
+      { id: 'agent-charters', label: 'Engine Control',      icon: Power,   href: '/admin/agents/control' },
     ],
   },
 ];
@@ -181,12 +184,24 @@ export default function SettingsPage({ onBack, initialSection = 'company' }: Pro
                 {group.label}
                 {collapsed ? <ChevronRight size={10} /> : <ChevronDown size={10} />}
               </button>
-              {!collapsed && group.items.map(item => {
+              {!collapsed && group.items.map((item, idx) => {
                 const Icon = item.icon;
-                const isActive = active === item.id;
+                const isActive = !item.href && active === item.id;
+                if (item.href) {
+                  return (
+                    <a
+                      key={`${item.id}-${idx}-${item.href}`}
+                      href={item.href}
+                      className="w-full flex items-center gap-2.5 px-4 py-2 text-sm transition-colors text-left text-foreground hover:bg-muted/60 font-normal"
+                    >
+                      <Icon size={14} className="text-muted-foreground" />
+                      {item.label}
+                    </a>
+                  );
+                }
                 return (
                   <button
-                    key={item.id}
+                    key={`${item.id}-${idx}`}
                     onClick={() => { setActive(item.id); setMobileSidebarOpen(false); }}
                     className={`w-full flex items-center gap-2.5 px-4 py-2 text-sm transition-colors text-left ${
                       isActive
