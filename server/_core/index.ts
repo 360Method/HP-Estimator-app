@@ -120,6 +120,94 @@ async function ensurePhoneTables() {
   }
 }
 
+async function ensurePriorityTranslationTables() {
+  // Migration 0058 created these for the Roadmap Generator lead magnet but
+  // the drizzle tracker diverges from prod (see memory note: migration drift
+  // is a known issue), so the tables aren't actually present in production.
+  // Create them at boot if missing — same pattern as ensurePhoneTables().
+  try {
+    const { getDb } = await import("../db");
+    const { sql } = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return;
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`portalAccounts\` (
+      \`id\` varchar(64) NOT NULL,
+      \`email\` varchar(320) NOT NULL,
+      \`firstName\` varchar(128) NOT NULL DEFAULT '',
+      \`lastName\` varchar(128) NOT NULL DEFAULT '',
+      \`phone\` varchar(32) NOT NULL DEFAULT '',
+      \`customerId\` varchar(64),
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      \`lastLoginAt\` timestamp NULL,
+      CONSTRAINT \`portalAccounts_id\` PRIMARY KEY(\`id\`),
+      CONSTRAINT \`portalAccounts_email_unique\` UNIQUE(\`email\`)
+    )`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS \`portalAccounts_email_idx\` ON \`portalAccounts\` (\`email\`)`).catch(() => null);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS \`portalAccounts_customerId_idx\` ON \`portalAccounts\` (\`customerId\`)`).catch(() => null);
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`portalMagicLinks\` (
+      \`token\` varchar(128) NOT NULL,
+      \`portalAccountId\` varchar(64) NOT NULL,
+      \`expiresAt\` timestamp NOT NULL,
+      \`consumedAt\` timestamp NULL,
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      CONSTRAINT \`portalMagicLinks_token\` PRIMARY KEY(\`token\`)
+    )`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS \`portalMagicLinks_account_idx\` ON \`portalMagicLinks\` (\`portalAccountId\`)`).catch(() => null);
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`portalProperties\` (
+      \`id\` varchar(64) NOT NULL,
+      \`portalAccountId\` varchar(64) NOT NULL,
+      \`street\` varchar(255) NOT NULL DEFAULT '',
+      \`unit\` varchar(64) NOT NULL DEFAULT '',
+      \`city\` varchar(128) NOT NULL DEFAULT '',
+      \`state\` varchar(64) NOT NULL DEFAULT '',
+      \`zip\` varchar(10) NOT NULL DEFAULT '',
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      CONSTRAINT \`portalProperties_id\` PRIMARY KEY(\`id\`)
+    )`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS \`portalProperties_account_idx\` ON \`portalProperties\` (\`portalAccountId\`)`).catch(() => null);
+    await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS \`portalProperties_account_zip_street_idx\` ON \`portalProperties\`(\`portalAccountId\`, \`street\`, \`zip\`)`).catch(() => null);
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`homeHealthRecords\` (
+      \`id\` varchar(64) NOT NULL,
+      \`propertyId\` varchar(64) NOT NULL,
+      \`portalAccountId\` varchar(64) NOT NULL,
+      \`findings\` json NOT NULL,
+      \`summary\` text,
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT \`homeHealthRecords_id\` PRIMARY KEY(\`id\`)
+    )`);
+    await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS \`homeHealthRecords_property_idx\` ON \`homeHealthRecords\`(\`propertyId\`)`).catch(() => null);
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`priorityTranslations\` (
+      \`id\` varchar(64) NOT NULL,
+      \`portalAccountId\` varchar(64) NOT NULL,
+      \`propertyId\` varchar(64) NOT NULL,
+      \`homeHealthRecordId\` varchar(64),
+      \`pdfStoragePath\` text,
+      \`reportUrl\` text,
+      \`notes\` text,
+      \`status\` varchar(32) NOT NULL DEFAULT 'submitted',
+      \`claudeResponse\` json,
+      \`outputPdfPath\` text,
+      \`deliveredAt\` timestamp NULL,
+      \`failureReason\` text,
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT \`priorityTranslations_id\` PRIMARY KEY(\`id\`)
+    )`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS \`priorityTranslations_account_idx\` ON \`priorityTranslations\` (\`portalAccountId\`)`).catch(() => null);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS \`priorityTranslations_property_idx\` ON \`priorityTranslations\` (\`propertyId\`)`).catch(() => null);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS \`priorityTranslations_status_idx\` ON \`priorityTranslations\` (\`status\`)`).catch(() => null);
+
+    console.log("[boot] priorityTranslation tables ensured");
+  } catch (err) {
+    console.warn("[boot] ensurePriorityTranslationTables failed (non-fatal):", err);
+  }
+}
+
 async function ensurePortalContinuityFlag() {
   try {
     const { getDb } = await import("../db");
@@ -371,6 +459,7 @@ async function ensureCharterTables() {
 async function startServer() {
   await ensurePhoneTables();
   await ensurePortalContinuityFlag();
+  await ensurePriorityTranslationTables();
   await ensureOAuthIntegrationTables();
   await ensureMagicLinkTokenHash();
   await ensureSchedulingTablesBoot();
