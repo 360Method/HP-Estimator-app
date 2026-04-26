@@ -233,6 +233,32 @@ async function ensurePortalContinuityFlag() {
   }
 }
 
+// Annual Home Health Report opt-in toggle on threeSixtyMemberships.
+// Default OFF per Customer Success Charter §5.
+async function ensureAnnualValuationOptInColumn() {
+  try {
+    const { getDb } = await import("../db");
+    const { sql } = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return;
+    const [[row]]: any = await db.execute(sql`
+      SELECT COUNT(*) AS c FROM information_schema.columns
+      WHERE table_schema = DATABASE()
+        AND table_name = 'threeSixtyMemberships'
+        AND column_name = 'annualValuationOptIn'
+    `);
+    if (row && Number(row.c) === 0) {
+      await db.execute(sql`
+        ALTER TABLE \`threeSixtyMemberships\`
+        ADD COLUMN \`annualValuationOptIn\` boolean NOT NULL DEFAULT 0
+      `);
+      console.log("[boot] annualValuationOptIn column added");
+    }
+  } catch (err) {
+    console.warn("[boot] ensureAnnualValuationOptInColumn failed (non-fatal):", err);
+  }
+}
+
 async function ensureOAuthIntegrationTables() {
   try {
     const { getDb } = await import("../db");
@@ -524,6 +550,7 @@ async function ensureEmailManagerTables() {
 async function startServer() {
   await ensurePhoneTables();
   await ensurePortalContinuityFlag();
+  await ensureAnnualValuationOptInColumn();
   await ensurePriorityTranslationTables();
   await ensureOAuthIntegrationTables();
   await ensureMagicLinkTokenHash();
@@ -1482,7 +1509,18 @@ async function startServer() {
   setInterval(runEmailManagerJob, 15 * 60 * 1000);
   console.log("[EmailManagerAI] AI email pipeline started (runs every 15 min)");
 
-  // ── Overdue invoice reminder (daily at 9 AM server time) ─────────────────────
+  // ── Overdue invoice reminder — DISABLED 2026-04-25 ──────────────────────────
+  // Per Customer Success Charter §3 (Invoice Email Cadence), Handy Pioneers
+  // does NOT chase late payments via automated reminders. Members and customers
+  // receive a single invoice email at creation; subsequent communication about
+  // unpaid balances is handled by the Concierge / Customer Success seat
+  // personally, in-context. The daily 9am cron has been removed. The manual
+  // `financials.sendReminder` endpoint remains available for one-off operator
+  // use, but no scheduled job calls it.
+  //
+  // The implementation below is preserved (commented) so the wiring can be
+  // restored quickly if the policy changes.
+  /*
   const runOverdueReminders = async () => {
     try {
       const overdueRows = await getOverdueInvoicesForReminder();
@@ -1530,6 +1568,8 @@ async function startServer() {
     console.log(`[Overdue] Next reminder run scheduled in ${Math.round(msUntil9am / 60000)} minutes`);
   };
   scheduleOverdueReminders();
+  */
+  console.log("[Overdue] Automated overdue reminders are DISABLED by policy (Customer Success Charter §3).");
 
   // ── Review request emails (runs every hour, checks for eligible sign-offs) ─────
   const GOOGLE_REVIEW_URL = process.env.GOOGLE_REVIEW_URL ?? 'https://g.page/r/handypioneers/review';
