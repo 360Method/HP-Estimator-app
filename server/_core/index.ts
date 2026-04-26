@@ -1,12 +1,14 @@
 import "dotenv/config";
-import express from "express";
+import express, { type Request, type Response } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import multer from "multer";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { appRouter } from "../routers";
+import { submitRoadmap } from "../lib/priorityTranslation/orchestrator";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import Stripe from "stripe";
@@ -412,7 +414,9 @@ async function startServer() {
   app.use("/api/360/checkout", publicWriteLimiter);
   app.use("/api/360/portfolio-checkout", publicWriteLimiter);
 
-  // ── CORS: allow 360 funnel, portal, and marketing site to call the pro API ──
+  // ── CORS: allow 360 funnel, portal, and the public marketing site ──
+  // handypioneers.com / www.handypioneers.com host the Roadmap Generator form,
+  // which posts the multipart PDF upload to /api/roadmap-generator/submit here.
   const allowedOrigins = [
     "https://360.handypioneers.com",
     "https://client.handypioneers.com",
@@ -1531,9 +1535,11 @@ async function startServer() {
   // ── Roadmap Generator / Priority Translation: multipart PDF intake ──
   // Inspection report PDFs can legitimately run 50-80 MB (Spectora exports
   // with embedded photos). Limit is 100 MB to keep a buffer without letting
-  // arbitrary huge payloads through. Writes the file to UPLOAD_VOLUME_PATH
-  // (Railway volume) if configured, else to the OS temp dir, then dispatches
-  // to the tRPC `priorityTranslation.submit` procedure with the storage path.
+  // arbitrary huge payloads through. Returns 202 immediately; Claude + PDF
+  // render + Resend email run in the background via submitRoadmap() so the
+  // homeowner's browser doesn't hang for 30–60s. Processing failures land in
+  // priorityTranslations.failureReason and trigger an internal email to help@.
+  // Alias /api/priority-translation/submit kept so legacy email links work.
   const ROADMAP_UPLOAD_MAX_BYTES = 100 * 1024 * 1024;
   const roadmapUpload = multer({
     storage: multer.memoryStorage(),
@@ -1547,49 +1553,60 @@ async function startServer() {
 
   async function handleRoadmapSubmit(req: express.Request, res: express.Response) {
     try {
+      const fields = (req.body ?? {}) as Record<string, string>;
       const file = (req as any).file as Express.Multer.File | undefined;
-      let storagePath: string | undefined;
-      if (file) {
-        const uploadDir = process.env.UPLOAD_VOLUME_PATH || path.join(os.tmpdir(), "handy-uploads");
-        await fs.promises.mkdir(uploadDir, { recursive: true });
-        const filename = `priority-translation-${randomUUID()}.pdf`;
-        const fullPath = path.join(uploadDir, filename);
-        await fs.promises.writeFile(fullPath, file.buffer);
-        storagePath = fullPath;
+
+      const required = ["firstName", "lastName", "email", "phone", "propertyAddress"] as const;
+      for (const k of required) {
+        if (!fields[k] || fields[k].trim().length === 0) {
+          res.status(400).json({ error: `Missing required field: ${k}` });
+          return;
+        }
       }
-      const caller = appRouter.createCaller({ req, res, user: null } as any);
-      const result = await caller.priorityTranslation.submit({
-        firstName: req.body.firstName,
-        lastName: req.body.lastName,
-        email: req.body.email,
-        phone: req.body.phone,
-        propertyAddress: req.body.propertyAddress,
-        notes: req.body.notes,
-        pdfStoragePath: storagePath,
-        reportUrl: req.body.reportUrl,
-        source: req.body.source || "roadmap_generator",
+      if (!file && !fields.reportUrl) {
+        res.status(400).json({ error: "Provide a PDF upload or reportUrl" });
+        return;
+      }
+
+      const result = await submitRoadmap({
+        firstName: fields.firstName,
+        lastName: fields.lastName,
+        email: fields.email,
+        phone: fields.phone,
+        propertyAddress: fields.propertyAddress,
+        notes: fields.notes,
+        pdfBuffer: file?.buffer,
+        pdfOriginalName: file?.originalname,
+        reportUrl: fields.reportUrl,
       });
+
       // Phase 4 agent trigger: a Roadmap Generator submission is a hot inbound
       // lead. Fans out to whichever agent subscribes (default: Lead Nurturer).
       try {
         const { emitAgentEvent } = await import("../lib/agentRuntime/triggerBus");
         emitAgentEvent("roadmap_generator.submitted", {
-          firstName: req.body.firstName,
-          lastName: req.body.lastName,
-          email: req.body.email,
-          phone: req.body.phone,
-          propertyAddress: req.body.propertyAddress,
-          notes: req.body.notes,
-          source: req.body.source || "roadmap_generator",
-          submissionId: (result as { id?: string | number } | null)?.id ?? null,
+          firstName: fields.firstName,
+          lastName: fields.lastName,
+          email: fields.email,
+          phone: fields.phone,
+          propertyAddress: fields.propertyAddress,
+          notes: fields.notes,
+          source: fields.source || "roadmap_generator",
+          submissionId: result.id,
         }).catch(() => null);
       } catch (emitErr) {
         console.warn("[Roadmap Generator] event emit failed:", emitErr);
       }
-      res.json(result);
+
+      res.status(202).json({
+        ok: true,
+        id: result.id,
+        status: result.status,
+        message: "Submission received. Your 360° Priority Roadmap will arrive by email within a few minutes.",
+      });
     } catch (err: any) {
       if (err?.code === "LIMIT_FILE_SIZE") {
-        res.status(413).json({ error: "File too large \u2014 max 100MB" });
+        res.status(413).json({ error: "File too large — max 100MB" });
         return;
       }
       console.error("[Roadmap Generator] submit error:", err?.message ?? err);

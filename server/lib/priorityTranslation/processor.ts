@@ -74,12 +74,50 @@ export function parseAddress(raw: string) {
 }
 
 // ─── Claude call ────────────────────────────────────────────────────────────
+/**
+ * Send the inspection report to Claude. Accepts either:
+ *   • `pdfBuffer` — passes the PDF as a `document` content block (preferred:
+ *     Claude OCRs image-only scans natively, no pdf-parse dep needed).
+ *   • `reportText` — falls back to text-only (used when source is a URL we've
+ *     already extracted, or for tests).
+ */
 export async function callClaudeForTranslation(args: {
   propertyAddress: string;
-  reportText: string;
+  reportText?: string;
+  pdfBuffer?: Buffer | Uint8Array;
   apiKey: string;
 }): Promise<ClaudePriorityTranslationResponse> {
+  if (!args.pdfBuffer && !args.reportText) {
+    throw new Error("callClaudeForTranslation requires pdfBuffer or reportText");
+  }
+
   const client = new Anthropic({ apiKey: args.apiKey });
+
+  const userContent: Anthropic.Messages.ContentBlockParam[] = [];
+  if (args.pdfBuffer) {
+    const base64 = Buffer.from(args.pdfBuffer).toString("base64");
+    userContent.push({
+      type: "document",
+      source: {
+        type: "base64",
+        media_type: "application/pdf",
+        data: base64,
+      },
+    });
+    userContent.push({
+      type: "text",
+      text: `Property: ${args.propertyAddress}\n\nThe attached PDF is the inspection report. Produce the JSON roadmap per the system instructions.`,
+    });
+  } else {
+    userContent.push({
+      type: "text",
+      text: PRIORITY_TRANSLATION_USER_TEMPLATE({
+        propertyAddress: args.propertyAddress,
+        reportText: args.reportText!,
+      }),
+    });
+  }
+
   const response = await client.messages.create({
     model: PRIORITY_TRANSLATION_MODEL,
     max_tokens: 4096,
@@ -90,15 +128,7 @@ export async function callClaudeForTranslation(args: {
         cache_control: { type: "ephemeral" },
       },
     ],
-    messages: [
-      {
-        role: "user",
-        content: PRIORITY_TRANSLATION_USER_TEMPLATE({
-          propertyAddress: args.propertyAddress,
-          reportText: args.reportText,
-        }),
-      },
-    ],
+    messages: [{ role: "user", content: userContent }],
   });
 
   const textBlock = response.content.find((b) => b.type === "text");
