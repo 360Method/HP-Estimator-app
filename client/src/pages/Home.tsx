@@ -26,7 +26,8 @@ import ReportingPage from '@/pages/ReportingPage';
 import MarketingPage from '@/pages/MarketingPage';
 import AdminLogin from '@/pages/AdminLogin';
 import AdminAccessDenied from '@/pages/AdminAccessDenied';
-import RequestsPage from '@/pages/RequestsPage';
+import LeadsPage from '@/pages/LeadsPage';
+import NewLeadBanner from '@/components/NewLeadBanner';
 import ThreeSixtyPage from '@/pages/ThreeSixtyPage';
 import FinancialsPage from '@/pages/FinancialsPage';
 import QuickBooksPage from '@/pages/QuickBooksPage';
@@ -68,6 +69,7 @@ function AdminApp() {
 
   return (
     <div className="min-h-screen bg-background">
+      <NewLeadBanner />
       <MetricsBar totals={totals} />
 
       {state.activeSection === 'dashboard' ? (
@@ -86,8 +88,10 @@ function AdminApp() {
         <ReportingPage />
       ) : state.activeSection === 'marketing' ? (
         <MarketingPage />
-      ) : state.activeSection === 'requests' ? (
-        <RequestsPage />
+      ) : (state.activeSection === 'leads' || state.activeSection === 'requests') ? (
+        // 'requests' is the legacy AppSection — old deep-links/notifications still
+        // arrive with section=requests; we fold them into the unified Leads inbox.
+        <LeadsPage />
       ) : state.activeSection === 'three-sixty' ? (
         <ThreeSixtyPage />
       ) : state.activeSection === 'financials' ? (

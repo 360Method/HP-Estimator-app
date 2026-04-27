@@ -21,7 +21,7 @@
  */
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, gte } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { router, publicProcedure } from "../_core/trpc";
 import { getDb, createOpportunity, createScheduleEvent, findCustomerByEmail, createCustomer } from "../db";
@@ -36,7 +36,12 @@ import {
   portalAccounts,
   priorityTranslations,
 } from "../../drizzle/schema.priorityTranslation";
-import { opportunities, threeSixtyMemberships } from "../../drizzle/schema";
+import {
+  threeSixtyMemberships,
+  schedulingSlots,
+  scheduledBookings,
+} from "../../drizzle/schema";
+import { createBooking } from "../scheduling";
 import { sendEmail } from "../gmail";
 import { notifyOwner } from "../_core/notification";
 
@@ -69,11 +74,53 @@ async function findPortalAccountForCustomerEmail(email: string) {
 }
 
 /**
- * Generate 4 mutually agreeable windows starting 5–10 days out.
- * Pacing rules (affluent stewardship):
+ * Stewardship pacing rules for the windows we offer:
  *   - Skip the next 4 days entirely (no "next available in 2 hours")
- *   - Offer mornings (10 AM) and afternoons (2 PM) of business days
- *   - Return 4 distinct windows
+ *   - Weekdays only
+ *   - Mornings (≤ 11 AM) + afternoons (≥ 1 PM, ≤ 4 PM)
+ *   - Return up to 4 distinct windows on distinct calendar days
+ */
+const MIN_DAYS_OUT = 5;
+const MAX_DAYS_OUT = 21;
+const MAX_WINDOWS = 4;
+
+/**
+ * Filter operator-configured slots down to a thoughtful set the customer
+ * actually sees. When the schedulingSlots table is empty (or every slot is
+ * outside the pacing window), fall back to a synthesized list so the funnel
+ * still works on a fresh install.
+ */
+export function pacedFilter<T extends { startAt: Date }>(
+  slots: T[],
+  now = new Date(),
+): T[] {
+  const minTs = now.getTime() + MIN_DAYS_OUT * 86_400_000;
+  const maxTs = now.getTime() + MAX_DAYS_OUT * 86_400_000;
+  const seenDays = new Set<string>();
+  const out: T[] = [];
+  for (const s of slots) {
+    const ts = new Date(s.startAt).getTime();
+    if (ts < minTs || ts > maxTs) continue;
+    const d = new Date(s.startAt);
+    const day = d.getDay();
+    if (day === 0 || day === 6) continue;
+    const hour = d.getHours();
+    const isMorning = hour <= 11;
+    const isAfternoon = hour >= 13 && hour <= 16;
+    if (!isMorning && !isAfternoon) continue;
+    const dayKey = d.toDateString();
+    if (seenDays.has(dayKey)) continue;
+    seenDays.add(dayKey);
+    out.push(s);
+    if (out.length >= MAX_WINDOWS) break;
+  }
+  return out;
+}
+
+/**
+ * Synthesized fallback used when the operator hasn't configured any
+ * `schedulingSlots` rows yet. NOT inserted into the DB — purely a UI offer
+ * the customer can pick. The booking mutation handles the case below.
  */
 export function generateThoughtfulWindows(now = new Date()): Array<{
   id: string;
@@ -82,17 +129,15 @@ export function generateThoughtfulWindows(now = new Date()): Array<{
   label: string;
 }> {
   const windows: Array<{ id: string; startIso: string; endIso: string; label: string }> = [];
-  // Jump 5 days forward, then walk forward.
   const cursor = new Date(now);
-  cursor.setDate(cursor.getDate() + 5);
+  cursor.setDate(cursor.getDate() + MIN_DAYS_OUT);
   cursor.setHours(0, 0, 0, 0);
 
   const morningHour = 10;
   const afternoonHour = 14;
-  // We alternate AM/PM across calendar days to get visual variety.
   let useAfternoon = false;
-  while (windows.length < 4) {
-    const day = cursor.getDay(); // 0 = Sun, 6 = Sat
+  while (windows.length < MAX_WINDOWS) {
+    const day = cursor.getDay();
     if (day !== 0 && day !== 6) {
       const start = new Date(cursor);
       start.setHours(useAfternoon ? afternoonHour : morningHour, 0, 0, 0);
@@ -108,7 +153,7 @@ export function generateThoughtfulWindows(now = new Date()): Array<{
         ? `${afternoonHour - 12}:00 PM`
         : `${morningHour}:00 AM`;
       windows.push({
-        id: `slot_${start.getTime()}`,
+        id: `synth_${start.getTime()}`,
         startIso: start.toISOString(),
         endIso: end.toISOString(),
         label: `${dayLabel} · ${timeLabel}`,
@@ -118,6 +163,19 @@ export function generateThoughtfulWindows(now = new Date()): Array<{
     cursor.setDate(cursor.getDate() + 1);
   }
   return windows;
+}
+
+function formatSlotLabel(start: Date): string {
+  const dayLabel = start.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+  const timeLabel = start.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  return `${dayLabel} · ${timeLabel}`;
 }
 
 /**
@@ -344,10 +402,42 @@ export const portalRoadmapRouter = router({
   }),
 
   /**
-   * Return 4 thoughtful appointment windows, default 5–10 days out.
+   * Return up to 4 thoughtful appointment windows. Pulls from the
+   * operator-configured `schedulingSlots` table, applying stewardship
+   * pacing (≥ 5 days out, weekdays, AM/PM, distinct days). When no slots
+   * qualify (fresh install, all blocked, all out of range), fall back to a
+   * synthesized list so the funnel still works.
    */
   listAvailableWindows: portalProcedure.query(async () => {
-    return generateThoughtfulWindows();
+    const db = await getDb();
+    if (!db) return generateThoughtfulWindows();
+
+    const fromTs = Date.now() + MIN_DAYS_OUT * 86_400_000;
+    const allSlots = await db
+      .select()
+      .from(schedulingSlots)
+      .where(
+        and(
+          gte(schedulingSlots.startAt, new Date(fromTs)),
+          eq(schedulingSlots.blocked, false),
+        ),
+      )
+      .orderBy(asc(schedulingSlots.startAt))
+      .limit(200);
+    const available = allSlots.filter((s) => s.bookedCount < s.capacity);
+    const paced = pacedFilter(available);
+
+    if (paced.length === 0) {
+      return generateThoughtfulWindows();
+    }
+
+    return paced.map((s) => ({
+      id: `slot_${s.id}`,
+      slotId: s.id,
+      startIso: new Date(s.startAt).toISOString(),
+      endIso: new Date(s.endAt).toISOString(),
+      label: formatSlotLabel(new Date(s.startAt)),
+    }));
   }),
 
   /**
@@ -367,6 +457,7 @@ export const portalRoadmapRouter = router({
   bookBaselineWalkthrough: portalProcedure
     .input(
       z.object({
+        slotId: z.number().int().positive().optional(),
         startIso: z.string(),
         endIso: z.string(),
         contactName: z.string().min(1).max(120),
@@ -452,6 +543,30 @@ export const portalRoadmapRouter = router({
         notes: input.priorityConcern ?? null,
       });
 
+      // 3b. If the customer picked a real schedulingSlots row, also reserve
+      //     it in scheduledBookings (the canonical capacity ledger). When the
+      //     window came from the synthesized fallback, we skip — the operator
+      //     will see it via the scheduleEvents calendar instead.
+      let scheduledBookingId: number | null = null;
+      if (input.slotId) {
+        try {
+          const booking = await createBooking({
+            customerId: crmCustomerId,
+            slotId: input.slotId,
+            visitType: "baseline",
+            notes: input.priorityConcern,
+            bookedBy: `portal:${customer.id}`,
+          });
+          scheduledBookingId = booking.id;
+        } catch (e) {
+          // Slot may have been taken between paint and submit — log and keep
+          // going. The portalAppointment + scheduleEvent + opportunity rows
+          // already capture the customer's intent and the operator will see
+          // the conflict in the admin scheduling page.
+          console.warn("[portalRoadmap] slot reservation failed:", e);
+        }
+      }
+
       // 4. Create the pro-side scheduleEvent. The schedule router type
       //    string contains "baseline" so the existing leadRouting hook
       //    fires onAppointmentBooked — but that hook lives in the schedule
@@ -531,6 +646,7 @@ export const portalRoadmapRouter = router({
       return {
         ok: true,
         appointmentId: portalAppt?.id,
+        scheduledBookingId,
         opportunityId,
         scheduleEventId,
         startIso: input.startIso,

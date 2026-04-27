@@ -22,6 +22,9 @@ import { notifyOwner } from "../_core/notification";
 import { onLeadCreated } from "../leadRouting";
 import { nanoid } from "nanoid";
 import { runAutomationsForTrigger } from "../automationEngine";
+import { renderEmailTemplate } from "../emailTemplates";
+import { sendEmail, isGmailConfigured } from "../gmail";
+import { sendSms, isTwilioConfigured } from "../twilio";
 
 export const bookingRouter = router({
   /** Check if a zip code is in the service area. Public — no auth required. */
@@ -149,14 +152,26 @@ export const bookingRouter = router({
         referenceNumber: leadId,
       }).catch(e => console.error('[automation] new_booking error:', e));
 
-      // Fire lead-routing notification to the Nurturer (non-blocking)
+      // Fire lead-routing notification to the Nurturer (non-blocking).
+      // `source` must match the typed LeadSource union; the free-text
+      // serviceType lives in the opportunity title/notes already.
       onLeadCreated({
         opportunityId: leadId,
         customerId: customer.id,
         title: `New online request — ${displayName}`,
-        source: input.serviceType,
-        priority: input.timeline === 'emergency' ? 'high' : 'normal',
+        source: 'book_consultation',
+        priority: input.timeline === 'ASAP' ? 'high' : 'normal',
       }).catch((e) => console.error('[leadRouting] onLeadCreated error:', e));
+
+      // Customer auto-ack — affluent-voice "your inquiry is in our care"
+      // (per Customer Success Charter, 2026-04-25). Email + SMS, both
+      // best-effort; the inquiry is already committed to the DB.
+      void sendBookingInquiryAck({
+        firstName: input.firstName,
+        email: input.email,
+        phone: input.phone,
+        smsConsent: input.smsConsent,
+      });
       return {
         success: true,
         leadId,
@@ -210,3 +225,68 @@ export const bookingRouter = router({
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => getOnlineRequestById(input.id)),
 });
+
+// ─── Customer auto-ack helper ──────────────────────────────────────────────────
+// Sends the "your inquiry is in our care" email + SMS after a /book wizard
+// submission. Affluent-voice copy is sourced from the `booking_inquiry_received`
+// template (seed-email-templates.mjs). Falls back to inline copy if the seed
+// has not been re-run against the DB.
+async function sendBookingInquiryAck(params: {
+  firstName: string;
+  email: string;
+  phone: string;
+  smsConsent: boolean;
+}): Promise<void> {
+  const portalUrl = process.env.PORTAL_BASE_URL ?? "https://client.handypioneers.com";
+  try {
+    if (isGmailConfigured()) {
+      const tpl = await renderEmailTemplate("booking_inquiry_received", {
+        customerFirstName: params.firstName,
+        portalUrl,
+      });
+      const subject = tpl?.subject ?? `Your inquiry is in our care, ${params.firstName}`;
+      const html = tpl?.html ?? defaultBookingAckHtml(params.firstName);
+      const text = tpl?.text ?? defaultBookingAckText(params.firstName);
+      await sendEmail({ to: params.email, subject, html, body: text }).catch((e) =>
+        console.warn("[booking ack] email failed:", e),
+      );
+    }
+  } catch (e) {
+    console.warn("[booking ack] email path errored:", e);
+  }
+  // SMS only if customer consented (TCPA hygiene)
+  try {
+    if (params.smsConsent && params.phone && isTwilioConfigured()) {
+      const smsBody = `Your inquiry is in our care, ${params.firstName}. Your Handy Pioneers Concierge will reach out within one business day to align on timing. (360) 241-5718 if anything is time-sensitive.`;
+      await sendSms(params.phone, smsBody).catch((e) =>
+        console.warn("[booking ack] sms failed:", e),
+      );
+    }
+  } catch (e) {
+    console.warn("[booking ack] sms path errored:", e);
+  }
+}
+
+function defaultBookingAckHtml(firstName: string): string {
+  return `<p>${firstName},</p>
+<p>Your inquiry has reached us at Handy Pioneers, and it is in our care.</p>
+<p>Here is what happens next: a member of our Concierge team will reach out personally — by text or by email — within one business day to learn more about your home, understand the project you have in mind, and find a window of time that fits your schedule for a walkthrough conversation.</p>
+<p>Nothing further is needed from you in the meantime. We come to you.</p>
+<p>If anything time-sensitive surfaces, you are welcome to call us directly at (360) 241-5718.</p>
+<p>— The Handy Pioneers Team<br>(360) 241-5718 · help@handypioneers.com</p>`;
+}
+
+function defaultBookingAckText(firstName: string): string {
+  return `${firstName},
+
+Your inquiry has reached us at Handy Pioneers, and it is in our care.
+
+A member of our Concierge team will reach out personally — by text or by email — within one business day to learn more about your home, understand the project you have in mind, and find a window of time that fits your schedule.
+
+Nothing further is needed from you in the meantime. We come to you.
+
+If anything time-sensitive surfaces, call us at (360) 241-5718.
+
+— The Handy Pioneers Team
+(360) 241-5718 · help@handypioneers.com`;
+}

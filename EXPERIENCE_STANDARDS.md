@@ -1,15 +1,135 @@
-# Experience Standards
+# Experience Standards — Handy Pioneers Pro App
 
-The principles every customer-facing surface in `client.handypioneers.com/portal`
-must hold to. Affluent buyers smell sales theater immediately — these standards
-exist so the portal feels like stewardship instead of marketing.
+This is the operator's daily workspace. The bar is excellence, not adequacy.
+The patterns below are the load-bearing decisions; deviating requires a good
+reason and a follow-up to update this document.
 
-## Voice rules
+## 1. The customer is the root entity
 
-**Never use** the following words in copy, button labels, headings, email
-templates, or notification bodies:
+Every notification, every banner, every list row that names a person ends up
+on **the customer profile**. Opportunities, estimates, jobs, invoices, and
+roadmaps are all surfaces inside the profile — never destinations of their
+own. Notification rows include `customerId` and link to
+`/?section=customer&customer=<id>` (the opportunity ID is appended as a
+secondary affordance, never the primary).
 
-- `estimate` (it's a "proposal" or "Roadmap")
+This means: if you find yourself building a top-level page for a single
+source (Requests, Voicemails, Missed Calls), stop. Add it as a chip in the
+Leads inbox or as a section in the customer profile.
+
+## 2. One inbox per role
+
+Marcin operates the entire pipeline. Every incoming lead — regardless of
+source — funnels into a single Leads inbox. The chip set tells him *where*
+each lead came from; the row order tells him *what's freshest*.
+
+Sources currently funneled in:
+- Online Request (`/book` form)
+- Roadmap Generator (Priority Translation)
+- Inbound Call / Missed Call / Voicemail (Twilio webhooks)
+- Membership Intent (360° enrollment)
+- Baseline Walkthrough booking
+- Manual entry (`New Lead` modal)
+- Contact Form / Referral
+
+Adding a new source = adding a row to `deriveSource()` in
+`server/routers/leads.ts` and a `SOURCE_META` entry in `LeadsPage.tsx`.
+**Do not** spin up a new top-level page for it.
+
+## 3. Persistent surfaces, not ephemeral ones
+
+If something matters, it stays visible until the operator engages with it.
+The `NewLeadBanner` (top of every admin page) shows unread `new_lead` and
+`new_booking` notifications until the operator opens the lead or explicitly
+dismisses it for the session. Toasts are for confirmation of actions the
+operator just took, not for important inbound signals.
+
+## 4. Mobile-first means literal phone-first
+
+Marcin operates from his phone. Every operator-facing surface meets:
+
+- **Tap targets ≥ 44 × 44 px.** Use `style={{ minHeight: 44 }}` on buttons
+  if Tailwind classes can't get you there.
+- **Single column** below `sm` (640 px). Two-column layouts collapse,
+  they don't squeeze.
+- **Sticky page header** on scroll. The operator should always know where
+  they are.
+- **Bottom action bar** on the Leads list and customer profile with the
+  four primary one-touch ops actions: Email, Call, SMS, Schedule.
+
+## 5. Calm, hierarchical, not tabs-everywhere
+
+The customer profile is the densest surface in the app. We resist the
+temptation to fragment it into more tabs. Instead, the **Concierge Brief**
+(top of Profile tab) gives a single-glance executive summary that points
+the operator at the right tab to dig deeper — header, Roadmap, AI activity,
+quick actions, opportunity counts.
+
+When in doubt, choose hierarchy over horizontal tabs.
+
+## 6. Stewardship voice in empty states
+
+Every empty state speaks in the Handy Pioneers voice — never a stock
+illustration with "No data" beneath it. Examples:
+
+- Leads inbox empty: *"Your customer roster awaits its first steward.
+  Soon, leads from every source — online requests, the Roadmap Generator,
+  inbound calls, voicemails, referrals — will gather here for tending."*
+- Notifications empty: *"All caught up."* (terse — confirmation, not
+  decoration).
+
+## 7. Color discipline
+
+- **Amber** — leads + new arrivals + stewardship cues. The Star icon, the
+  banner gradient, the gold "New" pill.
+- **Violet** — Roadmap / Priority Translation surfaces.
+- **Blue** — portal / customer-side activity (inbox unread, portal logins).
+- **Emerald** — AI / agent activity, success confirmations.
+- **Red** — only for true urgency (overdue, blocked, broken).
+
+If you reach for red and the situation isn't urgent, you wanted amber.
+
+## 8. Build gates
+
+A change is shippable only after:
+
+1. Type-check clean for the files you touched (`tsc --noEmit`).
+2. `pnpm build` succeeds.
+3. Server bundle smoke-imports: `node --input-type=module -e
+   "import('./dist/index.js').then(()=>console.log('OK'))"`.
+4. The relevant box in `HANDOFF_CHECKLIST.md` is checked.
+
+## 9. Removing pages
+
+When a top-level page is being retired (as the Requests page was on
+`feat/lead-flow-unified`):
+
+1. Delete the page file.
+2. **Keep** the `AppSection` key in the union, marked deprecated, so old
+   notifications and bookmarked URLs still type-check.
+3. Make the shell redirect from the deprecated section to the new one
+   in `Home.tsx`.
+4. Update the breadcrumb segment in `MetricsBar.tsx` to render the new
+   section's label whenever either key is active.
+5. Replace any in-app references to `navigateToTopLevel('<old>')` with
+   the new section key.
+
+This pattern preserves the customer's deep-link history without keeping
+dead code around.
+
+---
+
+# Customer Portal Surfaces (`client.handypioneers.com`)
+
+These rules govern customer-facing pages. Affluent buyers smell sales
+theater immediately — the portal must feel like stewardship, not marketing.
+
+## Voice rules — words we never use
+
+In customer-facing copy, button labels, headings, email templates, or
+notifications:
+
+- `estimate` (we deliver "proposals" or "Roadmaps")
 - `free` (we offer; we don't give away)
 - `cheap`
 - `affordable`
@@ -23,40 +143,31 @@ templates, or notification bodies:
 - `limited time`
 
 The `assertVoice()` helper in `server/routers/portalRoadmap.ts` warns when
-forbidden words appear in customer-supplied text — that's a soft signal so we
-can refine copy, not a block. **Never warn on the customer's own words.**
+forbidden words appear in operator copy — **never** in the customer's own
+words (priority concern field is theirs and may use these naturally).
 
 ## Stewardship pacing
 
-- Never offer "next available in 2 hours." Affluent customers read that as
-  desperate.
-- Default appointment offers start **5–10 days out**. Mornings (10am) and
-  afternoons (2pm) of business days. Four windows is enough — more becomes
-  paralysis.
-- Notifications about a customer's appointment go out at **24h before** and
-  **1h before**. No marketing follow-ups about the same walkthrough.
+- Never offer "next available in 2 hours."
+- Default appointment offers start **5–10 days out**, weekdays only.
+  Mornings (10am) and afternoons (2pm). Four windows is the cap.
+- Pre-arrival reminders: 24h before, 1h before. **No marketing follow-ups
+  about the same walkthrough.**
 
-## CTA discipline
+## CTA discipline on the Roadmap page
 
-- The Roadmap page surfaces **one** primary CTA at a time, contextual to where
-  the customer is in their journey. No upsell stack below it. No "save 20%"
-  banners. No "limited spots" countdowns.
-- CTA variants resolved server-side in `portalRoadmap.getCtaContext`:
-  - **Default** — Schedule Baseline Walkthrough
-  - **Pending estimate** — Approve your proposal
-  - **Active project** — Track project status
-  - **360° member, no upcoming visit** — Schedule next standard-of-care visit
+Single primary CTA, server-resolved by `portalRoadmap.getCtaContext`:
 
-## Mobile-first
+| Customer state                              | Variant                  | Label                |
+| ------------------------------------------- | ------------------------ | -------------------- |
+| Default (no estimate, no project)           | `baseline_walkthrough`   | Schedule walkthrough |
+| Estimate sent or viewed                     | `approve_estimate`       | Review now           |
+| Estimate approved + linked HP opportunity   | `track_project`          | Open project         |
+| 360° member with no upcoming visit          | `schedule_member_visit`  | Request a visit      |
 
-- Tap targets ≥ **44px** (iOS HIG minimum); 48–52px for primary CTAs.
-- Modals are **full-width on mobile** with bottom-sheet styling on small
-  screens; centered card on tablet/desktop.
-- Typography: refined serif (Georgia / Times New Roman) for headlines that
-  matter, system sans-serif for body and metadata.
-- Forms use a parchment background (`#faf7f0`) and gold focus rings (`#c8922a`).
+No upsell stack below it. No "save 20%" banners. No countdowns.
 
-## Brand tokens
+## Brand tokens (portal-side)
 
 | Token        | Hex       | Use                                              |
 | ------------ | --------- | ------------------------------------------------ |
@@ -65,22 +176,20 @@ can refine copy, not a block. **Never warn on the customer's own words.**
 | Parchment    | `#faf7f0` | Form backgrounds, calm cards                     |
 | Border-warm  | `#e5e0d3` | All neutral borders on customer-facing surfaces  |
 
-## Confirmation experience
+## Confirmation flow
 
 After every customer-initiated booking:
 
-1. In-portal confirmation screen with the date and what to expect next.
-2. Affluent-voice email with `.ics` attachment (the customer presses download
-   inside the modal).
-3. Admin / operator notification (`notifyOwner` + lead-routing assignment to
-   the Consultant role).
-4. Pre-arrival reminders: 24h and 1h before. **No further comms about that
-   same appointment**.
+1. In-portal confirmation screen with date and what to expect next.
+2. Stewardship-voice email with `.ics` attachment (download from the
+   confirmation modal).
+3. Admin notification (`notifyOwner` + lead-routing assignment).
+4. Pre-arrival reminders only — no further marketing about that booking.
 
-## Things we do not do
+## Things we do not do on customer surfaces
 
 - Pop the same modal twice if the customer cancels.
 - Send marketing email about a confirmed booking.
 - Auto-charge or hold a card during the funnel.
 - Show "X people booked this week" social-proof banners.
-- Use exclamation marks in stewardship copy. Calm voice, full sentences.
+- Use exclamation marks in stewardship copy.

@@ -133,7 +133,13 @@ function StepDots({ step, total }: { step: number; total: number }) {
 }
 
 // ─── Funnel: Modal ────────────────────────────────────────────────────────────
-type Slot = { id: string; startIso: string; endIso: string; label: string };
+type Slot = {
+  id: string;
+  slotId?: number;
+  startIso: string;
+  endIso: string;
+  label: string;
+};
 
 function BaselineFunnel({
   open,
@@ -205,6 +211,7 @@ function BaselineFunnel({
   const next = () => {
     if (step === 2 && selectedSlot) {
       bookMutation.mutate({
+        slotId: selectedSlot.slotId,
         startIso: selectedSlot.startIso,
         endIso: selectedSlot.endIso,
         contactName: name.trim(),
