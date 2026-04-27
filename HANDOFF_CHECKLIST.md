@@ -1,5 +1,25 @@
 # HP Estimator — Integration Handoff Checklist
 
+## DONE — 2026-04-27 — Roadmap deliverable v2: editorial PDF rewrite (`feat/roadmap-deliverable-quality-v2`)
+
+**Per Marcin:** *"The Roadmap Generator is not currently set up properly. Drastically improve so it's actually valuable to customer and us — Ritz-Carlton, not contractor estimate."*
+
+### What shipped (PR #40, merged)
+- **Prompt rewrite** (`server/lib/priorityTranslation/prompt.ts`): adds `executive_summary` (2–3 paragraphs), `property_character` (PNW + era of home), `closing` (stewardship invitation). Per-finding adds `interpretation` ("what this means for your home") and `recommended_approach` ("how we'd approach it") — the actual "translation" the document is named for. Tightens horizon framing (NOW = 90 d, SOON = 6–18 mo, WAIT = 3–5 yr). Bans anti-patterns ("find a contractor", "get three bids", `$0–$X` "starting at" pricing).
+- **PDF rewrite** (`server/lib/priorityTranslation/pdf.ts`): was a flat 3-page hero+grouped-list+disclaimer. Now a 17-page editorial document — full-bleed forest cover with serif title, Standard-of-Care letter, two-column executive summary with At-a-Glance ledger, full-bleed urgency dividers (NOW/SOON/WAIT), one-page-per-finding spreads (`FINDING` → `WHAT THIS MEANS FOR YOUR HOME` cream inset → `HOW WE'D APPROACH IT` → investment-range ribbon with reasoning footnote), three-pathway closing with integrated disclaimer. Times Roman serif headlines, Helvetica tracked small-caps for metadata. Sanitizes Claude prose for WinAnsi (curly quotes, ellipsis, nbsp) so the renderer can never crash on prose it didn't author.
+- **Schema** (`drizzle/schema.priorityTranslation.ts`): extends `ClaudePriorityTranslationResponse` with optional `executive_summary`, `property_character`, `closing` + per-finding `interpretation` / `recommended_approach`. `summary_1_paragraph` preserved for back-compat. `HealthRecordFinding` gets matching optional fields. **No migration needed** — additions land on JSON-typed columns.
+- **Sample generator** (`scripts/generate-roadmap-sample.mjs`): renders a 17-page reference PDF from a hand-crafted, voice-compliant fixture (Margaret in a 1992 Felida craftsman, 10 findings across NOW/SOON/WAIT). Output committed at `docs/samples/roadmap-sample-2026-04-27.pdf` — the visual diff target for future iteration. Re-run with `pnpm tsx scripts/generate-roadmap-sample.mjs`.
+
+### Aligned with PR #34 rename
+Customer-facing strings updated to match the "Priority Translation → 360° Roadmap" rename that landed in PR #34: cover subtitle "A 360° Method Roadmap", Standard-of-Care letter copy, disclaimer text, footer wordmark "360°  METHOD  ROADMAP". Internal code identifiers (`priorityTranslation/`, `PriorityTranslationStatus`, etc.) stay as-is.
+
+### Recommended follow-ups (not blocking)
+- **Visual review** — open `docs/samples/roadmap-sample-2026-04-27.pdf` and confirm the deliverable feels right. Iterate from there.
+- **Live Claude run** — once `processSubmission` orchestrator is fully wired (currently a stub per `processor.ts:191`), re-run the smoke test against a real Spectora inspection PDF. Expect Claude to populate the new `interpretation` + `recommended_approach` fields with real interpretation depth, not just rewording.
+- **Move to nucleus CMS** — header copy, color tokens, disclaimer prose, anchor cost ranges. Currently hardcoded in `prompt.ts` + `pdf.ts` + `costRanges.ts`.
+
+---
+
 ## DONE — 2026-04-27 — Unified Leads inbox + Concierge Brief (`feat/lead-flow-unified`)
 
 **Per Marcin:** *"Right now I only see leads temporarily when the request banner pops up under the inbox or pipeline — that needs to get improved. Everything should fall into the first lead bucket. Maybe take away the Request page entirely and everything just falls into the Leads tab."*
