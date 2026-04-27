@@ -87,6 +87,10 @@ export type HealthRecordFinding = {
   source_id: string;
   category: string;
   finding: string;
+  /** "What this means for your home" — translated, time-horizon framed. Optional for back-compat. */
+  interpretation?: string;
+  /** "How we'd approach it" — sequencing + character of work. Optional for back-compat. */
+  recommended_approach?: string;
   urgency: "NOW" | "SOON" | "WAIT";
   investment_range_low_usd: number;
   investment_range_high_usd: number;
@@ -122,10 +126,21 @@ export type PriorityTranslationStatus =
   | "failed";
 
 export type ClaudePriorityTranslationResponse = {
+  /** Back-compat: first paragraph of executive_summary. Older readers fall back here. */
   summary_1_paragraph: string;
+  /** 2–3 paragraph stewardship narrative addressed to the homeowner. */
+  executive_summary?: string;
+  /** 1 paragraph: era of home, PNW climate context, what shapes the standard of care. */
+  property_character?: string;
+  /** 1 paragraph: stewardship invitation + next-step framing. */
+  closing?: string;
   findings: Array<{
     category: string;
     finding: string;
+    /** "What this means for your home" — interpretation in plain language. */
+    interpretation?: string;
+    /** "How we'd approach it" — sequencing + character of work. */
+    recommended_approach?: string;
     urgency: "NOW" | "SOON" | "WAIT";
     investment_range_low_usd: number;
     investment_range_high_usd: number;
