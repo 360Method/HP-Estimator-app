@@ -214,6 +214,53 @@ async function ensurePriorityTranslationTables() {
   }
 }
 
+/**
+ * Idempotent CREATE TABLE + ADD COLUMN for portalCustomers.
+ *
+ * Migrations 0002 + 0038 added referralCode/referredBy/onboardingCompletedAt
+ * but the drizzle tracker diverges from prod DB state (see memory note).
+ * verifyToken's bridge into portalCustomers fails with "Unknown column" if
+ * any of the schema-declared columns are missing in prod, so check + add
+ * each one defensively at boot. Same pattern as ensurePortalContinuityFlag.
+ */
+async function ensurePortalCustomersColumns() {
+  try {
+    const { getDb } = await import("../db");
+    const { sql } = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return;
+
+    const required: Array<{ col: string; type: string; extra?: string }> = [
+      { col: "stripeCustomerId", type: "varchar(64)" },
+      { col: "referralCode", type: "varchar(32)", extra: "UNIQUE" },
+      { col: "referredBy", type: "varchar(64)" },
+      { col: "onboardingCompletedAt", type: "timestamp NULL" },
+    ];
+
+    for (const r of required) {
+      const [[row]]: any = await db.execute(sql`
+        SELECT COUNT(*) AS c FROM information_schema.columns
+        WHERE table_schema = DATABASE()
+          AND table_name = 'portalCustomers'
+          AND column_name = ${r.col}
+      `);
+      if (row && Number(row.c) === 0) {
+        const ddl = `ALTER TABLE \`portalCustomers\` ADD COLUMN \`${r.col}\` ${r.type}`;
+        await db.execute(sql.raw(ddl));
+        if (r.extra === "UNIQUE") {
+          await db
+            .execute(sql.raw(`ALTER TABLE \`portalCustomers\` ADD UNIQUE \`portalCustomers_${r.col}_unique\` (\`${r.col}\`)`))
+            .catch(() => null);
+        }
+        console.log(`[boot] portalCustomers.${r.col} column added`);
+      }
+    }
+    console.log("[boot] ensurePortalCustomersColumns OK");
+  } catch (err) {
+    console.warn("[boot] ensurePortalCustomersColumns failed (non-fatal):", err);
+  }
+}
+
 async function ensurePortalContinuityFlag() {
   try {
     const { getDb } = await import("../db");
@@ -655,6 +702,7 @@ async function ensureDepartmentHeadFlags() {
 async function startServer() {
   await ensurePhoneTables();
   await ensurePortalContinuityFlag();
+  await ensurePortalCustomersColumns();
   await ensureAnnualValuationOptInColumn();
   await ensurePriorityTranslationTables();
   await ensureOAuthIntegrationTables();
