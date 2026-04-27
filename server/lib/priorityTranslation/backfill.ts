@@ -39,6 +39,7 @@ import {
 import { onLeadCreated } from "../../leadRouting";
 import { sendPriorityTranslationReady } from "./email";
 import { renderPriorityTranslationPdf } from "./pdf";
+import { issueMagicLink } from "./portalAccount";
 
 export type BackfillResult = {
   scanned: number;
@@ -365,6 +366,41 @@ export async function sendRoadmapTestEmail(opts: {
       propertyAddress,
     });
     return { ok: true, resendId: result.id };
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+/**
+ * Issue a fresh magic link for an existing portalAccount — diagnostic only.
+ * Returns the raw token + the full URL the homeowner would click. Used to
+ * curl-verify the verifyToken bridge end-to-end without sending a real
+ * email or running the Claude pipeline.
+ */
+export async function issueDiagnosticMagicLink(opts: {
+  portalAccountId: string;
+}): Promise<
+  | { ok: true; token: string; url: string; expiresAt: Date }
+  | { ok: false; reason: string }
+> {
+  const db = await getDb();
+  if (!db) return { ok: false, reason: "DB unavailable" };
+  const portalBaseUrl =
+    process.env.PORTAL_BASE_URL || "https://client.handypioneers.com";
+  try {
+    const link = await issueMagicLink(db, {
+      portalAccountId: opts.portalAccountId,
+      portalBaseUrl,
+    });
+    return {
+      ok: true,
+      token: link.token,
+      url: link.url,
+      expiresAt: link.expiresAt,
+    };
   } catch (err) {
     return {
       ok: false,

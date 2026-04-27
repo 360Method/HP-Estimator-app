@@ -13,6 +13,7 @@ import {
   backfillRoadmapCrmRows,
   snapshotRoadmapPipeline,
   sendRoadmapTestEmail,
+  issueDiagnosticMagicLink,
 } from "../lib/priorityTranslation/backfill";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
@@ -2072,7 +2073,12 @@ async function startServer() {
           })
         : null;
 
-      res.status(200).json({ snapshot, backfill, testEmail });
+      const issueLinkFor = (body as any).issueTestMagicLinkFor as string | undefined;
+      const testMagicLink = issueLinkFor
+        ? await issueDiagnosticMagicLink({ portalAccountId: issueLinkFor })
+        : null;
+
+      res.status(200).json({ snapshot, backfill, testEmail, testMagicLink });
     } catch (err: any) {
       console.error("[admin/roadmap-diagnostic] error:", err?.message ?? err);
       res.status(500).json({ error: err?.message ?? "diagnostic failed" });
