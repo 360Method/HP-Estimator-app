@@ -22,9 +22,10 @@ jobs:
           node-version: '20'
 
       - name: Install pnpm
+        # Version is sourced from package.json's `packageManager` field —
+        # specifying it here as well now causes pnpm/action-setup@v4 to
+        # error with "Multiple versions of pnpm specified".
         uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
