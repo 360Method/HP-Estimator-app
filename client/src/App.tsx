@@ -82,7 +82,12 @@ import OrgChart from "./pages/admin/OrgChart";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 
-// Domains that should serve only the customer portal (no admin app)
+// Domains that should serve only the customer portal (no admin app).
+// On these hostnames any /admin or /onboarding URL is hidden behind a
+// NotFound — the SPA build is shared between subdomains so we can't
+// physically separate the bundles, but we can refuse to render staff
+// surfaces. This is a soft security boundary (the JS bundle still
+// contains those components); pair with API-side authz for hard guards.
 const PORTAL_HOSTNAMES = ["client.handypioneers.com"];
 
 const isPortalDomain = PORTAL_HOSTNAMES.includes(window.location.hostname);
@@ -97,6 +102,17 @@ function PortalDomainRoot() {
     navigate("/portal/login", { replace: true });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return null;
+}
+
+/**
+ * Wraps an admin/internal route component so it 404s on the customer
+ * subdomain. Use for everything under /admin and /onboarding.
+ */
+function staffOnly<P>(Component: (props: P) => React.ReactNode) {
+  return (props: P) => {
+    if (isPortalDomain) return <NotFound />;
+    return <>{Component(props)}</>;
+  };
 }
 
 function Router() {
@@ -153,23 +169,24 @@ function Router() {
       {/* Internal 360° work order completion wizard */}
       <Route path="/360/work-orders/:id">{() => <WorkOrderDetail />}</Route>
 
-      {/* Data migration onboarding wizard */}
-      <Route path="/onboarding" component={() => <DataMigrationPage />} />
+      {/* Data migration onboarding wizard (staff-only) */}
+      <Route path="/onboarding" component={staffOnly(() => <DataMigrationPage />)} />
 
-      {/* Admin — AI agent runtime + KPI dashboard (Phase 1) */}
-      <Route path="/admin/dashboard" component={AdminDashboard} />
-      <Route path="/admin/chat" component={IntegratorChat} />
-      <Route path="/admin/org-chart" component={OrgChart} />
-      <Route path="/admin/agents/control" component={AgentsControl} />
-      <Route path="/admin/agents/runs" component={AgentsRuns} />
-      <Route path="/admin/ai-agents/tasks" component={AiAgentTasks} />
-      <Route path="/admin/ai-agents/:id" component={AiAgentDetail} />
-      <Route path="/admin/ai-agents" component={AiAgentsList} />
-      <Route path="/admin/departments/:slug" component={DepartmentDetail} />
-      <Route path="/admin/scheduling" component={AdminSchedulingPage} />
-      <Route path="/admin/vendors/new" component={AdminVendorNew} />
-      <Route path="/admin/vendors/:id" component={AdminVendorDetail} />
-      <Route path="/admin/vendors" component={AdminVendorsList} />
+      {/* Admin — AI agent runtime + KPI dashboard (Phase 1).
+          All staff-only — wrapped to 404 on client.handypioneers.com. */}
+      <Route path="/admin/dashboard" component={staffOnly(AdminDashboard)} />
+      <Route path="/admin/chat" component={staffOnly(IntegratorChat)} />
+      <Route path="/admin/org-chart" component={staffOnly(OrgChart)} />
+      <Route path="/admin/agents/control" component={staffOnly(AgentsControl)} />
+      <Route path="/admin/agents/runs" component={staffOnly(AgentsRuns)} />
+      <Route path="/admin/ai-agents/tasks" component={staffOnly(AiAgentTasks)} />
+      <Route path="/admin/ai-agents/:id" component={staffOnly(AiAgentDetail)} />
+      <Route path="/admin/ai-agents" component={staffOnly(AiAgentsList)} />
+      <Route path="/admin/departments/:slug" component={staffOnly(DepartmentDetail)} />
+      <Route path="/admin/scheduling" component={staffOnly(AdminSchedulingPage)} />
+      <Route path="/admin/vendors/new" component={staffOnly(AdminVendorNew)} />
+      <Route path="/admin/vendors/:id" component={staffOnly(AdminVendorDetail)} />
+      <Route path="/admin/vendors" component={staffOnly(AdminVendorsList)} />
 
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />

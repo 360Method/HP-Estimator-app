@@ -14,6 +14,7 @@ import {
   createPortalToken,
   findValidPortalToken,
   markPortalTokenUsed,
+  consumeRoadmapMagicLinkAsPortalCustomer,
   createPortalSession,
   findValidPortalSession,
   deletePortalSession,
@@ -196,18 +197,38 @@ export const portalRouter = router({
   verifyToken: portalPublicProcedure
     .input(z.object({ token: z.string() }))
     .mutation(async ({ input, ctx }) => {
-      const tokenRow = await findValidPortalToken(input.token);
-      if (!tokenRow || tokenRow.usedAt) {
-        throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid or expired link" });
+      // Two token-issuing systems live in parallel:
+      //   • portalTokens (legacy, int customerId → portalCustomers) — issued
+      //     by the booking/estimate/invoice flows.
+      //   • portalMagicLinks (varchar portalAccountId → portalAccounts) —
+      //     issued by the Roadmap Generator pipeline.
+      //
+      // Try the legacy table first (cheaper, common case); if no match, fall
+      // back to the Roadmap magic-link bridge below. Either way the homeowner
+      // ends up with a portalSession cookie on a portalCustomers row.
+
+      let resolvedCustomerId: number | null = null;
+      const legacyRow = await findValidPortalToken(input.token);
+      if (legacyRow && !legacyRow.usedAt) {
+        await markPortalTokenUsed(legacyRow.id);
+        resolvedCustomerId = legacyRow.customerId;
+      } else {
+        // Roadmap magic-link bridge.
+        const bridged = await consumeRoadmapMagicLinkAsPortalCustomer(input.token);
+        if (bridged) {
+          resolvedCustomerId = bridged.portalCustomerId;
+        }
       }
 
-      await markPortalTokenUsed(tokenRow.id);
+      if (!resolvedCustomerId) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid or expired link" });
+      }
 
       const sessionToken = randomBytes(32).toString("hex");
       const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
 
       await createPortalSession({
-        customerId: tokenRow.customerId,
+        customerId: resolvedCustomerId,
         sessionToken,
         expiresAt,
       });
@@ -224,7 +245,7 @@ export const portalRouter = router({
         });
       }
 
-      const customer = await findPortalCustomerById(tokenRow.customerId);
+      const customer = await findPortalCustomerById(resolvedCustomerId);
       return { customer };
     }),
 
