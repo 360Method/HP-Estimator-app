@@ -150,8 +150,15 @@ async function main() {
   const today = new Date().toISOString().slice(0, 10);
   const outDir = resolve(REPO_ROOT, "docs", "samples");
   mkdirSync(outDir, { recursive: true });
-  const outPath = resolve(outDir, `roadmap-sample-${today}.pdf`);
-  writeFileSync(outPath, pdfBuffer);
+  // Write both the dated v2 file AND the canonical "latest" file the funnel
+  // site embeds. Keeping the dated file lets us diff visually against past
+  // editions; the canonical file lets the marketing site link to a stable URL.
+  const versionTag = process.env.ROADMAP_SAMPLE_VERSION || "v2";
+  const datedPath = resolve(outDir, `roadmap-sample-${today}-${versionTag}.pdf`);
+  const canonicalPath = resolve(outDir, `roadmap-sample-latest.pdf`);
+  writeFileSync(datedPath, pdfBuffer);
+  writeFileSync(canonicalPath, pdfBuffer);
+  const outPath = datedPath;
 
   const sizeKb = (pdfBuffer.byteLength / 1024).toFixed(1);
   console.log(`[sample] wrote ${outPath} (${sizeKb} KB, ${MOCK_RESPONSE.findings.length} findings)`);

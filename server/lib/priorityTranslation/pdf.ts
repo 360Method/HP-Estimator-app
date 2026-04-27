@@ -140,14 +140,17 @@ export async function renderPriorityTranslationPdf(input: RenderInput): Promise<
     editionLabel,
   });
 
-  // ─── Section + finding pages ──────────────────────────────────────────────
+  // ─── Findings — packed 1–2 per page with a small in-line section banner
+  // before the first finding of each bucket. No full-bleed dividers; that
+  // bloated the page count without adding signal. ───────────────────────────
+  const ctx: FlowCtx = { page: null, y: 0, pageNumber: 3 };
   let itemCounter = 0;
   for (const urg of URGENCY_ORDER) {
     const items = byUrgency[urg];
     if (items.length === 0) continue;
 
     const totals = sumRanges(items);
-    drawSectionDivider(doc, fonts, {
+    drawSectionBanner(doc, fonts, ctx, {
       urgency: urg,
       itemCount: items.length,
       totals,
@@ -157,10 +160,9 @@ export async function renderPriorityTranslationPdf(input: RenderInput): Promise<
 
     for (const f of items) {
       itemCounter += 1;
-      drawFindingPage(doc, fonts, {
+      drawFinding(doc, fonts, ctx, {
         urgency: urg,
         index: itemCounter,
-        totalIndex: input.claudeResponse.findings.length,
         finding: f,
         propertyAddress: input.propertyAddress,
         editionLabel,
@@ -173,6 +175,7 @@ export async function renderPriorityTranslationPdf(input: RenderInput): Promise<
     closing: input.claudeResponse.closing,
     propertyAddress: input.propertyAddress,
     editionLabel,
+    pageNumber: ctx.pageNumber + 1,
   });
 
   return await doc.save();
@@ -256,6 +259,7 @@ function drawCoverPage(
 }
 
 // ─── Page 2: Standard of Care letter ────────────────────────────────────────
+// Tightened: 3 short paragraphs, no oversize pull-quote. Reads in 30 seconds.
 function drawStandardOfCareLetter(doc: PDFDocument, fonts: Fonts): PDFPage {
   const page = drawPaperPage(doc);
   let y = PAGE_H - MARGIN;
@@ -265,22 +269,21 @@ function drawStandardOfCareLetter(doc: PDFDocument, fonts: Fonts): PDFPage {
   });
   y -= 8;
   page.drawRectangle({ x: MARGIN, y: y - 8, width: 60, height: 2, color: BRAND.amber });
-  y -= 56;
+  y -= 44;
 
-  // Pull quote — large serif italic, indented
-  const quote = "We don't sell repairs. We propose a standard of care for the home you've chosen to keep.";
+  // Compact pull quote — single-line italic, no oversize block
+  const quote = "We don't sell repairs. We propose a standard of care.";
   drawWrappedText(page, quote, {
-    x: MARGIN, y, size: 24, font: fonts.serifItalic, color: BRAND.forest,
-    lineHeight: 30, maxWidth: CONTENT_W,
+    x: MARGIN, y, size: 22, font: fonts.serifItalic, color: BRAND.forest,
+    lineHeight: 28, maxWidth: CONTENT_W,
   });
-  y -= measureWrappedText(quote, fonts.serifItalic, 24, CONTENT_W) * 30 + 28;
+  y -= measureWrappedText(quote, fonts.serifItalic, 22, CONTENT_W) * 28 + 24;
 
-  // Body paragraphs
+  // Body — 3 paragraphs, tighter
   const body = [
-    "What follows is the homeowner's edition of the 360° Roadmap. Inspection reports are written in the language of liability — every finding flagged, every observation hedged. That is the inspector's job, and a good one. It is not, however, a plan.",
-    "Our task is to read the report carefully, walk it through the lens of the Pacific Northwest's rain load, the era of your home, and the way properties of this kind tend to age — and then organize the findings into three honest time horizons: what to address now, what to plan for, and what to monitor.",
-    "Every investment range you'll see is the fully-loaded customer price for quality restoration work in Clark County: vetted tradespeople, materials that match the home, project management end-to-end, and our standard 30% gross-margin floor. No \"starting at\" pricing, no hedge.",
-    "If a finding raises a question, the right next move is a complimentary baseline walkthrough. We'd rather understand the property in person than guess on paper.",
+    "What follows is the homeowner's edition of the 360° Roadmap. Inspection reports are written in the language of liability — every finding flagged, every observation hedged. That is a good and necessary job; it is not, however, a plan.",
+    "Our task is to read the report carefully, apply the lens of the Pacific Northwest's rain load and the era of your home, and organize what the inspector saw into three honest time horizons: address now, plan for soon, monitor on the next cycle.",
+    "Every investment range here is the fully-loaded customer price for quality restoration work in Clark County — vetted tradespeople, materials that match the home, end-to-end project management. No \"starting at\" pricing, no hedge.",
   ];
 
   for (const para of body) {
@@ -289,21 +292,27 @@ function drawStandardOfCareLetter(doc: PDFDocument, fonts: Fonts): PDFPage {
       x: MARGIN, y, size: 12, font: fonts.serif, color: BRAND.ink,
       lineHeight: 17, maxWidth: CONTENT_W,
     });
-    y -= lines * 17 + 14;
+    y -= lines * 17 + 12;
   }
 
-  y -= 8;
+  y -= 4;
   page.drawRectangle({ x: MARGIN, y: y - 4, width: 40, height: 1, color: BRAND.amber });
-  y -= 22;
+  y -= 20;
   page.drawText("The Handy Pioneers stewardship team", {
     x: MARGIN, y, size: 11, font: fonts.serifItalic, color: BRAND.muted,
   });
 
-  drawPaperFooter(page, fonts, { left: "360° Priority Translation", right: "I" });
+  drawPaperFooter(page, fonts, { left: "360° Roadmap", right: "II" });
   return page;
 }
 
 // ─── Page 3: Executive Summary + At-a-Glance ────────────────────────────────
+// Stacked layout: headline → executive summary (full width) → At-a-Glance
+// strip (full width, three urgency cells) → property character.
+//
+// The previous two-column layout collided on narrower copy because the
+// left-column body text and right-column ledger had insufficient gutter
+// on long words. Stacked layout removes the collision risk entirely.
 function drawExecutiveSummary(
   doc: PDFDocument,
   fonts: Fonts,
@@ -324,64 +333,66 @@ function drawExecutiveSummary(
   });
   y -= 6;
   page.drawRectangle({ x: MARGIN, y: y - 8, width: 60, height: 2, color: BRAND.amber });
-  y -= 28;
+  y -= 26;
 
-  // Big serif lede
+  // Serif lede — full width
   const headline = `For ${args.firstName || "the homeowner"} of ${shortAddress(args.propertyAddress)}`;
-  const headlineLines = measureWrappedText(headline, fonts.serifBold, 22, CONTENT_W * 0.62);
+  const headlineLines = measureWrappedText(headline, fonts.serifBold, 20, CONTENT_W);
   drawWrappedText(page, headline, {
-    x: MARGIN, y, size: 22, font: fonts.serifBold, color: BRAND.forest,
-    lineHeight: 26, maxWidth: CONTENT_W * 0.62,
+    x: MARGIN, y, size: 20, font: fonts.serifBold, color: BRAND.forest,
+    lineHeight: 24, maxWidth: CONTENT_W,
   });
-  y -= headlineLines * 26 + 18;
+  y -= headlineLines * 24 + 16;
 
-  // Two-column body layout
-  const colW = CONTENT_W * 0.58;
-  const sidebarX = MARGIN + colW + 28;
-  const sidebarW = CONTENT_W - colW - 28;
-
-  // Left column: executive_summary text
+  // Executive summary body — full width, slightly tighter to fit the stacked
+  // ledger and property character on the same page.
   const summaryText = args.response.executive_summary || args.response.summary_1_paragraph || "";
   const paragraphs = splitParagraphs(summaryText);
-  let textY = y;
   for (const p of paragraphs) {
-    const lines = measureWrappedText(p, fonts.serif, 11, colW);
+    const lines = measureWrappedText(p, fonts.serif, 11, CONTENT_W);
     drawWrappedText(page, p, {
-      x: MARGIN, y: textY, size: 11, font: fonts.serif, color: BRAND.ink,
-      lineHeight: 16, maxWidth: colW,
+      x: MARGIN, y, size: 11, font: fonts.serif, color: BRAND.ink,
+      lineHeight: 15, maxWidth: CONTENT_W,
     });
-    textY -= lines * 16 + 10;
+    y -= lines * 15 + 8;
   }
+  y -= 8;
 
-  // Right column: At-a-Glance ledger inset
-  drawAtAGlance(page, fonts, {
-    x: sidebarX,
-    y,
-    width: sidebarW,
-    byUrgency: args.byUrgency,
+  // At-a-Glance ledger — full-width horizontal strip, three cells side by side.
+  y = drawAtAGlanceStrip(page, fonts, {
+    x: MARGIN, y, width: CONTENT_W, byUrgency: args.byUrgency,
   });
+  y -= 18;
 
-  // Property character full-width below
+  // Property character — italic block, full width
   if (args.response.property_character) {
-    const characterY = Math.min(textY, y - 280) - 20;
     drawTracked(page, fonts.sansBold, "PROPERTY CHARACTER", {
-      x: MARGIN, y: characterY, size: 8, tracking: 2.4, color: BRAND.amber,
+      x: MARGIN, y, size: 8, tracking: 2.4, color: BRAND.amber,
     });
-    page.drawRectangle({ x: MARGIN, y: characterY - 10, width: 30, height: 1, color: BRAND.amber });
+    page.drawRectangle({ x: MARGIN, y: y - 10, width: 30, height: 1, color: BRAND.amber });
+    const charLines = measureWrappedText(args.response.property_character, fonts.serifItalic, 11, CONTENT_W);
     drawWrappedText(page, args.response.property_character, {
-      x: MARGIN, y: characterY - 28, size: 11, font: fonts.serifItalic, color: BRAND.ink,
-      lineHeight: 16, maxWidth: CONTENT_W,
+      x: MARGIN, y: y - 24, size: 11, font: fonts.serifItalic, color: BRAND.ink,
+      lineHeight: 15, maxWidth: CONTENT_W,
     });
+    y -= 24 + charLines * 15;
   }
 
   drawPaperFooter(page, fonts, {
     left: `${shortAddress(args.propertyAddress)}  ·  ${args.editionLabel}`,
-    right: "II",
+    right: "III",
   });
   return page;
 }
 
-function drawAtAGlance(
+/**
+ * Horizontal At-a-Glance strip — three urgency cells side by side, each
+ * bordered with their accent color. Lives inline in the executive summary
+ * page rather than as a sidebar (no two-column collision risk).
+ *
+ * Returns the y position consumed (the strip's bottom edge).
+ */
+function drawAtAGlanceStrip(
   page: PDFPage,
   fonts: Fonts,
   args: {
@@ -390,62 +401,101 @@ function drawAtAGlance(
     width: number;
     byUrgency: Record<Urgency, ClaudePriorityTranslationResponse["findings"]>;
   },
-): void {
-  const padding = 14;
-  const rowHeight = 56;
-  const headerHeight = 38;
-  const totalHeight = headerHeight + rowHeight * 3 + padding;
-
-  // Inset card
-  page.drawRectangle({
-    x: args.x, y: args.y - totalHeight, width: args.width, height: totalHeight,
-    color: BRAND.creamDeep,
-  });
-  // Left rule
-  page.drawRectangle({
-    x: args.x, y: args.y - totalHeight, width: 2, height: totalHeight, color: BRAND.amber,
-  });
-
-  let cy = args.y - 18;
+): number {
+  // Header label
   drawTracked(page, fonts.sansBold, "AT A GLANCE", {
-    x: args.x + padding, y: cy, size: 8, tracking: 2.4, color: BRAND.amber,
+    x: args.x, y: args.y, size: 8, tracking: 2.4, color: BRAND.amber,
   });
-  cy -= 24;
+  page.drawRectangle({ x: args.x, y: args.y - 10, width: 30, height: 1, color: BRAND.amber });
 
-  for (const urg of URGENCY_ORDER) {
+  const stripTop = args.y - 22;
+  const cellGap = 12;
+  const cellW = (args.width - cellGap * 2) / 3;
+  const cellH = 76;
+
+  URGENCY_ORDER.forEach((urg, i) => {
     const items = args.byUrgency[urg];
     const totals = sumRanges(items);
     const accent = URGENCY_ACCENT[urg];
+    const cellX = args.x + i * (cellW + cellGap);
+    const cellY = stripTop - cellH;
 
-    // Color dot
-    page.drawCircle({ x: args.x + padding + 4, y: cy - 4, size: 4, color: accent });
+    // Cell card
+    page.drawRectangle({
+      x: cellX, y: cellY, width: cellW, height: cellH, color: BRAND.creamDeep,
+    });
+    page.drawRectangle({
+      x: cellX, y: cellY, width: 3, height: cellH, color: accent,
+    });
 
+    // Top row: urgency label (large) + count (right)
     page.drawText(URGENCY_COPY[urg].label, {
-      x: args.x + padding + 16, y: cy - 8, size: 14, font: fonts.serifBold, color: accent,
+      x: cellX + 12, y: cellY + cellH - 22, size: 18, font: fonts.serifBold, color: accent,
     });
-    page.drawText(`${items.length} item${items.length === 1 ? "" : "s"}`, {
-      x: args.x + args.width - padding - fonts.sans.widthOfTextAtSize(`${items.length} item${items.length === 1 ? "" : "s"}`, 9),
-      y: cy - 8, size: 9, font: fonts.sans, color: BRAND.muted,
+    const countText = `${items.length} item${items.length === 1 ? "" : "s"}`;
+    const countW = fonts.sans.widthOfTextAtSize(countText, 9);
+    page.drawText(countText, {
+      x: cellX + cellW - 10 - countW, y: cellY + cellH - 18, size: 9,
+      font: fonts.sans, color: BRAND.muted,
     });
 
+    // Range
     const rangeText = items.length > 0
-      ? `$${formatK(totals.low)}–$${formatK(totals.high)} investment range`
+      ? `$${formatK(totals.low)}–$${formatK(totals.high)}`
       : "—";
     page.drawText(rangeText, {
-      x: args.x + padding + 16, y: cy - 24, size: 9, font: fonts.sansItalic, color: BRAND.muted,
-    });
-    page.drawText(URGENCY_COPY[urg].horizon, {
-      x: args.x + padding + 16, y: cy - 36, size: 8, font: fonts.sans, color: BRAND.mutedSoft,
+      x: cellX + 12, y: cellY + cellH - 44, size: 13, font: fonts.serifBold, color: BRAND.forest,
     });
 
-    cy -= rowHeight;
-  }
+    // Horizon
+    page.drawText(URGENCY_COPY[urg].horizon, {
+      x: cellX + 12, y: cellY + 12, size: 8, font: fonts.sansItalic, color: BRAND.muted,
+    });
+  });
+
+  return stripTop - cellH;
 }
 
-// ─── Section divider ────────────────────────────────────────────────────────
-function drawSectionDivider(
+// ─── Flow primitives — pack 1–2 findings per page ──────────────────────────
+//
+// FlowCtx tracks the current page + cursor across multiple finding draws,
+// so a finding that fits in the remaining space stays on the same page,
+// and the section banner only opens a new page when the bucket actually
+// has nowhere to land. This is what brings the deliverable from 17 → ~11
+// pages without losing breathing room.
+
+type FlowCtx = {
+  page: PDFPage | null;
+  y: number;
+  pageNumber: number;
+};
+
+const PAGE_BOTTOM_RESERVE = 56; // space below content for footer
+const FOOTER_Y = 22;
+
+function newFlowPage(doc: PDFDocument, fonts: Fonts, ctx: FlowCtx, footerLeft: string): PDFPage {
+  const page = drawPaperPage(doc);
+  ctx.page = page;
+  ctx.y = PAGE_H - MARGIN;
+  ctx.pageNumber += 1;
+  drawPaperFooter(page, fonts, {
+    left: footerLeft,
+    right: romanize(ctx.pageNumber),
+  });
+  return page;
+}
+
+/**
+ * Compact in-line section banner — drawn at the top of the first finding
+ * in each urgency bucket. No full-bleed page (the old divider page bloated
+ * the count and had a description/ledger collision at narrow column widths).
+ *
+ * If the current page has < 220pt of room remaining, opens a new page first.
+ */
+function drawSectionBanner(
   doc: PDFDocument,
   fonts: Fonts,
+  ctx: FlowCtx,
   args: {
     urgency: Urgency;
     itemCount: number;
@@ -453,136 +503,172 @@ function drawSectionDivider(
     propertyAddress: string;
     editionLabel: string;
   },
-): PDFPage {
-  const page = doc.addPage([PAGE_W, PAGE_H]);
+): void {
   const accent = URGENCY_ACCENT[args.urgency];
   const tint = URGENCY_TINT[args.urgency];
   const copy = URGENCY_COPY[args.urgency];
+  const footerLeft = `${shortAddress(args.propertyAddress)}  ·  ${args.editionLabel}`;
 
-  // Top 60% accent block
-  const splitY = PAGE_H * 0.42;
-  page.drawRectangle({ x: 0, y: splitY, width: PAGE_W, height: PAGE_H - splitY, color: accent });
-  // Bottom 40% tint
-  page.drawRectangle({ x: 0, y: 0, width: PAGE_W, height: splitY, color: tint });
-  // Hairline divider
-  page.drawRectangle({ x: 0, y: splitY - 1, width: PAGE_W, height: 2, color: BRAND.amber });
+  // First entry — open the first findings page.
+  if (!ctx.page) {
+    newFlowPage(doc, fonts, ctx, footerLeft);
+  }
 
-  // Top wordmark
-  drawTracked(page, fonts.sansBold, "HANDY PIONEERS  ·  360°  METHOD", {
-    x: MARGIN, y: PAGE_H - MARGIN, size: 9, tracking: 3.0, color: BRAND.amberLight,
+  // If the current page can't host the banner + at least one finding, page-break.
+  const minSpace = 220;
+  if (ctx.y - PAGE_BOTTOM_RESERVE < minSpace) {
+    newFlowPage(doc, fonts, ctx, footerLeft);
+  }
+
+  const page = ctx.page!;
+  const bannerH = 64;
+  const bannerY = ctx.y - bannerH;
+
+  // Tinted band, accent left bar
+  page.drawRectangle({
+    x: MARGIN, y: bannerY, width: CONTENT_W, height: bannerH, color: tint,
+  });
+  page.drawRectangle({
+    x: MARGIN, y: bannerY, width: 4, height: bannerH, color: accent,
   });
 
-  // Massive label
+  // Label + horizon
   page.drawText(copy.label, {
-    x: MARGIN, y: splitY + 60, size: 140, font: fonts.serifBold, color: BRAND.cream,
+    x: MARGIN + 18, y: bannerY + bannerH - 30, size: 28, font: fonts.serifBold, color: accent,
   });
-
-  // Horizon tag (under label)
   drawTracked(page, fonts.sansBold, copy.horizon.toUpperCase(), {
-    x: MARGIN, y: splitY + 38, size: 11, tracking: 2.8, color: BRAND.amberLight,
+    x: MARGIN + 18, y: bannerY + 14, size: 8, tracking: 2.4, color: accent,
   });
 
-  // Bottom block — description + ledger
-  const bottomY = splitY - 60;
-  drawWrappedText(page, copy.description, {
-    x: MARGIN, y: bottomY, size: 16, font: fonts.serifItalic, color: BRAND.forest,
-    lineHeight: 22, maxWidth: CONTENT_W * 0.7,
-  });
-
-  // Right-aligned ledger
-  const ledgerY = bottomY;
+  // Right-side ledger — well separated, won't collide
+  const ledgerX = MARGIN + CONTENT_W * 0.55;
+  const ledgerW = CONTENT_W * 0.45 - 14;
   drawTracked(page, fonts.sansBold, "SECTION LEDGER", {
-    x: PAGE_W - MARGIN - 200, y: ledgerY, size: 8, tracking: 2.4, color: accent,
+    x: ledgerX, y: bannerY + bannerH - 18, size: 7, tracking: 2.0, color: accent,
   });
-  page.drawRectangle({ x: PAGE_W - MARGIN - 200, y: ledgerY - 8, width: 30, height: 1, color: accent });
-  page.drawText(`${args.itemCount} item${args.itemCount === 1 ? "" : "s"}`, {
-    x: PAGE_W - MARGIN - 200, y: ledgerY - 30, size: 14, font: fonts.serifBold, color: BRAND.forest,
+  const itemsText = `${args.itemCount} item${args.itemCount === 1 ? "" : "s"}`;
+  page.drawText(itemsText, {
+    x: ledgerX, y: bannerY + bannerH - 36, size: 12, font: fonts.serifBold, color: BRAND.forest,
   });
-  page.drawText(
-    `$${formatK(args.totals.low)}–$${formatK(args.totals.high)}`,
-    { x: PAGE_W - MARGIN - 200, y: ledgerY - 50, size: 14, font: fonts.serifBold, color: BRAND.forest },
-  );
+  const rangeStr = `$${formatK(args.totals.low)}–$${formatK(args.totals.high)}`;
+  const rangeW = fonts.serifBold.widthOfTextAtSize(rangeStr, 12);
+  page.drawText(rangeStr, {
+    x: ledgerX + ledgerW - rangeW, y: bannerY + bannerH - 36, size: 12,
+    font: fonts.serifBold, color: BRAND.forest,
+  });
   page.drawText("investment range", {
-    x: PAGE_W - MARGIN - 200, y: ledgerY - 64, size: 9, font: fonts.sansItalic, color: BRAND.muted,
+    x: ledgerX + ledgerW - fonts.sansItalic.widthOfTextAtSize("investment range", 8),
+    y: bannerY + 14, size: 8, font: fonts.sansItalic, color: BRAND.muted,
   });
 
-  // Bottom footer (lighter on tinted background)
-  drawTracked(page, fonts.sans, `${shortAddress(args.propertyAddress).toUpperCase()}  ·  ${args.editionLabel.toUpperCase()}`, {
-    x: MARGIN, y: 28, size: 7.5, tracking: 2.0, color: BRAND.muted,
-  });
-
-  return page;
+  ctx.y = bannerY - 24;
 }
 
-// ─── Finding page ───────────────────────────────────────────────────────────
-function drawFindingPage(
+/**
+ * Compact finding card — designed so two cards fit on a page when content
+ * is light. Card height budget: ~280pt for typical content (3-line finding,
+ * 4-line interpretation, 2-line approach). Two such cards = 560pt; with
+ * 608pt usable page height, that leaves comfortable breathing room.
+ */
+function drawFinding(
   doc: PDFDocument,
   fonts: Fonts,
+  ctx: FlowCtx,
   args: {
     urgency: Urgency;
     index: number;
-    totalIndex: number;
     finding: ClaudePriorityTranslationResponse["findings"][number];
     propertyAddress: string;
     editionLabel: string;
   },
-): PDFPage {
-  const page = drawPaperPage(doc);
+): void {
   const accent = URGENCY_ACCENT[args.urgency];
-  let y = PAGE_H - MARGIN;
+  const footerLeft = `${shortAddress(args.propertyAddress)}  ·  ${args.editionLabel}`;
+  const f = args.finding;
 
-  // Top metadata strip
+  // Pre-compute card height so we can decide whether to page-break.
+  const categoryLines = measureWrappedText(f.category, fonts.serifBold, 16, CONTENT_W);
+  const findingLines = measureWrappedText(f.finding, fonts.serif, 10.5, CONTENT_W - 8);
+  const interpLines = f.interpretation
+    ? measureWrappedText(f.interpretation, fonts.serifItalic, 11, CONTENT_W - 16)
+    : 0;
+  const approachLines = f.recommended_approach
+    ? measureWrappedText(f.recommended_approach, fonts.serif, 10.5, CONTENT_W - 8)
+    : 0;
+
+  const headerH = 14;
+  const categoryH = categoryLines * 20 + 10;
+  const findingH = 12 + findingLines * 14 + 8;
+  const interpH = interpLines > 0 ? 14 + interpLines * 15 + 10 : 0;
+  const approachH = approachLines > 0 ? 12 + approachLines * 14 + 8 : 0;
+  const ribbonH = 42;
+  const cardH = headerH + categoryH + findingH + interpH + approachH + ribbonH + 10;
+
+  if (!ctx.page || ctx.y - cardH < PAGE_BOTTOM_RESERVE) {
+    newFlowPage(doc, fonts, ctx, footerLeft);
+  }
+  const page = ctx.page!;
+  let y = ctx.y;
+
+  // Header strip — urgency + index, no rule (rule lives under category)
   drawTracked(page, fonts.sansBold, args.urgency, {
-    x: MARGIN, y, size: 9, tracking: 2.8, color: accent,
+    x: MARGIN, y: y - 6, size: 8, tracking: 2.4, color: accent,
   });
   const indexLabel = `ITEM ${String(args.index).padStart(2, "0")}`;
+  const indexW = fonts.sansBold.widthOfTextAtSize(indexLabel, 8) + (indexLabel.length - 1) * 2.0;
   drawTracked(page, fonts.sansBold, indexLabel, {
-    x: PAGE_W - MARGIN - fonts.sansBold.widthOfTextAtSize(indexLabel, 9) - (indexLabel.length - 1) * 2.4,
-    y, size: 9, tracking: 2.4, color: BRAND.muted,
+    x: PAGE_W - MARGIN - indexW, y: y - 6, size: 8, tracking: 2.0, color: BRAND.muted,
   });
-  y -= 8;
-  page.drawRectangle({ x: MARGIN, y: y - 6, width: 30, height: 2, color: accent });
-  y -= 28;
+  y -= headerH;
 
-  // Category title — serif bold
-  const categoryLines = measureWrappedText(args.finding.category, fonts.serifBold, 24, CONTENT_W);
-  drawWrappedText(page, args.finding.category, {
-    x: MARGIN, y, size: 24, font: fonts.serifBold, color: BRAND.forest,
-    lineHeight: 28, maxWidth: CONTENT_W,
+  // Category title — 16pt serif bold
+  drawWrappedText(page, f.category, {
+    x: MARGIN, y, size: 16, font: fonts.serifBold, color: BRAND.forest,
+    lineHeight: 20, maxWidth: CONTENT_W,
   });
-  y -= categoryLines * 28 + 18;
+  page.drawRectangle({ x: MARGIN, y: y - categoryLines * 20, width: 24, height: 1, color: accent });
+  y -= categoryH;
 
-  // Finding paragraph
-  y = drawLabeledBlock(page, fonts, {
-    label: "FINDING",
-    text: args.finding.finding,
-    x: MARGIN, y, width: CONTENT_W, accent,
+  // Finding paragraph — small inline label
+  drawTracked(page, fonts.sansBold, "FINDING", {
+    x: MARGIN, y, size: 7, tracking: 1.8, color: accent,
   });
-  y -= 18;
+  y -= 12;
+  drawWrappedText(page, f.finding, {
+    x: MARGIN, y, size: 10.5, font: fonts.serif, color: BRAND.ink,
+    lineHeight: 14, maxWidth: CONTENT_W - 8,
+  });
+  y -= findingLines * 14 + 8;
 
-  // Interpretation — visually distinct (italic serif, slight indent + amber bar)
-  if (args.finding.interpretation) {
-    y = drawPullBlock(page, fonts, {
-      label: "WHAT THIS MEANS FOR YOUR HOME",
-      text: args.finding.interpretation,
-      x: MARGIN, y, width: CONTENT_W,
+  // Interpretation — italic body with amber side bar (no padded card)
+  if (f.interpretation) {
+    drawTracked(page, fonts.sansBold, "WHAT THIS MEANS FOR YOUR HOME", {
+      x: MARGIN, y, size: 7, tracking: 1.8, color: BRAND.amber,
     });
-    y -= 18;
+    y -= 12;
+    page.drawRectangle({ x: MARGIN, y: y - interpLines * 15 + 4, width: 2, height: interpLines * 15 - 4, color: BRAND.amber });
+    drawWrappedText(page, f.interpretation, {
+      x: MARGIN + 10, y, size: 11, font: fonts.serifItalic, color: BRAND.forest,
+      lineHeight: 15, maxWidth: CONTENT_W - 16,
+    });
+    y -= interpLines * 15 + 10;
   }
 
-  // Recommended approach
-  if (args.finding.recommended_approach) {
-    y = drawLabeledBlock(page, fonts, {
-      label: "HOW WE'D APPROACH IT",
-      text: args.finding.recommended_approach,
-      x: MARGIN, y, width: CONTENT_W, accent,
+  // Approach
+  if (f.recommended_approach) {
+    drawTracked(page, fonts.sansBold, "HOW WE'D APPROACH IT", {
+      x: MARGIN, y, size: 7, tracking: 1.8, color: accent,
     });
-    y -= 24;
+    y -= 12;
+    drawWrappedText(page, f.recommended_approach, {
+      x: MARGIN, y, size: 10.5, font: fonts.serif, color: BRAND.ink,
+      lineHeight: 14, maxWidth: CONTENT_W - 8,
+    });
+    y -= approachLines * 14 + 8;
   }
 
-  // Investment range ribbon at bottom
-  const ribbonH = 64;
-  const ribbonY = Math.max(MARGIN + 90, y - ribbonH);
+  // Investment range ribbon — compact (42pt)
+  const ribbonY = y - ribbonH;
   page.drawRectangle({
     x: MARGIN, y: ribbonY, width: CONTENT_W, height: ribbonH, color: BRAND.creamDeep,
   });
@@ -590,78 +676,30 @@ function drawFindingPage(
     x: MARGIN, y: ribbonY, width: 3, height: ribbonH, color: accent,
   });
   drawTracked(page, fonts.sansBold, "INVESTMENT RANGE", {
-    x: MARGIN + 16, y: ribbonY + ribbonH - 18, size: 8, tracking: 2.4, color: BRAND.amber,
+    x: MARGIN + 12, y: ribbonY + ribbonH - 12, size: 7, tracking: 1.8, color: BRAND.amber,
   });
-  const rangeStr = `$${args.finding.investment_range_low_usd.toLocaleString()}–$${args.finding.investment_range_high_usd.toLocaleString()}`;
+  const rangeStr = f.investment_range_low_usd === 0 && f.investment_range_high_usd === 0
+    ? "Monitor — no investment scheduled"
+    : `$${f.investment_range_low_usd.toLocaleString()}–$${f.investment_range_high_usd.toLocaleString()}`;
   page.drawText(rangeStr, {
-    x: MARGIN + 16, y: ribbonY + ribbonH - 44, size: 22, font: fonts.serifBold, color: BRAND.forest,
+    x: MARGIN + 12, y: ribbonY + 10, size: 14, font: fonts.serifBold, color: BRAND.forest,
   });
 
-  // Reasoning footnote on right side of ribbon
-  drawWrappedText(page, args.finding.reasoning, {
-    x: MARGIN + CONTENT_W * 0.42, y: ribbonY + ribbonH - 18, size: 9,
-    font: fonts.serifItalic, color: BRAND.muted, lineHeight: 13,
-    maxWidth: CONTENT_W * 0.55,
+  // Reasoning footnote on right
+  drawWrappedText(page, f.reasoning, {
+    x: MARGIN + CONTENT_W * 0.46, y: ribbonY + ribbonH - 12, size: 8.5,
+    font: fonts.serifItalic, color: BRAND.muted, lineHeight: 12,
+    maxWidth: CONTENT_W * 0.51,
   });
 
-  drawPaperFooter(page, fonts, {
-    left: `${shortAddress(args.propertyAddress)}  ·  ${args.editionLabel}`,
-    right: romanize(args.index + 2),
-  });
-  return page;
-}
-
-function drawLabeledBlock(
-  page: PDFPage,
-  fonts: Fonts,
-  args: { label: string; text: string; x: number; y: number; width: number; accent: RGB },
-): number {
-  drawTracked(page, fonts.sansBold, args.label, {
-    x: args.x, y: args.y, size: 8, tracking: 2.4, color: args.accent,
-  });
-  page.drawRectangle({ x: args.x, y: args.y - 8, width: 24, height: 1, color: args.accent });
-  const textY = args.y - 22;
-  const lines = measureWrappedText(args.text, fonts.serif, 12, args.width);
-  drawWrappedText(page, args.text, {
-    x: args.x, y: textY, size: 12, font: fonts.serif, color: BRAND.ink,
-    lineHeight: 17, maxWidth: args.width,
-  });
-  return textY - lines * 17;
-}
-
-function drawPullBlock(
-  page: PDFPage,
-  fonts: Fonts,
-  args: { label: string; text: string; x: number; y: number; width: number },
-): number {
-  // Inset card with cream background + amber left bar
-  const padding = 16;
-  const lines = measureWrappedText(args.text, fonts.serifItalic, 13, args.width - padding * 2);
-  const blockH = 28 + lines * 18 + padding;
-  const blockY = args.y - blockH;
-
-  page.drawRectangle({
-    x: args.x, y: blockY, width: args.width, height: blockH, color: BRAND.creamDeep,
-  });
-  page.drawRectangle({
-    x: args.x, y: blockY, width: 3, height: blockH, color: BRAND.amber,
-  });
-
-  drawTracked(page, fonts.sansBold, args.label, {
-    x: args.x + padding, y: args.y - 16, size: 8, tracking: 2.4, color: BRAND.amber,
-  });
-  drawWrappedText(page, args.text, {
-    x: args.x + padding, y: args.y - 34, size: 13, font: fonts.serifItalic, color: BRAND.forest,
-    lineHeight: 18, maxWidth: args.width - padding * 2,
-  });
-  return blockY;
+  ctx.y = ribbonY - 14;
 }
 
 // ─── Closing page ───────────────────────────────────────────────────────────
 function drawClosingPage(
   doc: PDFDocument,
   fonts: Fonts,
-  args: { closing?: string; propertyAddress: string; editionLabel: string },
+  args: { closing?: string; propertyAddress: string; editionLabel: string; pageNumber: number },
 ): PDFPage {
   const page = drawPaperPage(doc);
   let y = PAGE_H - MARGIN;
@@ -749,7 +787,7 @@ function drawClosingPage(
 
   drawPaperFooter(page, fonts, {
     left: `${shortAddress(args.propertyAddress)}  ·  ${args.editionLabel}`,
-    right: "—",
+    right: romanize(args.pageNumber),
   });
   return page;
 }
