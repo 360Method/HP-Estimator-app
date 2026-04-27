@@ -1444,9 +1444,12 @@ async function startServer() {
     const db = await getDb();
     const gmailConfigured = isGmailConfigured();
     const gmailConnected = !!(process.env.GMAIL_CONNECTED_EMAIL);
+    const resendConfigured = !!process.env.RESEND_API_KEY;
     res.json({
       status: "ok",
       db: db ? "connected" : "unavailable",
+      // Resend handles outbound mail; Gmail status is for inbound polling only.
+      email: { sender: resendConfigured ? "resend_ready" : "resend_missing_key" },
       gmail: { configured: gmailConfigured, connected: gmailConnected },
     });
   });

@@ -520,8 +520,8 @@ async function sendAppointmentConfirmationToCustomer(params: {
 <p>Need to adjust the time? Reply to this email or call (360) 241-5718.</p>
 <p>— The Handy Pioneers Team</p>`;
 
-    const { sendEmail, isGmailConfigured } = await import("./gmail");
-    if (isGmailConfigured()) {
+    const { sendEmail, isEmailSenderReady } = await import("./gmail");
+    if (isEmailSenderReady()) {
       await sendEmail({ to: c.email, subject, html }).catch((e) =>
         console.warn("[appointment ack] email failed:", e),
       );

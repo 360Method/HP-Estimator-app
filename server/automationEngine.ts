@@ -93,8 +93,8 @@ async function executeAction(
     }
     case "send_email": {
       if (!payload.email) throw new Error("No email in payload");
-      const { sendEmail, isGmailConfigured } = await import("./gmail");
-      if (!isGmailConfigured()) throw new Error("Gmail not configured");
+      const { sendEmail, isEmailSenderReady } = await import("./gmail");
+      if (!isEmailSenderReady()) throw new Error("Email sender not configured (RESEND_API_KEY missing)");
       const subject = interpolate(ap.subject ?? "", payload);
       const body = interpolate(ap.bodyTemplate ?? "", payload);
       await sendEmail({ to: payload.email, subject, body });

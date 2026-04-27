@@ -23,7 +23,7 @@ import { onLeadCreated } from "../leadRouting";
 import { nanoid } from "nanoid";
 import { runAutomationsForTrigger } from "../automationEngine";
 import { renderEmailTemplate } from "../emailTemplates";
-import { sendEmail, isGmailConfigured } from "../gmail";
+import { sendEmail, isEmailSenderReady } from "../gmail";
 import { sendSms, isTwilioConfigured } from "../twilio";
 import { startProjectEstimate } from "../lib/projectEstimator/estimator";
 import { getDb } from "../db";
@@ -280,7 +280,7 @@ async function sendBookingInquiryAck(params: {
 }): Promise<void> {
   const portalUrl = process.env.PORTAL_BASE_URL ?? "https://client.handypioneers.com";
   try {
-    if (isGmailConfigured()) {
+    if (isEmailSenderReady()) {
       const tpl = await renderEmailTemplate("booking_inquiry_received", {
         customerFirstName: params.firstName,
         portalUrl,
@@ -291,6 +291,8 @@ async function sendBookingInquiryAck(params: {
       await sendEmail({ to: params.email, subject, html, body: text }).catch((e) =>
         console.warn("[booking ack] email failed:", e),
       );
+    } else {
+      console.warn("[booking ack] RESEND_API_KEY not set — email skipped");
     }
   } catch (e) {
     console.warn("[booking ack] email path errored:", e);
