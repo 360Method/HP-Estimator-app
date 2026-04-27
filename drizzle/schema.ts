@@ -1581,7 +1581,12 @@ export const notifications = mysqlTable("notifications", {
   priority: varchar("priority", { length: 16 }).notNull().default("normal"),
   emailSent: boolean("emailSent").default(false).notNull(),
   smsSent: boolean("smsSent").default(false).notNull(),
-  readAt: varchar("readAt", { length: 32 }),
+  // Stored as TIMESTAMP in the DB (see migration 0061). Bug 3 fix
+  // (2026-04-27): the prior `varchar(32)` declaration caused
+  // markNotificationRead to write an ISO string into a timestamp column,
+  // which strict-mode MySQL silently rejected — the read state never
+  // persisted and the unread count never decremented.
+  readAt: timestamp("readAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type DbNotification = typeof notifications.$inferSelect;
@@ -2132,6 +2137,14 @@ export const agentDrafts = mysqlTable("agentDrafts", {
   stepKey: varchar("stepKey", { length: 64 }).notNull(),
   channel: varchar("channel", { length: 16 }).notNull().$type<AgentDraftChannel>(),
   status: varchar("status", { length: 16 }).notNull().default("pending").$type<AgentDraftStatus>(),
+  /**
+   * Routine drafts (auto-acks, info-questions, post-approval range delivery)
+   * fire without a human approval tap. Strategic drafts (concierge follow-ups,
+   * specific-finding emails, 360° intros, long-term nurture) stay false so the
+   * operator must approve from the inbox. Set per-row at insert time; the
+   * worker / immediate-queue paths read it to decide whether to dispatch.
+   */
+  draftAutoSend: boolean("draftAutoSend").notNull().default(false),
   scheduledFor: timestamp("scheduledFor").notNull(),
   subject: varchar("subject", { length: 255 }),
   body: text("body"),

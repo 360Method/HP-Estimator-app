@@ -351,6 +351,7 @@ async function ensureLeadNurturerTables() {
       \`stepKey\` varchar(64) NOT NULL,
       \`channel\` varchar(16) NOT NULL,
       \`status\` varchar(16) NOT NULL DEFAULT 'pending',
+      \`draftAutoSend\` boolean NOT NULL DEFAULT 0,
       \`scheduledFor\` timestamp NOT NULL,
       \`subject\` varchar(255),
       \`body\` text,
@@ -395,6 +396,23 @@ async function ensureLeadNurturerTables() {
         ADD COLUMN \`bypassAutoNurture\` boolean NOT NULL DEFAULT 0
       `);
       console.log("[boot] customers.bypassAutoNurture column added");
+    }
+
+    // Bug 1 fix (2026-04-27): draftAutoSend column on agentDrafts. Routine
+    // drafts (auto-acks, info questions, post-approval range delivery) skip
+    // the operator's approval gate. See drizzle/0074_agent_drafts_auto_send.sql.
+    const [[autoSendRow]]: any = await db.execute(sql`
+      SELECT COUNT(*) AS c FROM information_schema.columns
+      WHERE table_schema = DATABASE()
+        AND table_name = 'agentDrafts'
+        AND column_name = 'draftAutoSend'
+    `);
+    if (autoSendRow && Number(autoSendRow.c) === 0) {
+      await db.execute(sql`
+        ALTER TABLE \`agentDrafts\`
+        ADD COLUMN \`draftAutoSend\` boolean NOT NULL DEFAULT 0
+      `);
+      console.log("[boot] agentDrafts.draftAutoSend column added");
     }
 
     // Seed default playbook

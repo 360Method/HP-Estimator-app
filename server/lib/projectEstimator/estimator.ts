@@ -329,13 +329,18 @@ async function queueEstimateReadyDraft(
     rangeHigh: row.customerRangeHighUsd ?? 0,
     portalProjectUrl,
   });
-  await db.insert(agentDrafts).values({
+  // confidence=high implies the AI has approved the underlying estimate, so
+  // the range-delivery email auto-sends without requiring Marcin's tap. The
+  // approval gate moves to the medium-confidence branch (notifyOwnerForReview)
+  // where Marcin reviews the estimate itself before it reaches the customer.
+  const inserted = await db.insert(agentDrafts).values({
     customerId: input.customerId,
     opportunityId: input.opportunityId,
     playbookKey: BOOK_CONSULTATION_PLAYBOOK_KEY,
     stepKey: "estimate_ready_immediate",
     channel: "email",
     status: "ready",
+    draftAutoSend: true,
     scheduledFor: new Date(),
     subject: email.subject,
     body: email.text,
@@ -344,6 +349,7 @@ async function queueEstimateReadyDraft(
     contextJson: JSON.stringify({ projectEstimateId: id }),
     generatedAt: new Date(),
   });
+  await dispatchAutoSendDraft(extractInsertId(inserted));
 }
 
 async function queueMissingInfoDraft(
@@ -360,13 +366,17 @@ async function queueMissingInfoDraft(
     firstName: input.firstName,
     questions: safeQuestions,
   });
-  await db.insert(agentDrafts).values({
+  // Info-gathering questions have no price/range exposure and reflect what the
+  // AI asked about — auto-send so the customer hears back within seconds
+  // instead of waiting on operator approval.
+  const inserted = await db.insert(agentDrafts).values({
     customerId: input.customerId,
     opportunityId: input.opportunityId,
     playbookKey: BOOK_CONSULTATION_PLAYBOOK_KEY,
     stepKey: "missing_info_immediate",
     channel: "email",
     status: "ready",
+    draftAutoSend: true,
     scheduledFor: new Date(),
     subject: draft.subject,
     body: draft.body,
@@ -378,6 +388,34 @@ async function queueMissingInfoDraft(
     }),
     generatedAt: new Date(),
   });
+  await dispatchAutoSendDraft(extractInsertId(inserted));
+}
+
+/**
+ * mysql2 returns [{ insertId }, _] on insert. Drizzle's mysql adapter
+ * surfaces this as the resolved value's first element.
+ */
+function extractInsertId(result: any): number | null {
+  const id = result?.[0]?.insertId ?? result?.insertId ?? null;
+  return typeof id === "number" && id > 0 ? id : null;
+}
+
+/**
+ * Fire the draft now via the Lead Nurturer's send path. Best-effort — a send
+ * failure logs and leaves the draft at status='ready' so Marcin sees it in the
+ * inbox and can retry/edit.
+ */
+async function dispatchAutoSendDraft(draftId: number | null): Promise<void> {
+  if (!draftId) return;
+  try {
+    const { sendDraft } = await import("../leadNurturer/roadmapFollowup");
+    const result = await sendDraft(draftId, null);
+    if (!result.ok) {
+      console.warn(`[projectEstimator] auto-send draft ${draftId} failed: ${result.reason}`);
+    }
+  } catch (err) {
+    console.warn(`[projectEstimator] auto-send draft ${draftId} threw:`, err);
+  }
 }
 
 async function notifyOwnerForReview(

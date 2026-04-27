@@ -731,9 +731,13 @@ export async function countUnreadForUser(userId: number) {
 export async function markNotificationRead(id: number) {
   const db = await getDb();
   if (!db) return;
+  // Bug 3 fix (2026-04-27): readAt is a TIMESTAMP column (migration 0061).
+  // Passing `new Date().toISOString()` produced an ISO string that strict-mode
+  // MySQL rejected, leaving readAt NULL and the unread count stuck. Pass a
+  // Date so drizzle serialises it correctly.
   await db
     .update(notifications)
-    .set({ readAt: new Date().toISOString() })
+    .set({ readAt: new Date() })
     .where(eq(notifications.id, id));
 }
 
@@ -742,7 +746,7 @@ export async function markAllNotificationsReadForUser(userId: number) {
   if (!db) return;
   await db
     .update(notifications)
-    .set({ readAt: new Date().toISOString() })
+    .set({ readAt: new Date() })
     .where(and(eq(notifications.userId, userId), isNull(notifications.readAt)));
 }
 

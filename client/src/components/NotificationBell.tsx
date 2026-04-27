@@ -162,12 +162,11 @@ export default function NotificationBell() {
       // Land on the customer profile, set the right tab, and queue the focus
       // token for the profile to scroll into view.
       setActiveCustomer(customerId, 'direct', focus);
-      // setActiveCustomer always lands on the profile tab; switch only when
-      // the event wants a different tab (communication, jobs, invoices, …).
-      if (tab !== 'profile') {
-        // Defer so the customer mount completes before the tab switch.
-        window.setTimeout(() => setCustomerTab(tab), 0);
-      }
+      // Bug 3 fix (2026-04-27): SET_ACTIVE_CUSTOMER preserves activeCustomerTab,
+      // so if Marcin was previously viewing customer X's "communication" tab
+      // and the bell sends him to customer Y, Y opens on the wrong tab. Set
+      // the target tab explicitly every time.
+      window.setTimeout(() => setCustomerTab(tab), 0);
       return;
     }
 
