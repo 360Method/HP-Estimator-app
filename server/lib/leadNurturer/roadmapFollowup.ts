@@ -303,6 +303,21 @@ async function generateAndStore(
     })
     .where(eq(agentDrafts.id, draft.id));
 
+  // Auto-send tier (Bug 1, 2026-04-27): routine drafts skip the approval
+  // gate. The current roadmap_followup playbook has no auto-send steps, but
+  // the column is wired so future seeds (auto_ack_received, range_delivered,
+  // info_questions_collection) flow through here without further code changes.
+  if ((draft as any).draftAutoSend) {
+    const sendResult = await sendDraft(draft.id, null);
+    if (!sendResult.ok) {
+      console.warn(`[leadNurturer] auto-send for draft ${draft.id} failed: ${sendResult.reason}`);
+      // Leave the draft at status='ready' so the operator can retry from the
+      // inbox; surface a bell notification.
+      void notifyDraftReady(draft, step.label).catch(() => null);
+    }
+    return;
+  }
+
   // Fire a bell notification so the draft is impossible to miss.
   // Best-effort; never blocks generation.
   void notifyDraftReady(draft, step.label).catch(() => null);

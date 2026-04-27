@@ -139,10 +139,19 @@ export async function sendEmail(params: {
   let gmail: ReturnType<typeof google.gmail>;
   try {
     gmail = await getGmailClient(fromEmail);
-  } catch {
-    // Gmail not connected — log and skip silently
-    console.warn("[Gmail] sendEmail: not connected, skipping");
-    return { messageId: "", threadId: "" };
+  } catch (err) {
+    // Bug 2 fix (2026-04-27): previously this swallowed the missing-token
+    // error and returned empty IDs, so callers thought the send succeeded and
+    // emails silently never arrived. Now we log a clear, actionable error and
+    // re-throw so the caller's .catch surfaces it. Action item: visit
+    // /admin/settings → Connect Gmail to authorize help@handypioneers.com.
+    const reason = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[Gmail] sendEmail to ${params.to} ABORTED — Gmail OAuth not connected. ` +
+      `Action: visit /admin/settings and click "Connect Gmail" to authorize ${fromEmail}. ` +
+      `Underlying error: ${reason}`,
+    );
+    throw new Error(`gmail_not_connected: ${reason}`);
   }
 
   const boundary = `boundary_${Date.now()}`;
@@ -191,13 +200,27 @@ export async function sendEmail(params: {
 
   const raw = Buffer.from(rawBody).toString("base64url");
 
-  const response = await gmail.users.messages.send({
-    userId: "me",
-    requestBody: {
-      raw,
-      threadId: params.threadId,
-    },
-  });
+  let response;
+  try {
+    response = await gmail.users.messages.send({
+      userId: "me",
+      requestBody: {
+        raw,
+        threadId: params.threadId,
+      },
+    });
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    console.error(
+      `[Gmail] sendEmail to ${params.to} REJECTED by Gmail API. ` +
+      `subject="${params.subject}". Underlying error: ${reason}`,
+    );
+    throw err;
+  }
+
+  console.log(
+    `[Gmail] sendEmail OK to=${params.to} subject="${params.subject}" messageId=${response.data.id}`,
+  );
 
   return {
     messageId: response.data.id!,
