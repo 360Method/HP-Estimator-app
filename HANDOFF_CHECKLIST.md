@@ -408,3 +408,47 @@ considered done. (Patterns are codified in `EXPERIENCE_STANDARDS.md`.)
       *(Required: esbuild --packages=external silently bundles around
       missing deps; only smoke-import catches them.)*
 - [ ] `EXPERIENCE_STANDARDS.md` updated when a new pattern lands.
+
+---
+
+## DONE — 2026-04-27 — Book Consultation / Project Estimator pipeline (`feat/book-consultation-pipeline`)
+
+**Per Marcin:** *"Lots of people will enter their one-off projects — that's how we get them into the 360° Method world. AI calculates the estimate range. If we need more info, AI spits out the questions for the Lead Nurturer."*
+
+### What shipped (PR #45)
+
+- **Estimator orchestrator** (`server/lib/projectEstimator/estimator.ts`) — fires from `bookingRouter.submit` after lead routing. Provisions a portal account, persists `projectEstimates` row, runs the Anthropic worker async, gates on confidence (high → delivered, medium → needs_review, low → needs_info), and returns `{ redirectUrl, projectEstimateId }` to redirect the homeowner to the confirmation page.
+- **Estimator math (corrected mid-build)** — internal labor $150/hr is **post-markup** (no further uplift). Sub labor: $100/hr cost × 1.5 default markup. Materials: cost × 1.5 default. Whole-job margin floor enforced server-side (`enforceMarginFloor`) AFTER summing: ≥ 30% on $2k+ hard cost, ≥ 40% under. Customer-facing range = total × [0.75, 1.25] (±25% discovery buffer). Floor uplifts proportionally raise sub-labor + materials markup; internal labor lines stay fixed.
+- **Customer-facing surfaces**:
+  - `/portal/consultation/submitted/:id` — 4-stage progress page that polls `getStatus` every 5s. Optional "tell us more" form for sqft / year built / urgency.
+  - `/portal/projects/:id` — investment-range hero, scope summary, what's included / not included, two-path CTA (Proceed → schedule project commencement; Walkthrough first → in-person scope confirmation). Marks `viewedAt` on first load; pauses cadence on Proceed.
+- **Cadence integration** — uses the existing Lead Nurturer infrastructure (`agentDrafts`, `nurturerPlaybooks`) shipped in PR #44. The Project Estimator inserts pre-rendered drafts directly with `playbookKey="book_consultation_followup"` and engagement triggers (`pauseCadenceForCustomer`) cancel pending rows on Proceed/Walkthrough.
+- **Schema** (boot-time `ensureBookConsultationTables()`):
+  - `projectEstimates` — Claude JSON, denormalized range, confidence, status, view/proceed/walkthrough timestamps, scope summary, inclusions, margin audit. Unique to this pipeline.
+  - Reuses main's `agentDrafts` and `nurturerPlaybooks` (no duplicate tables).
+- **Voice** — extends `EXPERIENCE_STANDARDS.md` with Book Consultation rules: range presentation (never "starting at"), two-path CTA, cadence pause on engagement.
+
+### Required env / secrets
+
+| Var | Purpose |
+|---|---|
+| `ANTHROPIC_API_KEY` | Estimator worker |
+| `RESEND_API_KEY` | Estimate-ready email delivery |
+| `INTERNAL_WORKER_KEY` | Internal `submitFromOnlineRequest` procedure |
+| `PORTAL_BASE_URL` | Defaults to `https://client.handypioneers.com` |
+
+All env vars degrade gracefully — pipeline survives if any are unset.
+
+### Manual verification before relying on the pipeline
+
+- [ ] Submit `/book` end-to-end → confirmation page renders + polls
+- [ ] With `ANTHROPIC_API_KEY` set, estimate populates within ~30s; status flips to `delivered` on high confidence
+- [ ] `/portal/projects/:id` shows investment range hero + two-path CTA
+- [ ] Click "Proceed" → `pauseCadenceForCustomer` cancels pending nurturer drafts
+- [ ] On low-confidence run, `missing_info_questions` populate a draft in `/admin/agents/drafts`
+
+### Known follow-ups (not blocking)
+
+- **Estimate PDF** — mirror `priorityTranslation/pdf.ts` so the customer can download a formal investment-range document.
+- **PortalAppointments query-param branching** — `markProceed` and `markWalkthrough` redirect with `?source=project|walkthrough&projectId=…`; the page should branch on `source` to show the right scheduling flow.
+- **Persist "tell us more"** — the optional sqft/yearBuilt/urgency form on the confirmation page is currently client-side only; add a `trpc.projectEstimator.addContext` mutation to persist.

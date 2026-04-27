@@ -25,6 +25,8 @@ import { runAutomationsForTrigger } from "../automationEngine";
 import { renderEmailTemplate } from "../emailTemplates";
 import { sendEmail, isGmailConfigured } from "../gmail";
 import { sendSms, isTwilioConfigured } from "../twilio";
+import { startProjectEstimate } from "../lib/projectEstimator/estimator";
+import { getDb } from "../db";
 
 export const bookingRouter = router({
   /** Check if a zip code is in the service area. Public — no auth required. */
@@ -172,11 +174,50 @@ export const bookingRouter = router({
         phone: input.phone,
         smsConsent: input.smsConsent,
       });
+
+      // Fire the Book Consultation / Project Estimator pipeline.
+      // Provisions a portal account, schedules the post-roadmap cadence
+      // through the existing Lead Nurturer infrastructure, and asynchronously
+      // runs the AI estimator. Auto-ack itself is handled above by
+      // sendBookingInquiryAck — startProjectEstimate must not duplicate it.
+      let redirectUrl: string | null = null;
+      let projectEstimateId: string | null = null;
+      try {
+        const db = await getDb();
+        if (db) {
+          const result = await startProjectEstimate(db, {
+            customerId: customer.id,
+            opportunityId: leadId,
+            onlineRequestId: (request as any)?.id ?? null,
+            firstName: input.firstName,
+            lastName: input.lastName,
+            email: input.email,
+            phone: input.phone,
+            smsConsent: input.smsConsent,
+            serviceType: input.serviceType,
+            description: input.description,
+            timeline: input.timeline,
+            street: input.street,
+            unit: input.unit,
+            city: input.city,
+            state: input.state,
+            zip: input.zip,
+            photoUrls: input.photoUrls,
+          });
+          redirectUrl = result.redirectUrl;
+          projectEstimateId = result.projectEstimateId;
+        }
+      } catch (err) {
+        console.error('[projectEstimator] startProjectEstimate failed:', err);
+      }
+
       return {
         success: true,
         leadId,
         customerId: customer.id,
         isNewCustomer,
+        projectEstimateId,
+        redirectUrl,
       };
     }),
 

@@ -286,6 +286,51 @@ async function ensurePortalContinuityFlag() {
 }
 
 /**
+ * Defensive ensure for the Book Consultation projectEstimates table.
+ * The Lead Nurturer infrastructure (agentDrafts, nurturerPlaybooks) ships in
+ * ensureLeadNurturerTables() below; we reuse that for cadence + drafts and
+ * only add projectEstimates here.
+ */
+async function ensureBookConsultationTables() {
+  try {
+    const { getDb } = await import("../db");
+    const { sql } = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return;
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`projectEstimates\` (
+      \`id\` varchar(64) NOT NULL,
+      \`opportunityId\` varchar(64) NOT NULL,
+      \`customerId\` varchar(64) NOT NULL,
+      \`onlineRequestId\` int DEFAULT NULL,
+      \`portalAccountId\` varchar(64) DEFAULT NULL,
+      \`status\` varchar(32) NOT NULL DEFAULT 'submitted',
+      \`confidence\` varchar(16) DEFAULT NULL,
+      \`claudeResponse\` json DEFAULT NULL,
+      \`customerRangeLowUsd\` int DEFAULT NULL,
+      \`customerRangeHighUsd\` int DEFAULT NULL,
+      \`scopeSummary\` text,
+      \`inclusionsMd\` text,
+      \`marginAudit\` text,
+      \`deliveredAt\` timestamp NULL DEFAULT NULL,
+      \`viewedAt\` timestamp NULL DEFAULT NULL,
+      \`proceedClickedAt\` timestamp NULL DEFAULT NULL,
+      \`walkthroughRequestedAt\` timestamp NULL DEFAULT NULL,
+      \`declinedAt\` timestamp NULL DEFAULT NULL,
+      \`failureReason\` text,
+      \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      \`updatedAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (\`id\`),
+      INDEX \`projectEstimates_opportunity_idx\` (\`opportunityId\`),
+      INDEX \`projectEstimates_customer_idx\` (\`customerId\`),
+      INDEX \`projectEstimates_status_idx\` (\`status\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    console.log("[boot] projectEstimates ensured");
+  } catch (err) {
+    console.warn("[boot] ensureBookConsultationTables failed (non-fatal):", err);
+  }
+}
+
+/**
  * Defensive ensure for the Lead Nurturer tables — agentDrafts + nurturerPlaybooks
  * + customers.bypassAutoNurture. Mirrors the boot-time pattern from
  * ensurePhoneTables / ensurePortalContinuityFlag so prod DBs that lag the
@@ -793,6 +838,7 @@ async function startServer() {
   await ensureAppSettings();
   await ensureDepartmentHeadFlags();
   await ensureLeadNurturerTables();
+  await ensureBookConsultationTables();
   const app = express();
   const server = createServer(app);
 
