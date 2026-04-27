@@ -1,5 +1,28 @@
 # HP Estimator — Integration Handoff Checklist
 
+## DONE — 2026-04-26 — Roadmap Generator end-to-end (4 PRs)
+
+**PRs #31, #33, #34, #35 (+ diagnostic #36):** Roadmap Generator pipeline now lands homeowners in a real customer-facing experience, with full CRM visibility for the operator.
+
+### What shipped
+- **PR #31** `feat(roadmap): confirmation page + CRM bridge + lead routing` — new public page `/portal/roadmap/submitted/:id` with 4-stage progress bar (received → reviewing → preparing → delivered) polling `priorityTranslation.getPublicStatus` every 5s. Stewardship-voice copy. New tRPC `getPublicStatus` (no PII). Submit endpoint returns `confirmationUrl`. **CRM bridge** in `submitRoadmap`: every Roadmap submission now creates/links a `customers` row by email, back-links `portalAccounts.customerId`, creates an `opportunities` row in 'New Lead' with `leadSource='Roadmap Generator'`, and fires `onLeadCreated` so the Nurturer notification + pipeline_event + lead_created automations fire.
+- **PR #33** `chore(roadmap): admin diagnostic + one-shot CRM backfill endpoint` — `POST /api/admin/roadmap-diagnostic` gated by `INTERNAL_WORKER_KEY`. Read-only snapshot of recent priorityTranslations + portalAccounts; idempotent backfill for accounts that landed before PR #31 (1 row fixed retroactively — Marcin's fake-lead now visible in admin).
+- **PR #34** `fix(roadmap): rename Priority Translation → Roadmap; fix magic-link 404` — every customer-visible string ("Your 360° Roadmap is ready", PDF title, attachment filename `360-roadmap.pdf`, CTA button "View Your Roadmap"). Also fixed wouter-path mismatch in `portalAccount.ts:122` (`/portal/authenticate` → `/portal/auth`) and adds `sendTestEmailTo` to the diagnostic endpoint.
+- **PR #35** `fix(portal): bridge Roadmap magic links + restore PORTAL_BASE_URL + admin route guard` — Marcin pushed back on hardcoding `pro.handypioneers.com`; `client.*` IS the correct customer subdomain (Railway custom domain bound, cert valid, Cloudflare proxied). The real fix: new `consumeRoadmapMagicLinkAsPortalCustomer()` in `portalDb.ts` looks up tokens in `portalMagicLinks` (varchar `portalAccountId`), bridges into the legacy `portalCustomers` table by upserting on email + stamping `hpCustomerId`, and `verifyToken` falls back to it on portalTokens miss. Orchestrator restored to honor `PORTAL_BASE_URL`. New `staffOnly()` wrapper in `App.tsx` 404s every `/admin/*` and `/onboarding` route on `client.handypioneers.com` (soft boundary — pair with API-side authz for hard guards).
+- **PR #36** `chore(roadmap-diagnostic): issueTestMagicLinkFor` — diagnostic endpoint can issue a fresh magic link for any portalAccount, returns the raw token + URL so the operator can curl-verify the bridge end-to-end.
+
+### Verified on prod after deploys
+- `client.handypioneers.com` serves the SPA (cert valid, Cloudflare proxied).
+- `/admin/*` paths render NotFound on `client.*` (verified after deploy).
+- Marcin's fake-lead `pt_d9ffdc8bb1a644a7a8d3` was completed at 16:11:07Z (8s after submit). Backfilled to CRM customer `73a97b76d2fcfe9370753d4f` + opportunity `a95d67be9446461c`. Nurturer notified.
+- Test email Resend ID `66e42b4a-e153-40e0-bb66-2bfaf6ffc3d3` confirmed renamed copy + working CTA.
+
+### Recommended follow-ups (not blocking)
+- The orchestrator's old "magic link gives portal session" flow now works via the bridge; consider migrating booking/estimates/invoices to also issue tokens through `portalMagicLinks` so we eventually have one token system.
+- `client.handypioneers.com` Railway custom-domain DNS shows `REQUIRES_UPDATE` because Cloudflare is in front (hides the real CNAME from Railway's check). Cosmetic — doesn't affect routing. Same on `pro.*`.
+
+---
+
 ## DONE — 2026-04-26 — Org Chart Mirror Pass
 
 **PR #29:** `feat/org-chart-mirror` — explicit Department Head seats + mobile accordion + boot-time flag safety net.
