@@ -1,5 +1,30 @@
 # HP Estimator — Integration Handoff Checklist
 
+## DONE — 2026-04-27 — Unified Leads inbox + Concierge Brief (`feat/lead-flow-unified`)
+
+**Per Marcin:** *"Right now I only see leads temporarily when the request banner pops up under the inbox or pipeline — that needs to get improved. Everything should fall into the first lead bucket. Maybe take away the Request page entirely and everything just falls into the Leads tab."*
+
+### What shipped
+- **New `leads` server router** (`server/routers/leads.ts`): `list` joins every active `area='lead'` opp with customer info, derived source label, age, assigned operator, online-request payload (timeline + photos + read state), and a `hasRoadmap` flag. Plus `counts`, `markOnlineRequestRead`, and `roadmapsForCustomer` for the Concierge Brief.
+- **New top-level section `'leads'`** with `LeadsPage` — reverse-chrono list, source/stage/age filter chips, persistent gold accent on rows < 24h that the operator hasn't viewed locally, stewardship empty state, mobile-first (sticky header, ≥ 44 px tap targets, single column, bottom action bar).
+- **Persistent `NewLeadBanner`** above MetricsBar: surfaces unread `new_lead` / `new_booking` notifications on EVERY admin page until the operator opens the lead or dismisses for the session. Hidden on the Leads tab itself.
+- **`ConciergeBrief` panel** at the top of the customer Profile tab — header strip (contact + address + lead source + customer-since), Roadmap section (with magic-link out to the customer-facing report), AI activity glance, and a five-button quick action bar (Email / Call / SMS / Schedule / Estimate).
+- **MetricsBar:** replaces the Requests slot with a Leads slot (Star icon, amber badge), surfacing unread online-requests + new-last-24h leads as one badge. Mobile nav tap targets bumped to 56 px. Requests breadcrumb removed.
+- **PipelinePage banner** now points at the unified Leads inbox instead of the retired Requests page.
+- **Deleted** `client/src/pages/RequestsPage.tsx`. Legacy `'requests'` AppSection key kept (aliased to `'leads'`) so old notification deep-links still resolve.
+- **Created** `EXPERIENCE_STANDARDS.md` codifying the patterns: customer is root, one inbox per role, persistent surfaces, mobile-first, hierarchy over tabs, stewardship empty states, color discipline, page-removal pattern.
+
+### Sources funneling into the Leads inbox today
+Online Request (`/book`), Roadmap Generator, Inbound Call, Missed Call, Voicemail, Membership Intent, Baseline Walkthrough, Manual, Contact Form, Referral. Adding a new source = one row in `deriveSource()` + one `SOURCE_META` entry in `LeadsPage.tsx`. **Do not** spin up a new top-level page.
+
+### Verified
+- `tsc --noEmit` clean for every new and modified file.
+- `pnpm build` succeeds.
+- Server bundle smoke-imports cleanly (per the `esbuild --packages=external` memory).
+  *(Note: `multer` was missing from `node_modules` post-merge with main — already declared in `package.json`, just needed `pnpm install`. Pre-existing issue from the Roadmap Generator pipeline merge, surfaced by the smoke-import gate working as designed.)*
+
+---
+
 ## DONE — 2026-04-26 — Roadmap Generator end-to-end (4 PRs)
 
 **PRs #31, #33, #34, #35 (+ diagnostic #36):** Roadmap Generator pipeline now lands homeowners in a real customer-facing experience, with full CRM visibility for the operator.
@@ -255,3 +280,66 @@ These secrets should be rotated in their respective consoles after the first suc
 2. Update `GOOGLE_ADS_DEVELOPER_TOKEN` in Railway with the production token.
 3. Click "Connect" in `/admin/settings` → Integrations → Google Ads.
 4. Confirm `/api/health` returns `googleAds: { configured: true, connected: true }`.
+
+---
+
+# Reusable Checklist — Operator-Facing Changes
+
+A living checklist for shipping operator-facing work. Anything that touches
+Marcin's daily workspace must clear every applicable box before it's
+considered done. (Patterns are codified in `EXPERIENCE_STANDARDS.md`.)
+
+## Information architecture
+
+- [ ] Every entity has ONE canonical home. No silo pages, no duplicates.
+- [ ] Every notification, banner, and link routes to the **customer profile**
+      (not directly to an opportunity) when a customer is involved. The
+      customer is the root entity.
+- [ ] No top-level page exists for a single source. Sources are filters or
+      chips inside the canonical inbox, not their own destinations.
+      *(Example: the retired Requests page — online bookings now appear as
+      Online Request leads inside the unified Leads inbox.)*
+
+## Lead flow specifics
+
+- [ ] Every lead source funnels into `area='lead'` opportunity rows.
+- [ ] The Leads tab is the single inbox. Sortable, filterable, mobile-first.
+- [ ] New leads (≤ 24h, not yet viewed locally) carry the gold accent.
+- [ ] The persistent `NewLeadBanner` shows on EVERY admin page until the
+      operator opens the lead or dismisses it for the session.
+- [ ] Tapping any lead → customer profile (not opportunity detail).
+
+## Customer profile (Concierge Brief)
+
+- [ ] Profile tab opens with the **Concierge Brief** at the top.
+- [ ] Brief includes: header strip (contact + address + lead source +
+      customer-since), Roadmap status row, AI activity glance,
+      and quick action bar (Email / Call / SMS / Schedule / Estimate).
+- [ ] Roadmap section pulls from `priorityTranslations` joined via
+      `portalAccounts.customerId`.
+- [ ] Quick actions deep-link into the existing tabs (no modal sprawl).
+
+## Mobile
+
+- [ ] All tap targets ≥ 44px on Leads list, customer profile, banners.
+- [ ] Sticky page header on scroll for long lists.
+- [ ] Mobile bottom action bar (Email / Call / SMS / Schedule) on Leads list.
+- [ ] Single-column layouts on screens < 640px.
+
+## Deletion / migration
+
+- [ ] When retiring a top-level page, leave the AppSection key in the union
+      with a comment marking it deprecated; the shell redirects to the new
+      home. (Old notification deep-links keep working.)
+- [ ] No data migration needed when the underlying rows are unchanged —
+      the data layer is the source of truth, the page was only a view.
+
+## Build + ship gates
+
+- [ ] `pnpm exec tsc --noEmit` clean for the files you touched.
+- [ ] `pnpm build` succeeds.
+- [ ] Smoke-import the server bundle: `node --input-type=module -e
+      "import('./dist/index.js').then(()=>console.log('OK'))"`.
+      *(Required: esbuild --packages=external silently bundles around
+      missing deps; only smoke-import catches them.)*
+- [ ] `EXPERIENCE_STANDARDS.md` updated when a new pattern lands.

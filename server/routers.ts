@@ -4,6 +4,8 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_core/trpc";
+
+// (Imports below were merged from main + feat/lead-flow-unified.)
 import { paymentsRouter } from "./routers/payments";
 import { estimateRouter } from "./routers/estimate";
 import { inboxRouter } from "./routers/inbox";
@@ -42,6 +44,7 @@ import { schedulingRouter }    from "./routers/scheduling";
 import { vendorsRouter }       from "./routers/vendors";
 import { agentsRouter }        from "./routers/agents";
 import { playbooksRouter }     from "./routers/playbooks";
+import { leadsRouter }         from "./routers/leads";
 import { requestPasswordReset, consumePasswordReset } from "./passwordReset";
 import {
   getAdminAllowlist,
@@ -90,6 +93,7 @@ export const appRouter = router({
   vendors: vendorsRouter,
   agents: agentsRouter,
   playbooks: playbooksRouter,
+  leads: leadsRouter,
 
   auth: router({
     /**
