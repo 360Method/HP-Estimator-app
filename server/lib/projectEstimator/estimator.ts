@@ -226,6 +226,60 @@ async function runEstimatorWorker(
   } else {
     await notifyOwnerForReview(db, id, input, claudeResponse);
   }
+
+  // Land a bell notification on the customer so the draft is impossible to
+  // miss — links into the profile's Pending Your Review section.
+  void fireDraftNeedsApprovalBell({
+    customerId: input.customerId,
+    opportunityId: input.opportunityId,
+    confidence: claudeResponse.confidence,
+    rangeLow: claudeResponse.customer_range_low_usd,
+    rangeHigh: claudeResponse.customer_range_high_usd,
+    firstName: input.firstName,
+    lastName: input.lastName,
+    status: newStatus,
+  }).catch((err) => console.warn("[projectEstimator] bell notification failed:", err));
+}
+
+async function fireDraftNeedsApprovalBell(params: {
+  customerId: string;
+  opportunityId: string;
+  confidence: "high" | "medium" | "low";
+  rangeLow: number;
+  rangeHigh: number;
+  firstName: string;
+  lastName: string;
+  status: "delivered" | "needs_review" | "needs_info";
+}): Promise<void> {
+  const { createNotification, customerLinkUrl, findDefaultUserForRole } = await import(
+    "../../leadRouting"
+  );
+  const consultantId = await findDefaultUserForRole("consultant").catch(() => null);
+  const ownerId =
+    consultantId ?? (await findDefaultUserForRole("nurturer").catch(() => null));
+
+  const tierLabel =
+    params.status === "delivered"
+      ? "Estimate ready to share"
+      : params.status === "needs_review"
+        ? "Estimate awaiting your review"
+        : "Estimate needs more info";
+
+  const range = `$${params.rangeLow.toLocaleString()}–$${params.rangeHigh.toLocaleString()}`;
+  const customerName = [params.firstName, params.lastName].filter(Boolean).join(" ").trim() || "this customer";
+
+  await createNotification({
+    userId: ownerId ?? null,
+    role: "consultant",
+    eventType: "draft_needs_approval",
+    title: `${tierLabel} — ${customerName}`,
+    body: `Project Estimator drafted a ${params.confidence}-confidence estimate. Range: ${range}. Review the scope, edits, and approve from ${customerName}'s profile.`,
+    linkUrl:
+      customerLinkUrl(params.customerId, params.opportunityId) + "&tab=profile&focus=pending-review",
+    opportunityId: params.opportunityId,
+    customerId: params.customerId,
+    priority: params.status === "needs_review" ? "high" : "normal",
+  });
 }
 
 function buildMarginAudit(r: EstimatorClaudeResponse): string {
