@@ -155,10 +155,19 @@ export async function sendEmail(params: {
   inReplyTo?: string;
 }): Promise<{ messageId: string; threadId: string }> {
   const { sendEmailViaResend } = await import("./lib/email/resend");
-  // If a caller specified a fromEmail explicitly, honour it. Otherwise let the
-  // Resend wrapper apply the default (`Handy Pioneers <noreply@handypioneers.com>`).
+  // If a caller specified a fromEmail explicitly, honour it. Otherwise let
+  // the Resend wrapper apply the default (`Handy Pioneers <help@handypioneers.com>`).
   const from = params.fromEmail
     ? `Handy Pioneers <${params.fromEmail}>`
+    : undefined;
+
+  // Forward Gmail-style threading info as raw RFC 2822 headers so the
+  // recipient's client and our help@ inbox both thread the reply correctly.
+  const headers: Record<string, string> | undefined = params.inReplyTo
+    ? {
+        "In-Reply-To": params.inReplyTo,
+        References: params.inReplyTo,
+      }
     : undefined;
 
   const result = await sendEmailViaResend({
@@ -167,6 +176,7 @@ export async function sendEmail(params: {
     html: params.html,
     body: params.body,
     from,
+    headers,
   });
 
   return { messageId: result.id, threadId: "" };
