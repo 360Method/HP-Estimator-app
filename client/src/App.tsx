@@ -61,6 +61,8 @@ import Portal360Membership from "./pages/portal/Portal360Membership";
 import PortalEnrollmentConfirmation from "./pages/portal/PortalEnrollmentConfirmation";
 import PortalRoadmapSubmitted from "./pages/portal/PortalRoadmapSubmitted";
 import PortalSchedule from "./pages/portal/PortalSchedule";
+import PortalConsultationSubmitted from "./pages/portal/PortalConsultationSubmitted";
+import PortalProjectDetail from "./pages/portal/PortalProjectDetail";
 import WorkOrderDetail from "./pages/WorkOrderDetail";
 import Welcome360Page from "./pages/Welcome360Page";
 import AgentDraftsPage from "./pages/admin/AgentDraftsPage";
@@ -166,6 +168,10 @@ function Router() {
       <Route path="/portal/360-membership" component={Portal360Membership} />
       <Route path="/portal/360-confirmation" component={PortalEnrollmentConfirmation} />
       <Route path="/portal/schedule" component={PortalSchedule} />
+
+      {/* Book Consultation pipeline — public (id is a long random token) */}
+      <Route path="/portal/consultation/submitted/:id" component={PortalConsultationSubmitted} />
+      <Route path="/portal/projects/:id" component={PortalProjectDetail} />
 
       {/* 360° Method post-checkout confirmation (public) */}
       <Route path="/360-welcome" component={Welcome360Page} />

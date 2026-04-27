@@ -48,6 +48,7 @@ import { vendorsRouter }       from "./routers/vendors";
 import { agentsRouter }        from "./routers/agents";
 import { playbooksRouter }     from "./routers/playbooks";
 import { leadsRouter }         from "./routers/leads";
+import { projectEstimatorRouter } from "./routers/projectEstimator";
 import { requestPasswordReset, consumePasswordReset } from "./passwordReset";
 import {
   getAdminAllowlist,
@@ -100,6 +101,7 @@ export const appRouter = router({
   agents: agentsRouter,
   playbooks: playbooksRouter,
   leads: leadsRouter,
+  projectEstimator: projectEstimatorRouter,
 
   auth: router({
     /**

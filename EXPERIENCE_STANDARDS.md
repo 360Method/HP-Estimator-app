@@ -276,3 +276,54 @@ After every customer-initiated booking:
 - Auto-charge or hold a card during the funnel.
 - Show "X people booked this week" social-proof banners.
 - Use exclamation marks in stewardship copy.
+
+---
+
+# Book Consultation pipeline standards
+
+These rules apply to any one-off project intake (the `/book` form) and the AI estimator that follows it.
+
+## 18. Pricing presentation — always a range, never a point
+
+- Show `low — high` (the customer's investment range, ±25% discovery buffer baked in).
+- Never use "starting at" pricing.
+- Never expose internal margin, markup multipliers, or the $100/$150 hourly rates.
+- Always show what's included AND what's not included.
+
+## 19. Two-path CTA on every project page
+
+When an estimate is delivered, the portal page offers two equally-welcomed paths:
+1. **Proceed with this project** — opens the in-portal scheduling funnel for project commencement.
+2. **Request a walkthrough first** — opens scheduling for an in-person scope confirmation.
+
+Either is "the right answer." Never pressure the customer into Proceed; never bury the walkthrough option.
+
+## 20. Cadence pauses on engagement
+
+The Project Estimator's cadence (T+4h..T+10d) cancels automatically on any of:
+- `appointment.scheduled` (customer booked the walkthrough or project)
+- `customer.replied` (inbound SMS or email)
+- `subscription.created` (joined 360° Method)
+- `estimate.approved` (clicked Proceed)
+- `customer.declined` (operator-set)
+
+Pause is triggered via `pauseCadenceForCustomer()` which flips matching `agentDrafts` rows to `cancelled` with the reason recorded.
+
+## 21. Confidence gate
+
+Every estimate ships through one of three paths:
+- **High confidence** → status `delivered`, customer sees range immediately, concierge_estimate_ready draft queues for approval.
+- **Medium confidence** → status `needs_review`, Marcin notified via `notifyOwner`. Customer sees "your range is being finalized" copy until Marcin approves.
+- **Low confidence** → status `needs_info`, `missing_info_questions` queue as a Nurturer draft addressed to the customer. Customer sees "your Concierge will be in touch shortly" copy.
+
+Customer never sees a sub-floor estimate; `enforceMarginFloor()` validates server-side regardless of what Claude returned.
+
+## 22. Margin discipline (matches the hp-estimate-builder-v1 skill)
+
+- Internal labor $150/hr is **post-markup** — never apply additional markup.
+- Subcontractor labor: $100/hr cost × 1.5× default markup (lands at $150 customer rate by design).
+- Materials: cost × 1.5× default markup.
+- Whole-job margin floor enforced AFTER summing: ≥ 30% on $2k+ hard cost, ≥ 40% under $2k.
+- Customer-facing range = customer total × [0.75, 1.25].
+
+If a touchpoint surfaces pricing that violates these rules, rewrite.

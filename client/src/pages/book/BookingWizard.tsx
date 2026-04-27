@@ -630,7 +630,18 @@ export default function BookingWizard() {
   }, []);
 
   const submitMutation = trpc.booking.submit.useMutation({
-    onSuccess: () => {
+    onSuccess: (result) => {
+      // Book Consultation pipeline returns a redirectUrl pointing to the
+      // confirmation page. Fall back to step 5 (legacy success state) if
+      // the estimator failed to start (e.g. DB unavailable).
+      if (result?.redirectUrl) {
+        window.location.href = result.redirectUrl;
+        return;
+      }
+      if (result?.projectEstimateId) {
+        window.location.href = `/portal/consultation/submitted/${result.projectEstimateId}`;
+        return;
+      }
       setStep(5);
     },
     onError: (err) => {
