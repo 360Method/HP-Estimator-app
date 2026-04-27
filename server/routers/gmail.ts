@@ -288,26 +288,32 @@ export const gmailRouter = router({
       return { messageId, subject, portalUrl };
     }),
 
-  /** Send an email from the connected Gmail account */
+  /**
+   * Send an email reply from the operator (now via Resend, sent from
+   * help@handypioneers.com so the customer's reply lands in our inbox and is
+   * picked up by the inbound poller into the same conversation).
+   *
+   * Accepts an optional `inReplyTo` Message-ID to thread the reply correctly
+   * in the recipient's mail client. The composer typically pulls this from
+   * the latest inbound email on the conversation.
+   */
   sendEmail: protectedProcedure
     .input(z.object({
       conversationId: z.number(),
       to: z.string().email(),
       subject: z.string().min(1),
       body: z.string().min(1),
+      /** Optional RFC 2822 Message-ID of the email we're replying to. */
+      inReplyTo: z.string().optional(),
+      /** Legacy Gmail thread id — accepted but ignored under Resend. */
       threadId: z.string().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
-      const fromEmail = process.env.GMAIL_CONNECTED_EMAIL || "help@handypioneers.com";
-      const token = await getGmailToken(fromEmail);
-      if (!token) throw new Error("Gmail not connected. Please connect your Gmail account in Settings.");
-
-      const { messageId, threadId } = await sendEmail({
-        fromEmail,
+      const { messageId } = await sendEmail({
         to: input.to,
         subject: input.subject,
         body: input.body,
-        threadId: input.threadId,
+        inReplyTo: input.inReplyTo,
       });
 
       const msg = await insertMessage({
@@ -324,6 +330,8 @@ export const gmailRouter = router({
       });
 
       await updateConversationLastMessage(input.conversationId, input.body, "email");
-      return { ...msg, gmailThreadId: threadId };
+      // gmailThreadId is no longer set under Resend (no thread concept). The
+      // shape stays for any caller still destructuring it — value is null.
+      return { ...msg, gmailThreadId: null };
     }),
 });

@@ -2,33 +2,39 @@
  * server/lib/email/resend.ts
  *
  * Canonical Resend transport for ALL outbound mail. Replaced the Gmail API
- * send path (2026-04-27) — Marcin verified handypioneers.com on Resend and
- * standardised the sender addresses below.
+ * send path (2026-04-27) — Marcin verified handypioneers.com on Resend.
  *
- * From-address conventions:
- *   - transactional   noreply@handypioneers.com   (default)
- *   - concierge       concierge@handypioneers.com (set voice="concierge"
- *                                                  for human-tone customer mail)
+ * From-address conventions (2026-04-27 update — single mailbox, no Workspace
+ * setup needed):
+ *   - default      help@handypioneers.com   — used for every customer-facing
+ *                                              send. Marcin already monitors
+ *                                              this mailbox; replies land in
+ *                                              Gmail and the inbound poller
+ *                                              picks them up into the
+ *                                              customer's Communications
+ *                                              timeline.
+ *   - transactional noreply@handypioneers.com — RESERVED for sends where a
+ *                                              reply makes no sense
+ *                                              (magic-link login, password
+ *                                              reset, system status). Pass
+ *                                              voice="transactional" to opt
+ *                                              in.
+ *
+ * Reply-To is always set to help@handypioneers.com so customer replies route
+ * to the operator inbox even when the From is noreply@.
  *
  * CC convention:
- *   - ccHelp=true     adds help@handypioneers.com so the team has a record
- *                     of customer-facing sends without watching a queue.
- *
- * The legacy `server/gmail.ts:sendEmail` and `server/leadRouting.ts:
- * sendResendEmail` are thin shims around `sendEmailViaResend` to keep the
- * existing call-site signatures intact.
- *
- * Inbound mail still flows through Gmail OAuth (see pollInboundEmails) — this
- * file is outbound-only.
+ *   - ccHelp=true     adds help@ to the visible CC list when the From is not
+ *                     already help@ (no-op when the default sender is used).
  */
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 
-const FROM_TRANSACTIONAL = "Handy Pioneers <noreply@handypioneers.com>";
-const FROM_CONCIERGE = "Handy Pioneers Concierge <concierge@handypioneers.com>";
 const HELP_INBOX = "help@handypioneers.com";
+const FROM_DEFAULT = "Handy Pioneers <help@handypioneers.com>";
+const FROM_TRANSACTIONAL = "Handy Pioneers <noreply@handypioneers.com>";
 
-export type ResendVoice = "transactional" | "concierge";
+export type ResendVoice = "transactional" | "concierge" | "default";
 
 export interface SendEmailParams {
   to: string | string[];
@@ -47,6 +53,12 @@ export interface SendEmailParams {
   /** Convenience: CC help@handypioneers.com so the team has a record. */
   ccHelp?: boolean;
   attachments?: Array<{ filename: string; content: string }>;
+  /**
+   * Raw email headers (e.g. `In-Reply-To`, `References`) — used when sending
+   * a reply that should thread inside the customer's mail client and inside
+   * Gmail when our inbound poller catches the reply.
+   */
+  headers?: Record<string, string>;
 }
 
 export interface SendEmailResult {
@@ -79,7 +91,11 @@ export async function sendEmailViaResend(params: SendEmailParams): Promise<SendE
 
   const from =
     params.from ??
-    (params.voice === "concierge" ? FROM_CONCIERGE : FROM_TRANSACTIONAL);
+    (params.voice === "transactional" ? FROM_TRANSACTIONAL : FROM_DEFAULT);
+  // Reply-To always points at help@ so replies route to the operator inbox
+  // even when the From address is noreply@. The Gmail OAuth poller picks the
+  // reply up and writes it to the customer's Communications timeline.
+  const replyTo = params.replyTo ?? HELP_INBOX;
   const to = Array.isArray(params.to) ? params.to : [params.to];
 
   const cc: string[] = [];
@@ -87,7 +103,7 @@ export async function sendEmailViaResend(params: SendEmailParams): Promise<SendE
     const list = Array.isArray(params.cc) ? params.cc : [params.cc];
     cc.push(...list);
   }
-  if (params.ccHelp && !cc.includes(HELP_INBOX)) {
+  if (params.ccHelp && !cc.includes(HELP_INBOX) && !from.includes(HELP_INBOX)) {
     cc.push(HELP_INBOX);
   }
 
@@ -100,12 +116,17 @@ export async function sendEmailViaResend(params: SendEmailParams): Promise<SendE
     subject: params.subject,
     html,
     text,
+    reply_to: replyTo,
   };
   if (cc.length > 0) payload.cc = cc;
   if (params.bcc) payload.bcc = Array.isArray(params.bcc) ? params.bcc : [params.bcc];
-  if (params.replyTo) payload.reply_to = params.replyTo;
   if (params.attachments && params.attachments.length > 0) {
     payload.attachments = params.attachments;
+  }
+  if (params.headers) {
+    // Resend forwards a `headers` object verbatim — used for In-Reply-To /
+    // References when sending a customer reply from the unified comms hub.
+    payload.headers = params.headers;
   }
 
   let res: Response;
