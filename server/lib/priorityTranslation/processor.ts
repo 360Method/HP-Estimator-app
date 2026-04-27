@@ -134,6 +134,8 @@ export function mergeFindings(
     source_id: sourceId,
     category: f.category,
     finding: f.finding,
+    interpretation: f.interpretation,
+    recommended_approach: f.recommended_approach,
     urgency: f.urgency,
     investment_range_low_usd: f.investment_range_low_usd,
     investment_range_high_usd: f.investment_range_high_usd,
