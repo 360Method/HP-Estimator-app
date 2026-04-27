@@ -41,7 +41,7 @@ import NotificationBell from '@/components/NotificationBell';
 import {
   Search, LayoutDashboard, Users, Inbox, GitBranch,
   DollarSign, BarChart2, Megaphone, Settings,
-  ChevronDown, ArrowLeft, Plus, Menu, X, Briefcase, CalendarDays, RefreshCw, BookOpen,
+  ChevronDown, ArrowLeft, Plus, Menu, X, Briefcase, CalendarDays, RefreshCw, BookOpen, Star,
 } from 'lucide-react';
 
 const HP_LOGO = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg';
@@ -68,6 +68,7 @@ const JOB_BUILDER_TABS: { id: AppSection; icon: string; label: string; shortLabe
 
 const BACKEND_NAV: { icon: React.ElementType; label: string; section: AppSection | null }[] = [
   { icon: LayoutDashboard, label: 'Dashboard',  section: 'dashboard' as AppSection },
+  { icon: Star,            label: 'Leads',      section: 'leads' as AppSection },
   { icon: Users,           label: 'Customers',  section: 'customers' },
   { icon: Briefcase,       label: 'Jobs',       section: 'jobs'      },
   { icon: CalendarDays,    label: 'Schedule',   section: 'schedule' as AppSection },
@@ -76,19 +77,23 @@ const BACKEND_NAV: { icon: React.ElementType; label: string; section: AppSection
   { icon: DollarSign,      label: 'Financials', section: 'financials' as AppSection },
   { icon: BarChart2,       label: 'Reporting',  section: 'reporting' as AppSection },
   { icon: Megaphone,       label: 'Marketing',  section: 'marketing' as AppSection },
-  { icon: RefreshCw,        label: 'Members',    section: 'three-sixty' as AppSection },
-  { icon: BookOpen,          label: 'QuickBooks',  section: 'quickbooks' as AppSection },
+  { icon: RefreshCw,       label: 'Members',    section: 'three-sixty' as AppSection },
+  { icon: BookOpen,        label: 'QuickBooks', section: 'quickbooks' as AppSection },
 ];
 
 export default function MetricsBar({ totals }: MetricsBarProps) {
   const { totalHard, totalPrice, totalGP, totalGM } = totals;
   const { state, setSection, setActiveOpportunity, setActiveCustomer, addCustomer, reset, navigateToTopLevel } = useEstimator();
-  // Unread online requests badge — poll every 60s
-  const { data: unreadData } = trpc.booking.unreadCount.useQuery(undefined, {
+  // Unread leads badge (online requests + leads created in last 24h) — poll every 60s.
+  // The leads.counts query is the new source of truth; booking.unreadCount stays
+  // around for back-compat with anything that still imports it, but the nav
+  // surfaces the unified counter.
+  const { data: leadCounts } = trpc.leads.counts.useQuery(undefined, {
     refetchInterval: 60_000,
     staleTime: 30_000,
   });
-  const unreadCount = unreadData?.count ?? 0;
+  const unreadCount = leadCounts?.unreadRequests ?? 0;
+  const newLeadCount = leadCounts?.newLast24h ?? 0;
 
   // Portal unread message count for Inbox badge
   const { data: portalUnreadData } = trpc.portal.getPortalUnreadCount.useQuery(undefined, {
@@ -225,6 +230,11 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
     markAllPortalReadMutation.mutate();
   };
 
+  const handleGoToLeads = () => {
+    navigateToTopLevel('leads' as AppSection);
+    setShowMobileNav(false);
+  };
+
   const handleNavClick = (section: AppSection | null, label: string) => {
     if (section === 'customers') { handleGoToCustomers(); return; }
     if (section === 'jobs') { handleGoToJobs(); return; }
@@ -232,6 +242,7 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
     if (section === 'dashboard') { handleGoToDashboard(); return; }
     if (section === 'schedule') { handleGoToSchedule(); return; }
     if (section === 'inbox') { handleGoToInbox(); return; }
+    if (section === 'leads') { handleGoToLeads(); return; }
     if (section === 'reporting') { setSection('reporting'); return; }
     if (section === 'marketing') { setSection('marketing'); return; }
     if (section === 'three-sixty') { setSection('three-sixty'); return; }
@@ -308,7 +319,9 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
           {!searchOpen && (
             <nav className="hidden md:flex items-center gap-0.5">
               {BACKEND_NAV.map(({ icon: Icon, label, section }) => {
-                const showBadge = unreadCount > 0 && label === 'Pipeline';
+                // Leads carries the live ops badge: total of unread online requests
+                // + leads created in the last 24h (the things still awaiting first touch).
+                const leadBadge = label === 'Leads' ? (unreadCount + newLeadCount) : 0;
                 const showInboxBadge = portalUnreadCount > 0 && label === 'Inbox';
                 return (
                   <button
@@ -323,9 +336,9 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
                   >
                     <div className="relative">
                       <Icon className="w-4 h-4" />
-                      {showBadge && (
-                        <span className="absolute -top-1.5 -right-1.5 flex items-center justify-center min-w-[14px] h-3.5 rounded-full bg-red-500 text-white text-[8px] font-bold leading-none px-0.5">
-                          {unreadCount > 9 ? '9+' : unreadCount}
+                      {leadBadge > 0 && (
+                        <span className="absolute -top-1.5 -right-1.5 flex items-center justify-center min-w-[14px] h-3.5 rounded-full bg-amber-500 text-white text-[8px] font-bold leading-none px-0.5">
+                          {leadBadge > 9 ? '9+' : leadBadge}
                         </span>
                       )}
                       {showInboxBadge && (
@@ -434,7 +447,7 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
         <div className="md:hidden border-t border-border bg-white">
           <div className="px-3 py-2 grid grid-cols-4 gap-1">
             {BACKEND_NAV.map(({ icon: Icon, label, section }) => {
-              const showBadge = unreadCount > 0 && label === 'Pipeline';
+              const leadBadge = label === 'Leads' ? (unreadCount + newLeadCount) : 0;
               const showInboxBadge = portalUnreadCount > 0 && label === 'Inbox';
               return (
                 <button
@@ -445,12 +458,13 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
                       ? 'bg-primary/10 text-primary'
                       : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                   }`}
+                  style={{ minHeight: 56 }} // mobile tap target
                 >
                   <div className="relative">
                     <Icon className="w-5 h-5" />
-                    {showBadge && (
-                      <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[14px] h-3.5 rounded-full bg-red-500 text-white text-[8px] font-bold leading-none px-0.5">
-                        {unreadCount > 9 ? '9+' : unreadCount}
+                    {leadBadge > 0 && (
+                      <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[14px] h-3.5 rounded-full bg-amber-500 text-white text-[8px] font-bold leading-none px-0.5">
+                        {leadBadge > 9 ? '9+' : leadBadge}
                       </span>
                     )}
                     {showInboxBadge && (
@@ -661,12 +675,12 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
                 <span>Inbox</span>
               </span>
             </div>
-          ) : state.activeSection === 'requests' ? (
-            /* ── Requests nav ── */
+          ) : (state.activeSection === 'leads' || state.activeSection === 'requests') ? (
+            /* ── Leads nav (folded in former Requests) ── */
             <div className="flex items-center py-2 gap-2">
               <span className="text-[11px] font-semibold text-primary flex items-center gap-1.5">
-                <span className="text-sm">📋</span>
-                <span>Requests</span>
+                <Star className="w-3.5 h-3.5 text-amber-500" />
+                <span>Leads</span>
               </span>
             </div>
           ) : state.activeSection === 'customer' && !state.activeCustomerId ? (

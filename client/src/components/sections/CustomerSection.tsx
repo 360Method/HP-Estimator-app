@@ -48,6 +48,7 @@ import DuplicateSuggestionBanner from '@/components/DuplicateSuggestionBanner';
 import { toast } from 'sonner';
 import { nanoid } from 'nanoid';
 import CustomerMembershipPanel from '@/components/CustomerMembershipPanel';
+import ConciergeBrief from '@/components/ConciergeBrief';
 
 // ─── Constants ────────────────────────────────────────────────
 const LEAD_SOURCES: LeadSource[] = [
@@ -2000,6 +2001,9 @@ export default function CustomerSection() {
 
       {/* ── Tab Content ── */}
       <div className="max-w-6xl mx-auto px-4 py-6">
+        {activeCustomerTab === 'profile' && activeCustomer && (
+          <ConciergeBrief customer={activeCustomer} opportunities={opportunities} />
+        )}
         {activeCustomerTab === 'profile' && ProfileTab()}
         {activeCustomerTab === 'properties' && (
           <div className="space-y-4">
