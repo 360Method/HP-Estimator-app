@@ -8,7 +8,7 @@
  * MySQL port: insert-then-select pattern (no pg .returning()).
  */
 
-import { randomBytes, randomUUID } from "crypto";
+import { createHash, randomBytes, randomUUID } from "crypto";
 import { and, eq } from "drizzle-orm";
 import type { MySql2Database } from "drizzle-orm/mysql2";
 import {
@@ -99,6 +99,12 @@ export async function findOrCreateHealthRecord(
 }
 
 // ─── Magic links ────────────────────────────────────────────────────────────
+// Tokens are stored as SHA-256 hex hashes at rest; the raw token only exists
+// in transit (email/SMS) and in the homeowner's browser when they click.
+function hashToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
 export async function issueMagicLink(
   db: DbLike,
   args: { portalAccountId: string; portalBaseUrl: string }
@@ -107,13 +113,15 @@ export async function issueMagicLink(
   const expiresAt = new Date(Date.now() + MAGIC_LINK_TTL_DAYS * 24 * 3600 * 1000);
 
   await db.insert(portalMagicLinks).values({
-    token,
+    tokenHash: hashToken(token),
     portalAccountId: args.portalAccountId,
     expiresAt,
   });
 
   const base = args.portalBaseUrl.replace(/\/+$/, "");
-  const url = `${base}/portal/authenticate?token=${encodeURIComponent(token)}`;
+  // Wouter route in App.tsx is /portal/auth (not /portal/authenticate); the
+  // older path rendered the catch-all NotFound, which homeowners read as 404.
+  const url = `${base}/portal/auth?token=${encodeURIComponent(token)}`;
   return { token, url, expiresAt };
 }
 
@@ -121,10 +129,11 @@ export async function consumeMagicLink(
   db: DbLike,
   token: string
 ): Promise<DbPortalAccount | null> {
+  const tokenHash = hashToken(token);
   const row = await db
     .select()
     .from(portalMagicLinks)
-    .where(eq(portalMagicLinks.token, token))
+    .where(eq(portalMagicLinks.tokenHash, tokenHash))
     .limit(1);
   const link = row[0];
   if (!link) return null;
@@ -134,7 +143,7 @@ export async function consumeMagicLink(
   await db
     .update(portalMagicLinks)
     .set({ consumedAt: new Date() })
-    .where(eq(portalMagicLinks.token, token));
+    .where(eq(portalMagicLinks.tokenHash, tokenHash));
 
   const account = await db
     .select()

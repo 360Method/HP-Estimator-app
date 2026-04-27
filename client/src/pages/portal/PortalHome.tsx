@@ -259,7 +259,11 @@ export default function PortalHome() {
       <PortalLayout>
         <div className="flex flex-col justify-center items-center py-24 gap-3">
           <Loader2 className="w-8 h-8 animate-spin text-[#c8922a]" />
-          {autoLogin.isPending && <p className="text-sm text-gray-400">Setting up your account…</p>}
+          {autoLogin.isPending && (
+            <p className="hp-serif italic text-sm" style={{ color: "var(--hp-slate)" }}>
+              Preparing your concierge desk…
+            </p>
+          )}
         </div>
       </PortalLayout>
     );
@@ -267,8 +271,11 @@ export default function PortalHome() {
   if (isLoading) {
     return (
       <PortalLayout>
-        <div className="flex justify-center items-center py-24">
+        <div className="flex flex-col justify-center items-center py-24 gap-3">
           <Loader2 className="w-6 h-6 animate-spin text-[#c8922a]" />
+          <p className="hp-serif italic text-sm" style={{ color: "var(--hp-slate)" }}>
+            Tending to your records…
+          </p>
         </div>
       </PortalLayout>
     );
@@ -302,23 +309,33 @@ export default function PortalHome() {
         {/* Breadcrumb */}
         <p className="text-xs text-gray-400">Customer Portal &rsaquo; Home</p>
 
-        {/* Welcome banner */}
+        {/* Welcome banner — concierge greeting, serif headline */}
         <div
-          className="rounded-xl p-5 text-white"
+          className="rounded-xl p-6 text-white"
           style={{ background: "linear-gradient(135deg,#1a2e1a 0%,#2d4a2d 100%)" }}
         >
-          <p className="text-sm opacity-70 mb-1">Welcome back,</p>
-          <h1 className="text-2xl font-bold">{customer?.name?.split(" ")[0] ?? "Customer"}</h1>
+          <p className="text-[11px] uppercase tracking-[0.18em] mb-2" style={{ color: "#e2b96a" }}>
+            Your Concierge Desk
+          </p>
+          <h1
+            className="hp-serif"
+            style={{ fontSize: "1.85rem", lineHeight: 1.1, color: "white" }}
+          >
+            Welcome back, {customer?.name?.split(" ")[0] ?? "friend"}.
+          </h1>
+          <p className="text-sm mt-2 text-white/75">
+            Your home's care, gathered in one place. Reach out anytime — we're here.
+          </p>
           {totalDue > 0 && (
-            <p className="text-sm mt-2 opacity-90">
-              You have{" "}
-              <span className="font-bold" style={{ color: "#c8922a" }}>
+            <p className="text-sm mt-3" style={{ color: "rgba(255,255,255,0.85)" }}>
+              An invoice of{" "}
+              <span className="font-bold" style={{ color: "#e2b96a" }}>
                 {fmtMoney(totalDue)}
               </span>{" "}
-              outstanding balance.{" "}
+              is ready for your review.{" "}
               <button
                 onClick={() => navigate("/portal/invoices")}
-                className="underline opacity-80 hover:opacity-100"
+                className="underline underline-offset-2 hover:text-white"
               >
                 View invoices →
               </button>

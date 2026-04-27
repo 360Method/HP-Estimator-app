@@ -456,6 +456,62 @@
       "when": 1777500040000,
       "tag": "0064_portal_continuity_flag",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "5",
+      "when": 1777500050000,
+      "tag": "0065_sms_templates",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "5",
+      "when": 1777500060000,
+      "tag": "0066_ai_agent_runtime_phase_1",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "5",
+      "when": 1777500070000,
+      "tag": "0067_scheduling_slots_bookings",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "5",
+      "when": 1777500080000,
+      "tag": "0068_ai_agents_phase_4_triggers_chat",
+      "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "5",
+      "when": 1777500090000,
+      "tag": "0069_vendors_crm",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "5",
+      "when": 1777500100000,
+      "tag": "0070_password_reset_tokens",
+      "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "5",
+      "when": 1777500110000,
+      "tag": "0071_oauth_integrations",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "5",
+      "when": 1777500120000,
+      "tag": "0072_charter_runtime",
+      "breakpoints": true
     }
   ]
 }

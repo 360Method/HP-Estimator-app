@@ -214,7 +214,7 @@ function drawCoverPage(
   });
 
   // Subtitle in italic serif
-  page.drawText("A 360° Priority Translation", {
+  page.drawText("A 360° Method Roadmap", {
     x: MARGIN + 16, y: titleY - 90, size: 16, font: fonts.serifItalic, color: BRAND.cream,
   });
 
@@ -277,7 +277,7 @@ function drawStandardOfCareLetter(doc: PDFDocument, fonts: Fonts): PDFPage {
 
   // Body paragraphs
   const body = [
-    "What follows is the homeowner's edition of the 360° Priority Translation. Inspection reports are written in the language of liability — every finding flagged, every observation hedged. That is the inspector's job, and a good one. It is not, however, a plan.",
+    "What follows is the homeowner's edition of the 360° Roadmap. Inspection reports are written in the language of liability — every finding flagged, every observation hedged. That is the inspector's job, and a good one. It is not, however, a plan.",
     "Our task is to read the report carefully, walk it through the lens of the Pacific Northwest's rain load, the era of your home, and the way properties of this kind tend to age — and then organize the findings into three honest time horizons: what to address now, what to plan for, and what to monitor.",
     "Every investment range you'll see is the fully-loaded customer price for quality restoration work in Clark County: vetted tradespeople, materials that match the home, project management end-to-end, and our standard 30% gross-margin floor. No \"starting at\" pricing, no hedge.",
     "If a finding raises a question, the right next move is a complimentary baseline walkthrough. We'd rather understand the property in person than guess on paper.",
@@ -740,7 +740,7 @@ function drawClosingPage(
   const disclaimerY = MARGIN + 70;
   drawWrappedText(
     page,
-    "The 360° Priority Translation summarizes the inspection report you provided. It is not a legal home inspection and does not replace a licensed home inspector's findings. Investment ranges reflect current Clark County, Washington pricing for quality restoration work and may change with market conditions and site-specific scope.",
+    "The 360° Roadmap summarizes the inspection report you provided. It is not a legal home inspection and does not replace a licensed home inspector's findings. Investment ranges reflect current Clark County, Washington pricing for quality restoration work and may change with market conditions and site-specific scope.",
     {
       x: MARGIN, y: disclaimerY, size: 8, font: fonts.sansItalic,
       color: BRAND.mutedSoft, lineHeight: 11, maxWidth: CONTENT_W,
@@ -771,7 +771,7 @@ function drawPaperFooter(
   drawTracked(page, fonts.sans, args.left.toUpperCase(), {
     x: MARGIN, y: 22, size: 7, tracking: 1.6, color: BRAND.muted,
   });
-  drawTracked(page, fonts.sansBold, "360° PRIORITY ROADMAP", {
+  drawTracked(page, fonts.sansBold, "360°  METHOD  ROADMAP", {
     x: PAGE_W / 2 - 56, y: 22, size: 7, tracking: 1.8, color: BRAND.amber,
   });
   const rightW = fonts.sans.widthOfTextAtSize(args.right, 8);

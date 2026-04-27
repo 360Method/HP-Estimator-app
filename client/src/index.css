@@ -6,6 +6,11 @@
    Layout: Single-column scrollable, sticky metrics bar
    ============================================================ */
 
+/* Cormorant Garamond — serif for headlines, stewardship moments.
+   Must precede @import "tailwindcss" so the bundler keeps it as a real
+   @import rule rather than inlining it. */
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&display=swap');
+
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -84,6 +89,35 @@
   --tier-best-bg: oklch(0.93 0.05 295);
   --tier-best-border: oklch(0.55 0.15 295);
   --tier-best-text: oklch(0.35 0.15 295);
+
+  /* ── Stewardship Brand Tokens (Ritz pass) ──
+     Editable from a future Settings → Branding page. Keys are stable. */
+  --hp-ink: #1a2e1a;
+  --hp-ink-soft: #2d4a2d;
+  --hp-ink-hover: #243c24;
+  --hp-gold: #c8922a;
+  --hp-gold-soft: #e2b96a;
+  --hp-gold-deep: #a07320;
+  --hp-cream: #faf6ef;
+  --hp-cream-soft: #f4ede0;
+  --hp-parchment: #fdfaf3;
+  --hp-charcoal: #1f1d1a;
+  --hp-charcoal-soft: #3a3733;
+  --hp-slate: #5b574f;
+  --hp-mist: #a39f95;
+  --hp-hairline: #e7e1d4;
+  --hp-border-warm: #d9d2c1;
+  --hp-positive: #3f6b3a;
+  --hp-positive-bg: #e9f0e6;
+  --hp-caution: #a06a1a;
+  --hp-caution-bg: #f7ecd6;
+  --hp-alert: #8a3127;
+  --hp-alert-bg: #f5e2de;
+
+  --hp-serif: "Cormorant Garamond", "Playfair Display", Georgia, serif;
+  --hp-elev-whisper: 0 1px 2px rgba(26, 46, 26, 0.04);
+  --hp-elev-rest: 0 2px 8px rgba(26, 46, 26, 0.06);
+  --hp-elev-lift: 0 8px 24px rgba(26, 46, 26, 0.08);
 }
 
 @layer base {
@@ -233,6 +267,63 @@
     color: var(--muted-foreground);
     margin-bottom: 6px;
   }
+
+  /* ── Stewardship voice utilities — apply where headlines or hospitality
+        moments live (admin home hero, vision banner, portal welcome, customer
+        profile concierge brief). Reach for these instead of writing one-off
+        Tailwind classes on every page. ── */
+  .hp-serif {
+    font-family: var(--hp-serif);
+    font-weight: 500;
+    letter-spacing: -0.01em;
+  }
+  .hp-headline {
+    font-family: var(--hp-serif);
+    font-weight: 500;
+    letter-spacing: -0.015em;
+    color: var(--hp-ink);
+    line-height: 1.15;
+  }
+  .hp-eyebrow {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--hp-gold-deep);
+  }
+  .hp-vision-banner {
+    background: linear-gradient(135deg, var(--hp-cream) 0%, var(--hp-parchment) 100%);
+    border-bottom: 1px solid var(--hp-hairline);
+    color: var(--hp-ink);
+  }
+  .hp-card-warm {
+    background: white;
+    border: 1px solid var(--hp-hairline);
+    border-radius: 14px;
+    box-shadow: var(--hp-elev-rest);
+  }
+  .hp-button-ink {
+    background: var(--hp-ink);
+    color: white;
+    border-radius: 10px;
+    padding: 12px 18px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    transition: background 0.15s, box-shadow 0.15s;
+    min-height: 44px;
+  }
+  .hp-button-ink:hover { background: var(--hp-ink-hover); box-shadow: var(--hp-elev-rest); }
+  .hp-button-gold {
+    background: var(--hp-gold);
+    color: white;
+    border-radius: 10px;
+    padding: 12px 18px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    transition: background 0.15s, box-shadow 0.15s;
+    min-height: 44px;
+  }
+  .hp-button-gold:hover { background: var(--hp-gold-deep); }
 
   /* Print styles */
   @media print {
