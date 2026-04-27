@@ -43,8 +43,22 @@ export function getOAuth2Client() {
   return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
 }
 
+/**
+ * True iff the Gmail OAuth env vars are set. Used to gate the inbound-mail
+ * poller — it has nothing to do with whether we can SEND mail. Outbound is
+ * Resend; check `isEmailSenderReady()` instead.
+ */
 export function isGmailConfigured() {
   return !!(process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET);
+}
+
+/**
+ * True iff the outbound email transport (Resend) is configured. Use this at
+ * any send-gating call site — booking auto-acks, draft sends, automation
+ * emails, etc.
+ */
+export function isEmailSenderReady(): boolean {
+  return !!process.env.RESEND_API_KEY;
 }
 
 /** Generate the Google OAuth consent URL */
@@ -119,113 +133,43 @@ async function getGmailClient(email: string) {
 
 // ─── Send Email ───────────────────────────────────────────────────────────────
 
-/** RFC 2047 encode a subject so non-ASCII chars (em dash, etc.) survive all mail clients */
-function encodeSubject(subject: string): string {
-  if (!/[^\x00-\x7F]/.test(subject)) return subject;
-  return `=?UTF-8?B?${Buffer.from(subject, 'utf-8').toString('base64')}?=`;
-}
-
+/**
+ * Outbound mail goes through Resend (2026-04-27 — Marcin verified the
+ * handypioneers.com domain there). This function used to spool through the
+ * Gmail API; it now delegates to the canonical Resend wrapper but keeps the
+ * same `{ messageId, threadId }` return shape so the 27 existing call sites
+ * compile without touching them. `threadId` becomes empty — Resend has no
+ * thread concept; the few callers that record it tolerate "" already.
+ *
+ * Inbound mail (pollInboundEmails) still uses Gmail OAuth; this is outbound-only.
+ */
 export async function sendEmail(params: {
   fromEmail?: string;
   to: string;
   subject: string;
   body?: string;
   html?: string;
+  /** Legacy Gmail thread id — ignored; kept for signature compatibility. */
   threadId?: string;
+  /** Legacy Gmail In-Reply-To — ignored; kept for signature compatibility. */
   inReplyTo?: string;
 }): Promise<{ messageId: string; threadId: string }> {
-  // Use help@ as default sender if no fromEmail provided
-  const fromEmail = params.fromEmail || "help@handypioneers.com";
-  let gmail: ReturnType<typeof google.gmail>;
-  try {
-    gmail = await getGmailClient(fromEmail);
-  } catch (err) {
-    // Bug 2 fix (2026-04-27): previously this swallowed the missing-token
-    // error and returned empty IDs, so callers thought the send succeeded and
-    // emails silently never arrived. Now we log a clear, actionable error and
-    // re-throw so the caller's .catch surfaces it. Action item: visit
-    // /admin/settings → Connect Gmail to authorize help@handypioneers.com.
-    const reason = err instanceof Error ? err.message : String(err);
-    console.error(
-      `[Gmail] sendEmail to ${params.to} ABORTED — Gmail OAuth not connected. ` +
-      `Action: visit /admin/settings and click "Connect Gmail" to authorize ${fromEmail}. ` +
-      `Underlying error: ${reason}`,
-    );
-    throw new Error(`gmail_not_connected: ${reason}`);
-  }
+  const { sendEmailViaResend } = await import("./lib/email/resend");
+  // If a caller specified a fromEmail explicitly, honour it. Otherwise let the
+  // Resend wrapper apply the default (`Handy Pioneers <noreply@handypioneers.com>`).
+  const from = params.fromEmail
+    ? `Handy Pioneers <${params.fromEmail}>`
+    : undefined;
 
-  const boundary = `boundary_${Date.now()}`;
-  const plainText = params.body ?? (params.html ? params.html.replace(/<[^>]+>/g, "") : "");
+  const result = await sendEmailViaResend({
+    to: params.to,
+    subject: params.subject,
+    html: params.html,
+    body: params.body,
+    from,
+  });
 
-  let rawBody: string;
-  if (params.html) {
-    // Multipart/alternative: plain + HTML
-    const headers = [
-      `From: Handy Pioneers <${fromEmail}>`,
-      `To: ${params.to}`,
-      `Subject: ${encodeSubject(params.subject)}`,
-      `MIME-Version: 1.0`,
-      `Content-Type: multipart/alternative; boundary="${boundary}"`,
-    ];
-    if (params.inReplyTo) {
-      headers.push(`In-Reply-To: ${params.inReplyTo}`);
-      headers.push(`References: ${params.inReplyTo}`);
-    }
-    rawBody = [
-      headers.join("\r\n"),
-      "",
-      `--${boundary}`,
-      `Content-Type: text/plain; charset=utf-8`,
-      "",
-      plainText,
-      `--${boundary}`,
-      `Content-Type: text/html; charset=utf-8`,
-      "",
-      params.html,
-      `--${boundary}--`,
-    ].join("\r\n");
-  } else {
-    const headers = [
-      `From: Handy Pioneers <${fromEmail}>`,
-      `To: ${params.to}`,
-      `Subject: ${encodeSubject(params.subject)}`,
-      `Content-Type: text/plain; charset=utf-8`,
-    ];
-    if (params.inReplyTo) {
-      headers.push(`In-Reply-To: ${params.inReplyTo}`);
-      headers.push(`References: ${params.inReplyTo}`);
-    }
-    rawBody = headers.join("\r\n") + "\r\n\r\n" + plainText;
-  }
-
-  const raw = Buffer.from(rawBody).toString("base64url");
-
-  let response;
-  try {
-    response = await gmail.users.messages.send({
-      userId: "me",
-      requestBody: {
-        raw,
-        threadId: params.threadId,
-      },
-    });
-  } catch (err) {
-    const reason = err instanceof Error ? err.message : String(err);
-    console.error(
-      `[Gmail] sendEmail to ${params.to} REJECTED by Gmail API. ` +
-      `subject="${params.subject}". Underlying error: ${reason}`,
-    );
-    throw err;
-  }
-
-  console.log(
-    `[Gmail] sendEmail OK to=${params.to} subject="${params.subject}" messageId=${response.data.id}`,
-  );
-
-  return {
-    messageId: response.data.id!,
-    threadId: response.data.threadId!,
-  };
+  return { messageId: result.id, threadId: "" };
 }
 
 // ─── Poll Inbound Emails ──────────────────────────────────────────────────────

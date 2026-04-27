@@ -1204,8 +1204,8 @@ export const portalRouter = router({
       void (async () => {
         try {
           const { renderEmailTemplate } = await import('../emailTemplates');
-          const { sendEmail, isGmailConfigured } = await import('../gmail');
-          if (!isGmailConfigured()) return;
+          const { sendEmail, isEmailSenderReady } = await import('../gmail');
+          if (!isEmailSenderReady()) return;
           const portalUrl = process.env.PORTAL_BASE_URL ?? 'https://client.handypioneers.com';
           const firstName = (ctx.portalCustomer.name ?? '').split(' ')[0] || ctx.portalCustomer.name || 'there';
           const tpl = await renderEmailTemplate('service_request_acknowledged', {
