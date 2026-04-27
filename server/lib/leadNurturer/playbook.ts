@@ -11,7 +11,7 @@
  */
 import { eq } from "drizzle-orm";
 import { getDb } from "../../db";
-import { agentPlaybooks, type PlaybookStep } from "../../../drizzle/schema";
+import { nurturerPlaybooks, type PlaybookStep } from "../../../drizzle/schema";
 
 export const ROADMAP_FOLLOWUP_KEY = "roadmap_followup";
 
@@ -125,7 +125,7 @@ export async function loadPlaybook(key: string): Promise<ResolvedPlaybook | null
   }
 
   try {
-    const rows = await db.select().from(agentPlaybooks).where(eq(agentPlaybooks.key, key)).limit(1);
+    const rows = await db.select().from(nurturerPlaybooks).where(eq(nurturerPlaybooks.key, key)).limit(1);
     const row = rows[0];
     if (!row) {
       return key === ROADMAP_FOLLOWUP_KEY ? defaultRoadmapFollowupPlaybook() : null;
@@ -197,11 +197,11 @@ export async function ensureDefaultPlaybooks(): Promise<void> {
   if (!db) return;
   const existing = await db
     .select()
-    .from(agentPlaybooks)
-    .where(eq(agentPlaybooks.key, ROADMAP_FOLLOWUP_KEY))
+    .from(nurturerPlaybooks)
+    .where(eq(nurturerPlaybooks.key, ROADMAP_FOLLOWUP_KEY))
     .limit(1);
   if (existing[0]) return;
-  await db.insert(agentPlaybooks).values({
+  await db.insert(nurturerPlaybooks).values({
     key: ROADMAP_FOLLOWUP_KEY,
     displayName: "Post-Roadmap Follow-Up",
     description:

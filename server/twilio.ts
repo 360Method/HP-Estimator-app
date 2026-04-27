@@ -239,6 +239,18 @@ export async function handleCallStatusUpdate(params: {
         })
       )
     ).catch((e) => console.error('[leadRouting] missed_call notify failed:', e));
+
+    // Phase 5 trigger: call.missed fans out to Lead Nurturer AI.
+    import('./lib/agentRuntime/triggerBus').then(({ emitAgentEvent }) =>
+      emitAgentEvent('call.missed', {
+        customerId: customer?.id ?? null,
+        customerName: customer?.displayName ?? null,
+        callerNumber: callerPhone,
+        twilioCallSid: CallSid,
+        durationSecs,
+        direction: Direction || 'inbound',
+      }).catch(() => null)
+    ).catch(() => null);
   }
   console.log(`[Twilio] Call ${CallSid} ${CallStatus} — ${durationSecs}s`);
 }

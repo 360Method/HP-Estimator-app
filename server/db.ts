@@ -41,6 +41,12 @@ import {
   threeSixtyWorkOrders,
   DbThreeSixtyWorkOrder,
   InsertDbThreeSixtyWorkOrder,
+  aiAgentsLegacy,
+  AiAgentLegacy,
+  InsertAiAgentLegacy,
+  gmailMessageLinks,
+  GmailMessageLink,
+  InsertGmailMessageLink,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
@@ -306,8 +312,99 @@ export async function upsertGmailToken(
   const db = await getDb();
   if (!db) return;
   await db.insert(gmailTokens)
-    .values({ email, accessToken, refreshToken: refreshToken ?? undefined, expiresAt })
-    .onDuplicateKeyUpdate({ set: { accessToken, refreshToken: refreshToken ?? undefined, expiresAt } });
+    .values({ email, accessToken, refreshToken: refreshToken ?? undefined, expiresAt, connectedAt: new Date() })
+    .onDuplicateKeyUpdate({ set: { accessToken, refreshToken: refreshToken ?? undefined, expiresAt, connectedAt: new Date() } });
+}
+
+export async function updateGmailTokenSyncState(
+  email: string,
+  lastSyncedAt: Date,
+  lastMessageIdSeen: string | null,
+) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(gmailTokens)
+    .set({ lastSyncedAt, ...(lastMessageIdSeen ? { lastMessageIdSeen } : {}) })
+    .where(eq(gmailTokens.email, email));
+}
+
+export async function deleteGmailToken(email: string) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(gmailTokens).where(eq(gmailTokens.email, email));
+}
+
+// ─── EMAIL MANAGER AI: MESSAGE LINKS ─────────────────────────────────────────
+
+export async function getGmailMessageLink(gmailMessageId: string): Promise<GmailMessageLink | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(gmailMessageLinks)
+    .where(eq(gmailMessageLinks.gmailMessageId, gmailMessageId)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function insertGmailMessageLink(link: InsertGmailMessageLink): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(gmailMessageLinks)
+    .values(link)
+    .onDuplicateKeyUpdate({ set: { classification: link.classification, customerId: link.customerId ?? undefined, aiDraftReplyId: link.aiDraftReplyId ?? undefined, gmailDraftId: link.gmailDraftId ?? undefined } });
+}
+
+export async function updateGmailMessageLink(
+  gmailMessageId: string,
+  updates: Partial<Pick<GmailMessageLink, 'classification' | 'customerId' | 'aiDraftReplyId' | 'gmailDraftId' | 'archived'>>,
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(gmailMessageLinks).set(updates).where(eq(gmailMessageLinks.gmailMessageId, gmailMessageId));
+}
+
+export async function listGmailMessageLinks(opts?: {
+  classification?: GmailMessageLink['classification'];
+  customerId?: string;
+  hasDraft?: boolean;
+  limit?: number;
+}): Promise<GmailMessageLink[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = [];
+  if (opts?.classification) conditions.push(eq(gmailMessageLinks.classification, opts.classification));
+  if (opts?.customerId) conditions.push(eq(gmailMessageLinks.customerId, opts.customerId));
+  if (opts?.hasDraft === true) conditions.push(sql`${gmailMessageLinks.gmailDraftId} IS NOT NULL`);
+  const q = db.select().from(gmailMessageLinks);
+  if (conditions.length > 0) q.where(and(...conditions));
+  return q.orderBy(desc(gmailMessageLinks.createdAt)).limit(opts?.limit ?? 50) as any;
+}
+
+export async function countPendingEmailDrafts(): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const rows = await db.select({ c: sql<number>`COUNT(*)` })
+    .from(gmailMessageLinks)
+    .where(and(
+      sql`${gmailMessageLinks.gmailDraftId} IS NOT NULL`,
+      eq(gmailMessageLinks.archived, false),
+    ));
+  return Number(rows[0]?.c ?? 0);
+}
+
+// ─── EMAIL MANAGER AI: AGENTS ────────────────────────────────────────────────
+
+export async function upsertAiAgent(agent: InsertAiAgentLegacy): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.insert(aiAgentsLegacy)
+    .values(agent)
+    .onDuplicateKeyUpdate({ set: { department: agent.department, reportsTo: agent.reportsTo, status: agent.status, systemPrompt: agent.systemPrompt ?? undefined } });
+}
+
+export async function getAiAgent(seatName: string): Promise<AiAgentLegacy | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(aiAgentsLegacy).where(eq(aiAgentsLegacy.seatName, seatName)).limit(1);
+  return rows[0] ?? null;
 }
 
 // ─── ADMIN ALLOWLIST ─────────────────────────────────────────────────────────

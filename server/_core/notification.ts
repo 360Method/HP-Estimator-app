@@ -58,7 +58,7 @@ const validatePayload = (input: NotificationPayload): NotificationPayload => {
 };
 
 /**
- * Dispatches a project-owner notification through the Manus Notification Service.
+ * Dispatches a project-owner notification through the upstream Forge notification service.
  * Returns `true` if the request was accepted, `false` when the upstream service
  * cannot be reached (callers can fall back to email/slack). Validation errors
  * bubble up as TRPC errors so callers can fix the payload.
@@ -68,18 +68,11 @@ export async function notifyOwner(
 ): Promise<boolean> {
   const { title, content } = validatePayload(payload);
 
-  if (!ENV.forgeApiUrl) {
-    throw new TRPCError({
-      code: "INTERNAL_SERVER_ERROR",
-      message: "Notification service URL is not configured.",
-    });
-  }
-
-  if (!ENV.forgeApiKey) {
-    throw new TRPCError({
-      code: "INTERNAL_SERVER_ERROR",
-      message: "Notification service API key is not configured.",
-    });
+  if (!ENV.forgeApiUrl || !ENV.forgeApiKey) {
+    // Legacy Forge notification service — not configured in Railway prod.
+    // No-op rather than throw so callers (e.g. voicemail webhook) can continue
+    // to persist call logs and SMS the owner instead.
+    return false;
   }
 
   const endpoint = buildEndpointUrl(ENV.forgeApiUrl);

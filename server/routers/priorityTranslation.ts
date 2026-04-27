@@ -155,6 +155,44 @@ export const priorityTranslationRouter = router({
     }),
 
   /**
+   * Public status lookup for the post-submit confirmation page. Returns only
+   * status + timestamps — no PII, no findings. Anyone holding the (20-char
+   * nanoid) submission id can poll this; surface is minimal.
+   *
+   * Used by /portal/roadmap/submitted/:id to advance the progress bar without
+   * requiring the homeowner to log in (their magic-link arrives by email).
+   */
+  getPublicStatus: publicProcedure
+    .input(z.object({ id: z.string().min(8).max(40) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+
+      const rows = await db
+        .select({
+          id: priorityTranslations.id,
+          status: priorityTranslations.status,
+          createdAt: priorityTranslations.createdAt,
+          deliveredAt: priorityTranslations.deliveredAt,
+        })
+        .from(priorityTranslations)
+        .where(eq(priorityTranslations.id, input.id))
+        .limit(1);
+      const row = rows[0];
+      if (!row) throw new TRPCError({ code: "NOT_FOUND" });
+
+      return {
+        id: row.id,
+        status: row.status,
+        createdAt: row.createdAt,
+        deliveredAt: row.deliveredAt,
+        // Intentionally omit failureReason — surfacing internal errors to a
+        // public endpoint isn't useful and can leak infra details. The portal
+        // (logged-in) getStatus still returns it for staff/owner debugging.
+      };
+    }),
+
+  /**
    * Internal worker. Called from the queue consumer. Pulls the translation
    * row, extracts report text, calls Claude, renders PDF, writes back to
    * home_health_record, issues a magic link, and sends the email.

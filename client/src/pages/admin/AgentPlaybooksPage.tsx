@@ -28,7 +28,7 @@ interface VoiceRules {
 }
 
 export default function AgentPlaybooksPage() {
-  const list = trpc.agentPlaybooks.list.useQuery();
+  const list = trpc.nurturerPlaybooks.list.useQuery();
   const [activeKey, setActiveKey] = useState<string>("roadmap_followup");
 
   useEffect(() => {
@@ -77,12 +77,12 @@ export default function AgentPlaybooksPage() {
 
 function PlaybookEditor({ playbookKey }: { playbookKey: string }) {
   const utils = trpc.useUtils();
-  const { data, isLoading } = trpc.agentPlaybooks.get.useQuery({ key: playbookKey });
-  const update = trpc.agentPlaybooks.update.useMutation({
+  const { data, isLoading } = trpc.nurturerPlaybooks.get.useQuery({ key: playbookKey });
+  const update = trpc.nurturerPlaybooks.update.useMutation({
     onSuccess: () => {
       toast.success("Playbook saved");
-      utils.agentPlaybooks.get.invalidate({ key: playbookKey });
-      utils.agentPlaybooks.list.invalidate();
+      utils.nurturerPlaybooks.get.invalidate({ key: playbookKey });
+      utils.nurturerPlaybooks.list.invalidate();
     },
     onError: (err) => toast.error(`Save failed: ${err.message}`),
   });

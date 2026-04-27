@@ -258,7 +258,9 @@ export interface GlobalSettings {
   customTaxPct: number;
 }
 
-export type AppSection = 'customer' | 'opp-details' | 'sales' | 'calculator' | 'estimate' | 'present' | 'customers' | 'jobs' | 'job-details' | 'pipeline' | 'invoice' | 'dashboard' | 'schedule' | 'inbox' | 'reporting' | 'marketing' | 'requests' | 'three-sixty' | 'financials' | 'quickbooks';
+export type AppSection = 'customer' | 'opp-details' | 'sales' | 'calculator' | 'estimate' | 'present' | 'customers' | 'jobs' | 'job-details' | 'pipeline' | 'invoice' | 'dashboard' | 'schedule' | 'inbox' | 'reporting' | 'marketing' | 'leads' | 'three-sixty' | 'financials' | 'quickbooks'
+  // 'requests' is deprecated — kept in the union so old deep-links still type-check; the shell redirects to 'leads'.
+  | 'requests';
 
 // ── Schedule / Calendar Types ──────────────────────────────────
 

@@ -1,10 +1,12 @@
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
 import { getPhoneSettings, updatePhoneSettings, placeTestCall } from "../phone";
+import { ENV } from "../_core/env";
 
 export const phoneRouter = router({
   getSettings: protectedProcedure.query(async () => {
-    return getPhoneSettings();
+    const settings = await getPhoneSettings();
+    return { ...settings, twilioPhoneNumber: ENV.twilioPhoneNumber || null };
   }),
 
   updateSettings: protectedProcedure

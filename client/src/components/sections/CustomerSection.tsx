@@ -48,6 +48,7 @@ import DuplicateSuggestionBanner from '@/components/DuplicateSuggestionBanner';
 import { toast } from 'sonner';
 import { nanoid } from 'nanoid';
 import CustomerMembershipPanel from '@/components/CustomerMembershipPanel';
+import ConciergeBrief from '@/components/ConciergeBrief';
 
 // ─── Constants ────────────────────────────────────────────────
 const LEAD_SOURCES: LeadSource[] = [
@@ -1946,7 +1947,7 @@ export default function CustomerSection() {
       )}
 
       {/* ── Stub Merge Banner ── */}
-      {activeCustomer?.leadSource === 'inbound_call' && !activeCustomer?.firstName && !activeCustomer?.email && activeCustomerId && (
+      {(activeCustomer?.leadSource as string) === 'inbound_call' && !activeCustomer?.firstName && !activeCustomer?.email && activeCustomerId && (
         <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-sm text-amber-800">
             <PhoneCall size={14} className="shrink-0 text-amber-600" />
@@ -2000,6 +2001,9 @@ export default function CustomerSection() {
 
       {/* ── Tab Content ── */}
       <div className="max-w-6xl mx-auto px-4 py-6">
+        {activeCustomerTab === 'profile' && activeCustomer && (
+          <ConciergeBrief customer={activeCustomer} opportunities={opportunities} />
+        )}
         {activeCustomerTab === 'profile' && ProfileTab()}
         {activeCustomerTab === 'properties' && (
           <div className="space-y-4">

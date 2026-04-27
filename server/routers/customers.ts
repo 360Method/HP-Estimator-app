@@ -129,6 +129,19 @@ export const customersRouter = router({
         tags: JSON.stringify(input.tags),
         email: input.email.toLowerCase().trim(),
       });
+      // Phase 4 trigger: customer with a lead-source flag is a fresh lead.
+      // Fires Lead Nurturer AI (and any other lead.created subscribers).
+      if ((input.leadSource ?? "").trim().length > 0) {
+        const { emitAgentEvent } = await import("../lib/agentRuntime/triggerBus");
+        emitAgentEvent("lead.created", {
+          customerId: id,
+          displayName,
+          email: input.email,
+          mobilePhone: input.mobilePhone,
+          leadSource: input.leadSource,
+          referredBy: input.referredBy,
+        }).catch(() => null);
+      }
       return customer;
     }),
 

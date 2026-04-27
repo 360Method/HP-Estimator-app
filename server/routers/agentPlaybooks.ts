@@ -1,5 +1,5 @@
 /**
- * agentPlaybooks router — operator-editable cadence definitions.
+ * nurturerPlaybooks router — operator-editable cadence definitions.
  *
  * Marcin (or future CX Lead) tunes timing + voice prompts in
  * /admin/agents/playbooks. The Lead Nurturer reads from this table at
@@ -11,7 +11,7 @@ import { eq } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { router, protectedProcedure } from "../_core/trpc";
 import { getDb } from "../db";
-import { agentPlaybooks } from "../../drizzle/schema";
+import { nurturerPlaybooks } from "../../drizzle/schema";
 
 const stepSchema = z.object({
   key: z.string().min(1).max(64),
@@ -28,17 +28,17 @@ const voiceRulesSchema = z.object({
   brand: z.string().optional(),
 });
 
-export const agentPlaybooksRouter = router({
+export const nurturerPlaybooksRouter = router({
   list: protectedProcedure.query(async () => {
     const db = await getDb();
     if (!db) return [];
-    return db.select().from(agentPlaybooks).orderBy(agentPlaybooks.key);
+    return db.select().from(nurturerPlaybooks).orderBy(nurturerPlaybooks.key);
   }),
 
   get: protectedProcedure.input(z.object({ key: z.string() })).query(async ({ input }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-    const rows = await db.select().from(agentPlaybooks).where(eq(agentPlaybooks.key, input.key)).limit(1);
+    const rows = await db.select().from(nurturerPlaybooks).where(eq(nurturerPlaybooks.key, input.key)).limit(1);
     if (!rows[0]) throw new TRPCError({ code: "NOT_FOUND" });
     return rows[0];
   }),
@@ -64,7 +64,7 @@ export const agentPlaybooksRouter = router({
       if (input.steps !== undefined) patch.stepsJson = JSON.stringify(input.steps);
       if (input.voiceRules !== undefined) patch.voiceRulesJson = JSON.stringify(input.voiceRules);
       if (Object.keys(patch).length === 0) return { ok: true };
-      await db.update(agentPlaybooks).set(patch).where(eq(agentPlaybooks.key, input.key));
+      await db.update(nurturerPlaybooks).set(patch).where(eq(nurturerPlaybooks.key, input.key));
       return { ok: true };
     }),
 });
