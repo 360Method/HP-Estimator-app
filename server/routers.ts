@@ -33,6 +33,7 @@ import { automationRulesRouter } from "./routers/automationRules";
 import { emailTemplatesRouter } from "./routers/emailTemplates";
 import { campaignsRouter } from "./routers/campaigns";
 import { priorityTranslationRouter } from "./routers/priorityTranslation";
+import { portalRoadmapRouter } from "./routers/portalRoadmap";
 import { gbpRouter }           from "./routers/gbp";
 import { metaRouter }          from "./routers/meta";
 import { googleAdsRouter }     from "./routers/googleAds";
@@ -82,6 +83,7 @@ export const appRouter = router({
   emailTemplates: emailTemplatesRouter,
   campaigns: campaignsRouter,
   priorityTranslation: priorityTranslationRouter,
+  portalRoadmap: portalRoadmapRouter,
   gbp: gbpRouter,
   meta: metaRouter,
   googleAds: googleAdsRouter,

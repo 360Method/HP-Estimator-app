@@ -1,5 +1,22 @@
 # HP Estimator — Integration Handoff Checklist
 
+## DONE — 2026-04-27 — Portal Roadmap surface + in-portal Take-Action funnel (`feat/portal-roadmap-take-action`)
+
+**Per Marcin:** *"This PDF will also need to be housed in their customer portal. I'm imagining we need to create a 'ready to take action' button so it takes them down an appointment funnel right in the portal without leaving."*
+
+### What shipped
+- **`/portal/roadmap` page** (`client/src/pages/portal/PortalRoadmap.tsx`) — affluent stewardship surface listing every Roadmap (Priority Translation) tied to the logged-in portal customer. PDF preview via inline `<iframe>` (iOS Safari renders natively, no `pdf.js` payload), download, magic share link for spouse/advisor (7-day single-use token). Multiple Roadmaps render as a chronological selector strip.
+- **In-portal four-step funnel** — never a redirect: pick window → confirm contact → optional concern → confirmation with `.ics` download. Bottom-sheet on mobile, centered card on tablet+. 44 px+ tap targets, refined-serif headlines (Georgia / Times New Roman), parchment + gold focus rings.
+- **Server router** (`server/routers/portalRoadmap.ts`) — `listRoadmaps`, `shareRoadmap`, `getCtaContext` (resolves the right CTA: estimate review · project tracking · member visit · default Baseline), `listAvailableWindows` (4 weekday slots, 5+ days out), `bookBaselineWalkthrough` (writes `portalAppointments` + `opportunities` + `scheduleEvents`, fires `onAppointmentBooked` for Consultant assignment, sends affluent confirmation email + admin `notifyOwner`).
+- **Sidebar link** added between Home and Appointments. Route registered in `App.tsx`. Voice rules + brand tokens captured in `EXPERIENCE_STANDARDS.md` "Customer Portal Surfaces" section.
+- **Tests** — `server/portalRoadmap.test.ts` (vitest, 5 cases) covers stewardship pacing rules; `scripts/synth-roadmap-test.mjs` runs the same checks standalone.
+
+### Known follow-ups (not blocking)
+- The booking helper currently fabricates calendar windows; once main's `schedulingSlots` table is populated by the operator from `/admin/scheduling`, swap `listAvailableWindows` to delegate to `listAvailableSlots()` from `server/scheduling.ts` (filtered to ≥ 5 days out). Track in this checklist when ready.
+- After 30 days of usage, audit how many funnel completions hit the no-slot fallback ("none of these work — your steward will reach out"). If non-trivial, expand the offered window count or relax pacing.
+
+---
+
 ## DONE — 2026-04-27 — Roadmap deliverable v2: editorial PDF rewrite (`feat/roadmap-deliverable-quality-v2`)
 
 **Per Marcin:** *"The Roadmap Generator is not currently set up properly. Drastically improve so it's actually valuable to customer and us — Ritz-Carlton, not contractor estimate."*
