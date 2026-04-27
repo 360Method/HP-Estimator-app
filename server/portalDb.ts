@@ -146,6 +146,90 @@ export async function markPortalTokenUsed(id: number) {
     .where(eq(portalTokens.id, id));
 }
 
+/**
+ * Bridge: redeem a Roadmap-Generator magic link (issued into portalMagicLinks
+ * with varchar portalAccountId) as a legacy portalCustomers row so the rest
+ * of the verifyToken flow (which assumes int customerId + portalCustomers)
+ * works without restructuring.
+ *
+ * Steps:
+ *  1. Look up portalMagicLinks by SHA-256 of the raw token; reject if expired
+ *     or already consumed.
+ *  2. Resolve to portalAccount → email + linked CRM customerId (varchar).
+ *  3. upsertPortalCustomer by email so a portalCustomers row exists.
+ *  4. Stamp portalCustomers.hpCustomerId from portalAccounts.customerId if
+ *     present, so the new portalCustomer is properly tied back to the CRM.
+ *  5. Mark portalMagicLinks consumed so the link is single-use.
+ *
+ * Returns { portalCustomerId } so the caller can create the session row.
+ * Returns null on any failure mode (invalid/expired/consumed/no email).
+ */
+export async function consumeRoadmapMagicLinkAsPortalCustomer(
+  rawToken: string,
+): Promise<{ portalCustomerId: number } | null> {
+  const db = await d();
+  const { createHash } = await import("crypto");
+  const tokenHash = createHash("sha256").update(rawToken).digest("hex");
+
+  const { portalMagicLinks, portalAccounts } = await import(
+    "../drizzle/schema.priorityTranslation"
+  );
+
+  const linkRows = await db
+    .select()
+    .from(portalMagicLinks)
+    .where(eq(portalMagicLinks.tokenHash, tokenHash))
+    .limit(1);
+  const link = linkRows[0];
+  if (!link) return null;
+  if (link.consumedAt) return null;
+  if (link.expiresAt.getTime() < Date.now()) return null;
+
+  const acctRows = await db
+    .select()
+    .from(portalAccounts)
+    .where(eq(portalAccounts.id, link.portalAccountId))
+    .limit(1);
+  const acct = acctRows[0];
+  if (!acct || !acct.email) return null;
+
+  // Promote into the legacy portalCustomers space so the rest of the auth
+  // flow (sessions, /portal/me, etc.) recognizes them.
+  const portalCustomer = await upsertPortalCustomer({
+    email: acct.email,
+    name: `${acct.firstName ?? ""} ${acct.lastName ?? ""}`.trim() || acct.email,
+    phone: acct.phone || null,
+    address: null,
+    hpCustomerId: acct.customerId ?? undefined,
+  });
+
+  if (!portalCustomer) return null;
+
+  // If portalAccount has a CRM customerId but portalCustomer does not,
+  // backfill it now so future lookups by hpCustomerId resolve.
+  if (acct.customerId && !portalCustomer.hpCustomerId) {
+    await db
+      .update(portalCustomers)
+      .set({ hpCustomerId: acct.customerId })
+      .where(eq(portalCustomers.id, portalCustomer.id));
+  }
+
+  // Single-use: mark consumed.
+  await db
+    .update(portalMagicLinks)
+    .set({ consumedAt: new Date() })
+    .where(eq(portalMagicLinks.tokenHash, tokenHash));
+
+  // Update lastLoginAt on the portalAccount too so the Roadmap-side record
+  // reflects the redemption.
+  await db
+    .update(portalAccounts)
+    .set({ lastLoginAt: new Date() })
+    .where(eq(portalAccounts.id, acct.id));
+
+  return { portalCustomerId: portalCustomer.id };
+}
+
 // ─── SESSIONS ─────────────────────────────────────────────────────────────────
 
 export async function createPortalSession(data: InsertPortalSession) {
