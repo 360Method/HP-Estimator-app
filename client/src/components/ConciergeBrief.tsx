@@ -18,7 +18,7 @@
  * attachments, owner notes) live in the existing tabs below. This brief
  * is the "executive summary" that tells the operator which tab to open.
  */
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import {
   Sparkles, FileText, Mail, Phone, MessageSquare, CalendarPlus,
   Plus, Star, Briefcase, MapPin, Clock, Bot, ArrowUpRight, Globe,
@@ -27,6 +27,7 @@ import { trpc } from "@/lib/trpc";
 import { Customer, Opportunity } from "@/lib/types";
 import { useEstimator } from "@/contexts/EstimatorContext";
 import { Badge } from "@/components/ui/badge";
+import PendingReview from "@/components/PendingReview";
 
 interface ConciergeBriefProps {
   customer: Customer;
@@ -54,7 +55,15 @@ const ROADMAP_STATUS_COLOR: Record<string, string> = {
 };
 
 export default function ConciergeBrief({ customer, opportunities }: ConciergeBriefProps) {
-  const { setCustomerTab } = useEstimator();
+  const { state, setCustomerTab, setPendingFocus } = useEstimator();
+  const focusToken = state.pendingFocus ?? null;
+  // One-shot consumption: clear the focus token after rendering so a later
+  // navigation away and back doesn't re-scroll surprisingly.
+  useEffect(() => {
+    if (!focusToken) return;
+    const t = window.setTimeout(() => setPendingFocus(null), 800);
+    return () => window.clearTimeout(t);
+  }, [focusToken, setPendingFocus]);
 
   const { data: roadmaps = [] } = trpc.leads.roadmapsForCustomer.useQuery(
     { customerId: customer.id },
@@ -127,7 +136,15 @@ export default function ConciergeBrief({ customer, opportunities }: ConciergeBri
   ];
 
   return (
-    <div className="rounded-2xl border border-border bg-gradient-to-br from-slate-50 via-white to-amber-50/30 shadow-sm overflow-hidden mb-6">
+    <>
+      {/* ── Pending Review (drafts impossible to miss) ──────── */}
+      <PendingReview
+        customerId={customer.id}
+        customerFirstName={customer.firstName ?? null}
+        focusToken={focusToken}
+      />
+
+      <div className="rounded-2xl border border-border bg-gradient-to-br from-slate-50 via-white to-amber-50/30 shadow-sm overflow-hidden mb-6">
       {/* ── Header strip ─────────────────────────────────────── */}
       <div className="px-4 sm:px-6 pt-4 pb-3 border-b border-border/60">
         <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -287,6 +304,7 @@ export default function ConciergeBrief({ customer, opportunities }: ConciergeBri
         </div>
       </div>
     </div>
+    </>
   );
 }
 

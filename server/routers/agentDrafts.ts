@@ -97,6 +97,39 @@ export const agentDraftsRouter = router({
       return enrichWithCustomer(rows);
     }),
 
+  /**
+   * Drafts (pending + ready) for a single customer — surfaced inside the
+   * customer profile's "Pending Your Review" section. Ready drafts come
+   * first so the operator sees them without scrolling.
+   */
+  listForCustomer: protectedProcedure
+    .input(z.object({ customerId: z.string() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      const rows = await db
+        .select()
+        .from(agentDrafts)
+        .where(
+          and(
+            eq(agentDrafts.customerId, input.customerId),
+            // Surfacing: ready drafts (operator must approve) first; we also
+            // include pending so the operator can see what's coming.
+          ),
+        )
+        .orderBy(desc(agentDrafts.updatedAt))
+        .limit(20);
+      // Sort: ready first, then pending; cancelled/sent/failed excluded.
+      const visible = rows.filter((r) => r.status === "ready" || r.status === "pending");
+      visible.sort((a, b) => {
+        if (a.status !== b.status) return a.status === "ready" ? -1 : 1;
+        const aT = (a.updatedAt instanceof Date ? a.updatedAt : new Date(a.updatedAt as any)).getTime();
+        const bT = (b.updatedAt instanceof Date ? b.updatedAt : new Date(b.updatedAt as any)).getTime();
+        return bT - aT;
+      });
+      return visible;
+    }),
+
   /** Counts for the inbox tab badges. */
   counts: protectedProcedure.query(async () => {
     const db = await getDb();

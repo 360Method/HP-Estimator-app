@@ -35,7 +35,7 @@ import {
   portalAccounts,
   type HealthRecordFinding,
 } from "../../../drizzle/schema.priorityTranslation";
-import { findDefaultUserForRole } from "../../leadRouting";
+import { createNotification, customerLinkUrl, findDefaultUserForRole } from "../../leadRouting";
 import { sendSms, isTwilioConfigured } from "../../twilio";
 import { sendEmail as sendGmail } from "../../gmail";
 import {
@@ -302,6 +302,29 @@ async function generateAndStore(
       generatedAt: new Date(),
     })
     .where(eq(agentDrafts.id, draft.id));
+
+  // Fire a bell notification so the draft is impossible to miss.
+  // Best-effort; never blocks generation.
+  void notifyDraftReady(draft, step.label).catch(() => null);
+}
+
+async function notifyDraftReady(draft: DbAgentDraft, stepLabel: string): Promise<void> {
+  try {
+    const nurturerId = await findDefaultUserForRole("nurturer").catch(() => null);
+    await createNotification({
+      userId: nurturerId ?? null,
+      role: "nurturer",
+      eventType: "draft_needs_approval",
+      title: `Draft awaiting your approval — ${stepLabel}`,
+      body: `The Lead Nurturer drafted a ${draft.channel === "sms" ? "text message" : "email"} (${stepLabel}). Review it on the customer profile and approve when ready.`,
+      linkUrl: customerLinkUrl(draft.customerId, draft.opportunityId ?? null) + "&tab=profile&focus=pending-review",
+      opportunityId: draft.opportunityId ?? undefined,
+      customerId: draft.customerId,
+      priority: "normal",
+    });
+  } catch (err) {
+    console.warn("[leadNurturer] notifyDraftReady failed:", err);
+  }
 }
 
 async function handleLongTermNurtureHandoff(draft: DbAgentDraft): Promise<void> {

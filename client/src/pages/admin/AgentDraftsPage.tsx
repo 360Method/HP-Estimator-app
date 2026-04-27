@@ -5,13 +5,15 @@
 // ============================================================
 
 import { useState } from "react";
-import { Calendar, CheckCircle2, Clock, Loader2, Mail, MessageSquare, Send, Trash2, X, Zap } from "lucide-react";
+import { Calendar, CheckCircle2, Clock, Info, Loader2, Mail, MessageSquare, Send, Trash2, User, X, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useEstimator } from "@/contexts/EstimatorContext";
+import { useLocation } from "wouter";
 
 type Tab = "scheduled" | "ready" | "sent" | "cancelled";
 
@@ -29,6 +31,14 @@ export default function AgentDraftsPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-6 py-10">
+      <div className="mb-6 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 flex items-start gap-2">
+        <Info className="w-4 h-4 text-sky-700 mt-0.5 shrink-0" />
+        <div className="text-xs text-sky-900 leading-relaxed">
+          <span className="font-semibold">Drafts now live inside the customer profile.</span>{" "}
+          Each row below deep-links to the customer's "Pending Your Review" section so you can edit + approve in context. This page remains the cross-customer operations dashboard.
+        </div>
+      </div>
+
       <header className="mb-8">
         <p className="text-xs uppercase tracking-[0.2em] text-stone-500">Lead Nurturer</p>
         <h1 className="mt-2 text-3xl font-semibold text-stone-900">Agent drafts</h1>
@@ -132,6 +142,7 @@ function ScheduledTab() {
                 Generate now
               </Button>
               <RescheduleButton draftId={d.id} current={d.scheduledFor} onSubmit={(when) => reschedule.mutate({ id: d.id, scheduledFor: when })} />
+              <ViewInProfileButton customerId={d.customerId} />
               <Button
                 size="sm"
                 variant="ghost"
@@ -146,6 +157,25 @@ function ScheduledTab() {
         </li>
       ))}
     </ul>
+  );
+}
+
+function ViewInProfileButton({ customerId }: { customerId: string }) {
+  const { setActiveCustomer } = useEstimator();
+  const [, navigate] = useLocation();
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      onClick={() => {
+        setActiveCustomer(customerId, "direct", "pending-review");
+        navigate("/");
+      }}
+      title="View in customer profile"
+    >
+      <User className="h-3 w-3 mr-1" />
+      In profile
+    </Button>
   );
 }
 
@@ -275,6 +305,7 @@ function ReadyTab() {
                   >
                     Edit
                   </Button>
+                  <ViewInProfileButton customerId={d.customerId} />
                   <Button size="sm" variant="ghost" onClick={() => cancel.mutate({ id: d.id })}>
                     <Trash2 className="h-4 w-4" />
                   </Button>

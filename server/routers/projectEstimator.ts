@@ -248,6 +248,80 @@ export const projectEstimatorRouter = router({
         .where(eq(projectEstimates.customerId, input.customerId))
         .orderBy(desc(projectEstimates.createdAt));
     }),
+
+  /**
+   * Estimates that need the operator's review for this customer (status =
+   * needs_review or needs_info). Surfaced inside the customer profile's
+   * Pending Your Review section.
+   */
+  listPendingForCustomer: protectedProcedure
+    .input(z.object({ customerId: z.string() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) return [];
+      const rows = await db
+        .select()
+        .from(projectEstimates)
+        .where(eq(projectEstimates.customerId, input.customerId))
+        .orderBy(desc(projectEstimates.createdAt));
+      return rows.filter(
+        (r) => r.status === "needs_review" || r.status === "needs_info",
+      );
+    }),
+
+  /**
+   * Operator-side: approve a needs_review estimate as-is or with edits.
+   * Flips status → delivered, stamps deliveredAt, and updates customer-facing
+   * fields if the operator tweaked them.
+   */
+  approveProject: protectedProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        scopeSummary: z.string().optional(),
+        inclusionsMd: z.string().optional(),
+        rangeLow: z.number().optional(),
+        rangeHigh: z.number().optional(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      const patch: Record<string, unknown> = {
+        status: "delivered",
+        deliveredAt: new Date(),
+        updatedAt: new Date(),
+      };
+      if (input.scopeSummary !== undefined) patch.scopeSummary = input.scopeSummary;
+      if (input.inclusionsMd !== undefined) patch.inclusionsMd = input.inclusionsMd;
+      if (input.rangeLow !== undefined) patch.customerRangeLowUsd = input.rangeLow;
+      if (input.rangeHigh !== undefined) patch.customerRangeHighUsd = input.rangeHigh;
+      await db
+        .update(projectEstimates)
+        .set(patch)
+        .where(eq(projectEstimates.id, input.id));
+      return { ok: true };
+    }),
+
+  /**
+   * Operator-side: reject (kill) a draft estimate. Sets failureReason for
+   * audit. The customer never sees it.
+   */
+  rejectProject: protectedProcedure
+    .input(z.object({ id: z.string(), reason: z.string().optional() }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+      await db
+        .update(projectEstimates)
+        .set({
+          status: "failed",
+          failureReason: input.reason ?? "rejected_by_operator",
+          updatedAt: new Date(),
+        })
+        .where(eq(projectEstimates.id, input.id));
+      return { ok: true };
+    }),
 });
 
 export type ProjectEstimatorRouter = typeof projectEstimatorRouter;

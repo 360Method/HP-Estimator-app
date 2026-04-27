@@ -1,22 +1,26 @@
 /**
- * NewLeadBanner — persistent, app-wide alert for newly-arrived leads.
+ * NewLeadBanner — persistent, app-wide alert for items the operator must
+ * see. Surfaces TWO kinds of unread notifications:
+ *
+ *   1. new_lead / new_booking — gold/amber banner: "New lead from …"
+ *   2. draft_needs_approval   — sky banner: "<customer>'s draft is awaiting
+ *                                your approval — review now"
  *
  * Sits above MetricsBar inside AdminApp so it shows on EVERY admin page.
- * Polls the notifications feed for unread `new_lead` / `new_booking` events
- * (the same rows the bell shows). Each unread event surfaces as a one-line
- * banner: "New lead from [source] — [first name]". Tap to open that
- * customer's profile (which marks the row read and dismisses the banner).
+ * Polls the notifications feed for unread events. Each unread event
+ * surfaces as a one-line banner. Tap to open that customer's profile
+ * (which marks the row read and, for drafts, scrolls to Pending Review).
  *
  * Auto-collapses to a compact pill once dismissed locally so the operator
  * isn't punished for acknowledging — but the bell still owns the canonical
  * unread count, and a fresh notification reopens the banner.
  *
- * Hidden when the operator is already on the Leads inbox (no point shouting
- * about leads they're already looking at) or on customer-detail pages where
- * the relevant lead may already be in front of them.
+ * Hidden on the relevant inbox surface (Leads inbox for new leads, Drafts
+ * inbox for drafts) so we don't shout about rows that are already in front
+ * of the operator.
  */
 import { useEffect, useMemo, useState } from "react";
-import { Bell, X, ChevronRight, Star } from "lucide-react";
+import { Bell, X, ChevronRight, Star, Sparkles } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useEstimator } from "@/contexts/EstimatorContext";
 
@@ -85,25 +89,40 @@ export default function NewLeadBanner() {
   const banners = useMemo(() => {
     return items
       .filter((n) => !n.readAt)
-      .filter((n) => n.eventType === "new_lead" || n.eventType === "new_booking")
+      .filter(
+        (n) =>
+          n.eventType === "new_lead" ||
+          n.eventType === "new_booking" ||
+          n.eventType === "draft_needs_approval",
+      )
       .filter((n) => !dismissed.has(n.id))
       .slice(0, 3); // never stack more than three
   }, [items, dismissed]);
 
-  // Hide the banner on the Leads inbox itself — the rows down below are the
-  // canonical surface there.
-  const hiddenOnSection = state.activeSection === "leads" || state.activeSection === "requests";
+  // Hide the banner when the operator is already on the surface that owns
+  // the corresponding rows.
+  const hiddenOnSection =
+    state.activeSection === "leads" ||
+    state.activeSection === "requests";
 
   if (hiddenOnSection || banners.length === 0) return null;
 
   const handleOpen = (n: typeof banners[number]) => {
     markRead.mutate({ id: n.id });
     if (n.customerId) {
-      setActiveCustomer(n.customerId, "list");
+      const focus = n.eventType === "draft_needs_approval" ? "pending-review" : null;
+      setActiveCustomer(n.customerId, "direct", focus);
     } else {
       navigateToTopLevel("leads");
     }
   };
+
+  const isDraft = (eventType: string) => eventType === "draft_needs_approval";
+
+  const bannerWrapClass = (eventType: string) =>
+    isDraft(eventType)
+      ? "sticky top-0 z-40 bg-gradient-to-r from-sky-600 to-sky-700 text-white shadow-md no-print"
+      : "sticky top-0 z-40 bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-md no-print";
 
   const handleDismiss = (id: number) => {
     setDismissed((d) => {
@@ -114,54 +133,76 @@ export default function NewLeadBanner() {
     });
   };
 
-  return (
-    <div className="sticky top-0 z-40 bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-md no-print">
-      {banners.map((n, i) => {
-        const customerName = (n as any).customerName as string | null | undefined;
-        const sourceMatch = n.body?.match(/from\s+([^.]+)/i);
-        const sourceLabel = sourceMatch?.[1]?.trim() ?? "a new contact";
-        return (
-          <div
-            key={n.id}
-            className={`flex items-center gap-3 px-4 sm:px-6 ${i > 0 ? "border-t border-amber-400/40" : ""}`}
-            style={{ minHeight: 44 }}
-          >
-            <button
-              onClick={() => handleOpen(n)}
-              className="flex-1 flex items-center gap-2 sm:gap-3 py-2 text-left min-w-0"
-            >
-              <span className="shrink-0 w-7 h-7 rounded-full bg-white/15 flex items-center justify-center">
-                <Star className="w-3.5 h-3.5" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="text-xs sm:text-sm font-semibold truncate">
-                  New lead from {sourceLabel}
-                  {customerName ? ` — ${customerName}` : ""}
-                </div>
-                <div className="text-[10px] sm:text-[11px] text-white/80 truncate">
-                  {n.title} · {fmtAgo(n.createdAt)}
-                </div>
-              </div>
-              <ChevronRight className="w-4 h-4 shrink-0 opacity-80" />
-            </button>
-            <button
-              onClick={() => handleDismiss(n.id)}
-              className="shrink-0 p-2 rounded-md hover:bg-white/15 text-white/80 hover:text-white transition-colors"
-              title="Dismiss for now"
-              style={{ minWidth: 44, minHeight: 44 }}
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        );
-      })}
-      {/* Subtle hint to drive operators back to the inbox */}
-      <button
-        onClick={() => navigateToTopLevel("leads")}
-        className="hidden sm:flex items-center gap-1 absolute right-3 -bottom-3 translate-y-full bg-white border border-amber-200 text-amber-700 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shadow"
+  // Group leads and drafts so each renders in its own colored band.
+  const leadBanners = banners.filter((n) => !isDraft(n.eventType));
+  const draftBanners = banners.filter((n) => isDraft(n.eventType));
+
+  const renderRow = (n: typeof banners[number], i: number, total: number, accent: string) => {
+    const customerName = (n as any).customerName as string | null | undefined;
+    const draft = isDraft(n.eventType);
+    let primary: string;
+    if (draft) {
+      primary = customerName
+        ? `${customerName}'s draft is awaiting your approval`
+        : "A draft is awaiting your approval";
+    } else {
+      const sourceMatch = n.body?.match(/from\s+([^.]+)/i);
+      const sourceLabel = sourceMatch?.[1]?.trim() ?? "a new contact";
+      primary = `New lead from ${sourceLabel}${customerName ? ` — ${customerName}` : ""}`;
+    }
+    return (
+      <div
+        key={n.id}
+        className={`flex items-center gap-3 px-4 sm:px-6 ${i > 0 ? `border-t ${accent}` : ""}`}
+        style={{ minHeight: 44 }}
       >
-        <Bell className="w-3 h-3" /> Open Leads
-      </button>
+        <button
+          onClick={() => handleOpen(n)}
+          className="flex-1 flex items-center gap-2 sm:gap-3 py-2 text-left min-w-0"
+        >
+          <span className="shrink-0 w-7 h-7 rounded-full bg-white/15 flex items-center justify-center">
+            {draft ? <Sparkles className="w-3.5 h-3.5" /> : <Star className="w-3.5 h-3.5" />}
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="text-xs sm:text-sm font-semibold truncate">
+              {primary}
+            </div>
+            <div className="text-[10px] sm:text-[11px] text-white/80 truncate">
+              {draft ? "Tap to review →" : n.title} · {fmtAgo(n.createdAt)}
+            </div>
+          </div>
+          <ChevronRight className="w-4 h-4 shrink-0 opacity-80" />
+        </button>
+        <button
+          onClick={() => handleDismiss(n.id)}
+          className="shrink-0 p-2 rounded-md hover:bg-white/15 text-white/80 hover:text-white transition-colors"
+          title="Dismiss for now"
+          style={{ minWidth: 44, minHeight: 44 }}
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+    );
+  };
+
+  return (
+    <div className="sticky top-0 z-40 no-print">
+      {leadBanners.length > 0 && (
+        <div className="bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-md relative">
+          {leadBanners.map((n, i) => renderRow(n, i, leadBanners.length, "border-amber-400/40"))}
+          <button
+            onClick={() => navigateToTopLevel("leads")}
+            className="hidden sm:flex items-center gap-1 absolute right-3 -bottom-3 translate-y-full bg-white border border-amber-200 text-amber-700 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shadow"
+          >
+            <Bell className="w-3 h-3" /> Open Leads
+          </button>
+        </div>
+      )}
+      {draftBanners.length > 0 && (
+        <div className="bg-gradient-to-r from-sky-600 to-sky-700 text-white shadow-md">
+          {draftBanners.map((n, i) => renderRow(n, i, draftBanners.length, "border-sky-400/40"))}
+        </div>
+      )}
     </div>
   );
 }
