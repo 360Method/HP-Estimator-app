@@ -108,9 +108,20 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
   const [activeModal, setActiveModal] = useState<NewMenuAction | null>(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [overlay, setOverlay] = useState<'account' | 'tasks' | 'help' | 'shortcuts' | 'settings' | null>(null);
+  const [settingsSection, setSettingsSection] = useState<string | undefined>(undefined);
   const newBtnRef = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
   // Back button is shown when state.customerNavSource is 'list' or 'search'
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const section = (e as CustomEvent<{ section: string }>).detail?.section;
+      setSettingsSection(section);
+      setOverlay('settings');
+    };
+    window.addEventListener('open-settings', handler);
+    return () => window.removeEventListener('open-settings', handler);
+  }, []);
 
   const utils = trpc.useUtils();
   const markAllPortalReadMutation = trpc.portal.markAllPortalRead.useMutation({
@@ -407,7 +418,7 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
               {(overlay === 'help' || overlay === 'shortcuts') && (
                 <HelpPage onBack={() => setOverlay(null)} initialTab={overlay === 'shortcuts' ? 'shortcuts' : 'help'} />
               )}
-              {overlay === 'settings' && <SettingsPage onBack={() => setOverlay(null)} />}
+              {overlay === 'settings' && <SettingsPage onBack={() => { setOverlay(null); setSettingsSection(undefined); }} initialSection={settingsSection as any} />}
             </div>
           )}
 

@@ -3,7 +3,9 @@ import { TRPCError } from "@trpc/server";
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_core/trpc";
+
+// (Imports below were merged from main + feat/lead-flow-unified.)
 import { paymentsRouter } from "./routers/payments";
 import { estimateRouter } from "./routers/estimate";
 import { inboxRouter } from "./routers/inbox";
@@ -31,7 +33,19 @@ import { automationRulesRouter } from "./routers/automationRules";
 import { emailTemplatesRouter } from "./routers/emailTemplates";
 import { campaignsRouter } from "./routers/campaigns";
 import { priorityTranslationRouter } from "./routers/priorityTranslation";
-import { leadsRouter } from "./routers/leads";
+import { gbpRouter }           from "./routers/gbp";
+import { metaRouter }          from "./routers/meta";
+import { googleAdsRouter }     from "./routers/googleAds";
+import { aiAgentsRouter }      from "./routers/aiAgents";
+import { integratorChatRouter } from "./routers/integratorChat";
+import { kpisRouter }          from "./routers/kpis";
+import { forgeRouter }         from "./routers/forge";
+import { schedulingRouter }    from "./routers/scheduling";
+import { vendorsRouter }       from "./routers/vendors";
+import { agentsRouter }        from "./routers/agents";
+import { playbooksRouter }     from "./routers/playbooks";
+import { leadsRouter }         from "./routers/leads";
+import { requestPasswordReset, consumePasswordReset } from "./passwordReset";
 import {
   getAdminAllowlist,
   addAdminAllowlistEmail,
@@ -68,6 +82,17 @@ export const appRouter = router({
   emailTemplates: emailTemplatesRouter,
   campaigns: campaignsRouter,
   priorityTranslation: priorityTranslationRouter,
+  gbp: gbpRouter,
+  meta: metaRouter,
+  googleAds: googleAdsRouter,
+  aiAgents: aiAgentsRouter,
+  integratorChat: integratorChatRouter,
+  kpis: kpisRouter,
+  forge: forgeRouter,
+  scheduling: schedulingRouter,
+  vendors: vendorsRouter,
+  agents: agentsRouter,
+  playbooks: playbooksRouter,
   leads: leadsRouter,
 
   auth: router({
@@ -87,19 +112,62 @@ export const appRouter = router({
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
     }),
+
+    /**
+     * Self-serve password reset request. Always returns success even when the
+     * email isn't on file — prevents account enumeration. Email contains a
+     * single-use token valid for 1 hour.
+     */
+    requestPasswordReset: publicProcedure
+      .input(z.object({ email: z.string().email() }))
+      .mutation(async ({ ctx, input }) => {
+        const requestIp =
+          (ctx.req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ||
+          ctx.req.socket.remoteAddress ||
+          null;
+        await requestPasswordReset({ email: input.email, requestIp });
+        return { ok: true } as const;
+      }),
+
+    /** Consume a reset token and set a new password (min 8 chars). */
+    consumePasswordReset: publicProcedure
+      .input(
+        z.object({
+          token: z.string().min(20),
+          newPassword: z.string().min(8).max(200),
+        }),
+      )
+      .mutation(async ({ input }) => {
+        const result = await consumePasswordReset({
+          rawToken: input.token,
+          newPassword: input.newPassword,
+        });
+        if (!result.ok) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message:
+              result.reason === "weak"
+                ? "Password must be at least 8 characters."
+                : "Reset link is invalid or has expired. Request a new one.",
+          });
+        }
+        return { ok: true } as const;
+      }),
   }),
 
   allowlist: router({
-    list: protectedProcedure.query(async () => {
+    // adminProcedure (role='admin'): only the OWNER_EMAIL user gets this role at
+    // upsert time, so allowlist mutations can no longer self-privilege.
+    list: adminProcedure.query(async () => {
       return getAdminAllowlist();
     }),
-    add: protectedProcedure
+    add: adminProcedure
       .input(z.object({ email: z.string().email() }))
       .mutation(async ({ ctx, input }) => {
         await addAdminAllowlistEmail(input.email, ctx.user.email ?? ctx.user.openId);
         return { success: true };
       }),
-    remove: protectedProcedure
+    remove: adminProcedure
       .input(z.object({ email: z.string().email() }))
       .mutation(async ({ ctx, input }) => {
         const list = await getAdminAllowlist();

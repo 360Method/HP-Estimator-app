@@ -52,14 +52,14 @@ export async function renderPriorityTranslationPdf(input: RenderInput): Promise<
   page.drawText("HANDY PIONEERS", {
     x: MARGIN, y: PAGE_H - MARGIN, size: 10, font: bold, color: BRAND.amber,
   });
-  page.drawText("360° Priority Translation", {
+  page.drawText("360° Roadmap", {
     x: MARGIN, y: PAGE_H - MARGIN - 18, size: 12, font: body, color: BRAND.muted,
   });
 
   drawWrappedText(page, "Your Property's", {
     x: MARGIN, y: PAGE_H - MARGIN - 120, size: 36, font: bold, color: BRAND.forest, lineHeight: 42, maxWidth: PAGE_W - 2 * MARGIN,
   });
-  drawWrappedText(page, "Priority Roadmap", {
+  drawWrappedText(page, "360° Roadmap", {
     x: MARGIN, y: PAGE_H - MARGIN - 162, size: 36, font: bold, color: BRAND.forest, lineHeight: 42, maxWidth: PAGE_W - 2 * MARGIN,
   });
 
@@ -170,7 +170,7 @@ export async function renderPriorityTranslationPdf(input: RenderInput): Promise<
   });
   drawWrappedText(
     disclaimerPage,
-    "The 360° Priority Translation summarizes the inspection report you provided. It is not a legal home inspection and does not replace a licensed home inspector's findings. Investment ranges reflect current Clark County, Washington pricing for quality restoration work and may change with market conditions and site-specific scope. For questions, contact help@handypioneers.com.",
+    "The 360° Roadmap summarizes the inspection report you provided. It is not a legal home inspection and does not replace a licensed home inspector's findings. Investment ranges reflect current Clark County, Washington pricing for quality restoration work and may change with market conditions and site-specific scope. For questions, contact help@handypioneers.com.",
     {
       x: MARGIN, y: PAGE_H - MARGIN - 40, size: 10, font: body, color: BRAND.forest,
       lineHeight: 14, maxWidth: PAGE_W - 2 * MARGIN,
