@@ -35,6 +35,7 @@ import { campaignsRouter } from "./routers/campaigns";
 import { priorityTranslationRouter } from "./routers/priorityTranslation";
 import { agentDraftsRouter } from "./routers/agentDrafts";
 import { nurturerPlaybooksRouter } from "./routers/agentPlaybooks";
+import { portalRoadmapRouter } from "./routers/portalRoadmap";
 import { gbpRouter }           from "./routers/gbp";
 import { metaRouter }          from "./routers/meta";
 import { googleAdsRouter }     from "./routers/googleAds";
@@ -86,6 +87,7 @@ export const appRouter = router({
   priorityTranslation: priorityTranslationRouter,
   agentDrafts: agentDraftsRouter,
   nurturerPlaybooks: nurturerPlaybooksRouter,
+  portalRoadmap: portalRoadmapRouter,
   gbp: gbpRouter,
   meta: metaRouter,
   googleAds: googleAdsRouter,

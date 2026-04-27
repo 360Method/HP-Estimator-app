@@ -56,6 +56,7 @@ import PortalChangeOrderDetail from "./pages/portal/PortalChangeOrderDetail";
 import PortalJobs from "./pages/portal/PortalJobs";
 import PortalReports from "./pages/portal/PortalReports";
 import PortalReportDetail from "./pages/portal/PortalReportDetail";
+import PortalRoadmap from "./pages/portal/PortalRoadmap";
 import Portal360Membership from "./pages/portal/Portal360Membership";
 import PortalEnrollmentConfirmation from "./pages/portal/PortalEnrollmentConfirmation";
 import PortalRoadmapSubmitted from "./pages/portal/PortalRoadmapSubmitted";
@@ -161,6 +162,7 @@ function Router() {
       <Route path="/portal/request" component={PortalRequest} />
       <Route path="/portal/reports/:id" component={PortalReportDetail} />
       <Route path="/portal/reports" component={PortalReports} />
+      <Route path="/portal/roadmap" component={PortalRoadmap} />
       <Route path="/portal/360-membership" component={Portal360Membership} />
       <Route path="/portal/360-confirmation" component={PortalEnrollmentConfirmation} />
       <Route path="/portal/schedule" component={PortalSchedule} />

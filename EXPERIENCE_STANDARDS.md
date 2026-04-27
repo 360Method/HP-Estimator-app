@@ -199,3 +199,80 @@ machine yields to the human read.
 - Money uses two decimals, no abbreviation ("$2,400.00" not "2.4k").
 - Service-area copy stays Vancouver-centric: "your home in Vancouver" reads
   better than "your property".
+
+---
+
+# Customer Portal Surfaces (`client.handypioneers.com`)
+
+These rules govern customer-facing pages. Affluent buyers smell sales
+theater immediately — the portal must feel like stewardship, not marketing.
+
+## Voice rules — words we never use
+
+In customer-facing copy, button labels, headings, email templates, or
+notifications:
+
+- `estimate` (we deliver "proposals" or "Roadmaps")
+- `free` (we offer; we don't give away)
+- `cheap`
+- `affordable`
+- `handyman`
+- `easy`
+- `fix`
+- `repair` (use "address," "tend to," "restore")
+- `best`
+- `save`
+- `discount`
+- `limited time`
+
+The `assertVoice()` helper in `server/routers/portalRoadmap.ts` warns when
+forbidden words appear in operator copy — **never** in the customer's own
+words (priority concern field is theirs and may use these naturally).
+
+## Stewardship pacing
+
+- Never offer "next available in 2 hours."
+- Default appointment offers start **5–10 days out**, weekdays only.
+  Mornings (10am) and afternoons (2pm). Four windows is the cap.
+- Pre-arrival reminders: 24h before, 1h before. **No marketing follow-ups
+  about the same walkthrough.**
+
+## CTA discipline on the Roadmap page
+
+Single primary CTA, server-resolved by `portalRoadmap.getCtaContext`:
+
+| Customer state                              | Variant                  | Label                |
+| ------------------------------------------- | ------------------------ | -------------------- |
+| Default (no estimate, no project)           | `baseline_walkthrough`   | Schedule walkthrough |
+| Estimate sent or viewed                     | `approve_estimate`       | Review now           |
+| Estimate approved + linked HP opportunity   | `track_project`          | Open project         |
+| 360° member with no upcoming visit          | `schedule_member_visit`  | Request a visit      |
+
+No upsell stack below it. No "save 20%" banners. No countdowns.
+
+## Brand tokens (portal-side)
+
+| Token        | Hex       | Use                                              |
+| ------------ | --------- | ------------------------------------------------ |
+| Forest       | `#1a2e1a` | Headlines, primary buttons, dense surfaces       |
+| Gold         | `#c8922a` | Accents, CTA fills, focus rings, brand inflection|
+| Parchment    | `#faf7f0` | Form backgrounds, calm cards                     |
+| Border-warm  | `#e5e0d3` | All neutral borders on customer-facing surfaces  |
+
+## Confirmation flow
+
+After every customer-initiated booking:
+
+1. In-portal confirmation screen with date and what to expect next.
+2. Stewardship-voice email with `.ics` attachment (download from the
+   confirmation modal).
+3. Admin notification (`notifyOwner` + lead-routing assignment).
+4. Pre-arrival reminders only — no further marketing about that booking.
+
+## Things we do not do on customer surfaces
+
+- Pop the same modal twice if the customer cancels.
+- Send marketing email about a confirmed booking.
+- Auto-charge or hold a card during the funnel.
+- Show "X people booked this week" social-proof banners.
+- Use exclamation marks in stewardship copy.
