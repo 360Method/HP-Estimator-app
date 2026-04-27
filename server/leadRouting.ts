@@ -30,6 +30,10 @@ import {
 } from "../drizzle/schema";
 import { sendSms, isTwilioConfigured } from "./twilio";
 import { isNotificationEnabled } from "./routers/notificationPreferences";
+import {
+  cancelPendingFollowupsForCustomer,
+  type EngagementCancelReason,
+} from "./lib/leadNurturer/roadmapFollowup";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -395,6 +399,10 @@ export async function onAppointmentBooked(params: {
       priority: "high",
     });
 
+    // Drain any post-Roadmap follow-up drafts queued for this customer —
+    // the appointment is now the next concrete touchpoint.
+    await onCustomerEngaged(params.customerId, "appointment_scheduled");
+
     // Customer-facing confirmation — affluent-voice stewardship copy
     // (per Customer Success Charter, 2026-04-25). Best-effort; the
     // appointment is already committed to the DB.
@@ -407,6 +415,23 @@ export async function onAppointmentBooked(params: {
     });
   } catch (err) {
     console.error("[leadRouting] onAppointmentBooked error:", err);
+  }
+}
+
+/**
+ * Generic "customer chose a path" hook. Used by appointment booking,
+ * subscription enrollment, explicit decline, and inbound replies. Currently
+ * just drains the Lead Nurturer's pending drafts — extend here for any
+ * future cadence cancellation needs.
+ */
+export async function onCustomerEngaged(
+  customerId: string,
+  reason: EngagementCancelReason,
+): Promise<void> {
+  try {
+    await cancelPendingFollowupsForCustomer(customerId, reason);
+  } catch (err) {
+    console.error("[leadRouting] onCustomerEngaged error:", err);
   }
 }
 

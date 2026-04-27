@@ -373,6 +373,27 @@ export async function create360MembershipFromWebhook(
       `[Handy Pioneers] New 360° Enrollment: ${customerName} — ${tier.charAt(0).toUpperCase() + tier.slice(1)} tier. Schedule baseline scan within 48h. Membership #${membershipId}.`
     ).catch((err) => console.error('[360 Webhook] SMS alert failed:', err));
   }
+
+  // ── 10. Drain post-Roadmap follow-up cadence ────────────────────────────────
+  // The customer enrolled in the 360° Method — Path B is now their path. Any
+  // pending Lead Nurturer drafts (Path A nudges) for this customer should
+  // stop firing.
+  try {
+    const { onCustomerEngaged } = await import("./leadRouting");
+    if (hpCustomerId) {
+      await onCustomerEngaged(hpCustomerId, "subscription_created");
+    } else if (customerEmail) {
+      const { customers } = await import("../drizzle/schema");
+      const match = await db
+        .select()
+        .from(customers)
+        .where(eq(customers.email, customerEmail.toLowerCase()))
+        .limit(1);
+      if (match[0]) await onCustomerEngaged(match[0].id, "subscription_created");
+    }
+  } catch (err) {
+    console.error("[360 Webhook] follow-up cancellation failed:", err);
+  }
 }
 
 

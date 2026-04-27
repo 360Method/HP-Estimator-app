@@ -1,5 +1,33 @@
 # HP Estimator — Integration Handoff Checklist
 
+## DONE — 2026-04-27 — Lead Nurturer post-Roadmap follow-up cadence (`feat/post-roadmap-followup-sequence`)
+
+**Per Marcin:** *"We will need to have an entire follow up process to get us at their door."*
+
+### What shipped
+- **Five-stage cadence** (`server/lib/leadNurturer/roadmapFollowup.ts`): T+4h Concierge SMS → T+24h specific-finding email → T+72h SMS check-in → T+7d 360° Method continuity email → T+14d long-term nurture stage flip. Every touchpoint is a `pending` row in `agentDrafts` with a `scheduledFor` timestamp.
+- **Approval-gated draft generator** (`server/lib/leadNurturer/draftGenerator.ts`): boot-time worker (every 5 min) picks up due drafts, gathers customer + `homeHealthRecord` context, asks Claude for a stewardship-voice body, marks them `ready`. Banned-word advisory (`estimate / free / cheap / fix / discount / etc.`) is surfaced inline so the operator edits before sending. **Nothing auto-sends.**
+- **Engagement triggers drain the queue**: `appointment_scheduled` (Baseline / Consultation), `subscription_created` (360° Stripe webhook), `customer_replied` (inbound SMS), `customer_declined` (operator-set). All routed through `onCustomerEngaged()` in `server/leadRouting.ts`.
+- **Per-customer escape hatch** — `customers.bypassAutoNurture` skips the cadence; the Lead Nurturer only acts on manual triggers for that customer.
+- **Operator surfaces**:
+  - `/admin/agents/drafts` — Scheduled / Ready / Sent / Cancelled tabs. Reschedule, edit, generate-now, approve+send, cancel.
+  - `/admin/agents/playbooks` — operator edits step timing + voice prompts + banned words. **No redeploy** required (nucleus principle).
+- **Schema** (migration 0065 + boot-time `ensureLeadNurturerTables()`):
+  - `agentDrafts` — pending/ready/sent/cancelled draft inbox.
+  - `agentPlaybooks` — operator-editable cadence definitions.
+  - `customers.bypassAutoNurture` — per-customer override.
+- **Tests**: `server/leadNurturer.roadmapFollowup.test.ts` — 6 passing including the synthetic test that triggers a Roadmap delivery for a fake customer and asserts all five drafts schedule with the right offsets.
+- **Docs**: this checklist + `EXPERIENCE_STANDARDS.md` sections 10–17 (customer-facing voice, banned vocabulary, approval-gate posture, cadence-stop-on-engagement).
+
+### Manual verification before relying on the cadence in prod
+- [ ] Open `/admin/agents/drafts` — confirm empty-state copy renders.
+- [ ] Open `/admin/agents/playbooks` — confirm the seeded `roadmap_followup` playbook loads.
+- [ ] Trigger a real Roadmap delivery in dev — confirm 5 pending drafts appear with the expected scheduledFor offsets.
+- [ ] Book a Baseline for a customer with pending drafts — confirm they all flip to `cancelled` with reason `appointment_scheduled`.
+- [ ] Send a customer an inbound SMS — confirm pending drafts cancel with reason `customer_replied`.
+
+---
+
 ## DONE — 2026-04-27 — Portal Roadmap surface + in-portal Take-Action funnel (`feat/portal-roadmap-take-action`)
 
 **Per Marcin:** *"This PDF will also need to be housed in their customer portal. I'm imagining we need to create a 'ready to take action' button so it takes them down an appointment funnel right in the portal without leaving."*

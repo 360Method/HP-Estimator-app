@@ -120,6 +120,14 @@ export async function handleInboundSms(params: {
     phone: From,
     description: Body?.slice(0, 100),
   }).catch(e => console.error('[automation] inbound_sms error:', e));
+  // Drain post-Roadmap follow-up drafts — the customer replied; the operator
+  // is now in the loop. Pending drafts shouldn't fire on top of a live
+  // conversation. Already-`ready` drafts are kept for the operator to choose.
+  if (customer?.id) {
+    import("./leadRouting")
+      .then(({ onCustomerEngaged }) => onCustomerEngaged(customer.id, "customer_replied"))
+      .catch((e) => console.error("[Twilio] follow-up cancel on inbound SMS failed:", e));
+  }
   console.log(`[Twilio] Inbound SMS from ${From}: ${Body?.slice(0, 50)}`);
   return msg;
 }

@@ -554,6 +554,12 @@ export const customers = mysqlTable("customers", {
   mergedIntoId: varchar("mergedIntoId", { length: 64 }),
   // QuickBooks sync
   qbCustomerId: varchar("qbCustomerId", { length: 64 }),
+  /**
+   * When true, the Lead Nurturer's auto-cadence (post-Roadmap follow-up etc.)
+   * skips this customer. Marcin flips this for hand-held leads. Manual draft
+   * triggers still work.
+   */
+  bypassAutoNurture: boolean("bypassAutoNurture").default(false).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -2105,3 +2111,69 @@ export const agentOptimizationTasks = mysqlTable("agent_optimization_tasks", {
 });
 export type DbAgentOptimizationTask = typeof agentOptimizationTasks.$inferSelect;
 export type InsertDbAgentOptimizationTask = typeof agentOptimizationTasks.$inferInsert;
+
+// ─── LEAD NURTURER: AGENT DRAFTS + PLAYBOOKS (migration 0065) ─────────────────
+// Post-Roadmap follow-up cadence. Drafts are created in `pending` status with
+// `scheduledFor` in the future; the Lead Nurturer worker picks them up at the
+// scheduled time, generates body/subject with Claude, marks them `ready`. The
+// operator approves from the admin inbox to send. Engagement events
+// (booking, subscription, decline, reply) cancel any remaining pending drafts.
+
+export type AgentDraftStatus = "pending" | "ready" | "sent" | "cancelled" | "failed";
+export type AgentDraftChannel = "sms" | "email";
+
+export const agentDrafts = mysqlTable("agentDrafts", {
+  id: int("id").autoincrement().primaryKey(),
+  customerId: varchar("customerId", { length: 64 }).notNull(),
+  opportunityId: varchar("opportunityId", { length: 64 }),
+  /** Playbook this draft belongs to — e.g. "roadmap_followup" */
+  playbookKey: varchar("playbookKey", { length: 64 }).notNull(),
+  /** Step within the playbook — e.g. "t_plus_4h_sms" */
+  stepKey: varchar("stepKey", { length: 64 }).notNull(),
+  channel: varchar("channel", { length: 16 }).notNull().$type<AgentDraftChannel>(),
+  status: varchar("status", { length: 16 }).notNull().default("pending").$type<AgentDraftStatus>(),
+  scheduledFor: timestamp("scheduledFor").notNull(),
+  subject: varchar("subject", { length: 255 }),
+  body: text("body"),
+  recipientEmail: varchar("recipientEmail", { length: 320 }),
+  recipientPhone: varchar("recipientPhone", { length: 32 }),
+  /** JSON snapshot of context used to render the draft (firstName, finding, etc.) */
+  contextJson: text("contextJson"),
+  /** User who reviewed/sent the draft (null until acted on) */
+  assigneeUserId: int("assigneeUserId"),
+  cancelReason: varchar("cancelReason", { length: 64 }),
+  generatedAt: timestamp("generatedAt"),
+  sentAt: timestamp("sentAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbAgentDraft = typeof agentDrafts.$inferSelect;
+export type InsertDbAgentDraft = typeof agentDrafts.$inferInsert;
+
+/**
+ * Playbook step descriptor — stored as JSON inside nurturerPlaybooks.stepsJson.
+ * `delayMinutes` is from the moment the playbook is started (e.g. roadmap
+ * delivery). Marcin edits these in /admin/agents/playbooks without touching
+ * code (nucleus principle).
+ */
+export type PlaybookStep = {
+  key: string;
+  channel: AgentDraftChannel;
+  delayMinutes: number;
+  label: string;
+  voicePrompt: string;
+};
+
+export const nurturerPlaybooks = mysqlTable("nurturerPlaybooks", {
+  id: int("id").autoincrement().primaryKey(),
+  key: varchar("key", { length: 64 }).notNull().unique(),
+  displayName: varchar("displayName", { length: 255 }).notNull(),
+  description: text("description"),
+  enabled: boolean("enabled").default(true).notNull(),
+  stepsJson: text("stepsJson").notNull(),
+  /** Optional voice/style guardrails injected into the Claude prompt */
+  voiceRulesJson: text("voiceRulesJson"),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbNurturerPlaybook = typeof nurturerPlaybooks.$inferSelect;
+export type InsertDbNurturerPlaybook = typeof nurturerPlaybooks.$inferInsert;

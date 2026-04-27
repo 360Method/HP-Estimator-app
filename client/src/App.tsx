@@ -63,6 +63,8 @@ import PortalRoadmapSubmitted from "./pages/portal/PortalRoadmapSubmitted";
 import PortalSchedule from "./pages/portal/PortalSchedule";
 import WorkOrderDetail from "./pages/WorkOrderDetail";
 import Welcome360Page from "./pages/Welcome360Page";
+import AgentDraftsPage from "./pages/admin/AgentDraftsPage";
+import AgentPlaybooksPage from "./pages/admin/AgentPlaybooksPage";
 
 // Admin pages (Phase 1 AI agent runtime + KPI dashboard)
 import AdminDashboard from "./pages/admin/AdminDashboard";
@@ -189,6 +191,10 @@ function Router() {
       <Route path="/admin/vendors/new" component={staffOnly(AdminVendorNew)} />
       <Route path="/admin/vendors/:id" component={staffOnly(AdminVendorDetail)} />
       <Route path="/admin/vendors" component={staffOnly(AdminVendorsList)} />
+
+      {/* Lead Nurturer admin — drafts inbox + playbook editor */}
+      <Route path="/admin/agents/drafts" component={AgentDraftsPage} />
+      <Route path="/admin/agents/playbooks" component={AgentPlaybooksPage} />
 
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />

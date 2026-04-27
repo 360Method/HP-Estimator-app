@@ -45,6 +45,7 @@ import {
 } from "../lib/priorityTranslation/processor";
 import { renderPriorityTranslationPdf } from "../lib/priorityTranslation/pdf";
 import { sendPriorityTranslationReady } from "../lib/priorityTranslation/email";
+import { scheduleRoadmapFollowup } from "../lib/leadNurturer/roadmapFollowup";
 
 // ─── Input schemas ──────────────────────────────────────────────────────────
 const submitInput = z.object({
@@ -293,6 +294,27 @@ export const priorityTranslationRouter = router({
           })
           .where(eq(priorityTranslations.id, row.id));
 
+        // 7. Schedule the post-Roadmap follow-up cadence. The Lead Nurturer
+        // will generate each draft when its scheduledFor lands. Best-effort —
+        // we don't block delivery on it.
+        try {
+          const customerId = await resolveCrmCustomerId(db, row.portalAccountId);
+          if (customerId) {
+            await scheduleRoadmapFollowup({
+              customerId,
+              portalAccountId: row.portalAccountId,
+              homeHealthRecordId: row.homeHealthRecordId,
+              recipientEmail: await loadEmail(db, row.portalAccountId),
+            });
+          } else {
+            console.warn(
+              `[priorityTranslation] no CRM customer for portal account ${row.portalAccountId}; skipping follow-up cadence`,
+            );
+          }
+        } catch (followupErr) {
+          console.error("[priorityTranslation] scheduleRoadmapFollowup failed:", followupErr);
+        }
+
         return { ok: true };
       } catch (err) {
         await db
@@ -336,6 +358,31 @@ async function loadEmail(db: any, portalAccountId: string): Promise<string> {
   const { portalAccounts } = await import("../../drizzle/schema.priorityTranslation");
   const rows = await db.select().from(portalAccounts).where(eq(portalAccounts.id, portalAccountId)).limit(1);
   return rows[0]?.email ?? "";
+}
+
+/**
+ * Look up (or create-on-demand later) the CRM customer for a portal account.
+ * The portalAccount.customerId column is the bridge — when set, we use it.
+ * When null, we fall back to email match against customers.email so the
+ * Lead Nurturer cadence can still find the right customer.
+ */
+async function resolveCrmCustomerId(
+  db: any,
+  portalAccountId: string,
+): Promise<string | null> {
+  const { portalAccounts } = await import("../../drizzle/schema.priorityTranslation");
+  const { customers } = await import("../../drizzle/schema");
+  const acctRows = await db.select().from(portalAccounts).where(eq(portalAccounts.id, portalAccountId)).limit(1);
+  const acct = acctRows[0];
+  if (!acct) return null;
+  if (acct.customerId) return acct.customerId;
+  if (!acct.email) return null;
+  const match = await db
+    .select()
+    .from(customers)
+    .where(eq(customers.email, acct.email.toLowerCase()))
+    .limit(1);
+  return match[0]?.id ?? null;
 }
 
 export type PriorityTranslationRouter = typeof priorityTranslationRouter;
