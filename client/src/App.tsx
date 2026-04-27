@@ -38,6 +38,8 @@ import Portal360Membership from "./pages/portal/Portal360Membership";
 import PortalEnrollmentConfirmation from "./pages/portal/PortalEnrollmentConfirmation";
 import WorkOrderDetail from "./pages/WorkOrderDetail";
 import Welcome360Page from "./pages/Welcome360Page";
+import AgentDraftsPage from "./pages/admin/AgentDraftsPage";
+import AgentPlaybooksPage from "./pages/admin/AgentPlaybooksPage";
 
 // Domains that should serve only the customer portal (no admin app)
 const PORTAL_HOSTNAMES = ["client.handypioneers.com"];
@@ -99,6 +101,10 @@ function Router() {
 
       {/* Data migration onboarding wizard */}
       <Route path="/onboarding" component={() => <DataMigrationPage />} />
+
+      {/* Lead Nurturer admin — drafts inbox + playbook editor */}
+      <Route path="/admin/agents/drafts" component={AgentDraftsPage} />
+      <Route path="/admin/agents/playbooks" component={AgentPlaybooksPage} />
 
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />

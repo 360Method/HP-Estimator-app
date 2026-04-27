@@ -122,9 +122,87 @@ async function ensurePortalContinuityFlag() {
   }
 }
 
+/**
+ * Defensive ensure for the Lead Nurturer tables — agentDrafts + agentPlaybooks
+ * + customers.bypassAutoNurture. Mirrors the boot-time pattern from
+ * ensurePhoneTables / ensurePortalContinuityFlag so prod DBs that lag the
+ * drizzle tracker self-heal on next deploy. (See memory note on tracker drift.)
+ */
+async function ensureLeadNurturerTables() {
+  try {
+    const { getDb } = await import("../db");
+    const { sql } = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return;
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agentDrafts\` (
+      \`id\` int NOT NULL AUTO_INCREMENT,
+      \`customerId\` varchar(64) NOT NULL,
+      \`opportunityId\` varchar(64),
+      \`playbookKey\` varchar(64) NOT NULL,
+      \`stepKey\` varchar(64) NOT NULL,
+      \`channel\` varchar(16) NOT NULL,
+      \`status\` varchar(16) NOT NULL DEFAULT 'pending',
+      \`scheduledFor\` timestamp NOT NULL,
+      \`subject\` varchar(255),
+      \`body\` text,
+      \`recipientEmail\` varchar(320),
+      \`recipientPhone\` varchar(32),
+      \`contextJson\` text,
+      \`assigneeUserId\` int,
+      \`cancelReason\` varchar(64),
+      \`generatedAt\` timestamp NULL,
+      \`sentAt\` timestamp NULL,
+      \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      \`updatedAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (\`id\`),
+      KEY \`agentDrafts_customer_idx\` (\`customerId\`),
+      KEY \`agentDrafts_status_sched_idx\` (\`status\`, \`scheduledFor\`),
+      KEY \`agentDrafts_playbook_idx\` (\`playbookKey\`)
+    )`);
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agentPlaybooks\` (
+      \`id\` int NOT NULL AUTO_INCREMENT,
+      \`key\` varchar(64) NOT NULL,
+      \`displayName\` varchar(255) NOT NULL,
+      \`description\` text,
+      \`enabled\` boolean NOT NULL DEFAULT 1,
+      \`stepsJson\` text NOT NULL,
+      \`voiceRulesJson\` text,
+      \`updatedAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (\`id\`),
+      UNIQUE KEY \`agentPlaybooks_key_uniq\` (\`key\`)
+    )`);
+
+    // bypassAutoNurture column on customers
+    const [[colRow]]: any = await db.execute(sql`
+      SELECT COUNT(*) AS c FROM information_schema.columns
+      WHERE table_schema = DATABASE()
+        AND table_name = 'customers'
+        AND column_name = 'bypassAutoNurture'
+    `);
+    if (colRow && Number(colRow.c) === 0) {
+      await db.execute(sql`
+        ALTER TABLE \`customers\`
+        ADD COLUMN \`bypassAutoNurture\` boolean NOT NULL DEFAULT 0
+      `);
+      console.log("[boot] customers.bypassAutoNurture column added");
+    }
+
+    // Seed default playbook
+    const { ensureDefaultPlaybooks } = await import("../lib/leadNurturer/playbook");
+    await ensureDefaultPlaybooks();
+
+    console.log("[boot] agentDrafts + agentPlaybooks ensured");
+  } catch (err) {
+    console.warn("[boot] ensureLeadNurturerTables failed (non-fatal):", err);
+  }
+}
+
 async function startServer() {
   await ensurePhoneTables();
   await ensurePortalContinuityFlag();
+  await ensureLeadNurturerTables();
   const app = express();
   const server = createServer(app);
 
@@ -921,6 +999,27 @@ async function startServer() {
   runDeferredCreditRelease().catch(console.error);
   setInterval(runDeferredCreditRelease, 6 * 60 * 60 * 1000); // every 6 hours
   console.log("[360 Deferred Credit] Deferred labor bank credit scheduler started (runs every 6 hours)");
+
+  // ── Lead Nurturer worker — generate due drafts every 5 minutes ──────────────
+  // Picks up pending agentDrafts whose scheduledFor has passed, asks Claude to
+  // render a stewardship-voice draft, marks them `ready`. Operator approves
+  // sends from /admin/agents/drafts. Best-effort and idempotent.
+  const runLeadNurturerWorker = async () => {
+    try {
+      const { runDueDrafts } = await import("../lib/leadNurturer/roadmapFollowup");
+      const result = await runDueDrafts({ limit: 25 });
+      if (result.picked > 0) {
+        console.log(
+          `[LeadNurturer] picked=${result.picked} generated=${result.generated} failed=${result.failed}`,
+        );
+      }
+    } catch (err) {
+      console.error("[LeadNurturer] worker error:", err);
+    }
+  };
+  runLeadNurturerWorker().catch(console.error);
+  setInterval(runLeadNurturerWorker, 5 * 60 * 1000);
+  console.log("[LeadNurturer] Draft worker started (runs every 5 minutes)");
 
   // ── Auto-archive Lost leads after 90 days (runs daily at 3 AM) ─────────────
   const LOST_ARCHIVE_DAYS = 90;
