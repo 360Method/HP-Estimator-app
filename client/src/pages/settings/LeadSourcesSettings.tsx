@@ -11,7 +11,7 @@ interface LeadSource {
 
 const DEFAULT_SOURCES: LeadSource[] = [
   { id: '1',  name: 'Google',           active: true,  count: 0 },
-  { id: '2',  name: 'Yelp',             active: true,  count: 0 },
+  { id: '2',  name: 'Yelp',             active: false, count: 0 },
   { id: '3',  name: 'Facebook',         active: true,  count: 0 },
   { id: '4',  name: 'Nextdoor',         active: true,  count: 0 },
   { id: '5',  name: 'Referral',         active: true,  count: 0 },

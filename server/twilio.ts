@@ -120,6 +120,14 @@ export async function handleInboundSms(params: {
     phone: From,
     description: Body?.slice(0, 100),
   }).catch(e => console.error('[automation] inbound_sms error:', e));
+  // Drain post-Roadmap follow-up drafts — the customer replied; the operator
+  // is now in the loop. Pending drafts shouldn't fire on top of a live
+  // conversation. Already-`ready` drafts are kept for the operator to choose.
+  if (customer?.id) {
+    import("./leadRouting")
+      .then(({ onCustomerEngaged }) => onCustomerEngaged(customer.id, "customer_replied"))
+      .catch((e) => console.error("[Twilio] follow-up cancel on inbound SMS failed:", e));
+  }
   console.log(`[Twilio] Inbound SMS from ${From}: ${Body?.slice(0, 50)}`);
   return msg;
 }
@@ -231,6 +239,18 @@ export async function handleCallStatusUpdate(params: {
         })
       )
     ).catch((e) => console.error('[leadRouting] missed_call notify failed:', e));
+
+    // Phase 5 trigger: call.missed fans out to Lead Nurturer AI.
+    import('./lib/agentRuntime/triggerBus').then(({ emitAgentEvent }) =>
+      emitAgentEvent('call.missed', {
+        customerId: customer?.id ?? null,
+        customerName: customer?.displayName ?? null,
+        callerNumber: callerPhone,
+        twilioCallSid: CallSid,
+        durationSecs,
+        direction: Direction || 'inbound',
+      }).catch(() => null)
+    ).catch(() => null);
   }
   console.log(`[Twilio] Call ${CallSid} ${CallStatus} — ${durationSecs}s`);
 }

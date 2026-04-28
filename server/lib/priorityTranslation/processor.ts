@@ -73,13 +73,51 @@ export function parseAddress(raw: string) {
   };
 }
 
-// ─── Claude call (text) ─────────────────────────────────────────────────────
+// ─── Claude call ────────────────────────────────────────────────────────────
+/**
+ * Send the inspection report to Claude. Accepts either:
+ *   • `pdfBuffer` — passes the PDF as a `document` content block (preferred:
+ *     Claude OCRs image-only scans natively, no pdf-parse dep needed).
+ *   • `reportText` — falls back to text-only (used when source is a URL we've
+ *     already extracted, or for tests).
+ */
 export async function callClaudeForTranslation(args: {
   propertyAddress: string;
-  reportText: string;
+  reportText?: string;
+  pdfBuffer?: Buffer | Uint8Array;
   apiKey: string;
 }): Promise<ClaudePriorityTranslationResponse> {
+  if (!args.pdfBuffer && !args.reportText) {
+    throw new Error("callClaudeForTranslation requires pdfBuffer or reportText");
+  }
+
   const client = new Anthropic({ apiKey: args.apiKey });
+
+  const userContent: Anthropic.Messages.ContentBlockParam[] = [];
+  if (args.pdfBuffer) {
+    const base64 = Buffer.from(args.pdfBuffer).toString("base64");
+    userContent.push({
+      type: "document",
+      source: {
+        type: "base64",
+        media_type: "application/pdf",
+        data: base64,
+      },
+    });
+    userContent.push({
+      type: "text",
+      text: `Property: ${args.propertyAddress}\n\nThe attached PDF is the inspection report. Produce the JSON roadmap per the system instructions.`,
+    });
+  } else {
+    userContent.push({
+      type: "text",
+      text: PRIORITY_TRANSLATION_USER_TEMPLATE({
+        propertyAddress: args.propertyAddress,
+        reportText: args.reportText!,
+      }),
+    });
+  }
+
   const response = await client.messages.create({
     model: PRIORITY_TRANSLATION_MODEL,
     max_tokens: 4096,
@@ -90,15 +128,7 @@ export async function callClaudeForTranslation(args: {
         cache_control: { type: "ephemeral" },
       },
     ],
-    messages: [
-      {
-        role: "user",
-        content: PRIORITY_TRANSLATION_USER_TEMPLATE({
-          propertyAddress: args.propertyAddress,
-          reportText: args.reportText,
-        }),
-      },
-    ],
+    messages: [{ role: "user", content: userContent }],
   });
 
   const textBlock = response.content.find((b) => b.type === "text");
@@ -108,61 +138,6 @@ export async function callClaudeForTranslation(args: {
 
   const json = extractJson(textBlock.text);
   return json as ClaudePriorityTranslationResponse;
-}
-
-// ─── Claude call (PDF buffer — no text extraction needed) ───────────────────
-/**
- * Passes the inspection report PDF directly to Claude as a base64 document.
- * Claude reads the PDF natively — no pdf-parse dep required.
- * Supported on claude-3-5-* and claude-opus-4-* models.
- */
-export async function callClaudeWithPdfBuffer(args: {
-  propertyAddress: string;
-  pdfBuffer: Buffer;
-  apiKey: string;
-}): Promise<ClaudePriorityTranslationResponse> {
-  const client = new Anthropic({ apiKey: args.apiKey });
-  const pdfBase64 = args.pdfBuffer.toString("base64");
-
-  const response = await client.messages.create({
-    model: PRIORITY_TRANSLATION_MODEL,
-    max_tokens: 4096,
-    system: [
-      {
-        type: "text",
-        text: PRIORITY_TRANSLATION_SYSTEM_PROMPT,
-        cache_control: { type: "ephemeral" },
-      },
-    ],
-    messages: [
-      {
-        role: "user",
-        content: [
-          {
-            type: "document",
-            source: {
-              type: "base64",
-              media_type: "application/pdf",
-              data: pdfBase64,
-            },
-          } as any,
-          {
-            type: "text",
-            text: PRIORITY_TRANSLATION_USER_TEMPLATE({
-              propertyAddress: args.propertyAddress,
-              reportText: "[Inspection report provided as the attached PDF document above]",
-            }),
-          },
-        ],
-      },
-    ],
-  });
-
-  const textBlock = response.content.find((b) => b.type === "text");
-  if (!textBlock || textBlock.type !== "text") {
-    throw new Error("Claude returned no text block");
-  }
-  return extractJson(textBlock.text) as ClaudePriorityTranslationResponse;
 }
 
 /** Extract the first JSON object from a Claude response (handles ```json fences). */
@@ -189,6 +164,8 @@ export function mergeFindings(
     source_id: sourceId,
     category: f.category,
     finding: f.finding,
+    interpretation: f.interpretation,
+    recommended_approach: f.recommended_approach,
     urgency: f.urgency,
     investment_range_low_usd: f.investment_range_low_usd,
     investment_range_high_usd: f.investment_range_high_usd,
@@ -205,12 +182,18 @@ export function mergeFindings(
 }
 
 // ─── Orchestrator skeleton ──────────────────────────────────────────────────
-// The full orchestrator runs through the priorityTranslation router.
-// processSubmission is kept for API completeness but defers to the router's
-// runPriorityTranslation() which has direct db access.
+/**
+ * Orchestration is intentionally left as a stub. Real implementation depends
+ * on db helpers (findOrCreatePortalAccount, upsertProperty, etc.) that live
+ * in the canonical portalDb.ts. Fill these in once the broken-git-state is
+ * resolved.
+ */
 export async function processSubmission(_input: SubmitInput): Promise<SubmitResult> {
+  // Placeholder — real implementation wires the 10-step pipeline described
+  // at the top of this file. Left as a stub so the module type-checks in
+  // isolation while the canonical db/llm modules are being restored.
   throw new Error(
-    "processSubmission: use priorityTranslationRouter.process or runPriorityTranslation() in the router instead"
+    "processSubmission not yet wired — depends on portalDb + _core/llm modules restored from broken git state"
   );
 }
 

@@ -19,7 +19,7 @@ import { toast } from "sonner";
 import { Loader2, ChevronRight, ChevronLeft, Phone, MapPin, Camera, X, CheckCircle2, AlertCircle } from "lucide-react";
 
 // ── Brand constants ────────────────────────────────────────────────────────────
-const HP_PHONE = "(360) 334-4428";
+const HP_PHONE = "(360) 838-6731";
 const HP_GOLD = "#c8922a";
 const SUCCESS_URL = "https://handypioneers.com/thankyou";
 const MAX_PHOTOS = 5;
@@ -630,7 +630,18 @@ export default function BookingWizard() {
   }, []);
 
   const submitMutation = trpc.booking.submit.useMutation({
-    onSuccess: () => {
+    onSuccess: (result) => {
+      // Book Consultation pipeline returns a redirectUrl pointing to the
+      // confirmation page. Fall back to step 5 (legacy success state) if
+      // the estimator failed to start (e.g. DB unavailable).
+      if (result?.redirectUrl) {
+        window.location.href = result.redirectUrl;
+        return;
+      }
+      if (result?.projectEstimateId) {
+        window.location.href = `/portal/consultation/submitted/${result.projectEstimateId}`;
+        return;
+      }
       setStep(5);
     },
     onError: (err) => {

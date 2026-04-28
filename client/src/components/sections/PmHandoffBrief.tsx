@@ -136,7 +136,7 @@ export default function PmHandoffBrief({ opportunity, customer }: Props) {
             <span className="text-muted-foreground">Scheduled end</span>
             <span className="font-medium">{fmtDate(opportunity.scheduledEndDate)}</span>
             <span className="text-muted-foreground">Sale signed</span>
-            <span className="font-medium">{fmtDate(signedEvent?.createdAt ?? opportunity.wonAt ?? null)}</span>
+            <span className="font-medium">{fmtDate(signedEvent?.createdAt instanceof Date ? signedEvent.createdAt.toISOString() : (signedEvent?.createdAt ?? opportunity.wonAt ?? null))}</span>
           </div>
           {!opportunity.scheduledDate && (
             <p className="text-[11px] text-muted-foreground mt-2">

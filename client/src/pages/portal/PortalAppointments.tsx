@@ -1,8 +1,9 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import PortalLayout from "@/components/PortalLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, ClipboardList, RefreshCw } from "lucide-react";
+import { Loader2, ClipboardList, RefreshCw, CalendarDays } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,6 +20,7 @@ function formatTime(ts: number | Date | null | undefined) {
 }
 
 export default function PortalAppointments() {
+  const [, navigate] = useLocation();
   const [tab, setTab] = useState<"upcoming" | "past">("upcoming");
   const { data, isLoading } = trpc.portal.getAppointments.useQuery();
   const { data: membershipData } = trpc.portal.getMembership360.useQuery(undefined, {
@@ -89,9 +91,24 @@ export default function PortalAppointments() {
                 <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
               </div>
             ) : list.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-                <ClipboardList className="w-16 h-16 mb-4 text-gray-300" />
-                <p className="text-base">No appointments</p>
+              <div className="flex flex-col items-center justify-center py-20 text-gray-500 max-w-sm mx-auto text-center">
+                <CalendarDays className="w-16 h-16 mb-4 text-gray-300" />
+                <p className="text-base font-medium text-gray-700">
+                  {tab === "upcoming" ? "No visits on the calendar yet" : "No past visits to show"}
+                </p>
+                {tab === "upcoming" && (
+                  <>
+                    <p className="text-sm mt-1 text-gray-500">
+                      We'll list your scheduled consultations and on-site visits here as soon as they're booked.
+                    </p>
+                    <button
+                      onClick={() => navigate("/portal/request")}
+                      className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-[#1a2e1a] hover:bg-[#2d4a2d] text-white text-sm font-semibold transition-colors"
+                    >
+                      Request a consultation →
+                    </button>
+                  </>
+                )}
               </div>
             ) : (
               <div className="border border-gray-200 rounded-md overflow-hidden mt-4">

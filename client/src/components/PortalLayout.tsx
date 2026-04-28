@@ -28,6 +28,7 @@ import {
   Home,
   Briefcase,
   Star,
+  Compass,
 } from "lucide-react";
 
 const HP_LOGO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg";
@@ -41,6 +42,7 @@ interface NavItem {
 
 const mainNav: NavItem[] = [
   { label: "Home", path: "/portal/home", icon: <Home className="w-4 h-4" /> },
+  { label: "Your Roadmap", path: "/portal/roadmap", icon: <Compass className="w-4 h-4" /> },
   { label: "Appointments", path: "/portal/appointments", icon: <Calendar className="w-4 h-4" /> },
   { label: "Invoices", path: "/portal/invoices", icon: <FileText className="w-4 h-4" /> },
   { label: "Estimates", path: "/portal/estimates", icon: <ClipboardList className="w-4 h-4" /> },

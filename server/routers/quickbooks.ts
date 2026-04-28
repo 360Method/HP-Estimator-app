@@ -156,11 +156,13 @@ export const quickbooksRouter = router({
     .input(z.object({ redirectUri: z.string().url() }))
     .query(({ ctx, input }) => {
       if (!ENV.qbClientId) throw new Error("QUICKBOOKS_CLIENT_ID not configured");
-      const state = Buffer.from(JSON.stringify({ userId: ctx.user.id, redirectUri: input.redirectUri })).toString("base64");
+      // Env var takes precedence — ensures the registered Intuit URI is always used
+      const redirectUri = ENV.qbRedirectUri || input.redirectUri;
+      const state = Buffer.from(JSON.stringify({ userId: ctx.user.id, redirectUri })).toString("base64");
       const params = new URLSearchParams({
         client_id: ENV.qbClientId,
         scope: "com.intuit.quickbooks.accounting",
-        redirect_uri: input.redirectUri,
+        redirect_uri: redirectUri,
         response_type: "code",
         state,
       });
@@ -180,10 +182,12 @@ export const quickbooksRouter = router({
       if (!ENV.qbClientId || !ENV.qbClientSecret) {
         throw new Error("QuickBooks credentials not configured");
       }
+      // Env var takes precedence to stay consistent with getAuthUrl
+      const redirectUri = ENV.qbRedirectUri || input.redirectUri;
       const params = new URLSearchParams({
         grant_type: "authorization_code",
         code: input.code,
-        redirect_uri: input.redirectUri,
+        redirect_uri: redirectUri,
       });
       const resp = await fetch(QB_TOKEN_URL, {
         method: "POST",

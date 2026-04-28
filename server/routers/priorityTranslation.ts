@@ -30,7 +30,7 @@ import {
 } from "../lib/priorityTranslation/portalAccount";
 import {
   parseAddress,
-  callClaudeWithPdfBuffer,
+  callClaudeForTranslation,
   mergeFindings,
   newTranslationId,
 } from "../lib/priorityTranslation/processor";
@@ -39,6 +39,7 @@ import { sendPriorityTranslationReady } from "../lib/priorityTranslation/email";
 import { notifyOwner } from "../_core/notification";
 import { findCustomerByEmail, createCustomer, createOpportunity } from "../db";
 import { onLeadCreated } from "../leadRouting";
+import { scheduleRoadmapFollowup } from "../lib/leadNurturer/roadmapFollowup";
 import { nanoid } from "nanoid";
 
 // ─── Input schemas ──────────────────────────────────────────────────────────
@@ -109,6 +110,29 @@ async function resolveEmail(db: any, portalAccountId: string): Promise<string> {
 }
 
 /**
+ * Look up the CRM customer for a portal account.
+ * Uses portalAccount.customerId if set; falls back to email match.
+ */
+async function resolveCrmCustomerId(db: any, portalAccountId: string): Promise<string | null> {
+  const { customers } = await import("../../drizzle/schema");
+  const acctRows = await db
+    .select()
+    .from(portalAccounts)
+    .where(eq(portalAccounts.id, portalAccountId))
+    .limit(1);
+  const acct = acctRows[0];
+  if (!acct) return null;
+  if (acct.customerId) return acct.customerId;
+  if (!acct.email) return null;
+  const match = await db
+    .select()
+    .from(customers)
+    .where(eq(customers.email, acct.email.toLowerCase()))
+    .limit(1);
+  return match[0]?.id ?? null;
+}
+
+/**
  * Runs the full 6-step processing pipeline for one translation row.
  * Safe to call fire-and-forget (catches and records failures).
  */
@@ -132,7 +156,7 @@ export async function runPriorityTranslation(db: any, translationId: string): Pr
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) throw new Error("ANTHROPIC_API_KEY not configured");
     const propertyAddress = await resolvePropertyAddress(db, row.propertyId);
-    const claudeResponse = await callClaudeWithPdfBuffer({ propertyAddress, pdfBuffer, apiKey });
+    const claudeResponse = await callClaudeForTranslation({ propertyAddress, pdfBuffer, apiKey });
 
     // 3. Merge findings into home health record.
     if (row.homeHealthRecordId) {
@@ -172,6 +196,23 @@ export async function runPriorityTranslation(db: any, translationId: string): Pr
       .update(priorityTranslations)
       .set({ status: "completed", claudeResponse, deliveredAt: new Date(), updatedAt: new Date() })
       .where(eq(priorityTranslations.id, row.id));
+
+    // 7. Schedule Path B nurture follow-up cadence.
+    try {
+      const customerId = await resolveCrmCustomerId(db, row.portalAccountId);
+      if (customerId) {
+        await scheduleRoadmapFollowup({
+          customerId,
+          portalAccountId: row.portalAccountId,
+          homeHealthRecordId: row.homeHealthRecordId,
+          recipientEmail: toEmail,
+        });
+      } else {
+        console.warn(`[PT] no CRM customer for portal account ${row.portalAccountId}; skipping follow-up cadence`);
+      }
+    } catch (followupErr) {
+      console.error("[PT] scheduleRoadmapFollowup failed:", followupErr);
+    }
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     await db
