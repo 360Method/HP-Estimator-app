@@ -57,6 +57,10 @@ type ChatMsg = {
   outputTokens?: number;
   toolCalls?: Array<{ key: string; input: unknown; output?: unknown; error?: string; requiresApproval?: boolean }>;
   streaming?: boolean;
+  /** Set when the stream pipeline emitted an error event — render visibly in the bubble. */
+  errorMessage?: string;
+  /** "connecting" until the first delta or connect event arrives. */
+  phase?: "connecting" | "thinking" | "streaming" | "done" | "error";
 };
 
 type Addressee = "integrator" | "sales" | "marketing" | "operations";
@@ -103,6 +107,10 @@ export default function VisionaryConsole() {
 
   // Streaming state — held outside react-query so deltas don't refetch.
   const [streamingMsg, setStreamingMsg] = useState<ChatMsg | null>(null);
+  // Locally-rendered user message until the server-side row gets refetched.
+  // Without this, the user's typed message disappears the moment they hit
+  // send (it's only persisted server-side once the SSE call begins).
+  const [localUserMsg, setLocalUserMsg] = useState<ChatMsg | null>(null);
   const [pending, setPending] = useState(false);
   const [draft, setDraft] = useState("");
   const messagesRef = useRef<HTMLDivElement | null>(null);
@@ -144,11 +152,27 @@ export default function VisionaryConsole() {
   // ── Send via SSE streaming endpoint ───────────────────────────────────────
   async function sendStreaming(conversationId: number, message: string) {
     setPending(true);
-    setStreamingMsg({ id: "streaming", role: "assistant", content: "", streaming: true });
+    // Show the user's message AND a "connecting…" assistant bubble immediately
+    // so Marcin always sees something happening even if the stream stalls.
+    const userPlaceholder: ChatMsg = {
+      id: `user-pending-${Date.now()}`,
+      role: "user",
+      content: message,
+    };
+    setStreamingMsg({
+      id: "streaming",
+      role: "assistant",
+      content: "",
+      streaming: true,
+      phase: "connecting",
+    });
+    setLocalUserMsg(userPlaceholder);
     setAutoScroll(true);
 
     const controller = new AbortController();
     abortRef.current = controller;
+    let receivedDoneEvent = false;
+    let lastErrorFromServer: string | null = null;
 
     try {
       const prefix =
@@ -201,7 +225,12 @@ export default function VisionaryConsole() {
             continue;
           }
 
-          if (event === "delta" && typeof payload.text === "string") {
+          if (event === "connect") {
+            setStreamingMsg((prev) => ({
+              ...(prev ?? { id: "streaming", role: "assistant", content: "", streaming: true }),
+              phase: "thinking",
+            }));
+          } else if (event === "delta" && typeof payload.text === "string") {
             runningText += payload.text;
             setStreamingMsg({
               id: "streaming",
@@ -209,6 +238,7 @@ export default function VisionaryConsole() {
               content: runningText,
               streaming: true,
               toolCalls: [...toolCalls],
+              phase: "streaming",
             });
           } else if (event === "tool_use") {
             toolCalls.push({ key: payload.key, input: payload.input, requiresApproval: payload.requiresApproval });
@@ -227,27 +257,78 @@ export default function VisionaryConsole() {
               toolCalls: [...toolCalls],
             }));
           } else if (event === "done") {
+            receivedDoneEvent = true;
             // Streaming complete — refetch persisted history so the canonical
             // assistant row replaces the in-memory streaming bubble.
             utils.integratorChat.listMessages.invalidate({ conversationId });
             utils.integratorChat.listConversations.invalidate();
             // Also refresh the action-queue panel to show any new tasks.
             utils.agentTeams.consoleSummary.invalidate();
-            utils.agentDrafts.listForCustomer.invalidate();
           } else if (event === "error") {
-            throw new Error(payload.message ?? "Stream error");
+            lastErrorFromServer = payload.message ?? "Stream error";
+            // Don't throw — keep the connection open so we can render the
+            // server's error inline. The server typically sends `done` or
+            // ends the stream right after.
           }
         }
       }
+
+      // Stream ended. If we got an error event but no done event, surface it
+      // as a visible error bubble so Marcin can see what failed.
+      if (lastErrorFromServer && !receivedDoneEvent) {
+        setStreamingMsg({
+          id: `error-${Date.now()}`,
+          role: "assistant",
+          content: "",
+          errorMessage: lastErrorFromServer,
+          phase: "error",
+        });
+        toast.error(`Integrator: ${lastErrorFromServer}`);
+        return;
+      }
+
+      // If the stream ended with no done and no error, surface a visible
+      // "stream ended unexpectedly" so we don't silently fail.
+      if (!receivedDoneEvent && !lastErrorFromServer) {
+        setStreamingMsg({
+          id: `incomplete-${Date.now()}`,
+          role: "assistant",
+          content: runningText,
+          errorMessage:
+            "The Integrator stream ended without a completion signal. The response above (if any) may be partial. Try resending — if this keeps happening, check Railway logs for `[integrator-stream]` errors.",
+          phase: "error",
+        });
+        toast.error("Integrator stream ended early");
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg !== "AbortError" && !msg.includes("aborted")) {
-        toast.error(`Integrator: ${msg}`);
+      if (msg === "AbortError" || msg.toLowerCase().includes("aborted")) {
+        // User-initiated abort — clear silently.
+        return;
       }
+      // Render the error visibly in the bubble so Marcin can read it without
+      // hunting for a toast.
+      setStreamingMsg({
+        id: `error-${Date.now()}`,
+        role: "assistant",
+        content: "",
+        errorMessage: msg,
+        phase: "error",
+      });
+      toast.error(`Integrator: ${msg}`);
     } finally {
       setPending(false);
-      setStreamingMsg(null);
       abortRef.current = null;
+      // Keep the streaming bubble (whether content, success placeholder
+      // pending invalidation, or error) for one tick so the user sees the
+      // result; the listMessages refetch will replace it if persisted.
+      if (receivedDoneEvent) {
+        // Successful completion — the persisted message will replace this.
+        setStreamingMsg(null);
+        setLocalUserMsg(null);
+      }
+      // For errors, leave streamingMsg + localUserMsg in place so the
+      // operator can see what was sent + what the failure was.
     }
   }
 
@@ -312,9 +393,10 @@ export default function VisionaryConsole() {
             })()
           : undefined,
       }));
+    if (localUserMsg) out.push(localUserMsg);
     if (streamingMsg) out.push(streamingMsg);
     return out;
-  }, [persisted, streamingMsg]);
+  }, [persisted, streamingMsg, localUserMsg]);
 
   return (
     <AdminShell>
@@ -538,6 +620,16 @@ function ChatEmptyState() {
 function MessageBubble({ message }: { message: ChatMsg }) {
   const isUser = message.role === "user";
   const tools = message.toolCalls ?? [];
+  const hasError = !!message.errorMessage;
+
+  // Phase-driven placeholder copy when nothing has streamed yet.
+  let placeholder: React.ReactNode = null;
+  if (!message.content && !hasError) {
+    if (message.phase === "connecting") placeholder = <span className="opacity-60 italic">Opening stream…</span>;
+    else if (message.phase === "thinking") placeholder = <span className="opacity-60 italic">Connected — waiting for the model to start…</span>;
+    else if (message.streaming) placeholder = <span className="opacity-60 italic">Thinking…</span>;
+    else placeholder = <em className="opacity-60">(no text)</em>;
+  }
 
   return (
     <div className={"flex " + (isUser ? "justify-end" : "justify-start")}>
@@ -546,19 +638,33 @@ function MessageBubble({ message }: { message: ChatMsg }) {
           "max-w-[88%] flex flex-col gap-1.5 " + (isUser ? "items-end" : "items-start")
         }
       >
-        <div
-          className={
-            "rounded-2xl px-3.5 py-2.5 text-sm whitespace-pre-wrap break-words " +
-            (isUser
-              ? "bg-primary text-primary-foreground"
-              : "bg-card border text-foreground")
-          }
-        >
-          {message.content || (message.streaming ? <span className="opacity-60 italic">Thinking…</span> : <em className="opacity-60">(no text)</em>)}
-          {message.streaming && message.content && (
-            <span className="inline-block w-1.5 h-4 ml-0.5 bg-current opacity-60 animate-pulse rounded-sm align-middle" />
-          )}
-        </div>
+        {hasError && (
+          <div className="rounded-2xl px-3.5 py-2.5 text-sm bg-red-50 border border-red-200 text-red-900 max-w-full break-words">
+            <div className="flex items-center gap-1.5 font-semibold text-xs uppercase tracking-wider mb-1">
+              <AlertCircle className="w-3.5 h-3.5" />
+              Stream failed
+            </div>
+            <div className="whitespace-pre-wrap text-xs">{message.errorMessage}</div>
+            <p className="text-[10px] text-red-800/70 mt-1.5">
+              Server logs (Railway) prefix these with <code className="font-mono">[integrator-stream]</code>.
+            </p>
+          </div>
+        )}
+        {(!hasError || message.content) && (
+          <div
+            className={
+              "rounded-2xl px-3.5 py-2.5 text-sm whitespace-pre-wrap break-words " +
+              (isUser
+                ? "bg-primary text-primary-foreground"
+                : "bg-card border text-foreground")
+            }
+          >
+            {message.content || placeholder}
+            {message.streaming && message.content && (
+              <span className="inline-block w-1.5 h-4 ml-0.5 bg-current opacity-60 animate-pulse rounded-sm align-middle" />
+            )}
+          </div>
+        )}
         {tools.length > 0 && (
           <details className="text-xs bg-card border rounded-md px-2.5 py-1.5 max-w-full self-stretch">
             <summary className="cursor-pointer text-muted-foreground select-none">
