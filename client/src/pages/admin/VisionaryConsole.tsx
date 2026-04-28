@@ -240,6 +240,17 @@ export default function VisionaryConsole() {
               toolCalls: [...toolCalls],
               phase: "streaming",
             });
+          } else if (event === "text_reset") {
+            // The model was about to call tools; the text it streamed in this
+            // turn was an acknowledgment ("I'll pull the KPIs..."). Clear it
+            // so the final synthesis turn renders fresh, uncontaminated.
+            runningText = "";
+            setStreamingMsg((prev) => ({
+              ...(prev ?? { id: "streaming", role: "assistant", content: "", streaming: true }),
+              content: "",
+              toolCalls: [...toolCalls],
+              phase: "thinking",
+            }));
           } else if (event === "tool_use") {
             toolCalls.push({ key: payload.key, input: payload.input, requiresApproval: payload.requiresApproval });
             setStreamingMsg((prev) => ({
