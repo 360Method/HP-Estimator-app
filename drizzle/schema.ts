@@ -2190,3 +2190,99 @@ export const nurturerPlaybooks = mysqlTable("nurturerPlaybooks", {
 });
 export type DbNurturerPlaybook = typeof nurturerPlaybooks.$inferSelect;
 export type InsertDbNurturerPlaybook = typeof nurturerPlaybooks.$inferInsert;
+
+// ─── AGENT TEAMS (Visionary Console Phase 1) ──────────────────────────────────
+// One team per department. Members are ai_agents seats; the Integrator
+// coordinates handoffs across teams from the Visionary Console at /admin/visionary.
+// Department enum mirrors ai_agents.department exactly.
+
+export const agentTeams = mysqlTable("agent_teams", {
+  id: int("id").autoincrement().primaryKey(),
+  department: mysqlEnum("department", [
+    "sales",
+    "operations",
+    "marketing",
+    "finance",
+    "customer_success",
+    "vendor_network",
+    "technology",
+    "strategy",
+    "integrator",
+  ]).notNull(),
+  name: varchar("name", { length: 120 }).notNull(),
+  /** FK to ai_agents.id — the seat that leads this team. Null until populated in Phase 2. */
+  teamLeadSeatId: int("teamLeadSeatId"),
+  purpose: text("purpose"),
+  status: mysqlEnum("status", ["active", "paused"]).notNull().default("active"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbAgentTeam = typeof agentTeams.$inferSelect;
+export type InsertDbAgentTeam = typeof agentTeams.$inferInsert;
+
+export const agentTeamMembers = mysqlTable("agent_team_members", {
+  id: int("id").autoincrement().primaryKey(),
+  teamId: int("teamId").notNull(),
+  /** FK to ai_agents.id */
+  seatId: int("seatId").notNull(),
+  role: mysqlEnum("role", ["frontend", "backend", "qa", "lead"]).notNull().default("backend"),
+  joinedAt: timestamp("joinedAt").defaultNow().notNull(),
+});
+export type DbAgentTeamMember = typeof agentTeamMembers.$inferSelect;
+export type InsertDbAgentTeamMember = typeof agentTeamMembers.$inferInsert;
+
+export const agentTeamTasks = mysqlTable("agent_team_tasks", {
+  id: int("id").autoincrement().primaryKey(),
+  teamId: int("teamId").notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description"),
+  status: mysqlEnum("status", ["open", "claimed", "in_progress", "blocked", "done"])
+    .notNull()
+    .default("open"),
+  /** FK to ai_agents.id, null until claimed */
+  claimedBySeatId: int("claimedBySeatId"),
+  /** JSON array of file paths the seat is owning while the task is in flight */
+  ownerFiles: text("ownerFiles"),
+  sourceEventType: varchar("sourceEventType", { length: 80 }),
+  sourceEventPayload: text("sourceEventPayload"),
+  /** Customer this task is acting on, if any. Customer-centric architecture rule. */
+  customerId: varchar("customerId", { length: 64 }),
+  priority: mysqlEnum("priority", ["low", "normal", "high"]).notNull().default("normal"),
+  dueAt: timestamp("dueAt"),
+  completedAt: timestamp("completedAt"),
+  /** Free-form notes appended on status updates (chronological). */
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbAgentTeamTask = typeof agentTeamTasks.$inferSelect;
+export type InsertDbAgentTeamTask = typeof agentTeamTasks.$inferInsert;
+
+export const agentTeamMessages = mysqlTable("agent_team_messages", {
+  id: int("id").autoincrement().primaryKey(),
+  teamId: int("teamId").notNull(),
+  /** FK to ai_agents.id (sender) */
+  fromSeatId: int("fromSeatId").notNull(),
+  /** FK to ai_agents.id (recipient). Null = broadcast to whole team. */
+  toSeatId: int("toSeatId"),
+  body: text("body").notNull(),
+  threadId: int("threadId"),
+  attachments: text("attachments"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbAgentTeamMessage = typeof agentTeamMessages.$inferSelect;
+export type InsertDbAgentTeamMessage = typeof agentTeamMessages.$inferInsert;
+
+export const agentTeamHandoffs = mysqlTable("agent_team_handoffs", {
+  id: int("id").autoincrement().primaryKey(),
+  fromTeamId: int("fromTeamId").notNull(),
+  toTeamId: int("toTeamId").notNull(),
+  eventType: varchar("eventType", { length: 80 }).notNull(),
+  payload: text("payload"),
+  status: mysqlEnum("status", ["pending", "accepted", "declined"]).notNull().default("pending"),
+  declineReason: text("declineReason"),
+  acceptedAt: timestamp("acceptedAt"),
+  declinedAt: timestamp("declinedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbAgentTeamHandoff = typeof agentTeamHandoffs.$inferSelect;
+export type InsertDbAgentTeamHandoff = typeof agentTeamHandoffs.$inferInsert;

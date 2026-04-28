@@ -327,3 +327,33 @@ Customer never sees a sub-floor estimate; `enforceMarginFloor()` validates serve
 - Customer-facing range = customer total × [0.75, 1.25].
 
 If a touchpoint surfaces pricing that violates these rules, rewrite.
+
+## 23. The Visionary Console is the cockpit
+
+`/admin/visionary` is Marcin's operating cockpit. From there he gives the
+Integrator a directive; the Integrator routes work to the right team via
+`agentTeams_assignTask` and broadcasts context via `agentTeams_broadcast`.
+
+Rules:
+- **Streaming, not blocking.** Long Integrator turns must stream so Marcin
+  can read along and steer mid-thought. The chat input stays usable while
+  text is streaming so the next directive can queue.
+- **Tool calls are visible.** Every tool the Integrator runs surfaces inline
+  in the chat with input + output. No hidden side effects. If a tool
+  requires approval, the bubble says so and links to `/admin/ai-agents/tasks`.
+- **Customer-centric tasks.** When the Integrator creates a team task that
+  involves a specific customer, the `customerId` is set so the task surfaces
+  inside the customer profile alongside drafts and other agent work. This
+  rule applies to every new agent surface that produces work on a customer.
+- **Mobile is the primary viewport.** Marcin operates from his phone; the
+  console must be excellent at 390 px. Single column, sticky compose with
+  `env(safe-area-inset-bottom)`, action queue collapses into a bottom drawer.
+- **Cost on the surface.** Every assistant turn shows token + dollar cost so
+  Marcin can see runtime spend without leaving the cockpit. The left pane
+  shows 24h department-by-department spend.
+- **The 8 teams are the org chart.** Members are seats from `/admin/ai-agents`;
+  team configuration lives in `/admin/agents/teams`. Adding a department-level
+  surface that bypasses these teams is a smell — surface it through the team.
+
+The cockpit replaces the "tied to Dispatch as the owner/Visionary"
+constraint; we host the entire coordination layer inside HP Estimator.

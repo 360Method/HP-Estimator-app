@@ -76,6 +76,8 @@ import AiAgentTasks from "./pages/admin/AiAgentTasks";
 import DepartmentDetail from "./pages/admin/DepartmentDetail";
 import AdminSchedulingPage from "./pages/admin/AdminSchedulingPage";
 import IntegratorChat from "./pages/admin/IntegratorChat";
+import VisionaryConsole from "./pages/admin/VisionaryConsole";
+import AgentTeamsPage from "./pages/admin/AgentTeamsPage";
 import AdminVendorsList from "./pages/admin/AdminVendorsList";
 import AdminVendorDetail from "./pages/admin/AdminVendorDetail";
 import AdminVendorNew from "./pages/admin/AdminVendorNew";
@@ -185,7 +187,9 @@ function Router() {
       {/* Admin — AI agent runtime + KPI dashboard (Phase 1).
           All staff-only — wrapped to 404 on client.handypioneers.com. */}
       <Route path="/admin/dashboard" component={staffOnly(AdminDashboard)} />
+      <Route path="/admin/visionary" component={staffOnly(VisionaryConsole)} />
       <Route path="/admin/chat" component={staffOnly(IntegratorChat)} />
+      <Route path="/admin/agents/teams" component={staffOnly(AgentTeamsPage)} />
       <Route path="/admin/org-chart" component={staffOnly(OrgChart)} />
       <Route path="/admin/agents/control" component={staffOnly(AgentsControl)} />
       <Route path="/admin/agents/runs" component={staffOnly(AgentsRuns)} />

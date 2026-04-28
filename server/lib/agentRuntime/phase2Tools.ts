@@ -800,6 +800,160 @@ registerTool({
   },
 });
 
+// ── Visionary Console: agent team coordination tools ─────────────────────────
+// Three tools the Integrator uses to coordinate cross-team work from the
+// /admin/visionary cockpit. None require approval — they're internal-only
+// writes (task assignment + intra-team broadcast).
+
+registerTool({
+  key: "agentTeams.list",
+  requiresApproval: false,
+  definition: {
+    name: "agentTeams_list",
+    description:
+      "List agent teams. Returns one row per department with team id, name, status, member count, and open task count. Use to figure out which team owns a piece of work before assigning it.",
+    input_schema: {
+      type: "object",
+      properties: {
+        department: {
+          type: "string",
+          enum: [
+            "sales",
+            "operations",
+            "marketing",
+            "finance",
+            "customer_success",
+            "vendor_network",
+            "technology",
+            "strategy",
+            "integrator",
+          ],
+          description: "Optional — filter to one department.",
+        },
+      },
+    },
+  },
+  handler: async ({ input }) => {
+    const d = await db();
+    const { agentTeams, agentTeamMembers, agentTeamTasks } = await import("../../../drizzle/schema");
+    const { and, eq, inArray, sql } = await import("drizzle-orm");
+    const dept = input.department as string | undefined;
+    const teams = dept
+      ? await d.select().from(agentTeams).where(eq(agentTeams.department, dept as never))
+      : await d.select().from(agentTeams);
+    const ids = teams.map((t) => t.id);
+    if (ids.length === 0) return [];
+    const memberCounts = await d
+      .select({ teamId: agentTeamMembers.teamId, c: sql<number>`COUNT(*)` })
+      .from(agentTeamMembers)
+      .where(inArray(agentTeamMembers.teamId, ids))
+      .groupBy(agentTeamMembers.teamId);
+    const openCounts = await d
+      .select({ teamId: agentTeamTasks.teamId, c: sql<number>`COUNT(*)` })
+      .from(agentTeamTasks)
+      .where(
+        and(
+          inArray(agentTeamTasks.teamId, ids),
+          inArray(agentTeamTasks.status, ["open", "claimed", "in_progress", "blocked"])
+        )
+      )
+      .groupBy(agentTeamTasks.teamId);
+    const memMap = new Map<number, number>();
+    for (const r of memberCounts) memMap.set(r.teamId, Number(r.c ?? 0));
+    const openMap = new Map<number, number>();
+    for (const r of openCounts) openMap.set(r.teamId, Number(r.c ?? 0));
+    return teams.map((t) => ({
+      id: t.id,
+      department: t.department,
+      name: t.name,
+      status: t.status,
+      teamLeadSeatId: t.teamLeadSeatId,
+      memberCount: memMap.get(t.id) ?? 0,
+      openTaskCount: openMap.get(t.id) ?? 0,
+    }));
+  },
+});
+
+registerTool({
+  key: "agentTeams.assignTask",
+  requiresApproval: false,
+  definition: {
+    name: "agentTeams_assignTask",
+    description:
+      "Create a new task on an agent team. Use when Marcin gives a directive that should be owned by a specific department's team. Returns the task id.",
+    input_schema: {
+      type: "object",
+      properties: {
+        teamId: { type: "number", description: "Target team id (use agentTeams_list to find it)." },
+        title: { type: "string", description: "Short, action-first task title (under 100 chars)." },
+        description: { type: "string", description: "Full directive — what to do, why, expected outcome." },
+        priority: {
+          type: "string",
+          enum: ["low", "normal", "high"],
+          description: "Default normal.",
+        },
+        customerId: {
+          type: "string",
+          description:
+            "Optional — when the task acts on a specific customer, set their id so the task surfaces in the customer profile.",
+        },
+        sourceEventType: {
+          type: "string",
+          description:
+            "Optional — origin signal (e.g. 'integrator_chat', 'roadmap_delivered', 'kpi_anomaly').",
+        },
+      },
+      required: ["teamId", "title"],
+    },
+  },
+  handler: async ({ input }) => {
+    const d = await db();
+    const { agentTeamTasks } = await import("../../../drizzle/schema");
+    const inserted = await d.insert(agentTeamTasks).values({
+      teamId: Number(input.teamId),
+      title: String(input.title).slice(0, 255),
+      description: input.description ? String(input.description) : null,
+      priority: ((input.priority as "low" | "normal" | "high") ?? "normal"),
+      customerId: input.customerId ? String(input.customerId).slice(0, 64) : null,
+      sourceEventType: input.sourceEventType ? String(input.sourceEventType).slice(0, 80) : "integrator_chat",
+      status: "open",
+    });
+    const id = Number((inserted as { insertId?: number }).insertId ?? 0);
+    return { ok: true, taskId: id };
+  },
+});
+
+registerTool({
+  key: "agentTeams.broadcast",
+  requiresApproval: false,
+  definition: {
+    name: "agentTeams_broadcast",
+    description:
+      "Broadcast a message to all members of a team. Use to convey context from Marcin (via the Integrator) to the team's seats — e.g. priorities for the week, decisions made, or context the team needs.",
+    input_schema: {
+      type: "object",
+      properties: {
+        teamId: { type: "number" },
+        body: { type: "string", description: "The message to broadcast (markdown ok, under 20k chars)." },
+      },
+      required: ["teamId", "body"],
+    },
+  },
+  handler: async ({ input, ctx }) => {
+    const d = await db();
+    const { agentTeamMessages } = await import("../../../drizzle/schema");
+    const inserted = await d.insert(agentTeamMessages).values({
+      teamId: Number(input.teamId),
+      // The runtime hands us the calling agentId — that's the broadcaster.
+      fromSeatId: ctx.agentId,
+      toSeatId: null,
+      body: String(input.body).slice(0, 20_000),
+    });
+    const id = Number((inserted as { insertId?: number }).insertId ?? 0);
+    return { ok: true, messageId: id };
+  },
+});
+
 export const PHASE_2_TOOL_KEYS: RegisteredTool["key"][] = [
   "customers.list",
   "customers.get",
@@ -823,4 +977,7 @@ export const PHASE_2_TOOL_KEYS: RegisteredTool["key"][] = [
   "vendors.get",
   "vendors.rankForOpportunity",
   "vendors.createOnboardingStep",
+  "agentTeams.list",
+  "agentTeams.assignTask",
+  "agentTeams.broadcast",
 ];
