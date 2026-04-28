@@ -1534,3 +1534,74 @@ export const userRoles = mysqlTable("userRoles", {
 });
 export type DbUserRole = typeof userRoles.$inferSelect;
 export type InsertDbUserRole = typeof userRoles.$inferInsert;
+
+// ─── RE-ENGAGEMENT CAMPAIGN (migration 0065) ─────────────────────────────────
+// One-shot reactivation cohorts (e.g. the 458 HCP-imported customers).
+// Distinct from the generic `campaigns` table because each draft is hand-written
+// per customer by Claude using their actual project history, then approved or
+// edited individually before sending.
+export const reengagementCampaigns = mysqlTable("reengagementCampaigns", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 160 }).notNull(),
+  segment: mysqlEnum("segment", ["hot", "warm", "cold", "custom"]).notNull().default("custom"),
+  status: mysqlEnum("status", [
+    "draft",
+    "generating",
+    "review",
+    "sending",
+    "sent",
+    "cancelled",
+  ])
+    .notNull()
+    .default("draft"),
+  description: text("description"),
+  createdBy: varchar("createdBy", { length: 64 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbReengagementCampaign = typeof reengagementCampaigns.$inferSelect;
+export type InsertDbReengagementCampaign = typeof reengagementCampaigns.$inferInsert;
+
+export const reengagementDrafts = mysqlTable("reengagementDrafts", {
+  id: int("id").autoincrement().primaryKey(),
+  campaignId: int("campaignId").notNull(),
+  customerId: varchar("customerId", { length: 64 }).notNull(),
+  segment: mysqlEnum("segment", ["hot", "warm", "cold"]).notNull(),
+  channel: mysqlEnum("channel", ["email", "sms"]).notNull(),
+  subject: varchar("subject", { length: 300 }),
+  body: text("body").notNull(),
+  status: mysqlEnum("status", [
+    "pending",
+    "approved",
+    "rejected",
+    "queued",
+    "sent",
+    "bounced",
+    "replied",
+    "failed",
+  ])
+    .notNull()
+    .default("pending"),
+  customerHistorySummary: text("customerHistorySummary"),
+  qaNotes: text("qaNotes"),
+  /** ISO date of customer's most recent paid invoice — used for segment + drift checks */
+  lastWorkDate: varchar("lastWorkDate", { length: 32 }),
+  /** Short human-readable summary of what we last did for this customer */
+  lastWorkSummary: varchar("lastWorkSummary", { length: 500 }),
+  /** Cents */
+  lifetimeValueCents: int("lifetimeValueCents"),
+  scheduledFor: timestamp("scheduledFor"),
+  sentAt: timestamp("sentAt"),
+  openedAt: timestamp("openedAt"),
+  clickedAt: timestamp("clickedAt"),
+  repliedAt: timestamp("repliedAt"),
+  bounceReason: varchar("bounceReason", { length: 300 }),
+  errorMessage: text("errorMessage"),
+  providerMessageId: varchar("providerMessageId", { length: 120 }),
+  approvedBy: varchar("approvedBy", { length: 64 }),
+  approvedAt: timestamp("approvedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type DbReengagementDraft = typeof reengagementDrafts.$inferSelect;
+export type InsertDbReengagementDraft = typeof reengagementDrafts.$inferInsert;

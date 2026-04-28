@@ -122,9 +122,66 @@ async function ensurePortalContinuityFlag() {
   }
 }
 
+async function ensureReengagementTables() {
+  // The drizzle tracker may diverge from prod; create the re-engagement tables
+  // at boot if missing so /admin/marketing/reengagement-campaign works on first
+  // deploy without a manual migration step. Mirrors ensurePhoneTables.
+  try {
+    const { getDb } = await import("../db");
+    const { sql } = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return;
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`reengagementCampaigns\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`name\` varchar(160) NOT NULL,
+      \`segment\` enum('hot','warm','cold','custom') NOT NULL DEFAULT 'custom',
+      \`status\` enum('draft','generating','review','sending','sent','cancelled') NOT NULL DEFAULT 'draft',
+      \`description\` text,
+      \`createdBy\` varchar(64),
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT \`reengagementCampaigns_id\` PRIMARY KEY(\`id\`)
+    )`);
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`reengagementDrafts\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`campaignId\` int NOT NULL,
+      \`customerId\` varchar(64) NOT NULL,
+      \`segment\` enum('hot','warm','cold') NOT NULL,
+      \`channel\` enum('email','sms') NOT NULL,
+      \`subject\` varchar(300),
+      \`body\` text NOT NULL,
+      \`status\` enum('pending','approved','rejected','queued','sent','bounced','replied','failed') NOT NULL DEFAULT 'pending',
+      \`customerHistorySummary\` text,
+      \`qaNotes\` text,
+      \`lastWorkDate\` varchar(32),
+      \`lastWorkSummary\` varchar(500),
+      \`lifetimeValueCents\` int,
+      \`scheduledFor\` timestamp NULL,
+      \`sentAt\` timestamp NULL,
+      \`openedAt\` timestamp NULL,
+      \`clickedAt\` timestamp NULL,
+      \`repliedAt\` timestamp NULL,
+      \`bounceReason\` varchar(300),
+      \`errorMessage\` text,
+      \`providerMessageId\` varchar(120),
+      \`approvedBy\` varchar(64),
+      \`approvedAt\` timestamp NULL,
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT \`reengagementDrafts_id\` PRIMARY KEY(\`id\`)
+    )`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS \`reengagementDrafts_campaign_idx\` ON \`reengagementDrafts\` (\`campaignId\`)`).catch(() => {});
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS \`reengagementDrafts_status_idx\` ON \`reengagementDrafts\` (\`status\`)`).catch(() => {});
+    console.log("[boot] reengagementCampaigns + reengagementDrafts ensured");
+  } catch (err) {
+    console.warn("[boot] ensureReengagementTables failed (non-fatal):", err);
+  }
+}
+
 async function startServer() {
   await ensurePhoneTables();
   await ensurePortalContinuityFlag();
+  await ensureReengagementTables();
   const app = express();
   const server = createServer(app);
 
@@ -961,6 +1018,15 @@ async function startServer() {
     console.log(`[AutoArchive] Next Lost-lead sweep scheduled in ${Math.round(msUntil3am / 60000)} minutes`);
   };
   scheduleLostLeadAutoArchive();
+
+  // ── Re-engagement campaign sender (every 5 min, paced 50 email + 25 sms / day) ──
+  const { runReengagementSender } = await import("../lib/reengagement/sender");
+  setInterval(() => {
+    runReengagementSender().catch((err) =>
+      console.error("[reengagement] sender tick error:", err),
+    );
+  }, 5 * 60 * 1000);
+  console.log("[reengagement] sender scheduler started (runs every 5 minutes)");
 
   // ── 360° Funnel REST endpoints (called from https://360.handypioneers.com) ──
 

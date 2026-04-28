@@ -38,6 +38,7 @@ import Portal360Membership from "./pages/portal/Portal360Membership";
 import PortalEnrollmentConfirmation from "./pages/portal/PortalEnrollmentConfirmation";
 import WorkOrderDetail from "./pages/WorkOrderDetail";
 import Welcome360Page from "./pages/Welcome360Page";
+import ReengagementCampaignPage from "./pages/admin/ReengagementCampaignPage";
 
 // Domains that should serve only the customer portal (no admin app)
 const PORTAL_HOSTNAMES = ["client.handypioneers.com"];
@@ -99,6 +100,9 @@ function Router() {
 
       {/* Data migration onboarding wizard */}
       <Route path="/onboarding" component={() => <DataMigrationPage />} />
+
+      {/* Admin: re-engagement campaign console */}
+      <Route path="/admin/marketing/reengagement-campaign" component={ReengagementCampaignPage} />
 
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
