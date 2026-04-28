@@ -94,6 +94,7 @@ export default function OrgChart() {
   const agentsQ = trpc.aiAgents.list.useQuery();
   const costQ = trpc.aiAgents.costSummary.useQuery();
   const flagsQ = trpc.aiAgents.listOptimizationTasks.useQuery({ status: "open" });
+  const teamsQ = trpc.agentTeams.listForOrgChart.useQuery();
 
   const [selectedAgentId, setSelectedAgentId] = useState<number | null>(null);
   const [confirmKill, setConfirmKill] = useState(false);
@@ -167,6 +168,60 @@ export default function OrgChart() {
     }
     return map;
   }, [agents]);
+
+  // Phase 2 — sub-team grouping. Each department (Sales, Marketing, …) can
+  // host multiple sub-teams (Lead Nurturer, Project Estimator, etc.), and each
+  // sub-team has 3 seats (frontend / backend / qa) joined via agent_team_members.
+  // We compute:
+  //   - teamsByDept: dept slug → sub-teams (skipping the umbrella dept-level team)
+  //   - seatToTeam: seatId → its sub-team id (so we can exclude already-grouped
+  //     seats from the "flat sub-agents" list rendered after the teams)
+  type SubTeam = {
+    id: number;
+    department: string;
+    name: string;
+    purpose: string | null;
+    members: Array<{ seat: Agent; role: string }>;
+  };
+  const { teamsByDept, seatToTeam } = useMemo(() => {
+    const teamsByDept = new Map<string, SubTeam[]>();
+    const seatToTeam = new Map<number, number>();
+    const apiTeams = teamsQ.data?.teams ?? [];
+    const apiMembers = teamsQ.data?.members ?? [];
+    const agentById = new Map<number, Agent>();
+    for (const a of agents) agentById.set(a.id, a);
+    const membersByTeam = new Map<number, typeof apiMembers>();
+    for (const m of apiMembers) {
+      const arr = membersByTeam.get(m.teamId) ?? [];
+      arr.push(m);
+      membersByTeam.set(m.teamId, arr);
+    }
+    for (const t of apiTeams) {
+      // Skip the umbrella dept-level team — it's named exactly the same as the
+      // department label (e.g. department='sales', name='Sales'), and its
+      // purpose mentions "Umbrella for the …". Phase 2 sub-teams have distinct
+      // names like "Lead Nurturer", "Project Estimator", etc.
+      const isUmbrella =
+        t.name.toLowerCase() === departmentLabel(t.department).toLowerCase() ||
+        (t.purpose ?? "").toLowerCase().startsWith("umbrella ");
+      if (isUmbrella) continue;
+      const memberRows = membersByTeam.get(t.id) ?? [];
+      const members = memberRows
+        .map((m) => ({ seat: agentById.get(m.seatId), role: m.role as string }))
+        .filter((x): x is { seat: Agent; role: string } => Boolean(x.seat));
+      // Render team only once it has at least one resolved member — avoids a
+      // ghost card when the seeds haven't run yet.
+      if (members.length === 0) continue;
+      // Order members frontend → backend → qa → other.
+      const ROLE_ORDER: Record<string, number> = { frontend: 0, backend: 1, qa: 2, lead: 3 };
+      members.sort((a, b) => (ROLE_ORDER[a.role] ?? 9) - (ROLE_ORDER[b.role] ?? 9));
+      for (const m of members) seatToTeam.set(m.seat.id, t.id);
+      const arr = teamsByDept.get(t.department) ?? [];
+      arr.push({ id: t.id, department: t.department, name: t.name, purpose: t.purpose, members });
+      teamsByDept.set(t.department, arr);
+    }
+    return { teamsByDept, seatToTeam };
+  }, [teamsQ.data, agents]);
 
   const byDept = useMemo(() => {
     const m = new Map<string, Agent[]>();
@@ -393,7 +448,7 @@ export default function OrgChart() {
                       </button>
                     </div>
                   </div>
-                  {/* Head + sub-agents — hidden on mobile when collapsed; always visible on md+ */}
+                  {/* Head + sub-teams + flat sub-agents — hidden on mobile when collapsed; always visible on md+ */}
                   <div className={(collapsedDepts.has(dept.slug) ? "hidden " : "") + "md:!flex md:flex-col gap-2"}>
                     {head && (
                       <SeatCard
@@ -405,16 +460,29 @@ export default function OrgChart() {
                         onStatusChange={(s) => setStatus.mutate({ id: head.id, status: s as never })}
                       />
                     )}
-                    {subs.map((s) => (
-                      <SeatCard
-                        key={s.id}
-                        kind={seatType(s)}
-                        agent={s}
-                        onClick={() => setSelectedAgentId(s.id)}
-                        onStatusChange={(st) => setStatus.mutate({ id: s.id, status: st as never })}
+                    {/* Phase 2 — sub-teams in this department */}
+                    {(teamsByDept.get(dept.slug) ?? []).map((team) => (
+                      <SubTeamGroup
+                        key={team.id}
+                        team={team}
+                        seatType={seatType}
+                        onSeatClick={(id) => setSelectedAgentId(id)}
+                        onStatusChange={(id, s) => setStatus.mutate({ id, status: s as never })}
                       />
                     ))}
-                    {!head && subs.length === 0 && (
+                    {/* Flat sub-agents not part of any sub-team (legacy single-seat sub-agents). */}
+                    {subs
+                      .filter((s) => !seatToTeam.has(s.id))
+                      .map((s) => (
+                        <SeatCard
+                          key={s.id}
+                          kind={seatType(s)}
+                          agent={s}
+                          onClick={() => setSelectedAgentId(s.id)}
+                          onStatusChange={(st) => setStatus.mutate({ id: s.id, status: st as never })}
+                        />
+                      ))}
+                    {!head && subs.length === 0 && (teamsByDept.get(dept.slug) ?? []).length === 0 && (
                       <div className="text-[11px] italic" style={{ color: "#64748b" }}>
                         No seats in this department yet.
                       </div>
@@ -861,6 +929,90 @@ function Metric({ label, value }: { label: string; value: string | number }) {
     <div className="border rounded px-2 py-1.5">
       <div className="text-[10px] text-muted-foreground uppercase tracking-wider">{label}</div>
       <div className="text-sm font-semibold tabular-nums">{value}</div>
+    </div>
+  );
+}
+
+// ─── PHASE 2 SUB-TEAM GROUP ──────────────────────────────────────────────────
+// Renders a 3-teammate sub-team (Lead Nurturer, Project Estimator, etc.) as a
+// nested card under its department head. The team header shows the team's
+// purpose; the body lists frontend / backend / qa cards inline.
+
+function SubTeamGroup(props: {
+  team: {
+    id: number;
+    department: string;
+    name: string;
+    purpose: string | null;
+    members: Array<{ seat: Agent; role: string }>;
+  };
+  seatType: (a: Agent) => "ai" | "human" | "hybrid";
+  onSeatClick: (seatId: number) => void;
+  onStatusChange: (seatId: number, status: string) => void;
+}) {
+  const { team } = props;
+  const liveCount = team.members.filter((m) => m.seat.status === "autonomous").length;
+  return (
+    <div
+      className="rounded-lg border p-2.5 ml-2"
+      style={{
+        background: "rgba(201,145,58,0.04)",
+        borderColor: "#3a2f1a",
+      }}
+    >
+      <div className="flex items-start justify-between gap-2 mb-1.5">
+        <div>
+          <div
+            className="text-[9px] font-bold tracking-[2px] uppercase"
+            style={{ color: "#c9913a" }}
+          >
+            Team · {team.name}
+          </div>
+          {team.purpose && (
+            <div className="text-[10px] mt-0.5 leading-tight" style={{ color: "#94a3b8" }}>
+              {team.purpose.slice(0, 110)}
+              {team.purpose.length > 110 ? "…" : ""}
+            </div>
+          )}
+        </div>
+        <div className="text-[10px] tabular-nums shrink-0" style={{ color: "#94a3b8" }}>
+          {team.members.length}/3 · {liveCount} live
+        </div>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        {team.members.map((m) => (
+          <div key={m.seat.id} className="flex items-stretch gap-2">
+            <span
+              className="text-[9px] font-bold tracking-[1.5px] px-1.5 py-0.5 rounded uppercase shrink-0 self-start"
+              style={{
+                background:
+                  m.role === "frontend"
+                    ? "#3b82f6"
+                    : m.role === "backend"
+                    ? "#10b981"
+                    : m.role === "qa"
+                    ? "#a78bfa"
+                    : "#64748b",
+                color: "#fff",
+                marginTop: "10px",
+              }}
+              title={`Territory: ${
+                m.role === "frontend" ? "drafts/" : m.role === "backend" ? "data/" : m.role === "qa" ? "audits/" : "—"
+              }`}
+            >
+              {m.role.toUpperCase()}
+            </span>
+            <div className="flex-1 min-w-0">
+              <SeatCard
+                kind={props.seatType(m.seat)}
+                agent={m.seat}
+                onClick={() => props.onSeatClick(m.seat.id)}
+                onStatusChange={(s) => props.onStatusChange(m.seat.id, s)}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
