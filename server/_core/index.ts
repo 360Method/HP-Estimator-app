@@ -2550,6 +2550,10 @@ async function startServer() {
       ensureOptimizationTasksTable,
       startSystemIntegrityCron,
     } = await import("../lib/agentRuntime/systemIntegrity");
+    const { ensureCronRunsTable } = await import("../lib/agentRuntime/cronRuns");
+    const { startIntegratorBriefCron } = await import(
+      "../lib/agentRuntime/integratorBrief"
+    );
     const { getDb } = await import("../db");
     const { aiAgents } = await import("../../drizzle/schema");
     // Phase 2: register all 15 tool wrappers. Import for side-effects.
@@ -2560,9 +2564,13 @@ async function startServer() {
     // Phase 5: ensure System Integrity table + start the hourly anomaly scan.
     // Tables are idempotent CREATE IF NOT EXISTS so this is safe on every boot.
     await ensureOptimizationTasksTable();
+    // cron_runs is the DB-backed dedupe store for time-of-day jobs (KPI
+    // rollups + integrator weekly brief). Survives Railway redeploys.
+    await ensureCronRunsTable();
     startScheduler();
     startKpiCron();
     startSystemIntegrityCron();
+    startIntegratorBriefCron();
     const db = await getDb();
     if (db) {
       const roster = await db.select().from(aiAgents);
@@ -2574,7 +2582,9 @@ async function startServer() {
         );
       }
     }
-    console.log("[boot] agent runtime scheduler + KPI cron started");
+    console.log(
+      "[boot] agent runtime scheduler + KPI cron + System Integrity sweep + Integrator weekly brief started",
+    );
   } catch (err) {
     console.warn("[boot] agent runtime failed to start (non-fatal):", err);
   }
