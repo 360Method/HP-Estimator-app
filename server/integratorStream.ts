@@ -7,17 +7,30 @@
  * console at /admin/visionary uses.
  *
  * Wire format (per SSE spec, one event per `\n\n` block):
- *   event: delta        — incremental text from the assistant
+ *   event: connect      — emitted once after headers flush; primes proxies
+ *   data: {"ok":true,"conversationId":N,"agent":"..."}
+ *
+ *   event: delta        — incremental text from the assistant for the
+ *                         CURRENT turn. Multiple turns may stream during a
+ *                         multi-tool-use loop; clients should reset their
+ *                         accumulated text when they receive `text_reset`.
  *   data: {"text":"..."}
  *
+ *   event: text_reset   — the prior turn's text was an acknowledgment; the
+ *                         model is about to call tools and synthesize.
+ *                         Clients must clear their accumulated text.
+ *   data: {"reason":"tool_call_pending","iteration":N}
+ *
  *   event: tool_use     — emitted once per tool the model wants to call
- *   data: {"key":"...","input":{...},"requiresApproval":boolean}
+ *   data: {"key":"...","input":{...},"requiresApproval":boolean,"turn":N}
  *
  *   event: tool_result  — emitted after each non-approval tool runs
- *   data: {"key":"...","output":...}  OR  {"key":"...","error":"..."}
+ *   data: {"key":"...","output":...,"turn":N}  OR  {"key":"...","error":"..."}
  *
- *   event: done         — final summary (cost, tokens, persisted message id)
- *   data: {"messageId":N,"costUsd":"0.0042","inputTokens":N,"outputTokens":N,"needsApproval":false}
+ *   event: done         — final summary (cost, tokens, persisted message id,
+ *                         turn count, total tool call count)
+ *   data: {"messageId":N,"costUsd":"0.0042","inputTokens":N,"outputTokens":N,
+ *          "needsApproval":bool,"turns":N,"toolCallCount":N}
  *
  *   event: error
  *   data: {"message":"..."}
@@ -43,9 +56,47 @@ import { priceRun } from "./lib/agentRuntime/pricing";
 import "./lib/agentRuntime/phase2Tools";
 
 const MAX_HISTORY_MSGS = 30;
-const MAX_TOKENS = 2048;
+const MAX_TOKENS = 4096;
+const MAX_TOOL_ITERATIONS = 6;
 
-const VISIONARY_PROMPT_ADDENDUM = `\n\n[Visionary Console]\nMarcin runs Handy Pioneers from the Visionary Console at /admin/visionary. When he gives you a directive, route it to the right team via the agentTeams_assignTask tool. Use agentTeams_list first to find the right team, then agentTeams_broadcast for context the team needs. Stream your reasoning as you work — short, action-first sentences.`;
+/**
+ * System-prompt addendum injected at chat time. The strong "no promises"
+ * language is load-bearing: without it the model defaults to
+ * acknowledgment-style text ("I'll pull the KPIs now") followed by a
+ * tool_use block, which used to leave the user staring at a placeholder
+ * after the tools ran. Combined with the multi-turn loop below, the model
+ * now MUST execute its tools and return a synthesis in the final turn.
+ */
+const VISIONARY_PROMPT_ADDENDUM = `
+
+[Visionary Console — operating posture]
+Marcin runs Handy Pioneers from the Visionary Console at /admin/visionary. He
+sees every tool call you make in the UI, with inputs and outputs. He does not
+need narration.
+
+CRITICAL: NEVER respond with placeholder/promise text. Forbidden patterns:
+  - "I'll pull..." / "I'll route..." / "I'll ping..." / "I'll check..."
+  - "Pulling now..." / "Routing now..." / "One moment..." / "Let me look..."
+  - "Got it — I'll..." / "On it..."
+
+These are ALL banned. They produce a response that LOOKS done but contains
+zero information. Marcin will not see a follow-up message; he sees only this
+turn's output.
+
+The correct pattern: when you need data, CALL THE TOOL in this same turn,
+wait for the result, then deliver the synthesis with concrete numbers, names,
+and findings. The runtime executes your tool calls and feeds the results
+back to you in the same conversation; you must use them to write the actual
+answer.
+
+If a tool requires approval (parked), that's fine — say so concisely
+("Drafted a Sales-team broadcast; parked for your tap in /admin/ai-agents/tasks")
+and continue with whatever else you can deliver.
+
+When routing work to a department, use agentTeams_list to find the team,
+then agentTeams_assignTask to create the task, then agentTeams_broadcast for
+context the team needs. After those execute, summarize what was assigned
+with the task IDs and team names — that's the value you deliver to Marcin.`;
 
 function sse(res: Response, event: string, data: unknown) {
   res.write(`event: ${event}\n`);
@@ -227,65 +278,24 @@ export function registerIntegratorStreamRoutes(app: Express): void {
           content: m.content,
         }));
 
-        // 8) Stream
+        // 8) Multi-turn agentic tool-use loop.
+        //
+        // Each iteration calls Anthropic with the running messages array. If
+        // the model emits tool_use blocks, we execute the tools, append the
+        // assistant turn + tool_result blocks to messages, and loop. When the
+        // model finally returns a text-only turn, that's the synthesis we
+        // stream to the user and persist.
+        //
+        // Why this matters: prior to this loop, a single turn was made and
+        // any tool_use blocks were executed AFTER the response had already
+        // streamed. The user saw "I'll pull the KPIs..." (acknowledgment) and
+        // never saw the synthesis with actual numbers. Now the model is forced
+        // to consume its own tool results before producing user-visible text.
         const client = new Anthropic({ apiKey });
-        logTag("calling Anthropic", { model: integrator.model, tools: toolKeys.length, history: messages.length });
-        const stream = client.messages.stream({
-          model: integrator.model,
-          max_tokens: MAX_TOKENS,
-          system: [
-            {
-              type: "text",
-              text: `${integrator.systemPrompt}${VISIONARY_PROMPT_ADDENDUM}\n\n[Live ops context]\n${briefing}`,
-              cache_control: { type: "ephemeral" },
-            },
-          ],
-          tools: toolDefs.length > 0 ? toolDefs : undefined,
-          messages,
-        });
-        activeStream = stream;
+        logTag("starting agentic loop", { model: integrator.model, tools: toolKeys.length, history: messages.length });
 
-        let firstDeltaAt: number | null = null;
-        let deltaCount = 0;
-        stream.on("text", (textDelta: string) => {
-          if (firstDeltaAt === null) {
-            firstDeltaAt = Date.now();
-            logTag("first delta after", `${firstDeltaAt - reqStart}ms`);
-          }
-          deltaCount += 1;
-          sse(res, "delta", { text: textDelta });
-        });
-        stream.on("error", (err) => {
-          logErr("anthropic stream error", err);
-        });
-
-        const finalMessage = await stream.finalMessage();
-        logTag("anthropic done", { deltas: deltaCount, totalMs: Date.now() - reqStart });
-
-        const inputTokens = finalMessage.usage.input_tokens;
-        const outputTokens = finalMessage.usage.output_tokens;
-        const costUsd = priceRun({ model: integrator.model, inputTokens, outputTokens });
-
-        // 9) Parse the final message for text + tool requests
-        const textParts: string[] = [];
-        const toolRequests: Array<{ key: string; input: Record<string, unknown>; name: string }> = [];
-        for (const block of finalMessage.content) {
-          if (block.type === "text") textParts.push(block.text);
-          else if (block.type === "tool_use") {
-            let key = block.name;
-            for (const tk of toolKeys) {
-              const def = getTool(tk);
-              if (def?.definition.name === block.name) {
-                key = tk;
-                break;
-              }
-            }
-            toolRequests.push({ key, input: block.input as Record<string, unknown>, name: block.name });
-          }
-        }
-        const text = textParts.join("\n\n");
-
-        // 10) Synthetic task row to give tool handlers a ctx.taskId
+        // Synthetic task row so tool handlers have a ctx.taskId. One per
+        // request, shared across all loop iterations.
         const taskInsert = await d.insert(aiAgentTasks).values({
           agentId: integrator.id,
           triggerType: "manual",
@@ -295,46 +305,208 @@ export function registerIntegratorStreamRoutes(app: Express): void {
         });
         const taskId = Number((taskInsert as { insertId?: number }).insertId ?? 0);
 
-        // 11) Execute tools (or park for approval)
-        const toolCallsLog: Array<{
+        const allToolCalls: Array<{
           key: string;
           input: unknown;
           output?: unknown;
           error?: string;
           requiresApproval?: boolean;
+          turn: number;
         }> = [];
+        let totalInputTokens = 0;
+        let totalOutputTokens = 0;
+        let finalSynthesisText = "";
+        let needsApproval = false;
+        let firstDeltaAt: number | null = null;
+        let iteration = 0;
 
-        for (const req of toolRequests) {
-          const tool = getTool(req.key);
-          sse(res, "tool_use", {
-            key: req.key,
-            input: req.input,
-            requiresApproval: tool?.requiresApproval ?? false,
+        // Map a model-emitted tool name back to our internal toolKey.
+        const nameToKey = (name: string): string => {
+          for (const tk of toolKeys) {
+            const def = getTool(tk);
+            if (def?.definition.name === name) return tk;
+          }
+          return name;
+        };
+
+        while (iteration < MAX_TOOL_ITERATIONS) {
+          iteration += 1;
+          logTag(`turn ${iteration} → calling Anthropic`, { msgCount: messages.length });
+
+          const turnStream = client.messages.stream({
+            model: integrator.model,
+            max_tokens: MAX_TOKENS,
+            system: [
+              {
+                type: "text",
+                text: `${integrator.systemPrompt}${VISIONARY_PROMPT_ADDENDUM}\n\n[Live ops context]\n${briefing}`,
+                cache_control: { type: "ephemeral" },
+              },
+            ],
+            tools: toolDefs.length > 0 ? toolDefs : undefined,
+            messages,
           });
-          if (!tool) {
-            toolCallsLog.push({ key: req.key, input: req.input, error: "Unknown tool" });
-            sse(res, "tool_result", { key: req.key, error: "Unknown tool" });
-            continue;
+          activeStream = turnStream;
+
+          // Stream this turn's text deltas live. If the turn ends up
+          // containing tool_use blocks, we'll emit a `text_reset` afterward
+          // so the client clears the acknowledgment text before tools render.
+          turnStream.on("text", (textDelta: string) => {
+            if (firstDeltaAt === null) {
+              firstDeltaAt = Date.now();
+              logTag("first delta", `${firstDeltaAt - reqStart}ms`);
+            }
+            sse(res, "delta", { text: textDelta });
+          });
+          turnStream.on("error", (err) => {
+            logErr(`turn ${iteration} stream error`, err);
+          });
+
+          const turnFinal = await turnStream.finalMessage();
+          totalInputTokens += turnFinal.usage.input_tokens;
+          totalOutputTokens += turnFinal.usage.output_tokens;
+
+          const toolUseBlocks = turnFinal.content.filter(
+            (b): b is Anthropic.ToolUseBlock => b.type === "tool_use"
+          );
+          const textParts = turnFinal.content
+            .filter((b): b is Anthropic.TextBlock => b.type === "text")
+            .map((b) => b.text);
+          const turnText = textParts.join("\n\n");
+
+          if (toolUseBlocks.length === 0) {
+            // ── Final synthesis turn. The deltas already streamed live.
+            finalSynthesisText = turnText;
+            logTag(`turn ${iteration} → final (no more tools)`, { textLen: turnText.length });
+            break;
           }
-          if (tool.requiresApproval) {
-            toolCallsLog.push({ key: req.key, input: req.input, requiresApproval: true });
-            continue;
+
+          // ── Intermediate turn: clear the acknowledgment text on the
+          //    client so it doesn't bleed into the final synthesis.
+          if (turnText.length > 0) {
+            sse(res, "text_reset", { reason: "tool_call_pending", iteration });
           }
-          try {
-            const out = await tool.handler({
-              input: req.input,
-              ctx: { agentId: integrator.id, taskId, db: d },
+
+          // Append the assistant turn (text + tool_use) as-is so the next
+          // call to Anthropic sees the same blocks it produced.
+          messages.push({ role: "assistant", content: turnFinal.content });
+
+          // Execute each tool, build tool_result blocks for the next user msg.
+          const toolResultBlocks: Anthropic.ToolResultBlockParam[] = [];
+
+          for (const tu of toolUseBlocks) {
+            const key = nameToKey(tu.name);
+            const tool = getTool(key);
+
+            sse(res, "tool_use", {
+              key,
+              input: tu.input,
+              requiresApproval: tool?.requiresApproval ?? false,
+              turn: iteration,
             });
-            toolCallsLog.push({ key: req.key, input: req.input, output: out });
-            sse(res, "tool_result", { key: req.key, output: out });
+
+            if (!tool) {
+              const errMsg = `Unknown tool: ${tu.name}`;
+              allToolCalls.push({ key, input: tu.input, error: errMsg, turn: iteration });
+              toolResultBlocks.push({
+                type: "tool_result",
+                tool_use_id: tu.id,
+                content: errMsg,
+                is_error: true,
+              });
+              sse(res, "tool_result", { key, error: errMsg, turn: iteration });
+              continue;
+            }
+
+            if (tool.requiresApproval) {
+              needsApproval = true;
+              allToolCalls.push({ key, input: tu.input, requiresApproval: true, turn: iteration });
+              // Give the model a synthetic "parked" result so the loop can
+              // continue. The model should acknowledge in its synthesis that
+              // the action is queued for Marcin's approval.
+              toolResultBlocks.push({
+                type: "tool_result",
+                tool_use_id: tu.id,
+                content:
+                  "[Parked for human approval — Marcin will review this draft in /admin/ai-agents/tasks. Mention that it's queued in your final response and continue with whatever else you can deliver in this turn.]",
+              });
+              sse(res, "tool_result", {
+                key,
+                output: { parked: true, queue: "/admin/ai-agents/tasks" },
+                turn: iteration,
+              });
+              continue;
+            }
+
+            try {
+              const out = await tool.handler({
+                input: tu.input as Record<string, unknown>,
+                ctx: { agentId: integrator.id, taskId, db: d },
+              });
+              allToolCalls.push({ key, input: tu.input, output: out, turn: iteration });
+              const resultStr = typeof out === "string" ? out : JSON.stringify(out);
+              toolResultBlocks.push({
+                type: "tool_result",
+                tool_use_id: tu.id,
+                content: resultStr,
+              });
+              sse(res, "tool_result", { key, output: out, turn: iteration });
+            } catch (err) {
+              const errMsg = err instanceof Error ? err.message : String(err);
+              allToolCalls.push({ key, input: tu.input, error: errMsg, turn: iteration });
+              toolResultBlocks.push({
+                type: "tool_result",
+                tool_use_id: tu.id,
+                content: errMsg,
+                is_error: true,
+              });
+              sse(res, "tool_result", { key, error: errMsg, turn: iteration });
+            }
+          }
+
+          // Append the tool_result blocks as a user message and loop.
+          messages.push({ role: "user", content: toolResultBlocks });
+          logTag(`turn ${iteration} → ${toolUseBlocks.length} tools executed, looping`);
+        }
+
+        if (!finalSynthesisText) {
+          // We hit MAX_TOOL_ITERATIONS without the model producing text-only
+          // output. Force a final synthesis turn with tools disabled so it
+          // has to summarize. If that still fails, fall back to a stub.
+          logTag(`max iterations (${MAX_TOOL_ITERATIONS}) reached, forcing synthesis`);
+          try {
+            const forceFinal = await client.messages.create({
+              model: integrator.model,
+              max_tokens: MAX_TOKENS,
+              system: [
+                {
+                  type: "text",
+                  text: `${integrator.systemPrompt}${VISIONARY_PROMPT_ADDENDUM}\n\nYou have used the maximum tool budget for this turn. Synthesize what you've learned into a single concise answer for Marcin. Lead with the numbers and findings; do not request more tools.`,
+                },
+              ],
+              messages,
+            });
+            finalSynthesisText = forceFinal.content
+              .filter((b): b is Anthropic.TextBlock => b.type === "text")
+              .map((b) => b.text)
+              .join("\n\n");
+            totalInputTokens += forceFinal.usage.input_tokens;
+            totalOutputTokens += forceFinal.usage.output_tokens;
+            // Stream the forced synthesis as a single delta (no live stream).
+            if (finalSynthesisText) sse(res, "delta", { text: finalSynthesisText });
           } catch (err) {
-            const errMsg = err instanceof Error ? err.message : String(err);
-            toolCallsLog.push({ key: req.key, input: req.input, error: errMsg });
-            sse(res, "tool_result", { key: req.key, error: errMsg });
+            logErr("forced synthesis failed", err);
+            finalSynthesisText = `[Reached max tool-use iterations (${MAX_TOOL_ITERATIONS}) without a synthesis. Try a more specific question.]`;
+            sse(res, "delta", { text: finalSynthesisText });
           }
         }
 
-        const needsApproval = toolCallsLog.some((c) => c.requiresApproval);
+        const costUsd = priceRun({
+          model: integrator.model,
+          inputTokens: totalInputTokens,
+          outputTokens: totalOutputTokens,
+        });
+
         await d
           .update(aiAgentTasks)
           .set({
@@ -343,17 +515,17 @@ export function registerIntegratorStreamRoutes(app: Express): void {
           })
           .where(eq(aiAgentTasks.id, taskId));
 
-        // 12) Audit run + persist assistant message
+        // 9) Audit run + persist assistant message (final synthesis only)
         await d.insert(aiAgentRuns).values({
           taskId,
           agentId: integrator.id,
           input: message,
-          output: text,
-          toolCalls: JSON.stringify(toolCallsLog),
-          inputTokens,
-          outputTokens,
+          output: finalSynthesisText,
+          toolCalls: JSON.stringify(allToolCalls),
+          inputTokens: totalInputTokens,
+          outputTokens: totalOutputTokens,
           costUsd: costUsd.toFixed(4),
-          durationMs: 0,
+          durationMs: Date.now() - reqStart,
           status: "success",
           errorMessage: null,
         });
@@ -362,15 +534,15 @@ export function registerIntegratorStreamRoutes(app: Express): void {
           conversationId,
           userId: user.id,
           role: "assistant",
-          content: text,
-          toolCalls: JSON.stringify(toolCallsLog),
-          inputTokens,
-          outputTokens,
+          content: finalSynthesisText,
+          toolCalls: JSON.stringify(allToolCalls),
+          inputTokens: totalInputTokens,
+          outputTokens: totalOutputTokens,
           costUsd: costUsd.toFixed(4),
         });
         const assistantId = Number((assistantInsert as { insertId?: number }).insertId ?? 0);
 
-        // 13) Conversation timestamp + auto-title
+        // 10) Conversation timestamp + auto-title
         const patch: Record<string, unknown> = { lastMessageAt: new Date() };
         if (!conv.title) patch.title = message.slice(0, 80);
         await d
@@ -381,11 +553,19 @@ export function registerIntegratorStreamRoutes(app: Express): void {
         sse(res, "done", {
           messageId: assistantId,
           costUsd: costUsd.toFixed(4),
-          inputTokens,
-          outputTokens,
+          inputTokens: totalInputTokens,
+          outputTokens: totalOutputTokens,
           needsApproval,
+          turns: iteration,
+          toolCallCount: allToolCalls.length,
         });
-        logTag("DONE", { conversationId, totalMs: Date.now() - reqStart, costUsd: costUsd.toFixed(4) });
+        logTag("DONE", {
+          conversationId,
+          totalMs: Date.now() - reqStart,
+          costUsd: costUsd.toFixed(4),
+          turns: iteration,
+          tools: allToolCalls.length,
+        });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         const stack = err instanceof Error ? err.stack : undefined;
