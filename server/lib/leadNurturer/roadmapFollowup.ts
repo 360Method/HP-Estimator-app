@@ -22,7 +22,7 @@
  * Customer.bypassAutoNurture short-circuits step 1; the per-customer escape
  * hatch Marcin asked for.
  */
-import { and, asc, eq, lte } from "drizzle-orm";
+import { and, asc, eq, inArray, lte } from "drizzle-orm";
 import { getDb } from "../../db";
 import {
   agentDrafts,
@@ -234,12 +234,36 @@ export async function runDueDrafts(args: { limit?: number; now?: Date } = {}): P
 
   if (due.length === 0) return { picked: 0, generated: 0, failed: 0 };
 
+  // Runtime bypassAutoNurture check — if the operator flipped the bypass after
+  // the cadence was scheduled, drain the customer's pending drafts now instead
+  // of generating them. The schedule-time check in scheduleRoadmapFollowup()
+  // catches this for fresh cadences; this catches mid-cadence toggles.
+  const customerIds = Array.from(new Set(due.map((d) => d.customerId)));
+  const bypassRows = await db
+    .select({ id: customers.id, bypass: customers.bypassAutoNurture })
+    .from(customers)
+    .where(inArray(customers.id, customerIds));
+  const bypassed = new Set(bypassRows.filter((r) => r.bypass).map((r) => r.id));
+  const actionable = due.filter((d) => !bypassed.has(d.customerId));
+  if (bypassed.size > 0) {
+    await db
+      .update(agentDrafts)
+      .set({ status: "cancelled", cancelReason: "bypass_auto_nurture" })
+      .where(
+        and(
+          inArray(agentDrafts.customerId, Array.from(bypassed)),
+          eq(agentDrafts.status, "pending"),
+        ),
+      );
+  }
+  if (actionable.length === 0) return { picked: due.length, generated: 0, failed: 0 };
+
   const playbook = await loadPlaybook(ROADMAP_FOLLOWUP_KEY);
-  if (!playbook) return { picked: due.length, generated: 0, failed: due.length };
+  if (!playbook) return { picked: due.length, generated: 0, failed: actionable.length };
 
   let generated = 0;
   let failed = 0;
-  for (const draft of due) {
+  for (const draft of actionable) {
     try {
       await generateAndStore(draft, playbook);
       generated++;

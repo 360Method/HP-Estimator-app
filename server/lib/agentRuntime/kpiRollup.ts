@@ -19,6 +19,12 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "../../db";
 import { aiAgents, kpiMetrics } from "../../../drizzle/schema";
+import {
+  claimCronRun,
+  markCronRunResult,
+  pacificDateKey,
+  pacificIsoWeekKey,
+} from "./cronRuns";
 
 type Unit = "usd" | "pct" | "count" | "days" | string;
 
@@ -222,11 +228,53 @@ export function startKpiCron(periodMs: number = 15 * 60 * 1000) {
     try {
       const now = Date.now();
       if (isPacificRollupHour() && now - lastDaily > 12 * 60 * 60 * 1000) {
-        await rollupSeatsToDepartments();
+        // DB-backed dedupe survives Railway restarts; the in-memory
+        // `lastDaily` shaves a DB round-trip on the off-hour ticks.
+        const dayKey = pacificDateKey();
+        if (await claimCronRun("kpi_daily_rollup", dayKey)) {
+          try {
+            const result = await rollupSeatsToDepartments();
+            await markCronRunResult(
+              "kpi_daily_rollup",
+              dayKey,
+              "succeeded",
+              `inserted=${result.inserted}`,
+            );
+            console.log(`[kpiCron] daily rollup ${dayKey}: inserted=${result.inserted}`);
+          } catch (err) {
+            await markCronRunResult(
+              "kpi_daily_rollup",
+              dayKey,
+              "failed",
+              err instanceof Error ? err.message.slice(0, 200) : "error",
+            );
+            throw err;
+          }
+        }
         lastDaily = now;
       }
       if (isPacificRollupHour() && isMonday() && now - lastWeekly > 6.5 * 24 * 60 * 60 * 1000) {
-        await rollupDepartmentsToCompany();
+        const weekKey = pacificIsoWeekKey();
+        if (await claimCronRun("kpi_weekly_rollup", weekKey)) {
+          try {
+            const result = await rollupDepartmentsToCompany();
+            await markCronRunResult(
+              "kpi_weekly_rollup",
+              weekKey,
+              "succeeded",
+              `inserted=${result.inserted}`,
+            );
+            console.log(`[kpiCron] weekly rollup ${weekKey}: inserted=${result.inserted}`);
+          } catch (err) {
+            await markCronRunResult(
+              "kpi_weekly_rollup",
+              weekKey,
+              "failed",
+              err instanceof Error ? err.message.slice(0, 200) : "error",
+            );
+            throw err;
+          }
+        }
         lastWeekly = now;
       }
     } catch (err) {
