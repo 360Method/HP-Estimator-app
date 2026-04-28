@@ -694,11 +694,19 @@ async function ensureAgentTeamTables() {
       \`teamLeadSeatId\` int,
       \`purpose\` text,
       \`status\` enum('active','paused') NOT NULL DEFAULT 'active',
+      \`costCapDailyUsd\` decimal(8,2) NOT NULL DEFAULT 5.00,
       \`createdAt\` timestamp NOT NULL DEFAULT (now()),
       \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
       CONSTRAINT \`agent_teams_id\` PRIMARY KEY(\`id\`),
-      CONSTRAINT \`agent_teams_department_uniq\` UNIQUE(\`department\`)
+      CONSTRAINT \`agent_teams_dept_name_uniq\` UNIQUE(\`department\`, \`name\`)
     )`);
+
+    // Phase 2 in-place migration: drop the old single-team-per-department UNIQUE
+    // and add UNIQUE(department, name) + costCapDailyUsd. Each step swallows the
+    // error if the schema is already at the Phase 2 target shape (idempotent).
+    await db.execute(sql`ALTER TABLE \`agent_teams\` DROP INDEX \`agent_teams_department_uniq\``).catch(() => {});
+    await db.execute(sql`ALTER TABLE \`agent_teams\` ADD CONSTRAINT \`agent_teams_dept_name_uniq\` UNIQUE(\`department\`, \`name\`)`).catch(() => {});
+    await db.execute(sql`ALTER TABLE \`agent_teams\` ADD COLUMN \`costCapDailyUsd\` decimal(8,2) NOT NULL DEFAULT 5.00`).catch(() => {});
 
     await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agent_team_members\` (
       \`id\` int AUTO_INCREMENT NOT NULL,
@@ -763,21 +771,68 @@ async function ensureAgentTeamTables() {
     await db.execute(sql`CREATE INDEX \`agent_team_handoffs_to_status_idx\` ON \`agent_team_handoffs\` (\`toTeamId\`, \`status\`)`).catch(() => {});
     await db.execute(sql`CREATE INDEX \`agent_team_handoffs_from_status_idx\` ON \`agent_team_handoffs\` (\`fromTeamId\`, \`status\`)`).catch(() => {});
 
-    // Seed 8 teams (one per non-integrator department) — idempotent via UNIQUE(department).
-    const seeds: Array<{ slug: string; name: string; purpose: string }> = [
-      { slug: "sales",            name: "Sales",            purpose: "Convert qualified leads into booked baselines and signed estimates." },
+    // Phase 2 — Sub-team artifacts + violations tables.
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agent_team_artifacts\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`taskId\` int NOT NULL,
+      \`teamId\` int NOT NULL,
+      \`fromSeatId\` int NOT NULL,
+      \`territory\` enum('drafts','data','audits') NOT NULL,
+      \`key\` varchar(120) NOT NULL,
+      \`contentJson\` text NOT NULL,
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      CONSTRAINT \`agent_team_artifacts_id\` PRIMARY KEY(\`id\`),
+      CONSTRAINT \`agent_team_artifacts_task_terr_key_uniq\` UNIQUE(\`taskId\`, \`territory\`, \`key\`)
+    )`);
+    await db.execute(sql`CREATE INDEX \`agent_team_artifacts_task_idx\` ON \`agent_team_artifacts\` (\`taskId\`)`).catch(() => {});
+    await db.execute(sql`CREATE INDEX \`agent_team_artifacts_team_idx\` ON \`agent_team_artifacts\` (\`teamId\`)`).catch(() => {});
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agent_team_violations\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`taskId\` int,
+      \`teamId\` int NOT NULL,
+      \`seatId\` int NOT NULL,
+      \`attemptedRole\` varchar(40) NOT NULL,
+      \`attemptedTerritory\` varchar(40) NOT NULL,
+      \`attemptedKey\` varchar(255),
+      \`reason\` text,
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      CONSTRAINT \`agent_team_violations_id\` PRIMARY KEY(\`id\`)
+    )`);
+    await db.execute(sql`CREATE INDEX \`agent_team_violations_team_idx\` ON \`agent_team_violations\` (\`teamId\`, \`createdAt\`)`).catch(() => {});
+
+    // Seed dept-level umbrella teams + Phase 2 sub-teams. Idempotent via
+    // UNIQUE(department, name).
+    const seeds: Array<{ slug: string; name: string; purpose: string; costCap?: number }> = [
+      // ── Department-level umbrella teams (Phase 1 origin) ─────────────────
+      { slug: "sales",            name: "Sales",            purpose: "Umbrella for the three Sales sub-teams: Lead Nurturer, Project Estimator, Membership Success." },
       { slug: "operations",       name: "Operations",       purpose: "Schedule, dispatch, and steward jobs from booking through sign-off." },
-      { slug: "marketing",        name: "Marketing",        purpose: "Generate qualified inbound demand through stewardship-voice content and ads." },
+      { slug: "marketing",        name: "Marketing",        purpose: "Umbrella for the four Marketing sub-teams: Content/SEO, Paid Ads, Brand Guardian, Community/Reviews." },
       { slug: "finance",          name: "Finance",          purpose: "Cash flow, AR/AP, margin discipline, and P&L visibility." },
       { slug: "customer_success", name: "Customer Success", purpose: "360° member retention, onboarding, and proactive home stewardship." },
       { slug: "vendor_network",   name: "Vendor Network",   purpose: "Recruit, vet, and steward the trade-vendor bench." },
       { slug: "technology",       name: "Technology",       purpose: "System integrity, agent runtime health, and platform improvements." },
       { slug: "strategy",         name: "Strategy",         purpose: "Market research, expansion planning, and long-arc roadmap." },
+      // ── Phase 2 — Sales sub-teams (3 teammates each: frontend/backend/qa) ─
+      { slug: "sales",     name: "Lead Nurturer",     purpose: "Customer-facing nurture: drafts SMS/email/call scripts, pulls history, audits voice + escalation triggers.", costCap: 5 },
+      { slug: "sales",     name: "Project Estimator", purpose: "Estimate authoring: scope narrative, cost calculation w/ margin floor, and confidence audit.",                  costCap: 5 },
+      { slug: "sales",     name: "Membership Success",purpose: "Path A→B continuity: outreach drafts, upsell-window detection, cadence/voice audit (no hard sell).",            costCap: 5 },
+      // ── Phase 2 — Marketing sub-teams ───────────────────────────────────
+      { slug: "marketing", name: "Content & SEO",      purpose: "Organic content engine: drafts, keyword research, voice/fact/readability audit.",                              costCap: 5 },
+      { slug: "marketing", name: "Paid Ads",           purpose: "Paid search/LSA: creative drafts, performance + segmentation, policy/voice audit.",                            costCap: 5 },
+      { slug: "marketing", name: "Brand Guardian",     purpose: "Brand integrity: corrections to off-brand drafts, scans all outbound, meta-audits Brand Guardian's own calls.", costCap: 5 },
+      { slug: "marketing", name: "Community & Reviews",purpose: "Reviews + sentiment: response drafts, GBP/social monitor, response-tone audit.",                               costCap: 5 },
     ];
     for (const s of seeds) {
+      const cap = (s.costCap ?? 5).toFixed(2);
       await db.execute(sql`
-        INSERT IGNORE INTO \`agent_teams\` (\`department\`, \`name\`, \`purpose\`, \`status\`)
-        VALUES (${s.slug}, ${s.name}, ${s.purpose}, 'active')
+        INSERT INTO \`agent_teams\` (\`department\`, \`name\`, \`purpose\`, \`status\`, \`costCapDailyUsd\`)
+        SELECT ${s.slug}, ${s.name}, ${s.purpose}, 'active', ${cap}
+        FROM DUAL
+        WHERE NOT EXISTS (
+          SELECT 1 FROM \`agent_teams\`
+          WHERE \`department\` = ${s.slug} AND \`name\` = ${s.name}
+        )
       `);
     }
 
@@ -790,7 +845,14 @@ async function ensureAgentTeamTables() {
     )) as unknown as Array<Array<{ id: number }>>;
     const integratorId = Array.isArray(integratorRows?.[0]) ? integratorRows[0][0]?.id : (integratorRows as unknown as Array<{ id: number }>)[0]?.id;
     if (integratorId) {
-      const TOOLS = ["agentTeams.list", "agentTeams.assignTask", "agentTeams.broadcast"];
+      const TOOLS = [
+        "agentTeams.list",
+        "agentTeams.assignTask",
+        "agentTeams.broadcast",
+        // Phase 2: cross-team handoff and team execution kickoff.
+        "agentTeams.proposeHandoff",
+        "agentTeams.executeTask",
+      ];
       for (const tk of TOOLS) {
         await db.execute(sql`
           INSERT INTO \`ai_agent_tools\` (\`agentId\`, \`toolKey\`, \`authorized\`)
@@ -2482,6 +2544,9 @@ async function startServer() {
     const { aiAgents } = await import("../../drizzle/schema");
     // Phase 2: register all 15 tool wrappers. Import for side-effects.
     await import("../lib/agentRuntime/phase2Tools");
+    // Phase 2 (Visionary): register team-coordination tools
+    // (writeArtifact / readArtifacts / sendDirectMessage / readMessages / markDone).
+    await import("../lib/agentRuntime/teamTools");
     // Phase 5: ensure System Integrity table + start the hourly anomaly scan.
     // Tables are idempotent CREATE IF NOT EXISTS so this is safe on every boot.
     await ensureOptimizationTasksTable();

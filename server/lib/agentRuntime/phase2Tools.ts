@@ -954,6 +954,62 @@ registerTool({
   },
 });
 
+// ── Phase 2: agentTeams.executeTask + proposeHandoff ─────────────────────────
+// Both are Integrator-only tools. executeTask kicks off the 3-teammate parallel
+// fan-out for a given team task; proposeHandoff escalates work cross-team.
+
+registerTool({
+  key: "agentTeams.executeTask",
+  requiresApproval: false,
+  definition: {
+    name: "agentTeams_executeTask",
+    description:
+      "Execute a team task by fanning out to all three teammates (frontend / backend / qa) in parallel. Returns each teammate's status, their cost, and a synthesis of the artifacts produced. Use after creating a task with agentTeams_assignTask.",
+    input_schema: {
+      type: "object",
+      properties: {
+        taskId: { type: "number", description: "agent_team_tasks.id to execute." },
+      },
+      required: ["taskId"],
+    },
+  },
+  handler: async ({ input }) => {
+    const { executeTeamTask } = await import("./teamCoordinator");
+    const result = await executeTeamTask({ taskId: Number(input.taskId), triggerType: "manual" });
+    return result;
+  },
+});
+
+registerTool({
+  key: "agentTeams.proposeHandoff",
+  requiresApproval: false,
+  definition: {
+    name: "agentTeams_proposeHandoff",
+    description:
+      "Escalate a piece of work cross-team — e.g. Marketing→Sales when a lead is qualified, or Sales→Operations when an estimate is approved. Some eventTypes auto-accept and create the receiving task immediately ('marketing.lead_qualified', 'sales.estimate_approved'); others land in pending and require operator review.",
+    input_schema: {
+      type: "object",
+      properties: {
+        fromTeamId: { type: "number" },
+        toTeamId: { type: "number" },
+        eventType: { type: "string", description: "Dot-namespaced event, e.g. 'marketing.lead_qualified'." },
+        payload: { type: "object", additionalProperties: true, description: "Optional payload (customerId, opportunityId, etc.)." },
+      },
+      required: ["fromTeamId", "toTeamId", "eventType"],
+    },
+  },
+  handler: async ({ input }) => {
+    const { proposeTeamHandoff } = await import("./teamCoordinator");
+    const result = await proposeTeamHandoff({
+      fromTeamId: Number(input.fromTeamId),
+      toTeamId: Number(input.toTeamId),
+      eventType: String(input.eventType),
+      payload: (input.payload as Record<string, unknown>) ?? undefined,
+    });
+    return result;
+  },
+});
+
 export const PHASE_2_TOOL_KEYS: RegisteredTool["key"][] = [
   "customers.list",
   "customers.get",
@@ -980,4 +1036,11 @@ export const PHASE_2_TOOL_KEYS: RegisteredTool["key"][] = [
   "agentTeams.list",
   "agentTeams.assignTask",
   "agentTeams.broadcast",
+  "agentTeams.executeTask",
+  "agentTeams.proposeHandoff",
+  "team.writeArtifact",
+  "team.readArtifacts",
+  "team.sendDirectMessage",
+  "team.readMessages",
+  "team.markDone",
 ];
