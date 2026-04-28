@@ -245,3 +245,66 @@ Ready to renew at {{renewalRate}}/year? Reply YES to confirm, or let's talk if y
 — HP Team
 
 ---
+
+## Phase 2 — 3-Teammate Sub-Teams (Visionary Console)
+
+Sales is split into three sub-teams that execute customer-facing work in parallel. Each sub-team has three seats — frontend (drafts/), backend (data/), QA (audits/) — and follows the same three rules.
+
+### The Three Rules
+
+1. **Own Territory** — frontend writes only to `drafts/` (customer-facing copy), backend writes only to `data/` (research, calculations, history), QA writes only to `audits/` (voice, fact, margin, policy reviews). Cross-territory writes are rejected by `team_writeArtifact` and logged to `agent_team_violations`.
+2. **Direct Messages** — teammates DM each other via `team_sendDirectMessage(toSeatName, body)` to coordinate. The team lead does not see this chatter; only the synthesized output. `team_readMessages` filters to messages addressed to the caller plus broadcasts.
+3. **Start Parallel** — the coordinator (`teamCoordinator.executeTeamTask`) fans out to all three teammates simultaneously via `Promise.all`. No teammate's claim blocks another. Each independently writes to its own territory; the synthesis step composes the final output.
+
+### Sub-Team 1: Lead Nurturer
+
+**Team ID:** `sales/Lead Nurturer`
+**Mission:** Customer-facing nurture — drafts SMS/email/call scripts, pulls customer history + scheduling, audits voice + escalation triggers.
+
+| Seat | Role | Territory | Key tools |
+|------|------|-----------|-----------|
+| `ai_lead_nurturer_frontend` | frontend | drafts/ | customers.get, opportunities.list, team.* |
+| `ai_lead_nurturer_backend`  | backend  | data/   | customers.get, opportunities.list, scheduling.listSlots, team.* |
+| `ai_lead_nurturer_qa`       | qa       | audits/ | customers.get, opportunities.get, team.* |
+
+### Sub-Team 2: Project Estimator
+
+**Team ID:** `sales/Project Estimator`
+**Mission:** Estimate authoring — scope narrative + price range presentation, cost calculation with margin floor enforcement, confidence-tier audit.
+
+| Seat | Role | Territory | Key tools |
+|------|------|-----------|-----------|
+| `ai_project_estimator_frontend` | frontend | drafts/ | opportunities.get, team.* |
+| `ai_project_estimator_backend`  | backend  | data/   | opportunities.get, invoices.query, team.* |
+| `ai_project_estimator_qa`       | qa       | audits/ | opportunities.get, team.* |
+
+**Cost rules (Backend enforces, QA validates):**
+- Internal labor: $150/hr
+- Subcontractor cost × 1.5
+- Materials × markup (default 1.4)
+- Hard margin floor: 30% gross margin (40% on small jobs under $2,000 hard cost)
+
+### Sub-Team 3: Membership Success
+
+**Team ID:** `sales/Membership Success`
+**Mission:** Path A → Path B continuity — outreach drafts (no hard sell), upsell-window detection, cadence/voice audit.
+
+| Seat | Role | Territory | Key tools |
+|------|------|-----------|-----------|
+| `ai_membership_success_frontend` | frontend | drafts/ | customers.get, opportunities.list, team.* |
+| `ai_membership_success_backend`  | backend  | data/   | customers.get, opportunities.list, opportunities.get, invoices.query, team.* |
+| `ai_membership_success_qa`       | qa       | audits/ | customers.get, team.* |
+
+### Cross-Department Handoffs (auto-accept)
+
+When the Sales sub-team produces an outcome that should escalate cross-department, it (or the Integrator on its behalf) calls `agentTeams_proposeHandoff(fromTeamId, toTeamId, eventType, payload)`:
+
+- `sales.estimate_approved` — auto-accepted by Operations; creates a dispatch task on the Operations team.
+
+### Voice Rules (apply to every Sales sub-team draft)
+
+- Refer to customers as "Owners" or by name; never "homeowners," "clients," "leads."
+- **Forbidden vocab:** handyman, cheap, affordable, easy, fix, repair, best, save, discount, limited time, deal.
+- Frame outcomes as stewardship of the home, not transactions.
+- Identity-first: address the Owner by name in every personalized comm.
+- 360° members get continuity-tone outreach; non-members get an invitation to consultation.

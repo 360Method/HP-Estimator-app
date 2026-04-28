@@ -859,8 +859,19 @@ function ActionQueuePane() {
   const summaryQ = trpc.agentTeams.consoleSummary.useQuery(undefined, { refetchInterval: 30_000 });
   const tasksQ = summaryQ.data?.activeTasks ?? [];
   const handoffsQ = summaryQ.data?.recentHandoffs ?? [];
+  const messagesQ = summaryQ.data?.recentMessages ?? [];
+  const violationsQ = summaryQ.data?.recentViolations ?? [];
+  const blockedQ = summaryQ.data?.blockedTasks ?? [];
+  const costRollup = summaryQ.data?.teamCostRollup ?? [];
   const pendingTasksQ = trpc.aiAgents.list.useQuery();
   const pendingDrafts = (pendingTasksQ.data ?? []).reduce((s, a) => s + (a.pendingDrafts ?? 0), 0);
+
+  // Top 5 spending teams today, sorted by spent (desc).
+  const topSpendingTeams = [...costRollup]
+    .filter((t) => t.spentTodayUsd > 0 || t.atCap)
+    .sort((a, b) => b.spentTodayUsd - a.spentTodayUsd)
+    .slice(0, 5);
+  const teamsAtCap = costRollup.filter((t) => t.atCap);
 
   return (
     <div className="space-y-3">
@@ -889,6 +900,26 @@ function ActionQueuePane() {
         )}
       </Card>
 
+      {/* Phase 2 — blocked / cost-capped tasks need attention first */}
+      {blockedQ.length > 0 && (
+        <Card className="p-3 border-red-200 bg-red-50/40">
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-red-800">
+              Blocked / cost-capped
+            </div>
+            <Badge className="bg-red-100 text-red-800 border-red-200">{blockedQ.length}</Badge>
+          </div>
+          <ul className="space-y-1.5 max-h-40 overflow-y-auto">
+            {blockedQ.slice(0, 6).map((t) => (
+              <li key={t.id} className="text-xs">
+                <div className="truncate font-medium text-red-900">{t.title}</div>
+                <div className="text-[10px] text-red-700/80">team #{t.teamId} · {t.status}</div>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
       <Card className="p-3">
         <div className="flex items-center justify-between mb-2">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -915,6 +946,91 @@ function ActionQueuePane() {
                 </div>
               </li>
             ))}
+          </ul>
+        )}
+      </Card>
+
+      {/* Phase 2 — inter-teammate DM stream */}
+      <Card className="p-3">
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Recent teammate DMs
+          </div>
+          {messagesQ.length > 0 && <Badge variant="outline">{messagesQ.length}</Badge>}
+        </div>
+        {messagesQ.length === 0 ? (
+          <p className="text-[11px] text-muted-foreground italic">
+            No teammate-to-teammate chatter yet.
+          </p>
+        ) : (
+          <ul className="space-y-1.5 max-h-40 overflow-y-auto">
+            {messagesQ.slice(0, 8).map((m) => (
+              <li key={m.id} className="text-[11px] border-l-2 border-primary/40 pl-2">
+                <div className="text-muted-foreground">
+                  seat #{m.fromSeatId} → seat #{m.toSeatId}
+                </div>
+                <div className="truncate">{m.body}</div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      {/* Phase 2 — territory violations (if any) */}
+      {violationsQ.length > 0 && (
+        <Card className="p-3 border-amber-200 bg-amber-50/40">
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-amber-800">
+              Territory violations
+            </div>
+            <Badge className="bg-amber-100 text-amber-800 border-amber-200">{violationsQ.length}</Badge>
+          </div>
+          <ul className="space-y-1.5 max-h-32 overflow-y-auto">
+            {violationsQ.slice(0, 5).map((v) => (
+              <li key={v.id} className="text-[11px]">
+                <div className="text-amber-900 font-medium">
+                  seat #{v.seatId} ({v.attemptedRole}) → {v.attemptedTerritory}
+                </div>
+                {v.attemptedKey && <div className="text-amber-800/80 truncate">key: {v.attemptedKey}</div>}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      {/* Phase 2 — per-team cost cap rail */}
+      <Card className="p-3">
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Team cost (24h)
+          </div>
+          {teamsAtCap.length > 0 && (
+            <Badge className="bg-red-100 text-red-800 border-red-200">{teamsAtCap.length} at cap</Badge>
+          )}
+        </div>
+        {topSpendingTeams.length === 0 ? (
+          <p className="text-[11px] text-muted-foreground italic">
+            No team spend yet today.
+          </p>
+        ) : (
+          <ul className="space-y-1.5">
+            {topSpendingTeams.map((t) => {
+              const pct = t.capUsd > 0 ? Math.min(100, Math.round((t.spentTodayUsd / t.capUsd) * 100)) : 0;
+              const barColor = t.atCap ? "bg-red-500" : pct > 75 ? "bg-amber-500" : "bg-emerald-500";
+              return (
+                <li key={t.teamId} className="text-[11px]">
+                  <div className="flex items-center justify-between mb-0.5">
+                    <span className="truncate">{t.name}</span>
+                    <span className="tabular-nums text-muted-foreground">
+                      ${t.spentTodayUsd.toFixed(2)} / ${t.capUsd.toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div className={`h-full ${barColor} transition-all`} style={{ width: `${pct}%` }} />
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
       </Card>

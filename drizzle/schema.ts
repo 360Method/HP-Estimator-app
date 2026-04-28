@@ -2214,6 +2214,8 @@ export const agentTeams = mysqlTable("agent_teams", {
   teamLeadSeatId: int("teamLeadSeatId"),
   purpose: text("purpose"),
   status: mysqlEnum("status", ["active", "paused"]).notNull().default("active"),
+  /** Per-team daily cost ceiling in USD. Coordinator pauses new assignments above this. */
+  costCapDailyUsd: decimal("costCapDailyUsd", { precision: 8, scale: 2 }).notNull().default("5.00"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -2286,3 +2288,36 @@ export const agentTeamHandoffs = mysqlTable("agent_team_handoffs", {
 });
 export type DbAgentTeamHandoff = typeof agentTeamHandoffs.$inferSelect;
 export type InsertDbAgentTeamHandoff = typeof agentTeamHandoffs.$inferInsert;
+
+// ─── AGENT TEAM ARTIFACTS (Phase 2) ───────────────────────────────────────────
+// Territory-scoped output store. Frontend writes drafts/, Backend writes data/,
+// QA writes audits/. Enforced at the tool layer — see teamCoordinator.ts.
+
+export const agentTeamArtifacts = mysqlTable("agent_team_artifacts", {
+  id: int("id").autoincrement().primaryKey(),
+  taskId: int("taskId").notNull(),
+  teamId: int("teamId").notNull(),
+  /** FK to ai_agents.id of the writer */
+  fromSeatId: int("fromSeatId").notNull(),
+  territory: mysqlEnum("territory", ["drafts", "data", "audits"]).notNull(),
+  key: varchar("key", { length: 120 }).notNull(),
+  contentJson: text("contentJson").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbAgentTeamArtifact = typeof agentTeamArtifacts.$inferSelect;
+export type InsertDbAgentTeamArtifact = typeof agentTeamArtifacts.$inferInsert;
+
+export const agentTeamViolations = mysqlTable("agent_team_violations", {
+  id: int("id").autoincrement().primaryKey(),
+  taskId: int("taskId"),
+  teamId: int("teamId").notNull(),
+  /** FK to ai_agents.id — the seat that attempted the cross-territory write. */
+  seatId: int("seatId").notNull(),
+  attemptedRole: varchar("attemptedRole", { length: 40 }).notNull(),
+  attemptedTerritory: varchar("attemptedTerritory", { length: 40 }).notNull(),
+  attemptedKey: varchar("attemptedKey", { length: 255 }),
+  reason: text("reason"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type DbAgentTeamViolation = typeof agentTeamViolations.$inferSelect;
+export type InsertDbAgentTeamViolation = typeof agentTeamViolations.$inferInsert;

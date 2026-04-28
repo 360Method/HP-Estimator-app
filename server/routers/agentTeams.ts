@@ -16,16 +16,19 @@
 
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { adminProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
 import {
   aiAgents,
+  aiAgentRuns,
   agentTeams,
   agentTeamMembers,
   agentTeamTasks,
   agentTeamMessages,
   agentTeamHandoffs,
+  agentTeamArtifacts,
+  agentTeamViolations,
 } from "../../drizzle/schema";
 
 const DEPARTMENTS = [
@@ -430,6 +433,184 @@ export const agentTeamsRouter = router({
       .from(agentTeamHandoffs)
       .orderBy(desc(agentTeamHandoffs.createdAt))
       .limit(20);
-    return { teams, activeTasks, recentHandoffs };
+
+    // Phase 2 enrichments — DMs, blocked tasks, violations, per-team daily cost.
+    const since = new Date();
+    since.setHours(0, 0, 0, 0);
+    const recentMessages = await d
+      .select()
+      .from(agentTeamMessages)
+      .where(sql`${agentTeamMessages.toSeatId} IS NOT NULL`) // direct messages only, not broadcasts
+      .orderBy(desc(agentTeamMessages.createdAt))
+      .limit(15);
+    const recentViolations = await d
+      .select()
+      .from(agentTeamViolations)
+      .orderBy(desc(agentTeamViolations.createdAt))
+      .limit(10);
+    const blockedTasks = activeTasks.filter((t) => t.status === "blocked");
+
+    // Per-team daily cost rollup — sums every member seat's run cost since midnight.
+    const memberSeats = await d
+      .select({ teamId: agentTeamMembers.teamId, seatId: agentTeamMembers.seatId })
+      .from(agentTeamMembers);
+    const seatToTeam = new Map<number, number[]>();
+    for (const m of memberSeats) {
+      const arr = seatToTeam.get(m.seatId) ?? [];
+      arr.push(m.teamId);
+      seatToTeam.set(m.seatId, arr);
+    }
+    const seatIds = Array.from(seatToTeam.keys());
+    const teamCostToday = new Map<number, number>();
+    if (seatIds.length > 0) {
+      const runs = await d
+        .select({
+          agentId: aiAgentRuns.agentId,
+          costSum: sql<number>`COALESCE(SUM(${aiAgentRuns.costUsd}), 0)`,
+        })
+        .from(aiAgentRuns)
+        .where(and(inArray(aiAgentRuns.agentId, seatIds), gte(aiAgentRuns.createdAt, since)))
+        .groupBy(aiAgentRuns.agentId);
+      for (const r of runs) {
+        const teamIds = seatToTeam.get(r.agentId) ?? [];
+        for (const tid of teamIds) {
+          teamCostToday.set(tid, (teamCostToday.get(tid) ?? 0) + Number(r.costSum ?? 0));
+        }
+      }
+    }
+    const teamCostRollup = teams.map((t) => ({
+      teamId: t.id,
+      department: t.department,
+      name: t.name,
+      spentTodayUsd: teamCostToday.get(t.id) ?? 0,
+      capUsd: Number(t.costCapDailyUsd),
+      atCap: (teamCostToday.get(t.id) ?? 0) >= Number(t.costCapDailyUsd),
+    }));
+
+    return {
+      teams,
+      activeTasks,
+      recentHandoffs,
+      recentMessages,
+      recentViolations,
+      blockedTasks,
+      teamCostRollup,
+    };
   }),
+
+  // ── Phase 2 — execute team task (parallel fan-out to all 3 teammates) ─────
+  executeTask: adminProcedure
+    .input(z.object({ taskId: z.number() }))
+    .mutation(async ({ input }) => {
+      const { executeTeamTask } = await import("../lib/agentRuntime/teamCoordinator");
+      const result = await executeTeamTask({ taskId: input.taskId, triggerType: "manual" });
+      return result;
+    }),
+
+  // ── Phase 2 — artifact + violation read ──────────────────────────────────
+  listArtifacts: adminProcedure
+    .input(
+      z.object({
+        taskId: z.number().optional(),
+        teamId: z.number().optional(),
+        limit: z.number().min(1).max(200).default(100),
+      })
+    )
+    .query(async ({ input }) => {
+      const d = await db();
+      const filters = [] as Array<ReturnType<typeof eq>>;
+      if (input.taskId !== undefined) filters.push(eq(agentTeamArtifacts.taskId, input.taskId));
+      if (input.teamId !== undefined) filters.push(eq(agentTeamArtifacts.teamId, input.teamId));
+      const where = filters.length > 0 ? and(...filters) : undefined;
+      const rows = where
+        ? await d.select().from(agentTeamArtifacts).where(where).orderBy(desc(agentTeamArtifacts.createdAt)).limit(input.limit)
+        : await d.select().from(agentTeamArtifacts).orderBy(desc(agentTeamArtifacts.createdAt)).limit(input.limit);
+      return rows.map((r) => ({
+        ...r,
+        content: safeParseJson(r.contentJson),
+      }));
+    }),
+
+  listViolations: adminProcedure
+    .input(
+      z
+        .object({
+          teamId: z.number().optional(),
+          limit: z.number().min(1).max(100).default(50),
+        })
+        .optional()
+    )
+    .query(async ({ input }) => {
+      const d = await db();
+      const rows = input?.teamId
+        ? await d
+            .select()
+            .from(agentTeamViolations)
+            .where(eq(agentTeamViolations.teamId, input.teamId))
+            .orderBy(desc(agentTeamViolations.createdAt))
+            .limit(input.limit)
+        : await d
+            .select()
+            .from(agentTeamViolations)
+            .orderBy(desc(agentTeamViolations.createdAt))
+            .limit(input?.limit ?? 50);
+      return rows;
+    }),
+
+  setCostCap: adminProcedure
+    .input(z.object({ teamId: z.number(), costCapDailyUsd: z.number().min(0).max(1000) }))
+    .mutation(async ({ input }) => {
+      const d = await db();
+      await d
+        .update(agentTeams)
+        .set({ costCapDailyUsd: input.costCapDailyUsd.toFixed(2) })
+        .where(eq(agentTeams.id, input.teamId));
+      return { ok: true };
+    }),
+
+  listAllMessages: adminProcedure
+    .input(
+      z
+        .object({
+          teamId: z.number().optional(),
+          directOnly: z.boolean().default(false),
+          limit: z.number().min(1).max(500).default(100),
+        })
+        .optional()
+    )
+    .query(async ({ input }) => {
+      const d = await db();
+      const filters = [] as Array<ReturnType<typeof eq>>;
+      if (input?.teamId !== undefined) filters.push(eq(agentTeamMessages.teamId, input.teamId));
+      const baseWhere = filters.length > 0 ? and(...filters) : undefined;
+      const directWhere = input?.directOnly
+        ? sql`${agentTeamMessages.toSeatId} IS NOT NULL`
+        : undefined;
+      const where =
+        baseWhere && directWhere
+          ? and(baseWhere, directWhere)
+          : (baseWhere ?? directWhere);
+      const rows = where
+        ? await d
+            .select()
+            .from(agentTeamMessages)
+            .where(where)
+            .orderBy(desc(agentTeamMessages.createdAt))
+            .limit(input?.limit ?? 100)
+        : await d
+            .select()
+            .from(agentTeamMessages)
+            .orderBy(desc(agentTeamMessages.createdAt))
+            .limit(input?.limit ?? 100);
+      return rows;
+    }),
 });
+
+function safeParseJson(s: string | null): unknown {
+  if (!s) return null;
+  try {
+    return JSON.parse(s);
+  } catch {
+    return s;
+  }
+}

@@ -308,3 +308,69 @@ Projected CPL improvement if approved: {{projected_cpl_improvement}}
 ACTION: Reply "approve" to reallocate or "hold" to keep current budget.
 
 ---
+
+## Phase 2 — 3-Teammate Sub-Teams (Visionary Console)
+
+Marketing is split into four sub-teams, each with three seats — frontend (drafts/), backend (data/), QA (audits/). Same three rules apply as in Sales.
+
+### The Three Rules
+
+1. **Own Territory** — frontend writes only to `drafts/`, backend writes only to `data/`, QA writes only to `audits/`. Cross-territory writes are rejected and logged.
+2. **Direct Messages** — teammates DM each other peer-to-peer; the team lead does not see chatter.
+3. **Start Parallel** — coordinator fans out to all three simultaneously.
+
+### Sub-Team 1: Content & SEO
+
+**Team ID:** `marketing/Content & SEO`
+**Mission:** Organic content engine — keyword research, drafts, voice/fact/readability audit.
+
+| Seat | Role | Territory | Notes |
+|------|------|-----------|-------|
+| `ai_content_seo_frontend` | frontend | drafts/ | Long-form drafts (blog, service pages, FAQs). |
+| `ai_content_seo_backend`  | backend  | data/   | Keyword cluster, intent map, competitor gap analysis. |
+| `ai_content_seo_qa`       | qa       | audits/ | Voice + fact + readability + SEO basics check. |
+
+### Sub-Team 2: Paid Ads
+
+**Team ID:** `marketing/Paid Ads`
+**Mission:** Paid search/LSA — creative variants, performance + segmentation, policy audit.
+
+| Seat | Role | Territory | Notes |
+|------|------|-----------|-------|
+| `ai_paid_ads_frontend` | frontend | drafts/ | Headline/description/CTA variants, 3 per ad group. |
+| `ai_paid_ads_backend`  | backend  | data/   | CPL, conversion rate, search-term performance, segment skew. |
+| `ai_paid_ads_qa`       | qa       | audits/ | Google Ads / LSA policy compliance + voice. |
+
+### Sub-Team 3: Brand Guardian
+
+**Team ID:** `marketing/Brand Guardian`
+**Mission:** Brand integrity — meta-checks even Brand Guardian's own decisions.
+
+| Seat | Role | Territory | Notes |
+|------|------|-----------|-------|
+| `ai_brand_guardian_frontend` | frontend | drafts/ | Proposed corrections for off-brand copy flagged by Backend. |
+| `ai_brand_guardian_backend`  | backend  | data/   | Sweeps recent outbound; flags forbidden vocab, voice slips. |
+| `ai_brand_guardian_qa`       | qa       | audits/ | Catches false positives + over-correction by Frontend. |
+
+### Sub-Team 4: Community & Reviews
+
+**Team ID:** `marketing/Community & Reviews`
+**Mission:** Reviews + sentiment — response drafts, GBP/social monitor, response-tone audit.
+
+| Seat | Role | Territory | Notes |
+|------|------|-----------|-------|
+| `ai_community_reviews_frontend` | frontend | drafts/ | Personalized review responses (5-star + recovery). |
+| `ai_community_reviews_backend`  | backend  | data/   | Review feed, sentiment scores, customer context per reviewer. |
+| `ai_community_reviews_qa`       | qa       | audits/ | Tone match (gracious vs recovery) + privacy in public responses. |
+
+### Cross-Department Handoffs (auto-accept)
+
+- `marketing.lead_qualified` — Marketing → Sales. Auto-accepted; creates a Lead Nurturer task on the Sales `Lead Nurturer` sub-team with the customerId payload.
+
+### Voice Rules (apply to every Marketing sub-team draft)
+
+- Stewardship voice; identity-first.
+- **Forbidden vocab:** handyman, cheap, affordable, easy, fix, repair, best, save, discount, limited time, deal.
+- Outcome-led, not feature-led.
+
+---
