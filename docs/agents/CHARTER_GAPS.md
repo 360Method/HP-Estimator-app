@@ -30,8 +30,28 @@ section under the External Contractor Network seat.
 | `sub_approval_rate` | Sub engagement requests approved by PM | % | monthly |
 | `specialty_coverage_rate` | Specialty jobs covered by vetted sub (vs declined) | % | monthly |
 
-**Action needed:** Add a `#### KPIs` table to the `external_contractor_network`
-section in `docs/agents/operations.md`, then re-run `node scripts/seed-charters.mjs`.
+---
+
+## DRAFT — Marcin to approve
+
+Add this block to `docs/agents/operations.md` under the `### External Contractor Network` section, immediately after the `#### SOPs` block:
+
+```markdown
+#### KPIs
+
+| key | label | target_min | target_max | unit | period |
+|-----|-------|-----------|-----------|------|--------|
+| sub_engagement_time | Time from Job Assigned to Sub Engaged | null | 24 | hours | weekly |
+| sub_approval_rate | Sub Engagement Requests Approved by PM | 85 | null | % | monthly |
+| specialty_coverage_rate | Specialty Jobs Matched to Vetted Sub | 90 | null | % | monthly |
+```
+
+**Notes on targets:**
+- `sub_engagement_time < 24h` — matches the charter SOP expectation that PM gets notified same day; adjust if typical subs take longer to respond
+- `sub_approval_rate > 85%` — measures quality of AI's sub-selection; lower than 85% means AI is routing to wrong vendors
+- `specialty_coverage_rate > 90%` — measures network breadth; if <90%, the contractor network needs expansion
+
+After adding, run: `node scripts/seed-charters.mjs`
 
 ---
 
@@ -48,7 +68,11 @@ recommendation" — but neither is defined in the charter's Initial Playbook Lib
 - Weekly campaign review summary
 - Budget reallocation recommendation
 
-**Suggested playbook to define (Marcin approves content/format):**
+---
+
+## DRAFT — Marcin to approve
+
+Add this block to `docs/agents/marketing.md` in the `## Initial Playbook Library` section (after the `brand-weekly-audit` playbook at the end of the file):
 
 ```markdown
 ### Playbook: Paid Ad Daily Brief
@@ -59,15 +83,39 @@ recommendation" — but neither is defined in the charter's Initial Playbook Lib
 
 Paid Ad Brief — {{date}}
 
-Campaigns: {{campaigns}}
-Total spend: {{total_spend}}
-Avg CPL: {{cpl}}
+| Campaign | Spend | Leads | CPL |
+|----------|-------|-------|-----|
+{{campaigns}}
 
-Flags: {{flags}}
+**Total spend:** {{total_spend}}
+**Avg CPL:** {{cpl}}
+
+**Flags:**
+{{flags}}
+
+No action required if no flags. Reply to pause any campaign.
+
+---
+
+### Playbook: Budget Reallocation Recommendation
+**Slug:** `budget-reallocation-rec`
+**Category:** internal-memo
+**Owner:** `ai_paid_ads`
+**Variables:** `{{week_of}}`, `{{top_performer}}`, `{{underperformer}}`, `{{recommendation}}`, `{{projected_cpl_improvement}}`
+
+Budget Reallocation — Week of {{week_of}}
+
+**Top performer:** {{top_performer}}
+**Underperformer:** {{underperformer}}
+
+**Recommendation:** {{recommendation}}
+
+Projected CPL improvement if approved: {{projected_cpl_improvement}}
+
+ACTION: Reply "approve" to reallocate or "hold" to keep current budget.
 ```
 
-**Action needed:** Add the above playbook block to the Initial Playbook Library
-section of `docs/agents/marketing.md`, then re-run `node scripts/seed-charters.mjs`.
+After adding, run: `node scripts/seed-charters.mjs`
 
 ---
 
