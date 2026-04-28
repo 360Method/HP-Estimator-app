@@ -568,6 +568,25 @@ export const agentTeamsRouter = router({
       return { ok: true };
     }),
 
+  /**
+   * Single round-trip the OrgChart UI uses to render the Phase 2 sub-team
+   * grouping layer. Returns one row per (team, member) joined with the seat's
+   * id + role — keeps the page on a single tRPC fetch instead of N+1.
+   */
+  listForOrgChart: adminProcedure.query(async () => {
+    const d = await db();
+    const teams = await d.select().from(agentTeams).orderBy(asc(agentTeams.id));
+    const members = await d
+      .select({
+        teamId: agentTeamMembers.teamId,
+        seatId: agentTeamMembers.seatId,
+        role: agentTeamMembers.role,
+        joinedAt: agentTeamMembers.joinedAt,
+      })
+      .from(agentTeamMembers);
+    return { teams, members };
+  }),
+
   listAllMessages: adminProcedure
     .input(
       z
