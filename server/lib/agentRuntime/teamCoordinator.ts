@@ -18,8 +18,10 @@
  * Cross-department handoff:
  *   The Integrator can call `proposeTeamHandoff(fromTeamId, toTeamId, eventType,
  *   payload)` to escalate work from Sales → Operations or similar. We auto-accept
- *   handoffs when the eventType matches a registered auto-accept rule (default:
- *   "marketing.lead_qualified", "sales.estimate_approved"); otherwise it lands
+ *   handoffs when the eventType matches a registered auto-accept rule (Phase 2:
+ *   "marketing.lead_qualified", "sales.estimate_approved"; Phase 3 adds
+ *   operations.project_completed, cs.member_renewed, cs.churn_risk_flagged,
+ *   vendor.gap_detected, vendor.performance_dropped); otherwise it lands
  *   in pending and the Integrator must review.
  */
 
@@ -45,9 +47,24 @@ const TEAM_TOOL_KEYS = [
   "team.markDone",
 ];
 
+// Auto-accept eventTypes — when proposeTeamHandoff is called with one of these,
+// the handoff is immediately marked accepted and a task is created on the
+// receiving team. Phase 3 expands this set to cover the cross-department
+// rhythms approved with Marcin.
+//
+// Intentionally NOT auto-accepted:
+//   finance.margin_floor_breach — strategic decision; Integrator surfaces this
+//   to Marcin via a notification rather than auto-routing to a team.
 const AUTO_ACCEPT_HANDOFFS = new Set([
-  "marketing.lead_qualified",
-  "sales.estimate_approved",
+  // Phase 2
+  "marketing.lead_qualified",     // Marketing → Sales (Lead Nurturer)
+  "sales.estimate_approved",      // Sales → Operations (Dispatch)
+  // Phase 3
+  "operations.project_completed", // Operations → Customer Success (Onboarding)
+  "cs.member_renewed",            // Customer Success → Sales (Membership Success)
+  "cs.churn_risk_flagged",        // Customer Success → Marketing (Community & Reviews — testimonial recovery)
+  "vendor.gap_detected",          // Operations/Vendor → Vendor Acquisition
+  "vendor.performance_dropped",   // Operations/Vendor → Vendor Operations
 ]);
 
 // ────────────────────────────────────────────────────────────────────────────

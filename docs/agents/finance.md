@@ -160,8 +160,21 @@ Human tax and compliance oversight. Reviews AI-generated financials quarterly, f
 
 ---
 
+## Phase 3 Sub-Team: Bookkeeping (3 teammates)
+
+**Members**
+- `ai_bookkeeping_frontend` — drafts/ (CPA-facing monthly reconciliation memo, anomaly summaries for Marcin)
+- `ai_bookkeeping_backend` — data/ (categorized transactions, uncategorized list, category variance vs prior month, anomaly list)
+- `ai_bookkeeping_qa` — audits/ (categorization audit, anomaly review, reconciliation completeness)
+
+**Three Rules** apply.
+
+**Cross-department handoffs (Finance is intentionally low-handoff)**
+- `finance.margin_floor_breach` is **NOT auto-routed**. Margin floor breaches are a strategic decision and surface to Marcin via a notification rather than spawning a downstream team task. The Integrator is responsible for raising the alert.
+- `ai_margin_monitor` and `ai_cash_flow` remain single specialist seats — they each own end-to-end without a 3-teammate split. Their alerts feed Marcin directly.
+
 ## Department Head SOPs
-`ai_bookkeeping` runs finance. Weekly: AR aging report to Marcin. Monthly: P&L summary. Quarterly: package for CPA/Tax.
+`ai_bookkeeping` runs finance. Weekly: AR aging report to Marcin. Monthly: P&L summary. Quarterly: package for CPA/Tax. The Phase 3 Bookkeeping sub-team executes the daily reconciliation; `ai_bookkeeping` is the seat that owns the team and KPIs roll up to the Integrator through it.
 
 ## Failure Modes
 - QuickBooks sync failure → AI Bookkeeping flags, Marcin resolves manually

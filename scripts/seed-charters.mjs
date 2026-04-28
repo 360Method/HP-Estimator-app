@@ -288,6 +288,21 @@ const EXPECTED_SEATS = [
   'ai_vendor_outreach','ai_vendor_onboarding','ai_trade_matching','ai_vendor_performance',
   'ai_system_integrity','ai_security','software_engineer',
   'ai_market_research','ai_expansion_playbook','ai_licensing_whitelabel',
+  // ── Phase 2: 21 sub-team seats ────────────────────────────────────────────
+  'ai_lead_nurturer_frontend','ai_lead_nurturer_backend','ai_lead_nurturer_qa',
+  'ai_project_estimator_frontend','ai_project_estimator_backend','ai_project_estimator_qa',
+  'ai_membership_success_frontend','ai_membership_success_backend','ai_membership_success_qa',
+  'ai_content_seo_frontend','ai_content_seo_backend','ai_content_seo_qa',
+  'ai_paid_ads_frontend','ai_paid_ads_backend','ai_paid_ads_qa',
+  'ai_brand_guardian_frontend','ai_brand_guardian_backend','ai_brand_guardian_qa',
+  'ai_community_reviews_frontend','ai_community_reviews_backend','ai_community_reviews_qa',
+  // ── Phase 3: 18 sub-team seats ────────────────────────────────────────────
+  'ai_dispatch_frontend','ai_dispatch_backend','ai_dispatch_qa',
+  'ai_onboarding_frontend','ai_onboarding_backend','ai_onboarding_qa',
+  'ai_annual_valuation_frontend','ai_annual_valuation_backend','ai_annual_valuation_qa',
+  'ai_vendor_acquisition_frontend','ai_vendor_acquisition_backend','ai_vendor_acquisition_qa',
+  'ai_vendor_ops_frontend','ai_vendor_ops_backend','ai_vendor_ops_qa',
+  'ai_bookkeeping_frontend','ai_bookkeeping_backend','ai_bookkeeping_qa',
 ];
 
 const foundSeats = new Set(agentRows.map(r => r.seatName));

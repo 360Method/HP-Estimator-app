@@ -170,8 +170,27 @@ Coordinate vetted subcontractors for specialty work (electrical, plumbing, HVAC,
 
 ---
 
+## Phase 3 Sub-Team: Dispatch (3 teammates)
+
+**Members**
+- `ai_dispatch_frontend` — drafts/ (crew briefs, customer arrival/confirmation/reschedule comms)
+- `ai_dispatch_backend` — data/ (schedule, conflict detection, crew availability, materials/sub status, drive-time clustering, utilization)
+- `ai_dispatch_qa` — audits/ (schedule integrity, brief accuracy, voice + escalation audit)
+
+**Three Rules**
+1. **Own territory** — frontend writes drafts/, backend writes data/, qa writes audits/. Cross-territory writes are rejected and logged to `agent_team_violations`.
+2. **Direct messages** — teammates DM each other via `team_sendDirectMessage`, bypassing the dept head (`ai_dispatch`).
+3. **Start parallel** — coordinator fires all three simultaneously; backend doesn't wait for frontend.
+
+**Cross-team handoffs that land here**
+- `sales.estimate_approved` → auto-accepts; creates a Dispatch task to schedule the new job and assign crew.
+
+**Cross-team handoffs originating here**
+- `operations.project_completed` → Customer Success Onboarding (auto-accepts).
+- `vendor.gap_detected` → Vendor Acquisition (auto-accepts) when no internal crew or active vendor matches a specialty trade.
+
 ## Department Head SOPs
-`ai_dispatch` runs the ops department. Daily: morning brief to PM. Weekly: crew utilization report to Integrator. Monthly: callback analysis.
+`ai_dispatch` runs the ops department. Daily: morning brief to PM. Weekly: crew utilization report to Integrator. Monthly: callback analysis. The Dispatch sub-team executes the day-to-day; `ai_dispatch` is the seat that owns the team and KPIs roll up to the Integrator through it.
 
 ## Failure Modes
 - Dispatch cron fails → PM gets fallback alert via notification bell

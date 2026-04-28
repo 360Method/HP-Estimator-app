@@ -986,7 +986,7 @@ registerTool({
   definition: {
     name: "agentTeams_proposeHandoff",
     description:
-      "Escalate a piece of work cross-team — e.g. Marketing→Sales when a lead is qualified, or Sales→Operations when an estimate is approved. Some eventTypes auto-accept and create the receiving task immediately ('marketing.lead_qualified', 'sales.estimate_approved'); others land in pending and require operator review.",
+      "Escalate a piece of work cross-team — e.g. Marketing→Sales when a lead is qualified, or Sales→Operations when an estimate is approved. Auto-accepted eventTypes create the receiving task immediately: 'marketing.lead_qualified', 'sales.estimate_approved', 'operations.project_completed', 'cs.member_renewed', 'cs.churn_risk_flagged', 'vendor.gap_detected', 'vendor.performance_dropped'. Other eventTypes land in pending and require operator review. Note: 'finance.margin_floor_breach' is intentionally NOT auto-routed — surface it to Marcin instead.",
     input_schema: {
       type: "object",
       properties: {

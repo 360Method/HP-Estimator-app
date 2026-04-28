@@ -176,8 +176,32 @@ Track vendor performance on every job. Flag declining vendors before they become
 
 ---
 
+## Phase 3 Sub-Team: Vendor Acquisition (3 teammates — Outreach + Onboarding combined)
+
+**Members**
+- `ai_vendor_acquisition_frontend` — drafts/ (vendor-facing outreach email/SMS, onboarding follow-ups for W9, COI, license, references)
+- `ai_vendor_acquisition_backend` — data/ (gap detection by trade × zip, prospect lists, onboarding-step state per in-progress vendor)
+- `ai_vendor_acquisition_qa` — audits/ (document completeness, compliance, voice audit)
+
+**Three Rules** apply.
+
+**Cross-team handoffs that land here**
+- `vendor.gap_detected` → auto-accepts; creates an Acquisition task to source vendors for the missing trade × zip.
+
+## Phase 3 Sub-Team: Vendor Operations (3 teammates — Trade Matching + Performance combined)
+
+**Members**
+- `ai_vendor_ops_frontend` — drafts/ (engagement requests, scorecards, corrective-action / probation memos)
+- `ai_vendor_ops_backend` — data/ (ranking for opportunities, scorecards, performance flags)
+- `ai_vendor_ops_qa` — audits/ (fairness audit on rankings, accuracy audit on scorecards, tone audit on memos)
+
+**Three Rules** apply.
+
+**Cross-team handoffs that land here**
+- `vendor.performance_dropped` → auto-accepts; creates an Operations task to draft a corrective-action memo or scorecard review.
+
 ## Department Head SOPs
-`ai_vendor_outreach` coordinates vendor department. Weekly: pipeline report. Monthly: vendor performance report + network gaps to Integrator.
+`ai_vendor_outreach` coordinates vendor department. Weekly: pipeline report. Monthly: vendor performance report + network gaps to Integrator. The two Phase 3 sub-teams (Acquisition, Operations) execute the day-to-day; `ai_vendor_outreach` is the seat that owns both teams and KPIs roll up to the Integrator through it.
 
 ## Failure Modes
 - Vendor network gap for critical trade → escalate to PM, manually source
