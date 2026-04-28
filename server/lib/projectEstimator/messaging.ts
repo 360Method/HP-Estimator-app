@@ -213,7 +213,7 @@ export async function sendEmailViaResend(args: {
   fromAddress?: string;
 }): Promise<{ id: string }> {
   const body = {
-    from: args.fromAddress || "Handy Pioneers <noreply@handypioneers.com>",
+    from: args.fromAddress || "Handy Pioneers <help@handypioneers.com>",
     to: [args.to],
     subject: args.subject,
     html: args.html,
