@@ -55,20 +55,59 @@ function sse(res: Response, event: string, data: unknown) {
   if (typeof res.flush === "function") res.flush();
 }
 
+function logTag(...args: unknown[]) {
+  console.log("[integrator-stream]", ...args);
+}
+function logErr(...args: unknown[]) {
+  console.error("[integrator-stream]", ...args);
+}
+
 export function registerIntegratorStreamRoutes(app: Express): void {
+  // Lightweight health probe — proves the route is mounted and the runtime
+  // dependencies (env, DB, integrator seat) are wired. Auth-gated so we don't
+  // leak runtime state.
+  app.get("/api/admin/integrator-stream/health", async (req: Request, res: Response) => {
+    try {
+      const user = await sdk.authenticateRequest(req).catch(() => null);
+      if (!user || (user as { role?: string }).role !== "admin") {
+        res.status(401).json({ ok: false, reason: "unauthorized" });
+        return;
+      }
+      const d = await getDb();
+      const dbOk = !!d;
+      const apiKey = !!process.env.ANTHROPIC_API_KEY;
+      let integratorSeated = false;
+      if (d) {
+        const [integrator] = await d
+          .select({ id: aiAgents.id })
+          .from(aiAgents)
+          .where(eq(aiAgents.department, "integrator"))
+          .limit(1);
+        integratorSeated = !!integrator;
+      }
+      res.json({ ok: dbOk && apiKey && integratorSeated, db: dbOk, anthropicKey: apiKey, integratorSeated });
+    } catch (err) {
+      res.status(500).json({ ok: false, reason: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
   app.post(
     "/api/admin/integrator-stream",
     express.json({ limit: "1mb" }),
     async (req: Request, res: Response) => {
+      const reqStart = Date.now();
+      logTag("POST /api/admin/integrator-stream — entered");
       // 1) Auth + admin check
       let user;
       try {
         user = await sdk.authenticateRequest(req);
       } catch {
+        logTag("auth fail");
         res.status(401).json({ error: "Unauthorized" });
         return;
       }
       if (!user || (user as { role?: string }).role !== "admin") {
+        logTag("non-admin user", user?.email);
         res.status(403).json({ error: "Admin only" });
         return;
       }
@@ -77,18 +116,21 @@ export function registerIntegratorStreamRoutes(app: Express): void {
       const conversationId = Number(body.conversationId);
       const message = String(body.message ?? "").trim();
       if (!conversationId || !message) {
+        logTag("bad request body", { conversationId, msgLen: message.length });
         res.status(400).json({ error: "conversationId and message required" });
         return;
       }
 
       const apiKey = process.env.ANTHROPIC_API_KEY;
       if (!apiKey) {
-        res.status(500).json({ error: "ANTHROPIC_API_KEY not set" });
+        logErr("ANTHROPIC_API_KEY not set on this Railway environment");
+        res.status(500).json({ error: "ANTHROPIC_API_KEY not set on the server" });
         return;
       }
 
       const d = await getDb();
       if (!d) {
+        logErr("getDb returned null");
         res.status(500).json({ error: "Database not available" });
         return;
       }
@@ -100,6 +142,7 @@ export function registerIntegratorStreamRoutes(app: Express): void {
         .where(eq(integratorChatConversations.id, conversationId))
         .limit(1);
       if (!conv || conv.userId !== user.id) {
+        logTag("conversation lookup failed", { conversationId, owner: conv?.userId, asker: user.id });
         res.status(404).json({ error: "Conversation not found" });
         return;
       }
@@ -111,22 +154,45 @@ export function registerIntegratorStreamRoutes(app: Express): void {
         .where(eq(aiAgents.department, "integrator"))
         .limit(1);
       if (!integrator) {
+        logErr("No integrator seat seeded");
         res.status(412).json({ error: "No integrator agent seeded. Run scripts/seed-ai-agents.mjs." });
         return;
       }
 
-      // 4) Begin SSE response
+      // 4) Begin SSE response — set headers, flush, prime the wire with a
+      //    connect event so Cloudflare/Railway forward the response without
+      //    waiting for buffer fill. The connect event also lets the client
+      //    confirm the stream is live before any model latency.
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache, no-transform");
       res.setHeader("Connection", "keep-alive");
       res.setHeader("X-Accel-Buffering", "no");
+      res.setHeader("Content-Encoding", "identity");
       res.flushHeaders?.();
+      // Padding bytes (8 KB of comment) — proxies that buffer until a chunk
+      // threshold need this to release the response. Comments are spec-legal
+      // and ignored by SSE clients.
+      res.write(`: ${"-".repeat(2048)}\n\n`);
+      sse(res, "connect", { ok: true, conversationId, agent: integrator.seatName });
+      logTag("stream opened", { conversationId, agent: integrator.seatName });
 
       // Heartbeat so reverse proxies don't hang up the long-poll.
       const heartbeat = setInterval(() => {
         res.write(": heartbeat\n\n");
       }, 15_000);
-      req.on("close", () => clearInterval(heartbeat));
+
+      // Track Anthropic stream so we can abort it if the client disconnects.
+      let activeStream: { abort: () => void } | null = null;
+      req.on("close", () => {
+        clearInterval(heartbeat);
+        if (activeStream) {
+          try {
+            activeStream.abort();
+          } catch {
+            /* ignore */
+          }
+        }
+      });
 
       try {
         // 5) Persist the user's message before we call Anthropic
@@ -163,6 +229,7 @@ export function registerIntegratorStreamRoutes(app: Express): void {
 
         // 8) Stream
         const client = new Anthropic({ apiKey });
+        logTag("calling Anthropic", { model: integrator.model, tools: toolKeys.length, history: messages.length });
         const stream = client.messages.stream({
           model: integrator.model,
           max_tokens: MAX_TOKENS,
@@ -176,12 +243,24 @@ export function registerIntegratorStreamRoutes(app: Express): void {
           tools: toolDefs.length > 0 ? toolDefs : undefined,
           messages,
         });
+        activeStream = stream;
 
+        let firstDeltaAt: number | null = null;
+        let deltaCount = 0;
         stream.on("text", (textDelta: string) => {
+          if (firstDeltaAt === null) {
+            firstDeltaAt = Date.now();
+            logTag("first delta after", `${firstDeltaAt - reqStart}ms`);
+          }
+          deltaCount += 1;
           sse(res, "delta", { text: textDelta });
+        });
+        stream.on("error", (err) => {
+          logErr("anthropic stream error", err);
         });
 
         const finalMessage = await stream.finalMessage();
+        logTag("anthropic done", { deltas: deltaCount, totalMs: Date.now() - reqStart });
 
         const inputTokens = finalMessage.usage.input_tokens;
         const outputTokens = finalMessage.usage.output_tokens;
@@ -306,11 +385,15 @@ export function registerIntegratorStreamRoutes(app: Express): void {
           outputTokens,
           needsApproval,
         });
+        logTag("DONE", { conversationId, totalMs: Date.now() - reqStart, costUsd: costUsd.toFixed(4) });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
+        const stack = err instanceof Error ? err.stack : undefined;
+        logErr("ERROR in stream pipeline", msg, stack);
         sse(res, "error", { message: msg });
       } finally {
         clearInterval(heartbeat);
+        activeStream = null;
         res.end();
       }
     }
