@@ -28,7 +28,7 @@ type SendArgs = {
 
 export async function sendPriorityTranslationReady(args: SendArgs): Promise<{ id: string }> {
   const body = {
-    from: args.fromAddress || "Handy Pioneers <noreply@handypioneers.com>",
+    from: args.fromAddress || "Handy Pioneers <help@handypioneers.com>",
     to: [args.to],
     cc: args.ccAddresses ?? ["sales@handypioneers.com"],
     subject: "Your 360° Priority Translation is ready",

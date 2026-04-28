@@ -228,7 +228,7 @@ export const priorityTranslationRouter = router({
         // TODO: persist pdfBuffer to storage, set outputPdfPath.
 
         // 5. Magic link + email.
-        const portalBaseUrl = process.env.PORTAL_BASE_URL || "https://pro.handypioneers.com";
+        const portalBaseUrl = process.env.PORTAL_BASE_URL || "https://client.handypioneers.com";
         const link = await issueMagicLink(db, {
           portalAccountId: row.portalAccountId,
           portalBaseUrl,

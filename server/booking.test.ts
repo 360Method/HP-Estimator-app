@@ -102,7 +102,7 @@ describe("booking.submit logic — customer dedup", () => {
       sendMarketingOptIn: baseInput.smsConsent,
       customerType: "homeowner",
       tags: "[]",
-      leadSource: "Online Request",
+      leadSource: "Booking",
     });
     expect(created.id).toBe("test-id-123");
     expect(db.createCustomer).toHaveBeenCalledOnce();

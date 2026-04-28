@@ -22,6 +22,7 @@ import { notifyOwner } from "../_core/notification";
 import { onLeadCreated } from "../leadRouting";
 import { nanoid } from "nanoid";
 import { runAutomationsForTrigger } from "../automationEngine";
+import { sendEmail } from "../gmail";
 
 export const bookingRouter = router({
   /** Check if a zip code is in the service area. Public — no auth required. */
@@ -82,7 +83,7 @@ export const bookingRouter = router({
           sendMarketingOptIn: input.smsConsent,
           customerType: "homeowner",
           tags: "[]",
-          leadSource: "Online Request",
+          leadSource: "Booking",
         });
       }
 
@@ -138,6 +139,27 @@ export const bookingRouter = router({
           isNewCustomer ? "New customer created." : "Matched to existing customer.",
         ].filter(Boolean).join("\n"),
       });
+
+      // 5. Auto-ack email to the customer (non-blocking; sender silently
+      // skips if Gmail isn't connected — see gmail.ts).
+      const ackHtml = `<!DOCTYPE html><html><body style="font-family:Helvetica,Arial,sans-serif;background:#f4f5f7;padding:32px 16px;">
+<table width="600" style="max-width:600px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;">
+<tr><td style="background:linear-gradient(135deg,#1a2e1a,#2d4a2d);padding:28px 40px;text-align:center;">
+  <p style="color:#fff;font-size:20px;font-weight:700;margin:0;">We received your request</p>
+  <p style="color:rgba(255,255,255,0.65);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;margin:6px 0 0;">Handy Pioneers</p>
+</td></tr>
+<tr><td style="padding:36px 40px;color:#1a1a1a;font-size:15px;line-height:1.6;">
+  <p>Hi ${input.firstName},</p>
+  <p>Thanks for reaching out. We have your request for <strong>${input.serviceType}</strong> in <strong>${input.city}, ${input.state}</strong>, and a member of our team will follow up within one business day.</p>
+  <p style="margin:18px 0 6px;font-size:13px;color:#888;text-transform:uppercase;letter-spacing:0.08em;">Reference</p>
+  <p style="margin:0;font-family:'Courier New',monospace;font-size:14px;">${leadId}</p>
+  <p style="margin-top:24px;font-size:13px;color:#888;">Questions in the meantime? Reply to this email or call <a href="tel:+13602415718" style="color:#c8922a;">(360) 241-5718</a>.</p>
+</td></tr></table></body></html>`;
+      sendEmail({
+        to: input.email,
+        subject: `We received your request — ${input.serviceType}`,
+        html: ackHtml,
+      }).catch((err) => console.error('[booking] auto-ack email failed:', err));
 
       // Fire new_booking automation (non-blocking)
       runAutomationsForTrigger('new_booking', {
