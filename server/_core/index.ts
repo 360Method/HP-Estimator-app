@@ -1,18 +1,27 @@
 import "dotenv/config";
-import express from "express";
+import express, { type Request, type Response } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import multer from "multer";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { appRouter } from "../routers";
+import { submitRoadmap } from "../lib/priorityTranslation/orchestrator";
+import {
+  backfillRoadmapCrmRows,
+  snapshotRoadmapPipeline,
+  sendRoadmapTestEmail,
+  issueDiagnosticMagicLink,
+} from "../lib/priorityTranslation/backfill";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import Stripe from "stripe";
 import { handleInboundSms, handleCallStatusUpdate, generateVoiceToken, isTwilioConfigured, downloadAndStoreRecording } from "../twilio";
 import twilio from "twilio";
-import { exchangeGmailCode, pollInboundEmails, sendOverdueReminderEmail } from "../gmail";
+import { exchangeGmailCode, pollInboundEmails, sendOverdueReminderEmail, isGmailConfigured } from "../gmail";
+import { runEmailManagerPipeline } from "../emailManagerAI";
 import { getFirstGmailToken, listOpportunities, updateOpportunity } from "../db";
 import { addSSEClient, broadcastNewMessage } from "../sse";
 import { getPortalInvoiceByStripePaymentIntentId, updatePortalInvoicePaid, getPortalInvoiceByCheckoutSessionId, findPortalCustomerById, getOverdueInvoicesForReminder, markPortalInvoiceReminderSent, getSignOffsEligibleForReviewRequest, getSignOffsEligibleForReviewReminder, markReviewRequestSent, markReviewReminderSent } from "../portalDb";
@@ -21,7 +30,11 @@ import { sendEmail } from "../gmail";
 import { notifyOwner } from "../_core/notification";
 import { buildInboundCallTwiml, buildFallbackTwiml, getPhoneSettings } from "../phone";
 import { randomUUID } from "crypto";
+import fs from "fs";
+import os from "os";
+import path from "path";
 import { sdk } from "./sdk";
+import { registerAuthRoutes, seedDefaultAdminIfNeeded } from "./auth";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -40,6 +53,23 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
     }
   }
   throw new Error(`No available port found starting from ${startPort}`);
+}
+
+function verifyTwilioRequest(req: express.Request, routePath: string): boolean {
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  if (!authToken) return true;
+  const sig = req.headers["x-twilio-signature"] as string | undefined;
+  const forwardedProto = (req.headers["x-forwarded-proto"] as string) || req.protocol;
+  const forwardedHost = (req.headers["x-forwarded-host"] as string) || req.get("host") || "localhost";
+  const proto = forwardedProto.split(",")[0].trim();
+  const host = forwardedHost.split(",")[0].trim();
+  const url = `${proto}://${host}${routePath}`;
+  try {
+    return twilio.validateRequest(authToken, sig ?? "", url, req.body);
+  } catch (err) {
+    console.warn(`[Twilio] Signature validation threw for ${routePath}:`, err);
+    return false;
+  }
 }
 
 async function ensurePhoneTables() {
@@ -96,14 +126,147 @@ async function ensurePhoneTables() {
   }
 }
 
+async function ensurePriorityTranslationTables() {
+  // Migration 0058 created these for the Roadmap Generator lead magnet but
+  // the drizzle tracker diverges from prod (see memory note: migration drift
+  // is a known issue), so the tables aren't actually present in production.
+  // Create them at boot if missing — same pattern as ensurePhoneTables().
+  try {
+    const { getDb } = await import("../db");
+    const { sql } = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return;
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`portalAccounts\` (
+      \`id\` varchar(64) NOT NULL,
+      \`email\` varchar(320) NOT NULL,
+      \`firstName\` varchar(128) NOT NULL DEFAULT '',
+      \`lastName\` varchar(128) NOT NULL DEFAULT '',
+      \`phone\` varchar(32) NOT NULL DEFAULT '',
+      \`customerId\` varchar(64),
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      \`lastLoginAt\` timestamp NULL,
+      CONSTRAINT \`portalAccounts_id\` PRIMARY KEY(\`id\`),
+      CONSTRAINT \`portalAccounts_email_unique\` UNIQUE(\`email\`)
+    )`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS \`portalAccounts_email_idx\` ON \`portalAccounts\` (\`email\`)`).catch(() => null);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS \`portalAccounts_customerId_idx\` ON \`portalAccounts\` (\`customerId\`)`).catch(() => null);
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`portalMagicLinks\` (
+      \`token\` varchar(128) NOT NULL,
+      \`portalAccountId\` varchar(64) NOT NULL,
+      \`expiresAt\` timestamp NOT NULL,
+      \`consumedAt\` timestamp NULL,
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      CONSTRAINT \`portalMagicLinks_token\` PRIMARY KEY(\`token\`)
+    )`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS \`portalMagicLinks_account_idx\` ON \`portalMagicLinks\` (\`portalAccountId\`)`).catch(() => null);
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`portalProperties\` (
+      \`id\` varchar(64) NOT NULL,
+      \`portalAccountId\` varchar(64) NOT NULL,
+      \`street\` varchar(255) NOT NULL DEFAULT '',
+      \`unit\` varchar(64) NOT NULL DEFAULT '',
+      \`city\` varchar(128) NOT NULL DEFAULT '',
+      \`state\` varchar(64) NOT NULL DEFAULT '',
+      \`zip\` varchar(10) NOT NULL DEFAULT '',
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      CONSTRAINT \`portalProperties_id\` PRIMARY KEY(\`id\`)
+    )`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS \`portalProperties_account_idx\` ON \`portalProperties\` (\`portalAccountId\`)`).catch(() => null);
+    await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS \`portalProperties_account_zip_street_idx\` ON \`portalProperties\`(\`portalAccountId\`, \`street\`, \`zip\`)`).catch(() => null);
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`homeHealthRecords\` (
+      \`id\` varchar(64) NOT NULL,
+      \`propertyId\` varchar(64) NOT NULL,
+      \`portalAccountId\` varchar(64) NOT NULL,
+      \`findings\` json NOT NULL,
+      \`summary\` text,
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT \`homeHealthRecords_id\` PRIMARY KEY(\`id\`)
+    )`);
+    await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS \`homeHealthRecords_property_idx\` ON \`homeHealthRecords\`(\`propertyId\`)`).catch(() => null);
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`priorityTranslations\` (
+      \`id\` varchar(64) NOT NULL,
+      \`portalAccountId\` varchar(64) NOT NULL,
+      \`propertyId\` varchar(64) NOT NULL,
+      \`homeHealthRecordId\` varchar(64),
+      \`pdfStoragePath\` text,
+      \`reportUrl\` text,
+      \`notes\` text,
+      \`status\` varchar(32) NOT NULL DEFAULT 'submitted',
+      \`claudeResponse\` json,
+      \`outputPdfPath\` text,
+      \`deliveredAt\` timestamp NULL,
+      \`failureReason\` text,
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT \`priorityTranslations_id\` PRIMARY KEY(\`id\`)
+    )`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS \`priorityTranslations_account_idx\` ON \`priorityTranslations\` (\`portalAccountId\`)`).catch(() => null);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS \`priorityTranslations_property_idx\` ON \`priorityTranslations\` (\`propertyId\`)`).catch(() => null);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS \`priorityTranslations_status_idx\` ON \`priorityTranslations\` (\`status\`)`).catch(() => null);
+
+    console.log("[boot] priorityTranslation tables ensured");
+  } catch (err) {
+    console.warn("[boot] ensurePriorityTranslationTables failed (non-fatal):", err);
+  }
+}
+
+/**
+ * Idempotent CREATE TABLE + ADD COLUMN for portalCustomers.
+ *
+ * Migrations 0002 + 0038 added referralCode/referredBy/onboardingCompletedAt
+ * but the drizzle tracker diverges from prod DB state (see memory note).
+ * verifyToken's bridge into portalCustomers fails with "Unknown column" if
+ * any of the schema-declared columns are missing in prod, so check + add
+ * each one defensively at boot. Same pattern as ensurePortalContinuityFlag.
+ */
+async function ensurePortalCustomersColumns() {
+  try {
+    const { getDb } = await import("../db");
+    const { sql } = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return;
+
+    const required: Array<{ col: string; type: string; extra?: string }> = [
+      { col: "stripeCustomerId", type: "varchar(64)" },
+      { col: "referralCode", type: "varchar(32)", extra: "UNIQUE" },
+      { col: "referredBy", type: "varchar(64)" },
+      { col: "onboardingCompletedAt", type: "timestamp NULL" },
+    ];
+
+    for (const r of required) {
+      const [[row]]: any = await db.execute(sql`
+        SELECT COUNT(*) AS c FROM information_schema.columns
+        WHERE table_schema = DATABASE()
+          AND table_name = 'portalCustomers'
+          AND column_name = ${r.col}
+      `);
+      if (row && Number(row.c) === 0) {
+        const ddl = `ALTER TABLE \`portalCustomers\` ADD COLUMN \`${r.col}\` ${r.type}`;
+        await db.execute(sql.raw(ddl));
+        if (r.extra === "UNIQUE") {
+          await db
+            .execute(sql.raw(`ALTER TABLE \`portalCustomers\` ADD UNIQUE \`portalCustomers_${r.col}_unique\` (\`${r.col}\`)`))
+            .catch(() => null);
+        }
+        console.log(`[boot] portalCustomers.${r.col} column added`);
+      }
+    }
+    console.log("[boot] ensurePortalCustomersColumns OK");
+  } catch (err) {
+    console.warn("[boot] ensurePortalCustomersColumns failed (non-fatal):", err);
+  }
+}
+
 async function ensurePortalContinuityFlag() {
   try {
     const { getDb } = await import("../db");
     const { sql } = await import("drizzle-orm");
     const db = await getDb();
     if (!db) return;
-    // Defensive: the drizzle tracker diverges from prod DB (see memory note),
-    // so add the column if missing even when migration 0064 already recorded.
     const [[row]]: any = await db.execute(sql`
       SELECT COUNT(*) AS c FROM information_schema.columns
       WHERE table_schema = DATABASE()
@@ -122,9 +285,785 @@ async function ensurePortalContinuityFlag() {
   }
 }
 
+/**
+ * Defensive ensure for the Book Consultation projectEstimates table.
+ * The Lead Nurturer infrastructure (agentDrafts, nurturerPlaybooks) ships in
+ * ensureLeadNurturerTables() below; we reuse that for cadence + drafts and
+ * only add projectEstimates here.
+ */
+async function ensureBookConsultationTables() {
+  try {
+    const { getDb } = await import("../db");
+    const { sql } = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return;
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`projectEstimates\` (
+      \`id\` varchar(64) NOT NULL,
+      \`opportunityId\` varchar(64) NOT NULL,
+      \`customerId\` varchar(64) NOT NULL,
+      \`onlineRequestId\` int DEFAULT NULL,
+      \`portalAccountId\` varchar(64) DEFAULT NULL,
+      \`status\` varchar(32) NOT NULL DEFAULT 'submitted',
+      \`confidence\` varchar(16) DEFAULT NULL,
+      \`claudeResponse\` json DEFAULT NULL,
+      \`customerRangeLowUsd\` int DEFAULT NULL,
+      \`customerRangeHighUsd\` int DEFAULT NULL,
+      \`scopeSummary\` text,
+      \`inclusionsMd\` text,
+      \`marginAudit\` text,
+      \`deliveredAt\` timestamp NULL DEFAULT NULL,
+      \`viewedAt\` timestamp NULL DEFAULT NULL,
+      \`proceedClickedAt\` timestamp NULL DEFAULT NULL,
+      \`walkthroughRequestedAt\` timestamp NULL DEFAULT NULL,
+      \`declinedAt\` timestamp NULL DEFAULT NULL,
+      \`failureReason\` text,
+      \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      \`updatedAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (\`id\`),
+      INDEX \`projectEstimates_opportunity_idx\` (\`opportunityId\`),
+      INDEX \`projectEstimates_customer_idx\` (\`customerId\`),
+      INDEX \`projectEstimates_status_idx\` (\`status\`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    console.log("[boot] projectEstimates ensured");
+  } catch (err) {
+    console.warn("[boot] ensureBookConsultationTables failed (non-fatal):", err);
+  }
+}
+
+/**
+ * Defensive ensure for the Lead Nurturer tables — agentDrafts + nurturerPlaybooks
+ * + customers.bypassAutoNurture. Mirrors the boot-time pattern from
+ * ensurePhoneTables / ensurePortalContinuityFlag so prod DBs that lag the
+ * drizzle tracker self-heal on next deploy. (See memory note on tracker drift.)
+ */
+async function ensureLeadNurturerTables() {
+  try {
+    const { getDb } = await import("../db");
+    const { sql } = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return;
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agentDrafts\` (
+      \`id\` int NOT NULL AUTO_INCREMENT,
+      \`customerId\` varchar(64) NOT NULL,
+      \`opportunityId\` varchar(64),
+      \`playbookKey\` varchar(64) NOT NULL,
+      \`stepKey\` varchar(64) NOT NULL,
+      \`channel\` varchar(16) NOT NULL,
+      \`status\` varchar(16) NOT NULL DEFAULT 'pending',
+      \`draftAutoSend\` boolean NOT NULL DEFAULT 0,
+      \`scheduledFor\` timestamp NOT NULL,
+      \`subject\` varchar(255),
+      \`body\` text,
+      \`recipientEmail\` varchar(320),
+      \`recipientPhone\` varchar(32),
+      \`contextJson\` text,
+      \`assigneeUserId\` int,
+      \`cancelReason\` varchar(64),
+      \`generatedAt\` timestamp NULL,
+      \`sentAt\` timestamp NULL,
+      \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      \`updatedAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (\`id\`),
+      KEY \`agentDrafts_customer_idx\` (\`customerId\`),
+      KEY \`agentDrafts_status_sched_idx\` (\`status\`, \`scheduledFor\`),
+      KEY \`agentDrafts_playbook_idx\` (\`playbookKey\`)
+    )`);
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`nurturerPlaybooks\` (
+      \`id\` int NOT NULL AUTO_INCREMENT,
+      \`key\` varchar(64) NOT NULL,
+      \`displayName\` varchar(255) NOT NULL,
+      \`description\` text,
+      \`enabled\` boolean NOT NULL DEFAULT 1,
+      \`stepsJson\` text NOT NULL,
+      \`voiceRulesJson\` text,
+      \`updatedAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (\`id\`),
+      UNIQUE KEY \`nurturerPlaybooks_key_uniq\` (\`key\`)
+    )`);
+
+    // bypassAutoNurture column on customers
+    const [[colRow]]: any = await db.execute(sql`
+      SELECT COUNT(*) AS c FROM information_schema.columns
+      WHERE table_schema = DATABASE()
+        AND table_name = 'customers'
+        AND column_name = 'bypassAutoNurture'
+    `);
+    if (colRow && Number(colRow.c) === 0) {
+      await db.execute(sql`
+        ALTER TABLE \`customers\`
+        ADD COLUMN \`bypassAutoNurture\` boolean NOT NULL DEFAULT 0
+      `);
+      console.log("[boot] customers.bypassAutoNurture column added");
+    }
+
+    // Bug 1 fix (2026-04-27): draftAutoSend column on agentDrafts. Routine
+    // drafts (auto-acks, info questions, post-approval range delivery) skip
+    // the operator's approval gate. See drizzle/0074_agent_drafts_auto_send.sql.
+    const [[autoSendRow]]: any = await db.execute(sql`
+      SELECT COUNT(*) AS c FROM information_schema.columns
+      WHERE table_schema = DATABASE()
+        AND table_name = 'agentDrafts'
+        AND column_name = 'draftAutoSend'
+    `);
+    if (autoSendRow && Number(autoSendRow.c) === 0) {
+      await db.execute(sql`
+        ALTER TABLE \`agentDrafts\`
+        ADD COLUMN \`draftAutoSend\` boolean NOT NULL DEFAULT 0
+      `);
+      console.log("[boot] agentDrafts.draftAutoSend column added");
+    }
+
+    // Seed default playbook
+    const { ensureDefaultPlaybooks } = await import("../lib/leadNurturer/playbook");
+    await ensureDefaultPlaybooks();
+
+    console.log("[boot] agentDrafts + nurturerPlaybooks ensured");
+  } catch (err) {
+    console.warn("[boot] ensureLeadNurturerTables failed (non-fatal):", err);
+  }
+}
+
+// Annual Home Health Report opt-in toggle on threeSixtyMemberships.
+// Default OFF per Customer Success Charter §5.
+async function ensureAnnualValuationOptInColumn() {
+  try {
+    const { getDb } = await import("../db");
+    const { sql } = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return;
+    const [[row]]: any = await db.execute(sql`
+      SELECT COUNT(*) AS c FROM information_schema.columns
+      WHERE table_schema = DATABASE()
+        AND table_name = 'threeSixtyMemberships'
+        AND column_name = 'annualValuationOptIn'
+    `);
+    if (row && Number(row.c) === 0) {
+      await db.execute(sql`
+        ALTER TABLE \`threeSixtyMemberships\`
+        ADD COLUMN \`annualValuationOptIn\` boolean NOT NULL DEFAULT 0
+      `);
+      console.log("[boot] annualValuationOptIn column added");
+    }
+  } catch (err) {
+    console.warn("[boot] ensureAnnualValuationOptInColumn failed (non-fatal):", err);
+  }
+}
+
+async function ensureOAuthIntegrationTables() {
+  try {
+    const { getDb } = await import("../db");
+    const { sql } = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return;
+    // Defensive boot-time creates (drizzle tracker may diverge from prod DB)
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`gbpTokens\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`accountId\` varchar(128) NOT NULL,
+      \`locationId\` varchar(128),
+      \`accessToken\` text NOT NULL,
+      \`refreshToken\` text NOT NULL,
+      \`expiresAt\` varchar(32) NOT NULL,
+      \`connectedAt\` timestamp NOT NULL DEFAULT (now()),
+      \`connectedByStaffId\` int,
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT \`gbpTokens_id\` PRIMARY KEY(\`id\`)
+    )`);
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`metaConnections\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`adAccountId\` varchar(64) NOT NULL,
+      \`pageIds\` text,
+      \`tokenStatus\` varchar(32) NOT NULL DEFAULT 'active',
+      \`lastVerifiedAt\` timestamp,
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT \`metaConnections_id\` PRIMARY KEY(\`id\`)
+    )`);
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`googleAdsTokens\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`customerId\` varchar(64) NOT NULL,
+      \`accessToken\` text NOT NULL,
+      \`refreshToken\` text NOT NULL,
+      \`expiresAt\` varchar(32) NOT NULL,
+      \`connectedAt\` timestamp NOT NULL DEFAULT (now()),
+      \`connectedByStaffId\` int,
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT \`googleAdsTokens_id\` PRIMARY KEY(\`id\`)
+    )`);
+    console.log("[boot] OAuth integration tables ensured");
+  } catch (err) {
+    console.warn("[boot] ensureOAuthIntegrationTables failed (non-fatal):", err);
+  }
+}
+
+// Idempotent upgrade: replace `portalMagicLinks.token` with hashed `tokenHash`.
+// Runs on every boot. Drizzle-kit can drift from prod, so we don't rely on it.
+async function ensureMagicLinkTokenHash() {
+  try {
+    const { getDb } = await import("../db");
+    const { sql } = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return;
+    const existsRows = await db.execute(sql`
+      SELECT COUNT(*) AS c
+      FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'portalMagicLinks'
+        AND COLUMN_NAME = 'tokenHash'
+    `);
+    const rows = (existsRows as any)[0] ?? existsRows;
+    const count = Number(rows?.[0]?.c ?? rows?.c ?? 0);
+    if (count > 0) return;
+    console.log("[boot] Upgrading portalMagicLinks -> tokenHash column");
+    await db.execute(sql`DELETE FROM \`portalMagicLinks\``);
+    await db.execute(sql`ALTER TABLE \`portalMagicLinks\` DROP PRIMARY KEY`);
+    await db.execute(sql`ALTER TABLE \`portalMagicLinks\` DROP COLUMN \`token\``);
+    await db.execute(sql`ALTER TABLE \`portalMagicLinks\` ADD COLUMN \`tokenHash\` CHAR(64) NOT NULL`);
+    await db.execute(sql`ALTER TABLE \`portalMagicLinks\` ADD PRIMARY KEY (\`tokenHash\`)`);
+    console.log("[boot] portalMagicLinks upgrade complete");
+  } catch (err) {
+    console.warn("[boot] ensureMagicLinkTokenHash failed (non-fatal):", err);
+  }
+}
+
+async function ensureSchedulingTablesBoot() {
+  try {
+    const { ensureSchedulingTables } = await import("../scheduling");
+    await ensureSchedulingTables();
+  } catch (err) {
+    console.warn("[boot] ensureSchedulingTablesBoot failed (non-fatal):", err);
+  }
+}
+
+async function ensureAgentPhase4Tables() {
+  // Phase 4 (triggers + chat) tables. Drizzle-kit's tracker has drifted from
+  // prod a few times — same boot-time idempotent guard the phone tables use.
+  try {
+    const { getDb } = await import("../db");
+    const { sql } = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return;
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`ai_agent_event_subscriptions\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`agentId\` int NOT NULL,
+      \`eventName\` varchar(80) NOT NULL,
+      \`filter\` text,
+      \`enabled\` boolean NOT NULL DEFAULT true,
+      \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT \`ai_agent_event_subscriptions_id\` PRIMARY KEY(\`id\`)
+    )`);
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`ai_agent_schedules\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`agentId\` int NOT NULL,
+      \`cronExpression\` varchar(80) NOT NULL,
+      \`timezone\` varchar(64) NOT NULL DEFAULT 'America/Los_Angeles',
+      \`enabled\` boolean NOT NULL DEFAULT true,
+      \`lastRunAt\` timestamp NULL,
+      \`nextRunAt\` timestamp NULL,
+      \`payload\` text,
+      \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT \`ai_agent_schedules_id\` PRIMARY KEY(\`id\`)
+    )`);
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`integrator_chat_conversations\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`userId\` int NOT NULL,
+      \`title\` varchar(200),
+      \`lastMessageAt\` timestamp NULL,
+      \`archived\` boolean NOT NULL DEFAULT false,
+      \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      \`updatedAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT \`integrator_chat_conversations_id\` PRIMARY KEY(\`id\`)
+    )`);
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`integrator_chat_messages\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`conversationId\` int NOT NULL,
+      \`userId\` int NOT NULL,
+      \`role\` enum('user','assistant','tool') NOT NULL,
+      \`content\` text NOT NULL,
+      \`toolCalls\` text,
+      \`inputTokens\` int NOT NULL DEFAULT 0,
+      \`outputTokens\` int NOT NULL DEFAULT 0,
+      \`costUsd\` decimal(10,4) NOT NULL DEFAULT '0.0000',
+      \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT \`integrator_chat_messages_id\` PRIMARY KEY(\`id\`)
+    )`);
+    console.log("[boot] agent phase-4 tables ensured");
+  } catch (err) {
+    console.warn("[boot] ensureAgentPhase4Tables failed (non-fatal):", err);
+  }
+}
+
+async function ensureVendorTablesBoot() {
+  try {
+    const { ensureVendorTables } = await import("../vendors");
+    await ensureVendorTables();
+  } catch (err) {
+    console.warn("[boot] ensureVendorTablesBoot failed (non-fatal):", err);
+  }
+}
+
+async function ensurePasswordResetTokensTableBoot() {
+  try {
+    const { ensurePasswordResetTokensTable } = await import("../passwordReset");
+    await ensurePasswordResetTokensTable();
+  } catch (err) {
+    console.warn("[boot] ensurePasswordResetTokensTableBoot failed (non-fatal):", err);
+  }
+}
+
+async function ensureCharterTables() {
+  try {
+    const { getDb } = await import("../db");
+    const { sql } = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return;
+
+    // Add charter columns to ai_agents — each ALTER is wrapped so re-runs skip gracefully
+    await db.execute(sql`ALTER TABLE \`ai_agents\` ADD COLUMN \`charterLoaded\` boolean NOT NULL DEFAULT false`).catch(() => {});
+    await db.execute(sql`ALTER TABLE \`ai_agents\` ADD COLUMN \`kpiCount\` int NOT NULL DEFAULT 0`).catch(() => {});
+    await db.execute(sql`ALTER TABLE \`ai_agents\` ADD COLUMN \`playbookCount\` int NOT NULL DEFAULT 0`).catch(() => {});
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agentCharters\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`department\` varchar(50) NOT NULL,
+      \`markdownContent\` longtext NOT NULL,
+      \`version\` int NOT NULL DEFAULT 1,
+      \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+      \`updatedByStaffId\` int,
+      CONSTRAINT \`agentCharters_id\` PRIMARY KEY(\`id\`),
+      CONSTRAINT \`agentCharters_dept_uniq\` UNIQUE(\`department\`)
+    )`);
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agentKpis\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`scopeType\` enum('seat','department','company') NOT NULL,
+      \`scopeId\` varchar(100) NOT NULL,
+      \`key\` varchar(100) NOT NULL,
+      \`label\` varchar(200) NOT NULL,
+      \`targetMin\` decimal(10,2),
+      \`targetMax\` decimal(10,2),
+      \`unit\` varchar(20) NOT NULL,
+      \`period\` enum('daily','weekly','monthly','quarterly') NOT NULL,
+      \`sourceQuery\` text,
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      CONSTRAINT \`agentKpis_id\` PRIMARY KEY(\`id\`),
+      CONSTRAINT \`agentKpis_scope_key\` UNIQUE(\`scopeType\`, \`scopeId\`, \`key\`)
+    )`);
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agentPlaybooks\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`ownerSeatName\` varchar(100) NOT NULL,
+      \`ownerDepartment\` varchar(50) NOT NULL,
+      \`name\` varchar(200) NOT NULL,
+      \`slug\` varchar(200) NOT NULL,
+      \`content\` mediumtext NOT NULL,
+      \`variables\` text,
+      \`category\` varchar(50) NOT NULL,
+      \`version\` int NOT NULL DEFAULT 1,
+      \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+      \`updatedByStaffId\` int,
+      CONSTRAINT \`agentPlaybooks_id\` PRIMARY KEY(\`id\`),
+      CONSTRAINT \`agentPlaybooks_slug_uniq\` UNIQUE(\`slug\`)
+    )`);
+
+    console.log("[boot] ensureCharterTables OK");
+  } catch (err) {
+    console.warn("[boot] ensureCharterTables failed (non-fatal):", err);
+  }
+}
+
+/**
+ * ensureAgentTeamTables — Visionary Console Phase 1 foundation.
+ * Creates agent_teams + 4 related tables and seeds one row per non-integrator
+ * department (8 rows). Idempotent — re-runs after the first boot are no-ops.
+ */
+async function ensureAgentTeamTables() {
+  try {
+    const { getDb } = await import("../db");
+    const { sql } = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return;
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agent_teams\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`department\` enum('sales','operations','marketing','finance','customer_success','vendor_network','technology','strategy','integrator') NOT NULL,
+      \`name\` varchar(120) NOT NULL,
+      \`teamLeadSeatId\` int,
+      \`purpose\` text,
+      \`status\` enum('active','paused') NOT NULL DEFAULT 'active',
+      \`costCapDailyUsd\` decimal(8,2) NOT NULL DEFAULT 5.00,
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT \`agent_teams_id\` PRIMARY KEY(\`id\`),
+      CONSTRAINT \`agent_teams_dept_name_uniq\` UNIQUE(\`department\`, \`name\`)
+    )`);
+
+    // Phase 2 in-place migration: drop the old single-team-per-department UNIQUE
+    // and add UNIQUE(department, name) + costCapDailyUsd. Each step swallows the
+    // error if the schema is already at the Phase 2 target shape (idempotent).
+    await db.execute(sql`ALTER TABLE \`agent_teams\` DROP INDEX \`agent_teams_department_uniq\``).catch(() => {});
+    await db.execute(sql`ALTER TABLE \`agent_teams\` ADD CONSTRAINT \`agent_teams_dept_name_uniq\` UNIQUE(\`department\`, \`name\`)`).catch(() => {});
+    await db.execute(sql`ALTER TABLE \`agent_teams\` ADD COLUMN \`costCapDailyUsd\` decimal(8,2) NOT NULL DEFAULT 5.00`).catch(() => {});
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agent_team_members\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`teamId\` int NOT NULL,
+      \`seatId\` int NOT NULL,
+      \`role\` enum('frontend','backend','qa','lead') NOT NULL DEFAULT 'backend',
+      \`joinedAt\` timestamp NOT NULL DEFAULT (now()),
+      CONSTRAINT \`agent_team_members_id\` PRIMARY KEY(\`id\`),
+      CONSTRAINT \`agent_team_members_team_seat_uniq\` UNIQUE(\`teamId\`, \`seatId\`)
+    )`);
+    await db.execute(sql`CREATE INDEX \`agent_team_members_seat_idx\` ON \`agent_team_members\` (\`seatId\`)`).catch(() => {});
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agent_team_tasks\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`teamId\` int NOT NULL,
+      \`title\` varchar(255) NOT NULL,
+      \`description\` text,
+      \`status\` enum('open','claimed','in_progress','blocked','done') NOT NULL DEFAULT 'open',
+      \`claimedBySeatId\` int,
+      \`ownerFiles\` text,
+      \`sourceEventType\` varchar(80),
+      \`sourceEventPayload\` text,
+      \`customerId\` varchar(64),
+      \`priority\` enum('low','normal','high') NOT NULL DEFAULT 'normal',
+      \`dueAt\` timestamp NULL,
+      \`completedAt\` timestamp NULL,
+      \`notes\` text,
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      CONSTRAINT \`agent_team_tasks_id\` PRIMARY KEY(\`id\`)
+    )`);
+    await db.execute(sql`CREATE INDEX \`agent_team_tasks_team_status_idx\` ON \`agent_team_tasks\` (\`teamId\`, \`status\`)`).catch(() => {});
+    await db.execute(sql`CREATE INDEX \`agent_team_tasks_customer_idx\` ON \`agent_team_tasks\` (\`customerId\`)`).catch(() => {});
+    await db.execute(sql`CREATE INDEX \`agent_team_tasks_claimedBy_idx\` ON \`agent_team_tasks\` (\`claimedBySeatId\`)`).catch(() => {});
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agent_team_messages\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`teamId\` int NOT NULL,
+      \`fromSeatId\` int NOT NULL,
+      \`toSeatId\` int,
+      \`body\` text NOT NULL,
+      \`threadId\` int,
+      \`attachments\` text,
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      CONSTRAINT \`agent_team_messages_id\` PRIMARY KEY(\`id\`)
+    )`);
+    await db.execute(sql`CREATE INDEX \`agent_team_messages_team_created_idx\` ON \`agent_team_messages\` (\`teamId\`, \`createdAt\`)`).catch(() => {});
+    await db.execute(sql`CREATE INDEX \`agent_team_messages_thread_idx\` ON \`agent_team_messages\` (\`threadId\`)`).catch(() => {});
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agent_team_handoffs\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`fromTeamId\` int NOT NULL,
+      \`toTeamId\` int NOT NULL,
+      \`eventType\` varchar(80) NOT NULL,
+      \`payload\` text,
+      \`status\` enum('pending','accepted','declined') NOT NULL DEFAULT 'pending',
+      \`declineReason\` text,
+      \`acceptedAt\` timestamp NULL,
+      \`declinedAt\` timestamp NULL,
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      CONSTRAINT \`agent_team_handoffs_id\` PRIMARY KEY(\`id\`)
+    )`);
+    await db.execute(sql`CREATE INDEX \`agent_team_handoffs_to_status_idx\` ON \`agent_team_handoffs\` (\`toTeamId\`, \`status\`)`).catch(() => {});
+    await db.execute(sql`CREATE INDEX \`agent_team_handoffs_from_status_idx\` ON \`agent_team_handoffs\` (\`fromTeamId\`, \`status\`)`).catch(() => {});
+
+    // Phase 2 — Sub-team artifacts + violations tables.
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agent_team_artifacts\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`taskId\` int NOT NULL,
+      \`teamId\` int NOT NULL,
+      \`fromSeatId\` int NOT NULL,
+      \`territory\` enum('drafts','data','audits') NOT NULL,
+      \`key\` varchar(120) NOT NULL,
+      \`contentJson\` text NOT NULL,
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      CONSTRAINT \`agent_team_artifacts_id\` PRIMARY KEY(\`id\`),
+      CONSTRAINT \`agent_team_artifacts_task_terr_key_uniq\` UNIQUE(\`taskId\`, \`territory\`, \`key\`)
+    )`);
+    await db.execute(sql`CREATE INDEX \`agent_team_artifacts_task_idx\` ON \`agent_team_artifacts\` (\`taskId\`)`).catch(() => {});
+    await db.execute(sql`CREATE INDEX \`agent_team_artifacts_team_idx\` ON \`agent_team_artifacts\` (\`teamId\`)`).catch(() => {});
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agent_team_violations\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`taskId\` int,
+      \`teamId\` int NOT NULL,
+      \`seatId\` int NOT NULL,
+      \`attemptedRole\` varchar(40) NOT NULL,
+      \`attemptedTerritory\` varchar(40) NOT NULL,
+      \`attemptedKey\` varchar(255),
+      \`reason\` text,
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      CONSTRAINT \`agent_team_violations_id\` PRIMARY KEY(\`id\`)
+    )`);
+    await db.execute(sql`CREATE INDEX \`agent_team_violations_team_idx\` ON \`agent_team_violations\` (\`teamId\`, \`createdAt\`)`).catch(() => {});
+
+    // Seed dept-level umbrella teams + Phase 2 sub-teams. Idempotent via
+    // UNIQUE(department, name).
+    const seeds: Array<{ slug: string; name: string; purpose: string; costCap?: number }> = [
+      // ── Department-level umbrella teams (Phase 1 origin) ─────────────────
+      { slug: "sales",            name: "Sales",            purpose: "Umbrella for the three Sales sub-teams: Lead Nurturer, Project Estimator, Membership Success." },
+      { slug: "operations",       name: "Operations",       purpose: "Schedule, dispatch, and steward jobs from booking through sign-off." },
+      { slug: "marketing",        name: "Marketing",        purpose: "Umbrella for the four Marketing sub-teams: Content/SEO, Paid Ads, Brand Guardian, Community/Reviews." },
+      { slug: "finance",          name: "Finance",          purpose: "Cash flow, AR/AP, margin discipline, and P&L visibility." },
+      { slug: "customer_success", name: "Customer Success", purpose: "360° member retention, onboarding, and proactive home stewardship." },
+      { slug: "vendor_network",   name: "Vendor Network",   purpose: "Recruit, vet, and steward the trade-vendor bench." },
+      { slug: "technology",       name: "Technology",       purpose: "System integrity, agent runtime health, and platform improvements." },
+      { slug: "strategy",         name: "Strategy",         purpose: "Market research, expansion planning, and long-arc roadmap." },
+      // ── Phase 2 — Sales sub-teams (3 teammates each: frontend/backend/qa) ─
+      { slug: "sales",     name: "Lead Nurturer",     purpose: "Customer-facing nurture: drafts SMS/email/call scripts, pulls history, audits voice + escalation triggers.", costCap: 5 },
+      { slug: "sales",     name: "Project Estimator", purpose: "Estimate authoring: scope narrative, cost calculation w/ margin floor, and confidence audit.",                  costCap: 5 },
+      { slug: "sales",     name: "Membership Success",purpose: "Path A→B continuity: outreach drafts, upsell-window detection, cadence/voice audit (no hard sell).",            costCap: 5 },
+      // ── Phase 2 — Marketing sub-teams ───────────────────────────────────
+      { slug: "marketing", name: "Content & SEO",      purpose: "Organic content engine: drafts, keyword research, voice/fact/readability audit.",                              costCap: 5 },
+      { slug: "marketing", name: "Paid Ads",           purpose: "Paid search/LSA: creative drafts, performance + segmentation, policy/voice audit.",                            costCap: 5 },
+      { slug: "marketing", name: "Brand Guardian",     purpose: "Brand integrity: corrections to off-brand drafts, scans all outbound, meta-audits Brand Guardian's own calls.", costCap: 5 },
+      { slug: "marketing", name: "Community & Reviews",purpose: "Reviews + sentiment: response drafts, GBP/social monitor, response-tone audit.",                               costCap: 5 },
+      // ── Phase 3 — Operations sub-team ─────────────────────────────────────
+      { slug: "operations",       name: "Dispatch",            purpose: "Daily schedule + crew assignment: customer-facing confirmations, conflict/utilization data, schedule integrity audit.",         costCap: 5 },
+      // ── Phase 3 — Customer Success sub-teams ──────────────────────────────
+      { slug: "customer_success", name: "Onboarding",          purpose: "First 30 days post-signing: welcome cadence drafts, portal-activation/baseline data, voice + completeness audit.",              costCap: 5 },
+      { slug: "customer_success", name: "Annual Valuation",    purpose: "Renewal-window value reports: ROI narrative drafts, value calculation, accuracy + tone audit (no hard sell).",                  costCap: 5 },
+      // ── Phase 3 — Vendor sub-teams ────────────────────────────────────────
+      { slug: "vendor_network",   name: "Vendor Acquisition",  purpose: "Outreach + onboarding combined: drafts to prospects, gap/compliance data, document-completeness audit.",                        costCap: 5 },
+      { slug: "vendor_network",   name: "Vendor Operations",   purpose: "Trade matching + performance combined: vendor-facing comms, ranking/scorecard data, fairness + accuracy audit.",                costCap: 5 },
+      // ── Phase 3 — Finance sub-team ────────────────────────────────────────
+      { slug: "finance",          name: "Bookkeeping",         purpose: "Daily reconciliation: CPA-facing memo drafts, transaction categorization, anomaly + categorization audit.",                     costCap: 3 },
+    ];
+    for (const s of seeds) {
+      const cap = (s.costCap ?? 5).toFixed(2);
+      await db.execute(sql`
+        INSERT INTO \`agent_teams\` (\`department\`, \`name\`, \`purpose\`, \`status\`, \`costCapDailyUsd\`)
+        SELECT ${s.slug}, ${s.name}, ${s.purpose}, 'active', ${cap}
+        FROM DUAL
+        WHERE NOT EXISTS (
+          SELECT 1 FROM \`agent_teams\`
+          WHERE \`department\` = ${s.slug} AND \`name\` = ${s.name}
+        )
+      `);
+    }
+
+    // Authorize the Integrator seat for the 3 new agent-team coordination tools.
+    // INSERT IGNORE on (agentId, toolKey) — first boot adds them, re-runs are no-ops.
+    // We don't have a unique constraint on ai_agent_tools(agentId, toolKey), so guard
+    // with a NOT EXISTS subquery instead.
+    const integratorRows = (await db.execute(
+      sql`SELECT \`id\` FROM \`ai_agents\` WHERE \`department\` = 'integrator' LIMIT 1`
+    )) as unknown as Array<Array<{ id: number }>>;
+    const integratorId = Array.isArray(integratorRows?.[0]) ? integratorRows[0][0]?.id : (integratorRows as unknown as Array<{ id: number }>)[0]?.id;
+    if (integratorId) {
+      const TOOLS = [
+        "agentTeams.list",
+        "agentTeams.assignTask",
+        "agentTeams.broadcast",
+        // Phase 2: cross-team handoff and team execution kickoff.
+        "agentTeams.proposeHandoff",
+        "agentTeams.executeTask",
+      ];
+      for (const tk of TOOLS) {
+        await db.execute(sql`
+          INSERT INTO \`ai_agent_tools\` (\`agentId\`, \`toolKey\`, \`authorized\`)
+          SELECT ${integratorId}, ${tk}, 1
+          FROM DUAL
+          WHERE NOT EXISTS (
+            SELECT 1 FROM \`ai_agent_tools\` WHERE \`agentId\` = ${integratorId} AND \`toolKey\` = ${tk}
+          )
+        `);
+      }
+    }
+
+    console.log("[boot] ensureAgentTeamTables OK");
+  } catch (err) {
+    console.warn("[boot] ensureAgentTeamTables failed (non-fatal):", err);
+  }
+}
+
+async function ensureEmailManagerTables() {
+  try {
+    const { getDb } = await import("../db");
+    const { sql } = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return;
+
+    // aiAgents
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`aiAgents\` (
+      \`id\`           int            NOT NULL AUTO_INCREMENT,
+      \`seatName\`     varchar(80)    NOT NULL,
+      \`department\`   varchar(80)    NOT NULL DEFAULT 'integrator_visionary',
+      \`reportsTo\`    varchar(80)    NOT NULL DEFAULT 'Integrator',
+      \`status\`       enum('active','draft_queue','paused') NOT NULL DEFAULT 'draft_queue',
+      \`systemPrompt\` text           NULL,
+      \`createdAt\`    timestamp      NOT NULL DEFAULT (now()),
+      \`updatedAt\`    timestamp      NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT \`aiAgents_id\` PRIMARY KEY (\`id\`),
+      UNIQUE KEY \`aiAgents_seatName_uidx\` (\`seatName\`)
+    )`);
+
+    // gmailMessageLinks
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`gmailMessageLinks\` (
+      \`id\`                  int            NOT NULL AUTO_INCREMENT,
+      \`gmailMessageId\`      varchar(128)   NOT NULL,
+      \`gmailThreadId\`       varchar(128)   NULL,
+      \`staffGmailEmail\`     varchar(320)   NOT NULL,
+      \`customerId\`          varchar(64)    NULL,
+      \`classification\`      enum('customer','urgent','promo','spam','personal','lead_inquiry','unclassified') NOT NULL DEFAULT 'unclassified',
+      \`classificationScore\` int            NOT NULL DEFAULT 0,
+      \`aiDraftReplyId\`      int            NULL,
+      \`gmailDraftId\`        varchar(128)   NULL,
+      \`fromEmail\`           varchar(320)   NOT NULL DEFAULT '',
+      \`fromName\`            varchar(255)   NOT NULL DEFAULT '',
+      \`subject\`             varchar(512)   NOT NULL DEFAULT '',
+      \`bodyPreview\`         varchar(500)   NOT NULL DEFAULT '',
+      \`archived\`            tinyint(1)     NOT NULL DEFAULT 0,
+      \`processedAt\`         timestamp      NOT NULL DEFAULT (now()),
+      \`createdAt\`           timestamp      NOT NULL DEFAULT (now()),
+      CONSTRAINT \`gmailMessageLinks_id\` PRIMARY KEY (\`id\`),
+      UNIQUE KEY \`gmailMessageLinks_msgId_uidx\` (\`gmailMessageId\`)
+    )`);
+
+    // gmailTokens extra columns (idempotent ALTER)
+    const [[scopeRow]]: any = await db.execute(sql`
+      SELECT COUNT(*) AS c FROM information_schema.columns
+      WHERE table_schema = DATABASE() AND table_name = 'gmailTokens' AND column_name = 'lastSyncedAt'
+    `);
+    if (Number(scopeRow?.c ?? 0) === 0) {
+      await db.execute(sql`ALTER TABLE \`gmailTokens\`
+        ADD COLUMN \`staffUserId\`       int            NULL,
+        ADD COLUMN \`scopesGranted\`     text           NULL,
+        ADD COLUMN \`connectedAt\`       timestamp      NULL,
+        ADD COLUMN \`lastSyncedAt\`      timestamp      NULL,
+        ADD COLUMN \`lastMessageIdSeen\` varchar(128)   NULL`);
+      console.log("[boot] gmailTokens columns added for Email Manager AI");
+    }
+
+    console.log("[boot] Email Manager AI tables ensured");
+  } catch (err) {
+    console.warn("[boot] ensureEmailManagerTables failed (non-fatal):", err);
+  }
+}
+
+async function ensureAppSettings() {
+  try {
+    const { getDb } = await import("../db");
+    const { sql } = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return;
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`appSettings\` (
+      \`id\` int NOT NULL DEFAULT 1,
+      \`companyName\` varchar(120) DEFAULT 'Handy Pioneers',
+      \`logoUrl\` varchar(500) DEFAULT '',
+      \`brandColor\` varchar(20) DEFAULT '#1E3A5F',
+      \`timezone\` varchar(60) DEFAULT 'America/Los_Angeles',
+      \`estimatePrefix\` varchar(10) DEFAULT 'EST',
+      \`invoicePrefix\` varchar(10) DEFAULT 'INV',
+      \`jobPrefix\` varchar(10) DEFAULT 'JOB',
+      \`portalUrl\` varchar(300) DEFAULT 'https://client.handypioneers.com',
+      \`websiteUrl\` varchar(300) DEFAULT 'https://handypioneers.com',
+      \`supportEmail\` varchar(320) DEFAULT '',
+      \`supportPhone\` varchar(30) DEFAULT '',
+      \`addressLine1\` varchar(200) DEFAULT '',
+      \`addressLine2\` varchar(200) DEFAULT '',
+      \`defaultTaxBps\` int DEFAULT 875,
+      \`defaultDepositPct\` int DEFAULT 50,
+      \`documentFooter\` text,
+      \`termsText\` text,
+      \`googleReviewLink\` varchar(500) DEFAULT '',
+      \`internalLaborRateCents\` int DEFAULT 15000,
+      \`defaultMarkupPct\` int DEFAULT 20,
+      \`smsFromName\` varchar(30) DEFAULT 'HandyPioneers',
+      \`emailEstimateApprovedSubject\` varchar(300) DEFAULT 'Your estimate has been approved — Handy Pioneers',
+      \`emailEstimateApprovedBody\` text,
+      \`emailJobSignOffSubject\` varchar(300) DEFAULT 'Job complete — your final invoice is ready',
+      \`emailJobSignOffBody\` text,
+      \`emailChangeOrderApprovedSubject\` varchar(300) DEFAULT 'Change order approved — Handy Pioneers',
+      \`emailChangeOrderApprovedBody\` text,
+      \`emailMagicLinkSubject\` varchar(300) DEFAULT 'Your Handy Pioneers Customer Portal Login',
+      \`emailMagicLinkBody\` text,
+      \`updatedAt\` timestamp DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT \`appSettings_id\` PRIMARY KEY(\`id\`)
+    )`);
+
+    // Seed the single settings row if absent
+    await db.execute(sql`INSERT IGNORE INTO \`appSettings\` (\`id\`) VALUES (1)`);
+
+    console.log("[boot] ensureAppSettings OK");
+  } catch (err) {
+    console.warn("[boot] ensureAppSettings failed (non-fatal):", err);
+  }
+}
+
+/**
+ * ensureDepartmentHeadFlags — idempotent safety net so the org chart always
+ * shows one explicit Head per department. Seed file is canonical; this UPDATE
+ * just (re-)applies the flag on the 8 designated seats. Safe if seats are
+ * missing — affects 0 rows.
+ *
+ * Heads (must match seed-ai-agents.mjs and the static reference chart):
+ *   sales              → ai_sdr
+ *   operations         → ai_dispatch
+ *   marketing          → ai_content_seo
+ *   finance            → ai_bookkeeping
+ *   customer_success   → ai_onboarding
+ *   vendor_trades      → ai_vendor_outreach
+ *   technology         → ai_system_integrity
+ *   strategy_expansion → ai_market_research
+ */
+async function ensureDepartmentHeadFlags() {
+  try {
+    const { getDb } = await import("../db");
+    const { sql } = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return;
+
+    const heads = [
+      "ai_sdr",
+      "ai_dispatch",
+      "ai_content_seo",
+      "ai_bookkeeping",
+      "ai_onboarding",
+      "ai_vendor_outreach",
+      "ai_system_integrity",
+      "ai_market_research",
+    ];
+
+    // Lift the 8 designated seats to head, demote any others that drifted to head
+    // so the chart stays single-head-per-department.
+    await db.execute(
+      sql`UPDATE \`ai_agents\` SET \`isDepartmentHead\` = 1 WHERE \`seatName\` IN (${sql.join(heads.map((h) => sql`${h}`), sql`, `)})`
+    );
+    await db.execute(
+      sql`UPDATE \`ai_agents\` SET \`isDepartmentHead\` = 0 WHERE \`seatName\` NOT IN (${sql.join(heads.map((h) => sql`${h}`), sql`, `)}) AND \`department\` <> 'integrator' AND \`isDepartmentHead\` = 1`
+    );
+
+    console.log("[boot] ensureDepartmentHeadFlags OK");
+  } catch (err) {
+    console.warn("[boot] ensureDepartmentHeadFlags failed (non-fatal):", err);
+  }
+}
+
 async function startServer() {
   await ensurePhoneTables();
   await ensurePortalContinuityFlag();
+  await ensurePortalCustomersColumns();
+  await ensureAnnualValuationOptInColumn();
+  await ensurePriorityTranslationTables();
+  await ensureOAuthIntegrationTables();
+  await ensureMagicLinkTokenHash();
+  await ensureSchedulingTablesBoot();
+  await ensureAgentPhase4Tables();
+  await ensureVendorTablesBoot();
+  await ensurePasswordResetTokensTableBoot();
+  await ensureCharterTables();
+  await ensureAgentTeamTables();
+  await ensureEmailManagerTables();
+  await ensureAppSettings();
+  await ensureDepartmentHeadFlags();
+  await ensureLeadNurturerTables();
+  await ensureBookConsultationTables();
   const app = express();
   const server = createServer(app);
 
@@ -133,9 +1072,9 @@ async function startServer() {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'", "https://maps.googleapis.com", "https://js.stripe.com"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "https://maps.googleapis.com", "https://js.stripe.com", "https://www.googletagmanager.com"],
         frameSrc: ["https://js.stripe.com", "https://hooks.stripe.com"],
-        connectSrc: ["'self'", "https://api.stripe.com", "https://maps.googleapis.com"],
+        connectSrc: ["'self'", "https://api.stripe.com", "https://maps.googleapis.com", "https://www.google-analytics.com", "https://analytics.google.com", "https://region1.google-analytics.com"],
         imgSrc: ["'self'", "data:", "blob:", "https:", "http:"],
         styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
         fontSrc: ["'self'", "https://fonts.gstatic.com"],
@@ -147,13 +1086,30 @@ async function startServer() {
   // ── Rate limiting ──
   const globalLimiter = rateLimit({ windowMs: 60 * 1000, max: 100, standardHeaders: true, legacyHeaders: false });
   const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, message: "Too many login attempts, try again later" });
+  // Tight limiter for public, unauthenticated POST surfaces that write to DB/Stripe/email.
+  const publicWriteLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many requests, please try again later" },
+  });
   app.use("/api/", globalLimiter);
   app.use("/api/oauth/", authLimiter);
+  app.use("/api/360/event", publicWriteLimiter);
+  app.use("/api/360/checkout", publicWriteLimiter);
+  app.use("/api/360/portfolio-checkout", publicWriteLimiter);
 
-  // ── CORS: allow 360 funnel and portal to call the pro API ──
+  // ── CORS: allow 360 funnel, portal, and the public marketing site ──
+  // handypioneers.com / www.handypioneers.com host the Roadmap Generator form,
+  // which posts the multipart PDF upload to /api/roadmap-generator/submit here.
   const allowedOrigins = [
     "https://360.handypioneers.com",
     "https://client.handypioneers.com",
+    "https://handypioneers.com",
+    "https://www.handypioneers.com",
+    "https://staging.handypioneers.com",
+    "https://staging-pro.handypioneers.com",
   ];
   if (process.env.NODE_ENV === "development") {
     allowedOrigins.push("http://localhost:3001", "http://localhost:5173");
@@ -202,17 +1158,67 @@ async function startServer() {
       case "payment_intent.succeeded": {
         const pi = event.data.object as Stripe.PaymentIntent;
         console.log(`[Webhook] PaymentIntent succeeded: ${pi.id} amount=${pi.amount}`);
-        // Sync portal invoice status to 'paid'
+        // Sync portal invoice status to 'paid' AND send the same branded
+        // receipt email that checkout.session.completed sends. Customers who
+        // pay via the in-page Payment Element (PaymentIntent flow) deserve
+        // the same confirmation as the Checkout flow.
+        let portalInvoiceId: number | null = null;
         try {
           const inv = await getPortalInvoiceByStripePaymentIntentId(pi.id);
           if (inv) {
             await updatePortalInvoicePaid(inv.id, pi.amount_received, pi.id);
+            portalInvoiceId = inv.id;
             console.log(`[Webhook] Portal invoice ${inv.id} marked paid via PI ${pi.id}`);
+            try {
+              const customer = await findPortalCustomerById(inv.customerId);
+              if (customer) {
+                const amountStr = `$${(pi.amount_received / 100).toFixed(2)}`;
+                const baseUrl = process.env.PORTAL_BASE_URL ?? 'https://client.handypioneers.com';
+                const invoiceUrl = `${baseUrl}/portal/invoices/${inv.id}`;
+                const firstName = customer.name.split(' ')[0];
+                const receiptHtml = `<!DOCTYPE html><html><body style="font-family:Helvetica,Arial,sans-serif;background:#f4f5f7;padding:32px 16px;">
+<table width="600" style="max-width:600px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;">
+<tr><td style="background:linear-gradient(135deg,#1a2e1a,#2d4a2d);padding:28px 40px;text-align:center;">
+  <p style="color:#fff;font-size:20px;font-weight:700;margin:0;">Payment Received</p>
+  <p style="color:rgba(255,255,255,0.65);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;margin:6px 0 0;">Handy Pioneers</p>
+</td></tr>
+<tr><td style="padding:36px 40px;color:#1a1a1a;font-size:15px;line-height:1.6;">
+  <p>Hi ${firstName},</p>
+  <p>We received your payment of <strong>${amountStr}</strong> for invoice <strong>${inv.invoiceNumber}</strong>. Thank you!</p>
+  <table width="100%" style="margin:20px 0;"><tr><td style="background:#f8f9fa;border:1px solid #e8e8e8;border-radius:6px;padding:16px 24px;text-align:center;">
+    <p style="margin:0;font-size:13px;color:#888;text-transform:uppercase;">Amount Paid</p>
+    <p style="margin:4px 0 0;font-size:28px;font-weight:700;color:#2D5016;">${amountStr}</p>
+  </td></tr></table>
+  <p style="text-align:center;"><a href="${invoiceUrl}" style="display:inline-block;background:#c8922a;color:#fff;font-weight:700;padding:12px 32px;border-radius:6px;text-decoration:none;">View Invoice</a></p>
+  <p style="font-size:13px;color:#888;text-align:center;">Questions? <a href="mailto:help@handypioneers.com" style="color:#c8922a;">help@handypioneers.com</a> | (360) 544-9858</p>
+</td></tr></table></body></html>`;
+                await sendEmail({ to: customer.email, subject: `Payment Received — Invoice ${inv.invoiceNumber}`, html: receiptHtml }).catch(() => null);
+                await notifyOwner({ title: `💳 Invoice Paid: ${inv.invoiceNumber}`, content: `${customer.name} paid ${amountStr} for invoice ${inv.invoiceNumber} via Stripe PaymentIntent.` }).catch(() => null);
+              }
+            } catch (emailErr) {
+              console.error('[Webhook] PI receipt email failed:', emailErr);
+            }
           } else {
             console.log(`[Webhook] No portal invoice found for PI ${pi.id} — may be client-side only`);
           }
         } catch (dbErr) {
           console.error(`[Webhook] DB update failed for PI ${pi.id}:`, dbErr);
+        }
+        // Phase 4 agent trigger: payment.received fans out to Cash Flow,
+        // Bookkeeping, Onboarding (membership initial), and any future listeners.
+        try {
+          const { emitAgentEvent } = await import("../lib/agentRuntime/triggerBus");
+          emitAgentEvent("payment.received", {
+            paymentIntentId: pi.id,
+            amountCents: pi.amount_received ?? pi.amount,
+            currency: pi.currency,
+            invoiceId: portalInvoiceId,
+            invoiceNumber: pi.metadata?.invoiceNumber ?? null,
+            customerName: pi.metadata?.customerName ?? null,
+            source: "stripe",
+          }).catch(() => null);
+        } catch (emitErr) {
+          console.warn("[Webhook] payment.received emit failed:", emitErr);
         }
         break;
       }
@@ -304,6 +1310,53 @@ async function startServer() {
         console.log(`[Webhook] PaymentIntent failed: ${pi.id}`);
         break;
       }
+      case "invoice.payment_succeeded": {
+        // Stripe Subscriptions fire this on every renewal cycle. Routes to
+        // the Customer Success "renewal acknowledged" path + Cash Flow.
+        // Stripe Invoice.subscription is on the v1 path; in newer SDK types
+        // it lives on parent.subscription_details. Read both defensively
+        // (the API response shape didn't change, only the type narrowing).
+        const inv = event.data.object as Stripe.Invoice & {
+          subscription?: string | { id?: string } | null;
+          parent?: { subscription_details?: { subscription?: string | { id?: string } | null } | null };
+        };
+        const rawSub = inv.subscription ?? inv.parent?.subscription_details?.subscription ?? null;
+        const subscriptionId =
+          typeof rawSub === "string"
+            ? rawSub
+            : (rawSub && typeof rawSub === "object" ? rawSub.id ?? null : null);
+        try {
+          const { emitAgentEvent } = await import("../lib/agentRuntime/triggerBus");
+          emitAgentEvent("subscription.renewed", {
+            invoiceId: inv.id,
+            subscriptionId,
+            stripeCustomerId: typeof inv.customer === "string" ? inv.customer : inv.customer?.id ?? null,
+            amountPaidCents: inv.amount_paid ?? 0,
+            currency: inv.currency,
+            periodStart: inv.period_start,
+            periodEnd: inv.period_end,
+          }).catch(() => null);
+        } catch (emitErr) {
+          console.warn("[Webhook] subscription.renewed emit failed:", emitErr);
+        }
+        break;
+      }
+      case "customer.subscription.deleted": {
+        const sub = event.data.object as Stripe.Subscription;
+        try {
+          const { emitAgentEvent } = await import("../lib/agentRuntime/triggerBus");
+          emitAgentEvent("subscription.cancelled", {
+            subscriptionId: sub.id,
+            stripeCustomerId: typeof sub.customer === "string" ? sub.customer : sub.customer?.id ?? null,
+            cancelAtPeriodEnd: sub.cancel_at_period_end ?? false,
+            cancelledAt: sub.canceled_at ?? Math.floor(Date.now() / 1000),
+            status: sub.status,
+          }).catch(() => null);
+        } catch (emitErr) {
+          console.warn("[Webhook] subscription.cancelled emit failed:", emitErr);
+        }
+        break;
+      }
       default:
         console.log(`[Webhook] Unhandled event type: ${event.type}`);
     }
@@ -314,24 +1367,10 @@ async function startServer() {
   // POST /api/twilio/sms — Twilio calls this when an SMS arrives
   app.post("/api/twilio/sms", express.urlencoded({ extended: false }), async (req, res) => {
     try {
-      // Validate Twilio signature in production
-      // Use x-forwarded-host and x-forwarded-proto to get the real public URL
-      // behind a reverse proxy — Twilio signs with the public URL
-      const authToken = process.env.TWILIO_AUTH_TOKEN;
-      if (authToken) {
-        const sig = req.headers["x-twilio-signature"] as string;
-        const forwardedProto = (req.headers["x-forwarded-proto"] as string) || req.protocol;
-        const forwardedHost = (req.headers["x-forwarded-host"] as string) || req.get("host") || "localhost";
-        const proto = forwardedProto.split(",")[0].trim(); // take first if comma-separated
-        const host = forwardedHost.split(",")[0].trim();
-        const url = `${proto}://${host}/api/twilio/sms`;
-        console.log(`[Twilio SMS] Validating signature for URL: ${url}`);
-        const valid = twilio.validateRequest(authToken, sig, url, req.body);
-        if (!valid && process.env.NODE_ENV === "production") {
-          console.warn(`[Twilio SMS] Signature validation failed for URL: ${url}`);
-          res.status(403).send("Forbidden");
-          return;
-        }
+      if (!verifyTwilioRequest(req, "/api/twilio/sms")) {
+        console.warn("[Twilio SMS] Signature validation failed");
+        res.status(403).send("Forbidden");
+        return;
       }
       const inboundMsg = await handleInboundSms(req.body);
       // Broadcast real-time update to connected clients
@@ -351,6 +1390,11 @@ async function startServer() {
   // POST /api/twilio/voice/status — Twilio calls this when call status changes
   app.post("/api/twilio/voice/status", express.urlencoded({ extended: false }), async (req, res) => {
     try {
+      if (!verifyTwilioRequest(req, "/api/twilio/voice/status")) {
+        console.warn("[Twilio Voice status] Signature validation failed");
+        res.status(403).send("Forbidden");
+        return;
+      }
       await handleCallStatusUpdate(req.body);
       res.sendStatus(204);
     } catch (err) {
@@ -361,7 +1405,15 @@ async function startServer() {
 
   // ── Twilio Voice TwiML — outbound call instructions ──────────────────────────
   // POST /api/twilio/voice/connect — returns TwiML to connect a browser call
+  // SECURITY: signature check is CRITICAL here — this route lets Twilio dial
+  // an arbitrary number. Without verification, an attacker can spoof-POST to
+  // initiate calls to premium-rate destinations on our account.
   app.post("/api/twilio/voice/connect", express.urlencoded({ extended: false }), (req, res) => {
+    if (!verifyTwilioRequest(req, "/api/twilio/voice/connect")) {
+      console.warn("[Twilio Voice connect] Signature validation failed — blocking call dial-out");
+      res.status(403).send("Forbidden");
+      return;
+    }
     const to = req.body.To || req.body.to;
     const VoiceResponse = twilio.twiml.VoiceResponse;
     const twiml = new VoiceResponse();
@@ -379,6 +1431,11 @@ async function startServer() {
   // POST /api/twilio/voice/inbound — Twilio calls this for every inbound call
   app.post("/api/twilio/voice/inbound", express.urlencoded({ extended: false }), async (req, res) => {
     try {
+      if (!verifyTwilioRequest(req, "/api/twilio/voice/inbound")) {
+        console.warn("[Twilio Voice inbound] Signature validation failed");
+        res.status(403).send("Forbidden");
+        return;
+      }
       const forwardedProto = (req.headers["x-forwarded-proto"] as string) || req.protocol;
       const forwardedHost = (req.headers["x-forwarded-host"] as string) || req.get("host") || "localhost";
       const proto = forwardedProto.split(",")[0].trim();
@@ -400,6 +1457,11 @@ async function startServer() {
   // ── Twilio Voice — stage-2 fallback (cell didn't answer) ─────────────────
   app.post("/api/twilio/voice/fallback", express.urlencoded({ extended: false }), async (req, res) => {
     try {
+      if (!verifyTwilioRequest(req, "/api/twilio/voice/fallback")) {
+        console.warn("[Twilio Voice fallback] Signature validation failed");
+        res.status(403).send("Forbidden");
+        return;
+      }
       const forwardedProto = (req.headers["x-forwarded-proto"] as string) || req.protocol;
       const forwardedHost = (req.headers["x-forwarded-host"] as string) || req.get("host") || "localhost";
       const proto = forwardedProto.split(",")[0].trim();
@@ -445,6 +1507,11 @@ async function startServer() {
   // ── Twilio Voice — voicemail recording callback ────────────────────────────
   app.post("/api/twilio/voice/voicemail", express.urlencoded({ extended: false }), async (req, res) => {
     try {
+      if (!verifyTwilioRequest(req, "/api/twilio/voice/voicemail")) {
+        console.warn("[Twilio Voice voicemail] Signature validation failed");
+        res.status(403).send("Forbidden");
+        return;
+      }
       const { CallSid, From, To, RecordingUrl, TranscriptionText, RecordingDuration } = req.body;
       const callerNumber = From || "Unknown";
       const durationSecs = RecordingDuration ? parseInt(RecordingDuration, 10) : 0;
@@ -470,6 +1537,37 @@ async function startServer() {
               if (log?.id) await updateCallLog(log.id, { recordingUrl: appUrl }).catch(console.warn);
             })
             .catch(console.warn);
+        }
+        // Voicemail always signals a fresh lead for the Nurturer — regardless of
+        // whether Twilio reports the call as "answered" (the voicemail recording
+        // is what was answered, not a live conversation).
+        try {
+          const { findOrCreateCustomerFromCall } = await import("../db");
+          const { createNotification, findDefaultUserForRole } = await import("../leadRouting");
+          const { customer } = await findOrCreateCustomerFromCall(From || callerNumber).catch(() => ({ customer: null }));
+          const userId = await findDefaultUserForRole('nurturer');
+          await createNotification({
+            userId,
+            role: 'nurturer',
+            eventType: 'voicemail',
+            title: `New voicemail from ${customer?.displayName ?? callerNumber}`,
+            body: `${duration} voicemail${TranscriptionText ? `: "${TranscriptionText.slice(0, 140)}"` : '.'} Call back today.`,
+            linkUrl: `/?section=inbox`,
+            customerId: customer?.id,
+            priority: 'high',
+          });
+          // Phase 4 trigger: voicemail.received fans out to Lead Nurturer AI.
+          const { emitAgentEvent } = await import("../lib/agentRuntime/triggerBus");
+          emitAgentEvent("voicemail.received", {
+            customerId: customer?.id ?? null,
+            customerName: customer?.displayName ?? callerNumber,
+            callerNumber,
+            durationSecs,
+            transcription: TranscriptionText ?? "",
+            recordingUrl: RecordingUrl ?? null,
+          }).catch(() => null);
+        } catch (notifyErr) {
+          console.warn("[Voicemail nurturer notify] Failed:", notifyErr);
         }
       }
 
@@ -547,8 +1645,40 @@ async function startServer() {
     addSSEClient(clientId, res);
   });
 
-  // ── Gmail diagnostic endpoint ─────────────────────────────────────────────────────────────
-  app.get("/api/gmail/debug", (req, res) => {
+  // ── Visionary Console: Integrator chat streaming endpoint ────────────────────
+  // POST /api/admin/integrator-stream — streams Anthropic deltas as SSE events.
+  // Tool execution + persistence happen on the server after the stream resolves.
+  const { registerIntegratorStreamRoutes } = await import("../integratorStream");
+  registerIntegratorStreamRoutes(app);
+
+  // ── Health check ─────────────────────────────────────────────────────────────
+  app.get("/api/health", async (req, res) => {
+    const { getDb } = await import("../db");
+    const db = await getDb();
+    const gmailConfigured = isGmailConfigured();
+    const gmailConnected = !!(process.env.GMAIL_CONNECTED_EMAIL);
+    const resendConfigured = !!process.env.RESEND_API_KEY;
+    res.json({
+      status: "ok",
+      db: db ? "connected" : "unavailable",
+      // Resend handles outbound mail; Gmail status is for inbound polling only.
+      email: { sender: resendConfigured ? "resend_ready" : "resend_missing_key" },
+      gmail: { configured: gmailConfigured, connected: gmailConnected },
+    });
+  });
+
+  // ── Gmail diagnostic endpoint (admin only) ─────────────────────────────────────
+  app.get("/api/gmail/debug", async (req, res) => {
+    try {
+      const user = await sdk.authenticateRequest(req);
+      if (user.role !== "admin") {
+        res.status(403).json({ error: "Admin access required" });
+        return;
+      }
+    } catch {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
     res.json({
       configured: !!(process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET),
       clientIdPrefix: process.env.GMAIL_CLIENT_ID?.slice(0, 20) || null,
@@ -584,6 +1714,127 @@ async function startServer() {
       // Store error for diagnostic endpoint
       process.env.GMAIL_LAST_ERROR = `${errMsg} ${errDetail}`.trim();
       res.redirect(`${origin}/?gmail=error&reason=${encodeURIComponent(errMsg.slice(0, 100))}`);
+    }
+  });
+
+  // ── QBO OAuth callback ────────────────────────────────────────────────────────
+  // Registered in Intuit: /api/quickbooks/callback
+  // Legacy alias also kept for any bookmarked URLs
+  const qboCallbackHandler = async (req: express.Request, res: express.Response) => {
+    const code = req.query.code as string | undefined;
+    const rawState = req.query.state as string | undefined;
+    const realmId = req.query.realmId as string | undefined;
+    if (!code || !realmId) { res.status(400).send("Missing code or realmId"); return; }
+
+    let userId: number | undefined;
+    let redirectUri = process.env.QUICKBOOKS_REDIRECT_URI || `${req.protocol}://${req.hostname}/api/quickbooks/callback`;
+    let returnTo = "/settings/integrations";
+    try {
+      if (rawState) {
+        const parsed = JSON.parse(Buffer.from(rawState, "base64").toString());
+        userId = parsed.userId;
+        if (parsed.redirectUri) redirectUri = parsed.redirectUri;
+        if (parsed.returnTo) returnTo = parsed.returnTo;
+      }
+    } catch { /* malformed state — proceed without userId */ }
+
+    if (!userId) { res.redirect(`${returnTo}?qb=error&reason=invalid_state`); return; }
+
+    const clientId = process.env.QUICKBOOKS_CLIENT_ID;
+    const clientSecret = process.env.QUICKBOOKS_CLIENT_SECRET;
+    if (!clientId || !clientSecret) { res.redirect(`${returnTo}?qb=error&reason=not_configured`); return; }
+
+    try {
+      const params = new URLSearchParams({
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: redirectUri,
+      });
+      const tokenResp = await fetch("https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`,
+        },
+        body: params.toString(),
+      });
+      if (!tokenResp.ok) {
+        const errText = await tokenResp.text();
+        console.error("[QBO callback] token exchange failed:", errText);
+        res.redirect(`${returnTo}?qb=error&reason=${encodeURIComponent(errText.slice(0, 100))}`);
+        return;
+      }
+      const tokenData = await tokenResp.json() as { access_token: string; refresh_token: string; expires_in?: number };
+      const expiresAt = new Date(Date.now() + (tokenData.expires_in ?? 3600) * 1000).toISOString();
+
+      const { getDb } = await import("../db.js");
+      const { qbTokens } = await import("../../drizzle/schema.js");
+      const { eq } = await import("drizzle-orm");
+      const db = await getDb();
+      if (db) {
+        const existing = await db.select({ id: qbTokens.id }).from(qbTokens).where(eq(qbTokens.userId, userId)).limit(1);
+        if (existing[0]) {
+          await db.update(qbTokens).set({ accessToken: tokenData.access_token, refreshToken: tokenData.refresh_token, realmId, expiresAt }).where(eq(qbTokens.userId, userId));
+        } else {
+          await db.insert(qbTokens).values({ userId, accessToken: tokenData.access_token, refreshToken: tokenData.refresh_token, realmId, expiresAt });
+        }
+      }
+      console.log(`[QBO] Connected for userId ${userId}, realmId ${realmId}`);
+      res.redirect(`${returnTo}?qb=connected`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[QBO callback] error:", msg);
+      res.redirect(`${returnTo}?qb=error&reason=${encodeURIComponent(msg.slice(0, 100))}`);
+    }
+  };
+  app.get("/api/quickbooks/callback", qboCallbackHandler);
+  app.get("/api/integrations/qbo/callback", qboCallbackHandler);
+
+  // ── GBP OAuth routes ─────────────────────────────────────────────────────────
+  const { gbpRouter: gbpOAuthRouter } = await import("../integrations/gbp/routes.js");
+  app.use("/api/integrations/gbp", gbpOAuthRouter);
+
+  // ── Meta integration routes ───────────────────────────────────────────────────
+  const { metaRouter: metaExpressRouter } = await import("../integrations/meta/routes.js");
+  app.use("/api/integrations/meta", metaExpressRouter);
+
+  // ── Google Ads OAuth routes ───────────────────────────────────────────────────
+  const { googleAdsRouter: googleAdsOAuthRouter } = await import("../integrations/google-ads/routes.js");
+  app.use("/api/integrations/google-ads", googleAdsOAuthRouter);
+
+  // ── Integration health endpoint ───────────────────────────────────────────────
+  app.get("/api/health", async (_req, res) => {
+    try {
+      const { getGbpTokens } = await import("../integrations/gbp/oauth.js");
+      const { getGoogleAdsTokens } = await import("../integrations/google-ads/oauth.js");
+      const [gbpTokenRow, gadsTokenRow] = await Promise.all([
+        getGbpTokens().catch(() => null),
+        getGoogleAdsTokens().catch(() => null),
+      ]);
+      const e = process.env;
+      res.json({
+        ok: true,
+        integrations: {
+          gbp: {
+            configured: !!(e.GBP_CLIENT_ID && e.GBP_CLIENT_SECRET),
+            connected: !!gbpTokenRow,
+          },
+          meta: {
+            configured: !!(e.META_SYSTEM_USER_TOKEN && e.META_AD_ACCOUNT_ID),
+            connected: !!(e.META_SYSTEM_USER_TOKEN && e.META_AD_ACCOUNT_ID),
+          },
+          googleAds: {
+            configured: !!(e.GOOGLE_ADS_CLIENT_ID && e.GOOGLE_ADS_DEVELOPER_TOKEN),
+            connected: !!gadsTokenRow,
+          },
+          quickbooks: {
+            configured: !!(e.QUICKBOOKS_CLIENT_ID && e.QUICKBOOKS_CLIENT_SECRET),
+            connected: false,
+          },
+        },
+      });
+    } catch {
+      res.json({ ok: true });
     }
   });
 
@@ -624,6 +1875,12 @@ async function startServer() {
         if (!d) return "—";
         return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
       };
+      const esc = (v: unknown): string => String(v ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
 
       // Build HTML matching the portal estimate detail layout
       const isLegacy = phases.length > 0 && !phases[0].items;
@@ -631,20 +1888,20 @@ async function startServer() {
       if (isLegacy) {
         lineItemsHtml = `<table class="items-table"><thead><tr><th>Services</th><th>Qty</th><th>Unit Price</th><th>Amount</th></tr></thead><tbody>`;
         for (const row of phases) {
-          lineItemsHtml += `<tr><td>${row.description || ""}</td><td>—</td><td>—</td><td>${fmtMoney(est.totalAmount ?? 0)}</td></tr>`;
+          lineItemsHtml += `<tr><td>${esc(row.description)}</td><td>—</td><td>—</td><td>${fmtMoney(est.totalAmount ?? 0)}</td></tr>`;
         }
         lineItemsHtml += `</tbody></table>`;
       } else {
         for (const phase of phases) {
           lineItemsHtml += `<div class="phase-block">`;
-          lineItemsHtml += `<div class="phase-header"><strong>${phase.phaseName || ""}</strong>`;
-          if (phase.phaseDescription) lineItemsHtml += `<p class="phase-desc">${phase.phaseDescription}</p>`;
+          lineItemsHtml += `<div class="phase-header"><strong>${esc(phase.phaseName)}</strong>`;
+          if (phase.phaseDescription) lineItemsHtml += `<p class="phase-desc">${esc(phase.phaseDescription)}</p>`;
           lineItemsHtml += `</div>`;
           lineItemsHtml += `<table class="items-table"><thead><tr><th>Services</th><th>Qty</th><th>Unit Price</th><th>Amount</th></tr></thead><tbody>`;
           for (const item of (phase.items || [])) {
-            lineItemsHtml += `<tr><td><strong>${item.name || ""}</strong>`;
-            if (item.scopeOfWork) lineItemsHtml += `<br/><span class="sow">SCOPE OF WORK<br/>— ${item.scopeOfWork}</span>`;
-            lineItemsHtml += `</td><td>${item.qty ?? "—"}</td><td>${item.unitPrice != null ? fmtMoney(Math.round(item.unitPrice * 100)) : "—"}</td><td>${item.amount != null ? fmtMoney(Math.round(item.amount * 100)) : "—"}</td></tr>`;
+            lineItemsHtml += `<tr><td><strong>${esc(item.name)}</strong>`;
+            if (item.scopeOfWork) lineItemsHtml += `<br/><span class="sow">SCOPE OF WORK<br/>— ${esc(item.scopeOfWork)}</span>`;
+            lineItemsHtml += `</td><td>${esc(item.qty ?? "—")}</td><td>${item.unitPrice != null ? fmtMoney(Math.round(item.unitPrice * 100)) : "—"}</td><td>${item.amount != null ? fmtMoney(Math.round(item.amount * 100)) : "—"}</td></tr>`;
           }
           lineItemsHtml += `</tbody></table>`;
           if (phase.phaseSubtotal != null) {
@@ -697,13 +1954,13 @@ async function startServer() {
           <div><div class="company">Handy Pioneers</div><div class="tagline">808 SE Chkalov Dr 3-433, Vancouver, WA 98683 &nbsp;|&nbsp; (360) 544-9858 &nbsp;|&nbsp; help@handypioneers.com</div></div>
           <div style="margin-left:auto;text-align:right;font-size:12px;">
             <div style="opacity:0.7">ESTIMATE</div>
-            <div style="font-weight:700;font-size:16px">${est.estimateNumber}</div>
+            <div style="font-weight:700;font-size:16px">${esc(est.estimateNumber)}</div>
           </div>
         </div>
         <div class="gold-bar"></div>
         <div class="body">
           <table class="meta-table"><tr>
-            <td><span class="section-label">For</span><br/><strong>${portalCustomer.name}</strong></td>
+            <td><span class="section-label">For</span><br/><strong>${esc(portalCustomer.name)}</strong></td>
             <td class="right"><span class="label">Estimate Date:</span> <span class="value">${fmtDate(est.sentAt)}</span><br/><span class="label">Expires:</span> <span class="value">${fmtDate(est.expiresAt)}</span></td>
           </tr></table>
           ${lineItemsHtml}
@@ -728,9 +1985,16 @@ async function startServer() {
     }
   });
 
-  // Configure body parser with larger size limit for file uploads
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  // Body parsers. File uploads route through uploadsRouter which caps at 16 MB
+  // after base64 decode; JSON wire payload only ~33% larger, so 25 MB is
+  // ample headroom without handing 50 MB of free buffer to every caller.
+  app.use(express.json({ limit: "25mb" }));
+  app.use(express.urlencoded({ limit: "2mb", extended: true }));
+
+  // ── Staff admin auth: /api/auth/login, /api/auth/logout, /api/auth/me ─────
+  app.use("/api/auth/login", authLimiter);
+  registerAuthRoutes(app);
+  seedDefaultAdminIfNeeded().catch(err => console.error("[Auth] seed failed:", err));
   // ── Gmail poll schedule (every 2 minutes) ────────────────────────────────────────────────────
   setInterval(async () => {
     const email = process.env.GMAIL_CONNECTED_EMAIL;
@@ -739,9 +2003,37 @@ async function startServer() {
         console.error("[Gmail] Poll error:", err)
       );
     }
-  }, 2 * 60 * 1000); // every 2 minutes
+  }, 2 * 60 * 1000);
 
-  // ── Overdue invoice reminder (daily at 9 AM server time) ─────────────────────
+  // ── Email Manager AI pipeline (every 15 minutes) ──────────────────────────
+  const runEmailManagerJob = async () => {
+    const email = process.env.GMAIL_CONNECTED_EMAIL;
+    if (!email) return;
+    if (!process.env.ANTHROPIC_API_KEY) {
+      console.warn("[EmailManagerAI] ANTHROPIC_API_KEY not set — skipping AI pipeline");
+      return;
+    }
+    await runEmailManagerPipeline(email).catch(err =>
+      console.error("[EmailManagerAI] Pipeline error:", err)
+    );
+  };
+  // Run once on startup, then every 15 min
+  runEmailManagerJob().catch(console.error);
+  setInterval(runEmailManagerJob, 15 * 60 * 1000);
+  console.log("[EmailManagerAI] AI email pipeline started (runs every 15 min)");
+
+  // ── Overdue invoice reminder — DISABLED 2026-04-25 ──────────────────────────
+  // Per Customer Success Charter §3 (Invoice Email Cadence), Handy Pioneers
+  // does NOT chase late payments via automated reminders. Members and customers
+  // receive a single invoice email at creation; subsequent communication about
+  // unpaid balances is handled by the Concierge / Customer Success seat
+  // personally, in-context. The daily 9am cron has been removed. The manual
+  // `financials.sendReminder` endpoint remains available for one-off operator
+  // use, but no scheduled job calls it.
+  //
+  // The implementation below is preserved (commented) so the wiring can be
+  // restored quickly if the policy changes.
+  /*
   const runOverdueReminders = async () => {
     try {
       const overdueRows = await getOverdueInvoicesForReminder();
@@ -789,6 +2081,8 @@ async function startServer() {
     console.log(`[Overdue] Next reminder run scheduled in ${Math.round(msUntil9am / 60000)} minutes`);
   };
   scheduleOverdueReminders();
+  */
+  console.log("[Overdue] Automated overdue reminders are DISABLED by policy (Customer Success Charter §3).");
 
   // ── Review request emails (runs every hour, checks for eligible sign-offs) ─────
   const GOOGLE_REVIEW_URL = process.env.GOOGLE_REVIEW_URL ?? 'https://g.page/r/handypioneers/review';
@@ -922,6 +2216,27 @@ async function startServer() {
   setInterval(runDeferredCreditRelease, 6 * 60 * 60 * 1000); // every 6 hours
   console.log("[360 Deferred Credit] Deferred labor bank credit scheduler started (runs every 6 hours)");
 
+  // ── Lead Nurturer worker — generate due drafts every 5 minutes ──────────────
+  // Picks up pending agentDrafts whose scheduledFor has passed, asks Claude to
+  // render a stewardship-voice draft, marks them `ready`. Operator approves
+  // sends from /admin/agents/drafts. Best-effort and idempotent.
+  const runLeadNurturerWorker = async () => {
+    try {
+      const { runDueDrafts } = await import("../lib/leadNurturer/roadmapFollowup");
+      const result = await runDueDrafts({ limit: 25 });
+      if (result.picked > 0) {
+        console.log(
+          `[LeadNurturer] picked=${result.picked} generated=${result.generated} failed=${result.failed}`,
+        );
+      }
+    } catch (err) {
+      console.error("[LeadNurturer] worker error:", err);
+    }
+  };
+  runLeadNurturerWorker().catch(console.error);
+  setInterval(runLeadNurturerWorker, 5 * 60 * 1000);
+  console.log("[LeadNurturer] Draft worker started (runs every 5 minutes)");
+
   // ── Auto-archive Lost leads after 90 days (runs daily at 3 AM) ─────────────
   const LOST_ARCHIVE_DAYS = 90;
   const runLostLeadAutoArchive = async () => {
@@ -936,7 +2251,6 @@ async function startServer() {
           await updateOpportunity(lead.id, {
             archived: true,
             archivedAt: new Date().toISOString(),
-            archivedReason: "auto_lost_90d",
           }).catch(() => null);
           archived++;
         }
@@ -1056,6 +2370,148 @@ async function startServer() {
     res.json({ ok: true });
   });
 
+  // ── Roadmap Generator / Priority Translation: multipart PDF intake ──
+  // Inspection report PDFs can legitimately run 50-80 MB (Spectora exports
+  // with embedded photos). Limit is 100 MB to keep a buffer without letting
+  // arbitrary huge payloads through. Returns 202 immediately; Claude + PDF
+  // render + Resend email run in the background via submitRoadmap() so the
+  // homeowner's browser doesn't hang for 30–60s. Processing failures land in
+  // priorityTranslations.failureReason and trigger an internal email to help@.
+  // Alias /api/priority-translation/submit kept so legacy email links work.
+  const ROADMAP_UPLOAD_MAX_BYTES = 100 * 1024 * 1024;
+  const roadmapUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: ROADMAP_UPLOAD_MAX_BYTES, files: 1 },
+    fileFilter: (_req, file, cb) => {
+      const isPdf = file.mimetype === "application/pdf" || /\.pdf$/i.test(file.originalname);
+      if (!isPdf) return cb(new Error("Only PDF uploads are accepted"));
+      cb(null, true);
+    },
+  });
+
+  async function handleRoadmapSubmit(req: express.Request, res: express.Response) {
+    try {
+      const fields = (req.body ?? {}) as Record<string, string>;
+      const file = (req as any).file as Express.Multer.File | undefined;
+
+      const required = ["firstName", "lastName", "email", "phone", "propertyAddress"] as const;
+      for (const k of required) {
+        if (!fields[k] || fields[k].trim().length === 0) {
+          res.status(400).json({ error: `Missing required field: ${k}` });
+          return;
+        }
+      }
+      if (!file && !fields.reportUrl) {
+        res.status(400).json({ error: "Provide a PDF upload or reportUrl" });
+        return;
+      }
+
+      const result = await submitRoadmap({
+        firstName: fields.firstName,
+        lastName: fields.lastName,
+        email: fields.email,
+        phone: fields.phone,
+        propertyAddress: fields.propertyAddress,
+        notes: fields.notes,
+        pdfBuffer: file?.buffer,
+        pdfOriginalName: file?.originalname,
+        reportUrl: fields.reportUrl,
+      });
+
+      // Phase 4 agent trigger: a Roadmap Generator submission is a hot inbound
+      // lead. Fans out to whichever agent subscribes (default: Lead Nurturer).
+      try {
+        const { emitAgentEvent } = await import("../lib/agentRuntime/triggerBus");
+        emitAgentEvent("roadmap_generator.submitted", {
+          firstName: fields.firstName,
+          lastName: fields.lastName,
+          email: fields.email,
+          phone: fields.phone,
+          propertyAddress: fields.propertyAddress,
+          notes: fields.notes,
+          source: fields.source || "roadmap_generator",
+          submissionId: result.id,
+        }).catch(() => null);
+      } catch (emitErr) {
+        console.warn("[Roadmap Generator] event emit failed:", emitErr);
+      }
+
+      // confirmationUrl is what the marketing site (handypioneers.com) should
+      // redirect the homeowner to after submit. Lives on the portal app where
+      // the polling status endpoint and PortalRoadmapSubmitted page exist.
+      const portalBase = process.env.PORTAL_BASE_URL || "https://pro.handypioneers.com";
+      const confirmationUrl = `${portalBase}/portal/roadmap/submitted/${result.id}`;
+
+      res.status(202).json({
+        ok: true,
+        id: result.id,
+        status: result.status,
+        message: "Submission received. Your 360° Priority Roadmap will arrive by email within a few minutes.",
+        confirmationUrl,
+      });
+    } catch (err: any) {
+      if (err?.code === "LIMIT_FILE_SIZE") {
+        res.status(413).json({ error: "File too large — max 100MB" });
+        return;
+      }
+      console.error("[Roadmap Generator] submit error:", err?.message ?? err);
+      const status = err?.code === "BAD_REQUEST" ? 400 : err?.code === "FORBIDDEN" ? 403 : 500;
+      res.status(status).json({ error: err?.message ?? "Submit failed" });
+    }
+  }
+
+  app.post("/api/roadmap-generator/submit", roadmapUpload.single("report_pdf"), handleRoadmapSubmit);
+  // Alias for the earlier endpoint name used by the marketing frontend.
+  app.post("/api/priority-translation/submit", roadmapUpload.single("report_pdf"), handleRoadmapSubmit);
+
+  // ── Internal diagnostic + one-shot CRM backfill for Roadmap Generator ──
+  // Read-only snapshot + idempotent backfill for portalAccounts that landed
+  // before PR #31's CRM bridge. Gated by INTERNAL_WORKER_KEY so only the
+  // operator (or an authorized worker) can hit it. POST body:
+  //   { workerKey, runBackfill?: boolean, lookbackDays?: number, limit?: number }
+  app.post("/api/admin/roadmap-diagnostic", express.json(), async (req, res) => {
+    try {
+      const body = (req.body ?? {}) as {
+        workerKey?: string;
+        runBackfill?: boolean;
+        lookbackDays?: number;
+        limit?: number;
+      };
+      if (!process.env.INTERNAL_WORKER_KEY) {
+        res.status(500).json({ error: "INTERNAL_WORKER_KEY not set on server" });
+        return;
+      }
+      if (!body.workerKey || body.workerKey !== process.env.INTERNAL_WORKER_KEY) {
+        res.status(401).json({ error: "Unauthorized" });
+        return;
+      }
+
+      const snapshot = await snapshotRoadmapPipeline({ limit: body.limit ?? 10 });
+      const backfill = body.runBackfill
+        ? await backfillRoadmapCrmRows({ lookbackDays: body.lookbackDays ?? 7 })
+        : null;
+
+      const sendTestEmailTo = (body as any).sendTestEmailTo as string | undefined;
+      const testEmail = sendTestEmailTo
+        ? await sendRoadmapTestEmail({
+            to: sendTestEmailTo,
+            firstName: (body as any).testFirstName,
+            propertyAddress: (body as any).testPropertyAddress,
+          })
+        : null;
+
+      const issueLinkFor = (body as any).issueTestMagicLinkFor as string | undefined;
+      const testMagicLink = issueLinkFor
+        ? await issueDiagnosticMagicLink({ portalAccountId: issueLinkFor })
+        : null;
+
+      res.status(200).json({ snapshot, backfill, testEmail, testMagicLink });
+    } catch (err: any) {
+      console.error("[admin/roadmap-diagnostic] error:", err?.message ?? err);
+      res.status(500).json({ error: err?.message ?? "diagnostic failed" });
+    }
+  });
+
   // tRPC API
   app.use(
     "/api/trpc",
@@ -1081,6 +2537,47 @@ async function startServer() {
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
   });
+
+  // ── AI agent runtime (Phase 1) ──
+  // Scheduler polls for queued tasks assigned to autonomous agents.
+  // KPI cron aggregates seat → department daily and department → company weekly.
+  // Hierarchy audit logs any Integrator/Head/sub-agent parentage violations.
+  try {
+    const { startScheduler } = await import("../lib/agentRuntime/scheduler");
+    const { startKpiCron } = await import("../lib/agentRuntime/kpiRollup");
+    const { auditRoster } = await import("../lib/agentRuntime/hierarchy");
+    const {
+      ensureOptimizationTasksTable,
+      startSystemIntegrityCron,
+    } = await import("../lib/agentRuntime/systemIntegrity");
+    const { getDb } = await import("../db");
+    const { aiAgents } = await import("../../drizzle/schema");
+    // Phase 2: register all 15 tool wrappers. Import for side-effects.
+    await import("../lib/agentRuntime/phase2Tools");
+    // Phase 2 (Visionary): register team-coordination tools
+    // (writeArtifact / readArtifacts / sendDirectMessage / readMessages / markDone).
+    await import("../lib/agentRuntime/teamTools");
+    // Phase 5: ensure System Integrity table + start the hourly anomaly scan.
+    // Tables are idempotent CREATE IF NOT EXISTS so this is safe on every boot.
+    await ensureOptimizationTasksTable();
+    startScheduler();
+    startKpiCron();
+    startSystemIntegrityCron();
+    const db = await getDb();
+    if (db) {
+      const roster = await db.select().from(aiAgents);
+      const violations = auditRoster(roster);
+      if (violations.length > 0) {
+        console.warn(
+          `[boot] ai_agents hierarchy audit: ${violations.length} violation(s):`,
+          violations.map((v) => `#${v.agentId}: ${v.v.code} — ${v.v.message}`)
+        );
+      }
+    }
+    console.log("[boot] agent runtime scheduler + KPI cron started");
+  } catch (err) {
+    console.warn("[boot] agent runtime failed to start (non-fatal):", err);
+  }
 }
 
 // Bootstrap GMAIL_CONNECTED_EMAIL from DB so it survives server restarts

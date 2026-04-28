@@ -79,6 +79,7 @@ const initialState: EstimatorState = {
   customers: [] as Customer[],
   activeCustomerId: null,
   customerNavSource: null,
+  pendingFocus: null,
   invoices: [],
   invoiceCounter: 1,
   scheduleEvents: [],
@@ -203,7 +204,8 @@ type Action =
   | { type: 'ADD_CUSTOMER'; payload: Customer }
   | { type: 'UPDATE_CUSTOMER'; id: string; payload: Partial<Customer> }
   | { type: 'REMOVE_CUSTOMER'; id: string }
-  | { type: 'SET_ACTIVE_CUSTOMER'; payload: string | null; source?: 'list' | 'search' | 'new' | 'direct' }
+  | { type: 'SET_ACTIVE_CUSTOMER'; payload: string | null; source?: 'list' | 'search' | 'new' | 'direct'; focus?: string | null }
+  | { type: 'SET_PENDING_FOCUS'; payload: string | null }
   | { type: 'ADD_CUSTOMER_ADDRESS'; customerId: string; address: CustomerAddress }
   | { type: 'UPDATE_CUSTOMER_ADDRESS'; customerId: string; addressId: string; payload: Partial<CustomerAddress> }
   | { type: 'REMOVE_CUSTOMER_ADDRESS'; customerId: string; addressId: string }
@@ -926,6 +928,7 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
           activeSection: 'customer',
           activeOpportunityId: null,
           customerNavSource: action.source ?? 'direct',
+          pendingFocus: action.focus ?? null,
         };
       }
       // Load customer data into working state
@@ -970,8 +973,12 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
         activityFeed: customer.activityFeed || [],
         opportunities: customer.opportunities || [],
         customerNavSource: action.source ?? 'direct',
+        pendingFocus: action.focus ?? null,
       };
     }
+
+    case 'SET_PENDING_FOCUS':
+      return { ...state, pendingFocus: action.payload };
 
     // ── Lead → Estimate ───────────────────────────────────────
     case 'CONVERT_LEAD_TO_ESTIMATE': {
@@ -1814,7 +1821,8 @@ interface EstimatorContextValue {
   mergeDbScheduleEvents: (events: ScheduleEvent[]) => void;
   updateCustomer: (id: string, payload: Partial<Customer>) => void;
   removeCustomer: (id: string) => void;
-  setActiveCustomer: (id: string | null, source?: 'list' | 'search' | 'new' | 'direct') => void;
+  setActiveCustomer: (id: string | null, source?: 'list' | 'search' | 'new' | 'direct', focus?: string | null) => void;
+  setPendingFocus: (focus: string | null) => void;
   addCustomerAddress: (customerId: string, address: CustomerAddress) => void;
   updateCustomerAddress: (customerId: string, addressId: string, payload: Partial<CustomerAddress>) => void;
   removeCustomerAddress: (customerId: string, addressId: string) => void;
@@ -2148,8 +2156,12 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'SET_BILLING_ADDRESS', customerId, addressId });
   }, []);
 
-  const setActiveCustomer = useCallback((id: string | null, source?: 'list' | 'search' | 'new' | 'direct') => {
-    dispatch({ type: 'SET_ACTIVE_CUSTOMER', payload: id, source });
+  const setActiveCustomer = useCallback((id: string | null, source?: 'list' | 'search' | 'new' | 'direct', focus?: string | null) => {
+    dispatch({ type: 'SET_ACTIVE_CUSTOMER', payload: id, source, focus: focus ?? null });
+  }, []);
+
+  const setPendingFocus = useCallback((focus: string | null) => {
+    dispatch({ type: 'SET_PENDING_FOCUS', payload: focus });
   }, []);
 
   const navigateToTopLevel = useCallback((section: AppSection) => {
@@ -2316,7 +2328,7 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
       setCustomerProfile, addActivityEvent, setCustomerTab,
       convertLeadToEstimate, convertEstimateToJob, archiveJob,
       setActiveOpportunity,
-      addCustomer, mergeDbCustomers, mergeDbInvoices, mergeDbScheduleEvents, updateCustomer, removeCustomer, setActiveCustomer,
+      addCustomer, mergeDbCustomers, mergeDbInvoices, mergeDbScheduleEvents, updateCustomer, removeCustomer, setActiveCustomer, setPendingFocus,
       addCustomerAddress, updateCustomerAddress, removeCustomerAddress, setPrimaryAddress, setBillingAddress,
       navigateToTopLevel,
       reset,

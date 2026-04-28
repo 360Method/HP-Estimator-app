@@ -43,8 +43,22 @@ export function getOAuth2Client() {
   return new google.auth.OAuth2(clientId, clientSecret, redirectUri);
 }
 
+/**
+ * True iff the Gmail OAuth env vars are set. Used to gate the inbound-mail
+ * poller — it has nothing to do with whether we can SEND mail. Outbound is
+ * Resend; check `isEmailSenderReady()` instead.
+ */
 export function isGmailConfigured() {
   return !!(process.env.GMAIL_CLIENT_ID && process.env.GMAIL_CLIENT_SECRET);
+}
+
+/**
+ * True iff the outbound email transport (Resend) is configured. Use this at
+ * any send-gating call site — booking auto-acks, draft sends, automation
+ * emails, etc.
+ */
+export function isEmailSenderReady(): boolean {
+  return !!process.env.RESEND_API_KEY;
 }
 
 /** Generate the Google OAuth consent URL */
@@ -119,101 +133,72 @@ async function getGmailClient(email: string) {
 
 // ─── Send Email ───────────────────────────────────────────────────────────────
 
-/** RFC 2047 encode a subject so non-ASCII chars (em dash, etc.) survive all mail clients */
-function encodeSubject(subject: string): string {
-  if (!/[^\x00-\x7F]/.test(subject)) return subject;
-  return `=?UTF-8?B?${Buffer.from(subject, 'utf-8').toString('base64')}?=`;
-}
-
+/**
+ * Outbound mail goes through Resend (2026-04-27 — Marcin verified the
+ * handypioneers.com domain there). This function used to spool through the
+ * Gmail API; it now delegates to the canonical Resend wrapper but keeps the
+ * same `{ messageId, threadId }` return shape so the 27 existing call sites
+ * compile without touching them. `threadId` becomes empty — Resend has no
+ * thread concept; the few callers that record it tolerate "" already.
+ *
+ * Inbound mail (pollInboundEmails) still uses Gmail OAuth; this is outbound-only.
+ */
 export async function sendEmail(params: {
   fromEmail?: string;
   to: string;
   subject: string;
   body?: string;
   html?: string;
+  /** Legacy Gmail thread id — ignored; kept for signature compatibility. */
   threadId?: string;
+  /** Legacy Gmail In-Reply-To — ignored; kept for signature compatibility. */
   inReplyTo?: string;
 }): Promise<{ messageId: string; threadId: string }> {
-  // Use help@ as default sender if no fromEmail provided
-  const fromEmail = params.fromEmail || "help@handypioneers.com";
-  let gmail: ReturnType<typeof google.gmail>;
-  try {
-    gmail = await getGmailClient(fromEmail);
-  } catch {
-    // Gmail not connected — log and skip silently
-    console.warn("[Gmail] sendEmail: not connected, skipping");
-    return { messageId: "", threadId: "" };
-  }
+  const { sendEmailViaResend } = await import("./lib/email/resend");
+  // If a caller specified a fromEmail explicitly, honour it. Otherwise let
+  // the Resend wrapper apply the default (`Handy Pioneers <help@handypioneers.com>`).
+  const from = params.fromEmail
+    ? `Handy Pioneers <${params.fromEmail}>`
+    : undefined;
 
-  const boundary = `boundary_${Date.now()}`;
-  const plainText = params.body ?? (params.html ? params.html.replace(/<[^>]+>/g, "") : "");
+  // Forward Gmail-style threading info as raw RFC 2822 headers so the
+  // recipient's client and our help@ inbox both thread the reply correctly.
+  const headers: Record<string, string> | undefined = params.inReplyTo
+    ? {
+        "In-Reply-To": params.inReplyTo,
+        References: params.inReplyTo,
+      }
+    : undefined;
 
-  let rawBody: string;
-  if (params.html) {
-    // Multipart/alternative: plain + HTML
-    const headers = [
-      `From: Handy Pioneers <${fromEmail}>`,
-      `To: ${params.to}`,
-      `Subject: ${encodeSubject(params.subject)}`,
-      `MIME-Version: 1.0`,
-      `Content-Type: multipart/alternative; boundary="${boundary}"`,
-    ];
-    if (params.inReplyTo) {
-      headers.push(`In-Reply-To: ${params.inReplyTo}`);
-      headers.push(`References: ${params.inReplyTo}`);
-    }
-    rawBody = [
-      headers.join("\r\n"),
-      "",
-      `--${boundary}`,
-      `Content-Type: text/plain; charset=utf-8`,
-      "",
-      plainText,
-      `--${boundary}`,
-      `Content-Type: text/html; charset=utf-8`,
-      "",
-      params.html,
-      `--${boundary}--`,
-    ].join("\r\n");
-  } else {
-    const headers = [
-      `From: Handy Pioneers <${fromEmail}>`,
-      `To: ${params.to}`,
-      `Subject: ${encodeSubject(params.subject)}`,
-      `Content-Type: text/plain; charset=utf-8`,
-    ];
-    if (params.inReplyTo) {
-      headers.push(`In-Reply-To: ${params.inReplyTo}`);
-      headers.push(`References: ${params.inReplyTo}`);
-    }
-    rawBody = headers.join("\r\n") + "\r\n\r\n" + plainText;
-  }
-
-  const raw = Buffer.from(rawBody).toString("base64url");
-
-  const response = await gmail.users.messages.send({
-    userId: "me",
-    requestBody: {
-      raw,
-      threadId: params.threadId,
-    },
+  const result = await sendEmailViaResend({
+    to: params.to,
+    subject: params.subject,
+    html: params.html,
+    body: params.body,
+    from,
+    headers,
   });
 
-  return {
-    messageId: response.data.id!,
-    threadId: response.data.threadId!,
-  };
+  return { messageId: result.id, threadId: "" };
 }
 
 // ─── Poll Inbound Emails ──────────────────────────────────────────────────────
 // Called on a schedule (e.g. every 2 minutes) to check for new emails.
 
+// Track whether we've already logged the "not connected" state — repeating it
+// every poll tick floods Railway logs (and at warn level it shows as an error).
+let gmailNotConnectedLogged = false;
+
 export async function pollInboundEmails(fromEmail: string, afterHistoryId?: string): Promise<void> {
   let gmail: ReturnType<typeof google.gmail>;
   try {
     gmail = await getGmailClient(fromEmail);
+    gmailNotConnectedLogged = false;
   } catch {
-    console.warn("[Gmail] Not connected, skipping poll");
+    if (!gmailNotConnectedLogged) {
+      console.log("[Gmail] Not connected, skipping poll (further notices suppressed until reconnected)");
+      gmailNotConnectedLogged = true;
+    }
     return;
   }
 
