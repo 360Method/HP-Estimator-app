@@ -155,8 +155,33 @@ White-glove human touchpoint for Gold-tier members. Handles complex requests, es
 
 ---
 
+## Phase 3 Sub-Team: Onboarding (3 teammates)
+
+**Members**
+- `ai_onboarding_frontend` — drafts/ (Day 0/3/7/14 welcome cadence, portal-setup nudges, baseline-walkthrough invitations)
+- `ai_onboarding_backend` — data/ (member tier, portal-activation state, baseline-walkthrough state, last-seen, prior path-A jobs)
+- `ai_onboarding_qa` — audits/ (voice + cadence completeness + accuracy on portal/scheduling links)
+
+**Three Rules** (own territory / DM teammates / start parallel) apply.
+
+**Cross-team handoffs that land here**
+- `operations.project_completed` → auto-accepts; creates an Onboarding task to nurture the customer post-job (continuity into membership where appropriate).
+
+## Phase 3 Sub-Team: Annual Valuation (3 teammates)
+
+**Members**
+- `ai_annual_valuation_frontend` — drafts/ (annual value report email + renewal CTA, ~45 days before renewal)
+- `ai_annual_valuation_backend` — data/ (jobs completed in membership year, labor-bank used, à-la-carte equivalent value, renewal date, tier)
+- `ai_annual_valuation_qa` — audits/ (numbers accuracy + tone audit, no hard sell)
+
+**Three Rules** apply.
+
+**Cross-team handoffs originating here**
+- `cs.member_renewed` → Sales Membership Success (auto-accepts) for upgrade-path follow-up.
+- `cs.churn_risk_flagged` → Marketing Community & Reviews (auto-accepts) for testimonial-recovery outreach when valuation signals churn risk.
+
 ## Department Head SOPs
-`ai_onboarding` coordinates Customer Success. Weekly: onboarding pipeline review. Monthly: retention report to Integrator. Quarterly: satisfaction survey launch.
+`ai_onboarding` coordinates Customer Success. Weekly: onboarding pipeline review. Monthly: retention report to Integrator. Quarterly: satisfaction survey launch. The two Phase 3 sub-teams (Onboarding, Annual Valuation) execute the day-to-day; `ai_nurture_cadence` remains a single specialist for between-job touchpoints.
 
 ## Failure Modes
 - Nurture cadence over-frequency → hard cap at 2/month, AI enforces

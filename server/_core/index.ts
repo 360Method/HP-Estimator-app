@@ -822,6 +822,16 @@ async function ensureAgentTeamTables() {
       { slug: "marketing", name: "Paid Ads",           purpose: "Paid search/LSA: creative drafts, performance + segmentation, policy/voice audit.",                            costCap: 5 },
       { slug: "marketing", name: "Brand Guardian",     purpose: "Brand integrity: corrections to off-brand drafts, scans all outbound, meta-audits Brand Guardian's own calls.", costCap: 5 },
       { slug: "marketing", name: "Community & Reviews",purpose: "Reviews + sentiment: response drafts, GBP/social monitor, response-tone audit.",                               costCap: 5 },
+      // ── Phase 3 — Operations sub-team ─────────────────────────────────────
+      { slug: "operations",       name: "Dispatch",            purpose: "Daily schedule + crew assignment: customer-facing confirmations, conflict/utilization data, schedule integrity audit.",         costCap: 5 },
+      // ── Phase 3 — Customer Success sub-teams ──────────────────────────────
+      { slug: "customer_success", name: "Onboarding",          purpose: "First 30 days post-signing: welcome cadence drafts, portal-activation/baseline data, voice + completeness audit.",              costCap: 5 },
+      { slug: "customer_success", name: "Annual Valuation",    purpose: "Renewal-window value reports: ROI narrative drafts, value calculation, accuracy + tone audit (no hard sell).",                  costCap: 5 },
+      // ── Phase 3 — Vendor sub-teams ────────────────────────────────────────
+      { slug: "vendor_network",   name: "Vendor Acquisition",  purpose: "Outreach + onboarding combined: drafts to prospects, gap/compliance data, document-completeness audit.",                        costCap: 5 },
+      { slug: "vendor_network",   name: "Vendor Operations",   purpose: "Trade matching + performance combined: vendor-facing comms, ranking/scorecard data, fairness + accuracy audit.",                costCap: 5 },
+      // ── Phase 3 — Finance sub-team ────────────────────────────────────────
+      { slug: "finance",          name: "Bookkeeping",         purpose: "Daily reconciliation: CPA-facing memo drafts, transaction categorization, anomaly + categorization audit.",                     costCap: 3 },
     ];
     for (const s of seeds) {
       const cap = (s.costCap ?? 5).toFixed(2);
