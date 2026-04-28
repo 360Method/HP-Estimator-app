@@ -1,5 +1,39 @@
 # HP Estimator — Integration Handoff Checklist
 
+## DONE — 2026-04-27 — Visionary Console Phase 1 (`feat/visionary-console-phase-1`)
+
+**Per Marcin:** *"I do not want to be tied to only using Dispatch as the owner/Visionary."*
+
+### What shipped
+- **`/admin/visionary` cockpit** — three-pane desktop (KPI hero tiles + agent cost rollup + "Talk to" chips on the left, streaming Integrator chat in the center, action queue on the right) and mobile-first single-column with a bottom-sheet drawer for the action queue. 44 px+ tap targets throughout, sticky compose with `env(safe-area-inset-bottom)`, auto-scroll with manual override. Built on the existing `integratorChatConversations` / `integratorChatMessages` tables — `/admin/chat` keeps working, the console is additive.
+- **SSE streaming Integrator** (`server/integratorStream.ts`) — `POST /api/admin/integrator-stream` calls Anthropic's `messages.stream()` and emits `delta` / `tool_use` / `tool_result` / `done` events. Tool execution + persistence happen on the server after the stream resolves; the client renders text deltas live and toolcalls inline. Cost + tokens shown per assistant turn. `cache_control: ephemeral` on the static system prompt keeps cost down on repeat turns.
+- **Agent Teams foundation** (migration 0075 + boot-time `ensureAgentTeamTables`):
+  - `agent_teams` — one row per department; UNIQUE(department) makes the seed idempotent.
+  - `agent_team_members` — seat → team with `frontend|backend|qa|lead` role.
+  - `agent_team_tasks` — open/claimed/in_progress/blocked/done; `customerId` honors the customer-as-root rule.
+  - `agent_team_messages` — broadcast (`toSeatId NULL`) or direct, with thread support.
+  - `agent_team_handoffs` — pending/accepted/declined inter-team handoffs.
+- **8 teams seeded automatically** (sales, operations, marketing, finance, customer_success, vendor_network, technology, strategy) with stewardship-voice purpose statements. Phase 2 populates members.
+- **`agentTeams.*` tRPC router** — listTeams, getTeam, createTeam, setTeamStatus, addMember, removeMember, listTasks, createTask, claimTask, updateTaskStatus, listMessages, sendMessage, listHandoffs, proposeHandoff, acceptHandoff, declineHandoff, consoleSummary.
+- **3 new Integrator tools** (`server/lib/agentRuntime/phase2Tools.ts`): `agentTeams.list`, `agentTeams.assignTask`, `agentTeams.broadcast`. Auto-authorized to the integrator seat at boot via the `ensureAgentTeamTables` guard. System prompt addendum injected at chat time so the Integrator knows about the cockpit and routes Marcin's directives via `agentTeams_assignTask`.
+- **`/admin/agents/teams`** — operator surface to view team status, add/remove members, pause/resume teams, and inspect recent tasks. Phase 1 surface; team mutations happen via the Visionary Console (chat-driven) for the day-to-day work.
+- **AdminShell nav** — "Visionary Console" pinned at the top, "Teams" added beside Engine Control.
+- **Customer-centric architecture preserved** — `agent_team_tasks.customerId` is set when a task acts on a specific customer so Phase 2 can pin tasks into the customer profile alongside drafts.
+
+### Manual verification
+- [ ] Open `/admin/visionary` on desktop — confirm 3 panes render and KPIs/cost populate (or show graceful empty states if the runtime hasn't recorded metrics yet).
+- [ ] Open `/admin/visionary` on iPhone (390 px) — confirm single column, sticky compose stays above the keyboard, action drawer slides up.
+- [ ] Send a directive from the cockpit — confirm text streams in live, the cost line appears on completion, and the assistant row persists in `integrator_chat_messages`.
+- [ ] Ask the Integrator "What teams do we have? Assign a stub task to Sales." — confirm `agentTeams_list` and `agentTeams_assignTask` execute and the task shows up under the Action Queue.
+- [ ] Visit `/admin/agents/teams` — confirm 8 teams render with their purpose statements; expand one and add a seat as `lead` (the team's `teamLeadSeatId` should pin to that seat).
+
+### Known follow-ups (not blocking)
+- KPI tiles surface "—" until the runtime records `path_a_to_b`, `gross_margin`, `leads_30d`, and `member_retention` keys. Wire those rollups in Phase 2 once the Marketing + Sales teams have members and start running.
+- Streaming endpoint executes tool calls _after_ the model finishes — the user sees text live but tool side effects (assignTask, broadcast) flush as a batch at the end. A future iteration can interleave tool execution into the stream loop using Anthropic's `partial_json` deltas + `input_json_delta` events.
+- Phase 2: populate teams (the prompt's "own territory, direct messages, parallel start" rules) starting with Sales + Marketing. Phase 3 fills the remaining 6 departments.
+
+---
+
 ## DONE — 2026-04-27 — Lead Nurturer post-Roadmap follow-up cadence (`feat/post-roadmap-followup-sequence`)
 
 **Per Marcin:** *"We will need to have an entire follow up process to get us at their door."*

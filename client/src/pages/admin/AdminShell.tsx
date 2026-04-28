@@ -10,9 +10,11 @@ import AdminLogin from "@/pages/AdminLogin";
 import AdminAccessDenied from "@/pages/AdminAccessDenied";
 
 const NAV = [
+  { href: "/admin/visionary", label: "Visionary Console" },
   { href: "/admin/org-chart", label: "Org Chart" },
   { href: "/admin/dashboard", label: "Dashboard" },
   { href: "/admin/chat", label: "Integrator Chat" },
+  { href: "/admin/agents/teams", label: "Teams" },
   { href: "/admin/agents/control", label: "Engine Control" },
   { href: "/admin/agents/runs", label: "Runs" },
   { href: "/admin/ai-agents", label: "AI Agents" },

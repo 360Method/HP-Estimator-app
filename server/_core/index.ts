@@ -675,6 +675,140 @@ async function ensureCharterTables() {
   }
 }
 
+/**
+ * ensureAgentTeamTables — Visionary Console Phase 1 foundation.
+ * Creates agent_teams + 4 related tables and seeds one row per non-integrator
+ * department (8 rows). Idempotent — re-runs after the first boot are no-ops.
+ */
+async function ensureAgentTeamTables() {
+  try {
+    const { getDb } = await import("../db");
+    const { sql } = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return;
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agent_teams\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`department\` enum('sales','operations','marketing','finance','customer_success','vendor_network','technology','strategy','integrator') NOT NULL,
+      \`name\` varchar(120) NOT NULL,
+      \`teamLeadSeatId\` int,
+      \`purpose\` text,
+      \`status\` enum('active','paused') NOT NULL DEFAULT 'active',
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT \`agent_teams_id\` PRIMARY KEY(\`id\`),
+      CONSTRAINT \`agent_teams_department_uniq\` UNIQUE(\`department\`)
+    )`);
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agent_team_members\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`teamId\` int NOT NULL,
+      \`seatId\` int NOT NULL,
+      \`role\` enum('frontend','backend','qa','lead') NOT NULL DEFAULT 'backend',
+      \`joinedAt\` timestamp NOT NULL DEFAULT (now()),
+      CONSTRAINT \`agent_team_members_id\` PRIMARY KEY(\`id\`),
+      CONSTRAINT \`agent_team_members_team_seat_uniq\` UNIQUE(\`teamId\`, \`seatId\`)
+    )`);
+    await db.execute(sql`CREATE INDEX \`agent_team_members_seat_idx\` ON \`agent_team_members\` (\`seatId\`)`).catch(() => {});
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agent_team_tasks\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`teamId\` int NOT NULL,
+      \`title\` varchar(255) NOT NULL,
+      \`description\` text,
+      \`status\` enum('open','claimed','in_progress','blocked','done') NOT NULL DEFAULT 'open',
+      \`claimedBySeatId\` int,
+      \`ownerFiles\` text,
+      \`sourceEventType\` varchar(80),
+      \`sourceEventPayload\` text,
+      \`customerId\` varchar(64),
+      \`priority\` enum('low','normal','high') NOT NULL DEFAULT 'normal',
+      \`dueAt\` timestamp NULL,
+      \`completedAt\` timestamp NULL,
+      \`notes\` text,
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      CONSTRAINT \`agent_team_tasks_id\` PRIMARY KEY(\`id\`)
+    )`);
+    await db.execute(sql`CREATE INDEX \`agent_team_tasks_team_status_idx\` ON \`agent_team_tasks\` (\`teamId\`, \`status\`)`).catch(() => {});
+    await db.execute(sql`CREATE INDEX \`agent_team_tasks_customer_idx\` ON \`agent_team_tasks\` (\`customerId\`)`).catch(() => {});
+    await db.execute(sql`CREATE INDEX \`agent_team_tasks_claimedBy_idx\` ON \`agent_team_tasks\` (\`claimedBySeatId\`)`).catch(() => {});
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agent_team_messages\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`teamId\` int NOT NULL,
+      \`fromSeatId\` int NOT NULL,
+      \`toSeatId\` int,
+      \`body\` text NOT NULL,
+      \`threadId\` int,
+      \`attachments\` text,
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      CONSTRAINT \`agent_team_messages_id\` PRIMARY KEY(\`id\`)
+    )`);
+    await db.execute(sql`CREATE INDEX \`agent_team_messages_team_created_idx\` ON \`agent_team_messages\` (\`teamId\`, \`createdAt\`)`).catch(() => {});
+    await db.execute(sql`CREATE INDEX \`agent_team_messages_thread_idx\` ON \`agent_team_messages\` (\`threadId\`)`).catch(() => {});
+
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agent_team_handoffs\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`fromTeamId\` int NOT NULL,
+      \`toTeamId\` int NOT NULL,
+      \`eventType\` varchar(80) NOT NULL,
+      \`payload\` text,
+      \`status\` enum('pending','accepted','declined') NOT NULL DEFAULT 'pending',
+      \`declineReason\` text,
+      \`acceptedAt\` timestamp NULL,
+      \`declinedAt\` timestamp NULL,
+      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
+      CONSTRAINT \`agent_team_handoffs_id\` PRIMARY KEY(\`id\`)
+    )`);
+    await db.execute(sql`CREATE INDEX \`agent_team_handoffs_to_status_idx\` ON \`agent_team_handoffs\` (\`toTeamId\`, \`status\`)`).catch(() => {});
+    await db.execute(sql`CREATE INDEX \`agent_team_handoffs_from_status_idx\` ON \`agent_team_handoffs\` (\`fromTeamId\`, \`status\`)`).catch(() => {});
+
+    // Seed 8 teams (one per non-integrator department) — idempotent via UNIQUE(department).
+    const seeds: Array<{ slug: string; name: string; purpose: string }> = [
+      { slug: "sales",            name: "Sales",            purpose: "Convert qualified leads into booked baselines and signed estimates." },
+      { slug: "operations",       name: "Operations",       purpose: "Schedule, dispatch, and steward jobs from booking through sign-off." },
+      { slug: "marketing",        name: "Marketing",        purpose: "Generate qualified inbound demand through stewardship-voice content and ads." },
+      { slug: "finance",          name: "Finance",          purpose: "Cash flow, AR/AP, margin discipline, and P&L visibility." },
+      { slug: "customer_success", name: "Customer Success", purpose: "360° member retention, onboarding, and proactive home stewardship." },
+      { slug: "vendor_network",   name: "Vendor Network",   purpose: "Recruit, vet, and steward the trade-vendor bench." },
+      { slug: "technology",       name: "Technology",       purpose: "System integrity, agent runtime health, and platform improvements." },
+      { slug: "strategy",         name: "Strategy",         purpose: "Market research, expansion planning, and long-arc roadmap." },
+    ];
+    for (const s of seeds) {
+      await db.execute(sql`
+        INSERT IGNORE INTO \`agent_teams\` (\`department\`, \`name\`, \`purpose\`, \`status\`)
+        VALUES (${s.slug}, ${s.name}, ${s.purpose}, 'active')
+      `);
+    }
+
+    // Authorize the Integrator seat for the 3 new agent-team coordination tools.
+    // INSERT IGNORE on (agentId, toolKey) — first boot adds them, re-runs are no-ops.
+    // We don't have a unique constraint on ai_agent_tools(agentId, toolKey), so guard
+    // with a NOT EXISTS subquery instead.
+    const integratorRows = (await db.execute(
+      sql`SELECT \`id\` FROM \`ai_agents\` WHERE \`department\` = 'integrator' LIMIT 1`
+    )) as unknown as Array<Array<{ id: number }>>;
+    const integratorId = Array.isArray(integratorRows?.[0]) ? integratorRows[0][0]?.id : (integratorRows as unknown as Array<{ id: number }>)[0]?.id;
+    if (integratorId) {
+      const TOOLS = ["agentTeams.list", "agentTeams.assignTask", "agentTeams.broadcast"];
+      for (const tk of TOOLS) {
+        await db.execute(sql`
+          INSERT INTO \`ai_agent_tools\` (\`agentId\`, \`toolKey\`, \`authorized\`)
+          SELECT ${integratorId}, ${tk}, 1
+          FROM DUAL
+          WHERE NOT EXISTS (
+            SELECT 1 FROM \`ai_agent_tools\` WHERE \`agentId\` = ${integratorId} AND \`toolKey\` = ${tk}
+          )
+        `);
+      }
+    }
+
+    console.log("[boot] ensureAgentTeamTables OK");
+  } catch (err) {
+    console.warn("[boot] ensureAgentTeamTables failed (non-fatal):", err);
+  }
+}
+
 async function ensureEmailManagerTables() {
   try {
     const { getDb } = await import("../db");
@@ -852,6 +986,7 @@ async function startServer() {
   await ensureVendorTablesBoot();
   await ensurePasswordResetTokensTableBoot();
   await ensureCharterTables();
+  await ensureAgentTeamTables();
   await ensureEmailManagerTables();
   await ensureAppSettings();
   await ensureDepartmentHeadFlags();
@@ -1437,6 +1572,12 @@ async function startServer() {
     const clientId = randomUUID();
     addSSEClient(clientId, res);
   });
+
+  // ── Visionary Console: Integrator chat streaming endpoint ────────────────────
+  // POST /api/admin/integrator-stream — streams Anthropic deltas as SSE events.
+  // Tool execution + persistence happen on the server after the stream resolves.
+  const { registerIntegratorStreamRoutes } = await import("../integratorStream");
+  registerIntegratorStreamRoutes(app);
 
   // ── Health check ─────────────────────────────────────────────────────────────
   app.get("/api/health", async (req, res) => {
