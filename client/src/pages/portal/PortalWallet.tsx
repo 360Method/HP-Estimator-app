@@ -100,9 +100,12 @@ export default function PortalWallet() {
             )}
 
             {cards.length === 0 && !showAdd && (
-              <div className="flex flex-col items-center justify-center py-12 text-gray-400 border border-dashed border-gray-200 rounded-lg">
+              <div className="flex flex-col items-center justify-center py-12 text-gray-500 border border-dashed border-gray-200 rounded-lg text-center px-6">
                 <CreditCard className="w-12 h-12 mb-3 text-gray-300" />
-                <p className="text-sm">No saved payment methods</p>
+                <p className="text-sm font-medium text-gray-700">No payment methods on file</p>
+                <p className="text-xs text-gray-500 mt-1 max-w-xs">
+                  Save a card to settle deposits and invoices in a single tap. Your details are encrypted and stored securely with Stripe.
+                </p>
               </div>
             )}
 
