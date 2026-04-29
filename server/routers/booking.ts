@@ -20,6 +20,7 @@ import {
 } from "../db";
 import { notifyOwner } from "../_core/notification";
 import { onLeadCreated } from "../leadRouting";
+import { sendEmail } from "../gmail";
 import { nanoid } from "nanoid";
 import { runAutomationsForTrigger } from "../automationEngine";
 import { renderEmailTemplate } from "../emailTemplates";
@@ -50,7 +51,7 @@ export const bookingRouter = router({
       serviceType: z.string().default("General Inquiry / Custom Request"),
       description: z.string().max(2000).default(""),
       timeline: z.enum(["ASAP", "Within a week", "Flexible"]),
-      photoUrls: z.array(z.string().url()).max(5).default([]),
+      photoUrls: z.array(z.string().url()).max(20).default([]),
       // Step 3
       firstName: z.string().min(1),
       lastName: z.string().min(1),
@@ -143,6 +144,17 @@ export const bookingRouter = router({
           isNewCustomer ? "New customer created." : "Matched to existing customer.",
         ].filter(Boolean).join("\n"),
       });
+
+      // Send auto-acknowledgment to prospect (non-blocking)
+      sendEmail({
+        to: input.email,
+        subject: "We've received your inquiry — Handy Pioneers",
+        html: `<p>Hi ${input.firstName},</p>
+<p>We've received your inquiry and are getting ready for a thoughtful first conversation.</p>
+<p>Our Concierge will reach out shortly to learn more about your home and what you have in mind. There's no pressure — the first conversation is simply exploratory.</p>
+<p>In the meantime, feel free to call or text us at <a href="tel:+13603344428">(360) 334-4428</a>.</p>
+<p>— The Handy Pioneers Team</p>`,
+      }).catch((e) => console.error('[booking] ack email error:', e));
 
       // Fire new_booking automation (non-blocking)
       runAutomationsForTrigger('new_booking', {
