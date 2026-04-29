@@ -65,6 +65,12 @@ import PortalSchedule from "./pages/portal/PortalSchedule";
 import PortalConsultationSubmitted from "./pages/portal/PortalConsultationSubmitted";
 import PortalProjectDetail from "./pages/portal/PortalProjectDetail";
 import WorkOrderDetail from "./pages/WorkOrderDetail";
+
+// Field tech PWA pages
+import TechLogin from "./pages/TechLogin";
+import TechDashboard from "./pages/TechDashboard";
+import TechJobDetail from "./pages/TechJobDetail";
+
 import Welcome360Page from "./pages/Welcome360Page";
 import AgentDraftsPage from "./pages/admin/AgentDraftsPage";
 import AgentPlaybooksPage from "./pages/admin/AgentPlaybooksPage";
@@ -211,6 +217,11 @@ function Router() {
 
       {/* Admin: re-engagement campaign console */}
       <Route path="/admin/marketing/reengagement-campaign" component={staffOnly(ReengagementCampaignPage)} />
+
+      {/* Field tech PWA */}
+      <Route path="/tech" component={TechLogin} />
+      <Route path="/tech/dashboard" component={TechDashboard} />
+      <Route path="/tech/job/:jobType/:jobId" component={TechJobDetail} />
 
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />

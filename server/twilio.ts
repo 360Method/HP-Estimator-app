@@ -252,6 +252,24 @@ export async function handleCallStatusUpdate(params: {
       }).catch(() => null)
     ).catch(() => null);
   }
+
+  // Auto-SMS on missed inbound call — sends a configurable apology/callback
+  // text to the caller. Independent of user-defined automation rules so
+  // every missed call gets at least one acknowledgment.
+  if (Direction === 'inbound' && ['no-answer', 'busy', 'failed'].includes(CallStatus)) {
+    try {
+      const { getPhoneSettings } = await import('./phone');
+      const settings = await getPhoneSettings();
+      const missedMsg = (settings as any).missedCallSms ||
+        "Hi! You reached Handy Pioneers. We missed your call — we'll call you back soon. Or text us here anytime.";
+      if (isTwilioConfigured()) {
+        await sendSms(callerPhone, missedMsg);
+      }
+    } catch (e) {
+      console.error('[Twilio] Missed call auto-SMS failed:', e);
+    }
+  }
+
   console.log(`[Twilio] Call ${CallSid} ${CallStatus} — ${durationSecs}s`);
 }
 
