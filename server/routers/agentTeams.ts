@@ -623,6 +623,169 @@ export const agentTeamsRouter = router({
             .limit(input?.limit ?? 100);
       return rows;
     }),
+
+  // ── Drill-down detail procedures (Visionary Console right-pane modals) ─────
+
+  getTaskDetail: adminProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input }) => {
+      const d = await db();
+      const [task] = await d.select().from(agentTeamTasks).where(eq(agentTeamTasks.id, input.id)).limit(1);
+      if (!task) throw new TRPCError({ code: "NOT_FOUND", message: "Task not found" });
+
+      const [team] = await d.select().from(agentTeams).where(eq(agentTeams.id, task.teamId)).limit(1);
+
+      let claimedBySeat: { id: number; seatName: string; department: string } | null = null;
+      if (task.claimedBySeatId) {
+        const [s] = await d
+          .select({ id: aiAgents.id, seatName: aiAgents.seatName, department: aiAgents.department })
+          .from(aiAgents)
+          .where(eq(aiAgents.id, task.claimedBySeatId))
+          .limit(1);
+        claimedBySeat = s ?? null;
+      }
+
+      const artifacts = await d
+        .select()
+        .from(agentTeamArtifacts)
+        .where(eq(agentTeamArtifacts.taskId, task.id))
+        .orderBy(desc(agentTeamArtifacts.createdAt))
+        .limit(20);
+
+      const recentRuns = task.claimedBySeatId
+        ? await d
+            .select()
+            .from(aiAgentRuns)
+            .where(eq(aiAgentRuns.agentId, task.claimedBySeatId))
+            .orderBy(desc(aiAgentRuns.createdAt))
+            .limit(10)
+        : [];
+
+      const recentDms = await d
+        .select()
+        .from(agentTeamMessages)
+        .where(eq(agentTeamMessages.teamId, task.teamId))
+        .orderBy(desc(agentTeamMessages.createdAt))
+        .limit(8);
+
+      return {
+        task: {
+          ...task,
+          sourceEventPayload: safeParseJson(task.sourceEventPayload as string | null),
+          ownerFiles: safeParseJson(task.ownerFiles as string | null),
+        },
+        team: team ?? null,
+        claimedBySeat,
+        artifacts: artifacts.map((a) => ({ ...a, content: safeParseJson(a.contentJson) })),
+        recentRuns,
+        recentDms,
+      };
+    }),
+
+  getMessageThread: adminProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input }) => {
+      const d = await db();
+      const [msg] = await d.select().from(agentTeamMessages).where(eq(agentTeamMessages.id, input.id)).limit(1);
+      if (!msg) throw new TRPCError({ code: "NOT_FOUND", message: "Message not found" });
+
+      const [team] = await d.select().from(agentTeams).where(eq(agentTeams.id, msg.teamId)).limit(1);
+
+      const [fromSeat] = await d
+        .select({ id: aiAgents.id, seatName: aiAgents.seatName, department: aiAgents.department })
+        .from(aiAgents)
+        .where(eq(aiAgents.id, msg.fromSeatId))
+        .limit(1);
+
+      let toSeat: { id: number; seatName: string; department: string } | null = null;
+      if (msg.toSeatId) {
+        const [s] = await d
+          .select({ id: aiAgents.id, seatName: aiAgents.seatName, department: aiAgents.department })
+          .from(aiAgents)
+          .where(eq(aiAgents.id, msg.toSeatId))
+          .limit(1);
+        toSeat = s ?? null;
+      }
+
+      // Thread: messages sharing the same threadId root.
+      // If this message IS the thread root (no threadId), find replies that reference it.
+      const threadRoot = msg.threadId ?? msg.id;
+      const threadMessages = await d
+        .select()
+        .from(agentTeamMessages)
+        .where(
+          sql`(${agentTeamMessages.id} = ${threadRoot}
+            OR ${agentTeamMessages.threadId} = ${threadRoot})
+            AND ${agentTeamMessages.id} != ${msg.id}`
+        )
+        .orderBy(asc(agentTeamMessages.createdAt))
+        .limit(30);
+
+      const fromSeatRole = await d
+        .select({ role: agentTeamMembers.role })
+        .from(agentTeamMembers)
+        .where(and(eq(agentTeamMembers.seatId, msg.fromSeatId), eq(agentTeamMembers.teamId, msg.teamId)))
+        .limit(1);
+
+      return {
+        message: msg,
+        team: team ?? null,
+        fromSeat: fromSeat ?? null,
+        toSeat,
+        fromSeatRole: fromSeatRole[0]?.role ?? null,
+        threadMessages,
+        threadRoot,
+      };
+    }),
+
+  getViolationDetail: adminProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input }) => {
+      const d = await db();
+      const [violation] = await d.select().from(agentTeamViolations).where(eq(agentTeamViolations.id, input.id)).limit(1);
+      if (!violation) throw new TRPCError({ code: "NOT_FOUND", message: "Violation not found" });
+
+      const [seat] = await d
+        .select({ id: aiAgents.id, seatName: aiAgents.seatName, department: aiAgents.department })
+        .from(aiAgents)
+        .where(eq(aiAgents.id, violation.seatId))
+        .limit(1);
+
+      const [team] = await d.select().from(agentTeams).where(eq(agentTeams.id, violation.teamId)).limit(1);
+
+      const [repeatRow] = await d
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(agentTeamViolations)
+        .where(eq(agentTeamViolations.seatId, violation.seatId));
+      const repeatCount = Number(repeatRow?.count ?? 0);
+
+      return {
+        violation,
+        seat: seat ?? null,
+        team: team ?? null,
+        repeatCount,
+      };
+    }),
+
+  getHandoffDetail: adminProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ input }) => {
+      const d = await db();
+      const [handoff] = await d.select().from(agentTeamHandoffs).where(eq(agentTeamHandoffs.id, input.id)).limit(1);
+      if (!handoff) throw new TRPCError({ code: "NOT_FOUND", message: "Handoff not found" });
+
+      const [fromTeam] = await d.select().from(agentTeams).where(eq(agentTeams.id, handoff.fromTeamId)).limit(1);
+      const [toTeam] = await d.select().from(agentTeams).where(eq(agentTeams.id, handoff.toTeamId)).limit(1);
+
+      return {
+        handoff: {
+          ...handoff,
+          payload: safeParseJson(handoff.payload as string | null),
+        },
+        fromTeam: fromTeam ?? null,
+        toTeam: toTeam ?? null,
+      };
+    }),
 });
 
 function safeParseJson(s: string | null): unknown {

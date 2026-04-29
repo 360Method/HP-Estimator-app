@@ -21,15 +21,17 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import {
   AlertCircle,
+  ArrowRight,
   Bot,
   ChevronUp,
   ChevronDown,
   Compass,
   DollarSign,
+  FileText,
   Loader2,
-  Pause,
-  Play,
+  MessageSquare,
   Send,
+  ShieldAlert,
   Sparkles,
   TrendingUp,
   Users,
@@ -41,6 +43,12 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { AdminShell } from "./AdminShell";
 import { DEPARTMENTS, departmentLabel, formatUsd } from "./constants";
 
@@ -855,6 +863,13 @@ function AddresseePane({ addressee, onChange }: { addressee: Addressee; onChange
   );
 }
 
+type ModalTarget =
+  | { type: "task"; id: number }
+  | { type: "message"; id: number }
+  | { type: "violation"; id: number }
+  | { type: "handoff"; id: number }
+  | null;
+
 function ActionQueuePane() {
   const summaryQ = trpc.agentTeams.consoleSummary.useQuery(undefined, { refetchInterval: 30_000 });
   const tasksQ = summaryQ.data?.activeTasks ?? [];
@@ -865,6 +880,8 @@ function ActionQueuePane() {
   const costRollup = summaryQ.data?.teamCostRollup ?? [];
   const pendingTasksQ = trpc.aiAgents.list.useQuery();
   const pendingDrafts = (pendingTasksQ.data ?? []).reduce((s, a) => s + (a.pendingDrafts ?? 0), 0);
+
+  const [modal, setModal] = useState<ModalTarget>(null);
 
   // Top 5 spending teams today, sorted by spent (desc).
   const topSpendingTeams = [...costRollup]
@@ -911,9 +928,15 @@ function ActionQueuePane() {
           </div>
           <ul className="space-y-1.5 max-h-40 overflow-y-auto">
             {blockedQ.slice(0, 6).map((t) => (
-              <li key={t.id} className="text-xs">
-                <div className="truncate font-medium text-red-900">{t.title}</div>
-                <div className="text-[10px] text-red-700/80">team #{t.teamId} · {t.status}</div>
+              <li key={t.id}>
+                <button
+                  type="button"
+                  onClick={() => setModal({ type: "task", id: t.id })}
+                  className="w-full text-left text-xs rounded px-1.5 py-1 hover:bg-red-100/60 transition min-h-[44px] flex flex-col justify-center"
+                >
+                  <div className="truncate font-medium text-red-900">{t.title}</div>
+                  <div className="text-[10px] text-red-700/80">team #{t.teamId} · {t.status}</div>
+                </button>
               </li>
             ))}
           </ul>
@@ -931,19 +954,26 @@ function ActionQueuePane() {
         </div>
         {tasksQ.length === 0 ? (
           <p className="text-[11px] text-muted-foreground italic">
-            No team tasks in flight. Quiet floor.
+            This task has no recent activity yet — your bench is composing its work.
           </p>
         ) : (
           <ul className="space-y-1.5 max-h-64 overflow-y-auto">
             {tasksQ.slice(0, 12).map((t) => (
-              <li key={t.id} className="text-xs flex items-start gap-2">
-                <span className={`mt-1 inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${statusDot(t.status)}`} />
-                <div className="flex-1 min-w-0">
-                  <div className="truncate">{t.title}</div>
-                  <div className="text-[10px] text-muted-foreground">
-                    {t.status} · {new Date(t.createdAt as unknown as string).toLocaleDateString()}
+              <li key={t.id}>
+                <button
+                  type="button"
+                  onClick={() => setModal({ type: "task", id: t.id })}
+                  className="w-full text-left text-xs rounded px-1.5 py-1 hover:bg-muted/60 transition min-h-[44px] flex items-start gap-2"
+                >
+                  <span className={`mt-2 inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${statusDot(t.status)}`} />
+                  <div className="flex-1 min-w-0">
+                    <div className="truncate">{t.title}</div>
+                    <div className="text-[10px] text-muted-foreground">
+                      {t.status} · {new Date(t.createdAt as unknown as string).toLocaleDateString()}
+                    </div>
                   </div>
-                </div>
+                  <ChevronDown className="w-3 h-3 mt-1 text-muted-foreground rotate-[-90deg] flex-shrink-0" />
+                </button>
               </li>
             ))}
           </ul>
@@ -965,11 +995,17 @@ function ActionQueuePane() {
         ) : (
           <ul className="space-y-1.5 max-h-40 overflow-y-auto">
             {messagesQ.slice(0, 8).map((m) => (
-              <li key={m.id} className="text-[11px] border-l-2 border-primary/40 pl-2">
-                <div className="text-muted-foreground">
-                  seat #{m.fromSeatId} → seat #{m.toSeatId}
-                </div>
-                <div className="truncate">{m.body}</div>
+              <li key={m.id}>
+                <button
+                  type="button"
+                  onClick={() => setModal({ type: "message", id: m.id })}
+                  className="w-full text-left text-[11px] border-l-2 border-primary/40 pl-2 pr-1 py-1 hover:bg-muted/50 rounded-r transition min-h-[44px] flex flex-col justify-center"
+                >
+                  <div className="text-muted-foreground">
+                    seat #{m.fromSeatId} → seat #{m.toSeatId}
+                  </div>
+                  <div className="truncate">{m.body}</div>
+                </button>
               </li>
             ))}
           </ul>
@@ -987,11 +1023,17 @@ function ActionQueuePane() {
           </div>
           <ul className="space-y-1.5 max-h-32 overflow-y-auto">
             {violationsQ.slice(0, 5).map((v) => (
-              <li key={v.id} className="text-[11px]">
-                <div className="text-amber-900 font-medium">
-                  seat #{v.seatId} ({v.attemptedRole}) → {v.attemptedTerritory}
-                </div>
-                {v.attemptedKey && <div className="text-amber-800/80 truncate">key: {v.attemptedKey}</div>}
+              <li key={v.id}>
+                <button
+                  type="button"
+                  onClick={() => setModal({ type: "violation", id: v.id })}
+                  className="w-full text-left text-[11px] rounded px-1.5 py-1 hover:bg-amber-100/60 transition min-h-[44px] flex flex-col justify-center"
+                >
+                  <div className="text-amber-900 font-medium">
+                    seat #{v.seatId} ({v.attemptedRole}) → {v.attemptedTerritory}
+                  </div>
+                  {v.attemptedKey && <div className="text-amber-800/80 truncate">key: {v.attemptedKey}</div>}
+                </button>
               </li>
             ))}
           </ul>
@@ -1048,9 +1090,18 @@ function ActionQueuePane() {
         ) : (
           <ul className="space-y-1.5 max-h-48 overflow-y-auto">
             {handoffsQ.slice(0, 6).map((h) => (
-              <li key={h.id} className="text-xs">
-                <span className="font-medium">{h.eventType}</span>
-                <span className="text-muted-foreground"> · {h.status}</span>
+              <li key={h.id}>
+                <button
+                  type="button"
+                  onClick={() => setModal({ type: "handoff", id: h.id })}
+                  className="w-full text-left text-xs rounded px-1.5 py-1 hover:bg-muted/60 transition min-h-[44px] flex items-center justify-between gap-2"
+                >
+                  <span>
+                    <span className="font-medium">{h.eventType}</span>
+                    <span className="text-muted-foreground"> · {h.status}</span>
+                  </span>
+                  <ChevronDown className="w-3 h-3 text-muted-foreground rotate-[-90deg] flex-shrink-0" />
+                </button>
               </li>
             ))}
           </ul>
@@ -1061,6 +1112,14 @@ function ActionQueuePane() {
           </button>
         </Link>
       </Card>
+
+      {/* Detail modals */}
+      <DetailModal open={modal !== null} onClose={() => setModal(null)}>
+        {modal?.type === "task" && <TaskDetailContent id={modal.id} onClose={() => setModal(null)} />}
+        {modal?.type === "message" && <MessageThreadContent id={modal.id} />}
+        {modal?.type === "violation" && <ViolationDetailContent id={modal.id} onClose={() => setModal(null)} />}
+        {modal?.type === "handoff" && <HandoffDetailContent id={modal.id} onClose={() => setModal(null)} />}
+      </DetailModal>
     </div>
   );
 }
@@ -1080,4 +1139,438 @@ function statusDot(s: string): string {
     default:
       return "bg-slate-300";
   }
+}
+
+// ─── Shared detail modal wrapper ─────────────────────────────────────────────
+
+function DetailModal({
+  open,
+  onClose,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent
+        className="w-full max-w-lg sm:max-w-xl max-h-[90vh] overflow-y-auto p-0"
+        onPointerDownOutside={onClose}
+      >
+        {children}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ModalSection({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1">{label}</div>
+      {children}
+    </div>
+  );
+}
+
+function JsonCollapse({ data }: { data: unknown }) {
+  const [open, setOpen] = useState(false);
+  if (data === null || data === undefined) return <span className="text-muted-foreground text-xs italic">none</span>;
+  return (
+    <details open={open} onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}>
+      <summary className="text-xs text-muted-foreground cursor-pointer select-none">
+        {open ? "hide payload" : "show payload"}
+      </summary>
+      <pre className="mt-1 text-[11px] bg-muted/40 rounded px-2 py-1.5 overflow-x-auto max-h-48 overflow-y-auto">
+        {JSON.stringify(data, null, 2)}
+      </pre>
+    </details>
+  );
+}
+
+function fmtTs(v: Date | string | null | undefined): string {
+  if (!v) return "—";
+  try {
+    return new Date(v as string).toLocaleString();
+  } catch {
+    return String(v);
+  }
+}
+
+// ─── Task detail ─────────────────────────────────────────────────────────────
+
+function TaskDetailContent({ id, onClose }: { id: number; onClose: () => void }) {
+  const utils = trpc.useUtils();
+  const q = trpc.agentTeams.getTaskDetail.useQuery({ id });
+  const cancelMut = trpc.agentTeams.updateTaskStatus.useMutation({
+    onSuccess: () => { utils.agentTeams.consoleSummary.invalidate(); onClose(); },
+  });
+  const blockMut = trpc.agentTeams.updateTaskStatus.useMutation({
+    onSuccess: () => { utils.agentTeams.consoleSummary.invalidate(); onClose(); },
+  });
+
+  if (q.isLoading) return <div className="p-6 flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" /> Loading task…</div>;
+  if (q.error || !q.data) return <div className="p-6 text-sm text-destructive">This task has no recent activity yet — your bench is composing its work.</div>;
+
+  const { task, team, claimedBySeat, artifacts, recentRuns, recentDms } = q.data;
+  const ownerFiles = Array.isArray(task.ownerFiles) ? (task.ownerFiles as string[]) : [];
+
+  return (
+    <div>
+      <DialogHeader className="px-4 pt-4 pb-2 border-b">
+        <DialogTitle className="flex items-start gap-2">
+          <FileText className="w-4 h-4 mt-0.5 text-primary flex-shrink-0" />
+          <span className="leading-snug">{task.title}</span>
+        </DialogTitle>
+      </DialogHeader>
+      <div className="p-4 space-y-4">
+        {/* Status + meta row */}
+        <div className="flex flex-wrap gap-2">
+          <Badge variant="outline" className="capitalize">{task.status}</Badge>
+          <Badge variant="outline" className="capitalize">{task.priority}</Badge>
+          {team && <Badge variant="secondary">{team.department} / {team.name}</Badge>}
+        </div>
+
+        {task.description && (
+          <ModalSection label="Description">
+            <p className="text-sm whitespace-pre-wrap">{task.description}</p>
+          </ModalSection>
+        )}
+
+        <ModalSection label="Claimed by">
+          <p className="text-sm">{claimedBySeat ? `${claimedBySeat.seatName} (${claimedBySeat.department})` : "unclaimed"}</p>
+        </ModalSection>
+
+        {task.sourceEventType && (
+          <ModalSection label="Source event">
+            <p className="text-sm font-mono">{task.sourceEventType}</p>
+            <JsonCollapse data={task.sourceEventPayload} />
+          </ModalSection>
+        )}
+
+        {ownerFiles.length > 0 && (
+          <ModalSection label="Owner files / artifacts">
+            <ul className="text-xs font-mono space-y-0.5">
+              {ownerFiles.map((f, i) => <li key={i} className="truncate text-muted-foreground">{f}</li>)}
+            </ul>
+          </ModalSection>
+        )}
+
+        {artifacts.length > 0 && (
+          <ModalSection label="Artifacts">
+            <ul className="space-y-1">
+              {artifacts.map((a) => (
+                <li key={a.id} className="text-xs flex items-start gap-1.5">
+                  <Badge variant="outline" className="text-[10px] flex-shrink-0">{a.territory}</Badge>
+                  <span className="font-mono truncate">{a.key}</span>
+                </li>
+              ))}
+            </ul>
+          </ModalSection>
+        )}
+
+        <ModalSection label="Timestamps">
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs">
+            <dt className="text-muted-foreground">Created</dt><dd>{fmtTs(task.createdAt)}</dd>
+            <dt className="text-muted-foreground">Due</dt><dd>{fmtTs(task.dueAt)}</dd>
+            <dt className="text-muted-foreground">Completed</dt><dd>{fmtTs(task.completedAt)}</dd>
+          </dl>
+        </ModalSection>
+
+        {recentRuns.length > 0 && (
+          <ModalSection label="Recent runs">
+            <ul className="space-y-1">
+              {recentRuns.slice(0, 5).map((r) => (
+                <li key={r.id} className="text-xs flex items-center gap-2">
+                  <Badge
+                    variant={r.status === "success" ? "default" : "destructive"}
+                    className="text-[10px] flex-shrink-0"
+                  >
+                    {r.status}
+                  </Badge>
+                  <span className="text-muted-foreground">{fmtTs(r.createdAt)}</span>
+                  <span className="tabular-nums text-muted-foreground">${Number(r.costUsd).toFixed(4)}</span>
+                </li>
+              ))}
+            </ul>
+          </ModalSection>
+        )}
+
+        {recentDms.length > 0 && (
+          <ModalSection label="Recent team DMs">
+            <ul className="space-y-1">
+              {recentDms.slice(0, 4).map((m) => (
+                <li key={m.id} className="text-[11px] border-l-2 border-primary/30 pl-2">
+                  <div className="text-muted-foreground">seat #{m.fromSeatId} → seat #{m.toSeatId ?? "team"}</div>
+                  <div className="truncate">{m.body}</div>
+                </li>
+              ))}
+            </ul>
+          </ModalSection>
+        )}
+
+        {task.notes && (
+          <ModalSection label="Notes">
+            <p className="text-xs whitespace-pre-wrap text-muted-foreground">{task.notes}</p>
+          </ModalSection>
+        )}
+
+        {/* Actions */}
+        {task.status !== "done" && (
+          <div className="pt-2 flex flex-wrap gap-2 border-t">
+            <Button
+              variant="destructive"
+              size="sm"
+              className="min-h-[44px]"
+              disabled={cancelMut.isPending}
+              onClick={() => cancelMut.mutate({ taskId: id, status: "done", notes: "Cancelled by operator." })}
+            >
+              Cancel task
+            </Button>
+            {task.status !== "blocked" && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="min-h-[44px]"
+                disabled={blockMut.isPending}
+                onClick={() => blockMut.mutate({ taskId: id, status: "blocked", notes: "Marked blocked by operator." })}
+              >
+                <ShieldAlert className="w-3.5 h-3.5 mr-1" /> Mark blocked
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Message thread ───────────────────────────────────────────────────────────
+
+function roleBadgeColor(role: string | null): string {
+  switch (role) {
+    case "frontend": return "bg-blue-100 text-blue-800 border-blue-200";
+    case "backend": return "bg-purple-100 text-purple-800 border-purple-200";
+    case "qa": return "bg-green-100 text-green-800 border-green-200";
+    case "lead": return "bg-amber-100 text-amber-800 border-amber-200";
+    default: return "";
+  }
+}
+
+function MessageThreadContent({ id }: { id: number }) {
+  const q = trpc.agentTeams.getMessageThread.useQuery({ id });
+
+  if (q.isLoading) return <div className="p-6 flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" /> Loading thread…</div>;
+  if (q.error || !q.data) return <div className="p-6 text-sm text-destructive">Could not load this thread. The DMs are still flowing.</div>;
+
+  const { message, team, fromSeat, toSeat, fromSeatRole, threadMessages, threadRoot } = q.data;
+
+  return (
+    <div>
+      <DialogHeader className="px-4 pt-4 pb-2 border-b">
+        <DialogTitle className="flex items-start gap-2">
+          <MessageSquare className="w-4 h-4 mt-0.5 text-primary flex-shrink-0" />
+          <span>DM thread #{threadRoot}</span>
+        </DialogTitle>
+      </DialogHeader>
+      <div className="p-4 space-y-4">
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="font-medium">{fromSeat?.seatName ?? `seat #${message.fromSeatId}`}</span>
+          {fromSeatRole && (
+            <span className={`text-[10px] px-1.5 py-0.5 rounded border ${roleBadgeColor(fromSeatRole)}`}>
+              {fromSeatRole}
+            </span>
+          )}
+          <ArrowRight className="w-3.5 h-3.5 text-muted-foreground" />
+          <span className="font-medium">{toSeat?.seatName ?? (message.toSeatId ? `seat #${message.toSeatId}` : "team broadcast")}</span>
+          {team && <Badge variant="secondary" className="text-[10px]">{team.name}</Badge>}
+        </div>
+
+        <ModalSection label="Message">
+          <p className="text-sm whitespace-pre-wrap bg-muted/30 rounded px-3 py-2">{message.body}</p>
+        </ModalSection>
+
+        <ModalSection label="Sent">
+          <p className="text-xs text-muted-foreground">{fmtTs(message.createdAt)}</p>
+        </ModalSection>
+
+        {threadMessages.length > 0 && (
+          <ModalSection label={`Thread (${threadMessages.length} more message${threadMessages.length === 1 ? "" : "s"})`}>
+            <ul className="space-y-2 max-h-60 overflow-y-auto">
+              {threadMessages.map((m) => (
+                <li key={m.id} className="text-xs border-l-2 border-primary/30 pl-2">
+                  <div className="text-muted-foreground">seat #{m.fromSeatId} → {m.toSeatId ? `seat #${m.toSeatId}` : "team"} · {fmtTs(m.createdAt)}</div>
+                  <div className="mt-0.5 whitespace-pre-wrap">{m.body}</div>
+                </li>
+              ))}
+            </ul>
+          </ModalSection>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Violation detail ─────────────────────────────────────────────────────────
+
+function ViolationDetailContent({ id, onClose }: { id: number; onClose: () => void }) {
+  const q = trpc.agentTeams.getViolationDetail.useQuery({ id });
+
+  if (q.isLoading) return <div className="p-6 flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" /> Loading violation…</div>;
+  if (q.error || !q.data) return <div className="p-6 text-sm text-destructive">Could not load this violation record.</div>;
+
+  const { violation, seat, team, repeatCount } = q.data;
+
+  return (
+    <div>
+      <DialogHeader className="px-4 pt-4 pb-2 border-b">
+        <DialogTitle className="flex items-start gap-2">
+          <ShieldAlert className="w-4 h-4 mt-0.5 text-amber-600 flex-shrink-0" />
+          Territory violation
+        </DialogTitle>
+      </DialogHeader>
+      <div className="p-4 space-y-4">
+        <div className="flex flex-wrap gap-2">
+          <Badge className="bg-amber-100 text-amber-800 border-amber-200">{violation.attemptedRole}</Badge>
+          <Badge variant="outline">{violation.attemptedTerritory}</Badge>
+          {repeatCount > 1 && (
+            <Badge variant="destructive">{repeatCount}× repeat offender</Badge>
+          )}
+        </div>
+
+        <ModalSection label="Seat">
+          <p className="text-sm">{seat ? `${seat.seatName} (${seat.department})` : `seat #${violation.seatId}`}</p>
+        </ModalSection>
+
+        {team && (
+          <ModalSection label="Team">
+            <p className="text-sm">{team.name} · {team.department}</p>
+          </ModalSection>
+        )}
+
+        {violation.attemptedKey && (
+          <ModalSection label="File path">
+            <p className="text-xs font-mono break-all">{violation.attemptedKey}</p>
+          </ModalSection>
+        )}
+
+        {violation.reason && (
+          <ModalSection label="Reason">
+            <p className="text-sm">{violation.reason}</p>
+          </ModalSection>
+        )}
+
+        <ModalSection label="When">
+          <p className="text-xs text-muted-foreground">{fmtTs(violation.createdAt)}</p>
+        </ModalSection>
+
+        <div className="pt-2 flex flex-wrap gap-2 border-t">
+          <Button
+            variant="outline"
+            size="sm"
+            className="min-h-[44px]"
+            onClick={() => {
+              toast.success("Violation acknowledged.");
+              onClose();
+            }}
+          >
+            Acknowledge
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="min-h-[44px]"
+            onClick={() => {
+              toast.info(`Investigating seat ${seat?.seatName ?? `#${violation.seatId}`} — check /admin/agents/teams for seat details.`);
+              onClose();
+            }}
+          >
+            Investigate this seat
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Handoff detail ───────────────────────────────────────────────────────────
+
+function HandoffDetailContent({ id, onClose }: { id: number; onClose: () => void }) {
+  const utils = trpc.useUtils();
+  const q = trpc.agentTeams.getHandoffDetail.useQuery({ id });
+  const acceptMut = trpc.agentTeams.acceptHandoff.useMutation({
+    onSuccess: () => { utils.agentTeams.consoleSummary.invalidate(); onClose(); },
+  });
+  const declineMut = trpc.agentTeams.declineHandoff.useMutation({
+    onSuccess: () => { utils.agentTeams.consoleSummary.invalidate(); onClose(); },
+  });
+
+  if (q.isLoading) return <div className="p-6 flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="w-4 h-4 animate-spin" /> Loading handoff…</div>;
+  if (q.error || !q.data) return <div className="p-6 text-sm text-destructive">Could not load this handoff record.</div>;
+
+  const { handoff, fromTeam, toTeam } = q.data;
+
+  return (
+    <div>
+      <DialogHeader className="px-4 pt-4 pb-2 border-b">
+        <DialogTitle className="flex items-start gap-2">
+          <ArrowRight className="w-4 h-4 mt-0.5 text-primary flex-shrink-0" />
+          Handoff: {handoff.eventType}
+        </DialogTitle>
+      </DialogHeader>
+      <div className="p-4 space-y-4">
+        <div className="flex items-center gap-2 text-sm flex-wrap">
+          <span className="font-medium">{fromTeam?.name ?? `team #${handoff.fromTeamId}`}</span>
+          <ArrowRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+          <span className="font-medium">{toTeam?.name ?? `team #${handoff.toTeamId}`}</span>
+          <Badge
+            variant={handoff.status === "accepted" ? "default" : handoff.status === "declined" ? "destructive" : "outline"}
+            className="capitalize"
+          >
+            {handoff.status}
+          </Badge>
+        </div>
+
+        <ModalSection label="Payload">
+          <JsonCollapse data={handoff.payload} />
+        </ModalSection>
+
+        <ModalSection label="Timeline">
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs">
+            <dt className="text-muted-foreground">Proposed</dt><dd>{fmtTs(handoff.createdAt)}</dd>
+            {handoff.acceptedAt && <><dt className="text-muted-foreground">Accepted</dt><dd>{fmtTs(handoff.acceptedAt)}</dd></>}
+            {handoff.declinedAt && <><dt className="text-muted-foreground">Declined</dt><dd>{fmtTs(handoff.declinedAt)}</dd></>}
+          </dl>
+        </ModalSection>
+
+        {handoff.declineReason && (
+          <ModalSection label="Decline reason">
+            <p className="text-sm">{handoff.declineReason}</p>
+          </ModalSection>
+        )}
+
+        {handoff.status === "pending" && (
+          <div className="pt-2 flex flex-wrap gap-2 border-t">
+            <Button
+              size="sm"
+              className="min-h-[44px]"
+              disabled={acceptMut.isPending}
+              onClick={() => acceptMut.mutate({ id })}
+            >
+              Accept handoff
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              className="min-h-[44px]"
+              disabled={declineMut.isPending}
+              onClick={() => declineMut.mutate({ id, reason: "Declined by operator." })}
+            >
+              Decline
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
