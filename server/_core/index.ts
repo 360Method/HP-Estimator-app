@@ -1552,13 +1552,90 @@ async function startServer() {
     const VoiceResponse = twilio.twiml.VoiceResponse;
     const twiml = new VoiceResponse();
     if (to) {
-      const dial = twiml.dial({ callerId: process.env.TWILIO_PHONE_NUMBER || "" });
+      // Two-party-consent disclosure (WA/OR/CA all require both parties to know).
+      // Plays to the called party only — opt-out via VOICE_RECORDING_DISCLOSURE=off.
+      const recordingEnabled = process.env.VOICE_RECORDING !== "off";
+      const disclosureEnabled = recordingEnabled && process.env.VOICE_RECORDING_DISCLOSURE !== "off";
+
+      // Reconstruct our public origin from the proxy headers — Railway/Cloudflare
+      // strip the original host, so we can't trust req.protocol/req.get("host").
+      const forwardedProto = (req.headers["x-forwarded-proto"] as string) || req.protocol;
+      const forwardedHost = (req.headers["x-forwarded-host"] as string) || req.get("host") || "localhost";
+      const proto = forwardedProto.split(",")[0].trim();
+      const host = forwardedHost.split(",")[0].trim();
+      const callbackBaseUrl = `${proto}://${host}`;
+
+      if (disclosureEnabled) {
+        // The disclosure plays before the dial connects, so the called party
+        // hears it. Twilio's <Say> is bridged into the call leg.
+        twiml.say(
+          { voice: "Polly.Joanna", language: "en-US" },
+          "This call may be recorded for quality and service.",
+        );
+      }
+
+      const dialOpts: Record<string, string> = {
+        callerId: process.env.TWILIO_PHONE_NUMBER || "",
+      };
+      if (recordingEnabled) {
+        // record-from-answer-dual = both legs split into separate channels in
+        // the resulting MP3, so we can post-process speaker separation later.
+        dialOpts.record = "record-from-answer-dual";
+        dialOpts.recordingStatusCallback = `${callbackBaseUrl}/api/twilio/voice/recording`;
+        dialOpts.recordingStatusCallbackMethod = "POST";
+        dialOpts.recordingStatusCallbackEvent = "completed";
+      }
+      const dial = twiml.dial(dialOpts);
       dial.number(to);
     } else {
       twiml.say("No destination specified.");
     }
     res.set("Content-Type", "text/xml");
     res.send(twiml.toString());
+  });
+
+  // ── Twilio Voice — recording status callback ────────────────────────────
+  // POST /api/twilio/voice/recording — fired once the recording is finalized.
+  // We download the MP3 from Twilio (Basic auth) and re-host it on Cloudinary
+  // so the inline <audio> player in the customer profile / Inbox can stream
+  // without leaking Twilio creds, then patch the matching call_logs row.
+  app.post("/api/twilio/voice/recording", express.urlencoded({ extended: false }), async (req, res) => {
+    try {
+      if (!verifyTwilioRequest(req, "/api/twilio/voice/recording")) {
+        console.warn("[Twilio Voice recording] Signature validation failed");
+        res.status(403).send("Forbidden");
+        return;
+      }
+      // Acknowledge fast — Twilio retries on 5xx, and the download/upload
+      // can take a few seconds. We do the work async after replying.
+      res.sendStatus(204);
+
+      const callSid = (req.body.CallSid as string | undefined) || "";
+      const recordingUrl = (req.body.RecordingUrl as string | undefined) || "";
+      const recordingStatus = (req.body.RecordingStatus as string | undefined) || "";
+      if (recordingStatus !== "completed" || !callSid || !recordingUrl) {
+        console.log(`[Voice Recording] Skipping — status=${recordingStatus} sid=${callSid || "(none)"}`);
+        return;
+      }
+      const { getCallLogByTwilioSid, updateCallLog } = await import("../db");
+      const appUrl = await downloadAndStoreRecording(recordingUrl, callSid);
+      if (!appUrl) {
+        console.warn(`[Voice Recording] Download failed for ${callSid}`);
+        return;
+      }
+      const callLog = await getCallLogByTwilioSid(callSid);
+      if (callLog?.id) {
+        await updateCallLog(callLog.id, { recordingAppUrl: appUrl, recordingUrl }).catch((err) =>
+          console.warn(`[Voice Recording] updateCallLog failed for ${callSid}:`, err),
+        );
+        console.log(`[Voice Recording] Stored recording for ${callSid} → ${appUrl}`);
+      } else {
+        console.warn(`[Voice Recording] No call_logs row for sid=${callSid} yet (status callback hasn't fired)`);
+      }
+    } catch (err) {
+      console.error("[Twilio Voice recording]", err);
+      // Already sent 204, so just log.
+    }
   });
 
   // ── Twilio Voice — inbound call routing ──────────────────────────────────────
