@@ -11,9 +11,11 @@ import { trpc } from '@/lib/trpc';
 import { toast } from 'sonner';
 import {
   Phone, PhoneOff, PhoneIncoming, Mic, MicOff,
-  Loader2, AlertTriangle, RefreshCw,
+  Loader2, AlertTriangle, RefreshCw, Grid3x3,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+
+const DIAL_PAD_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'] as const;
 
 type CallState = 'idle' | 'connecting' | 'ringing' | 'active' | 'incoming';
 
@@ -32,19 +34,37 @@ export default function VoiceCallPanel({ toNumber, toName, onCallEnd }: VoiceCal
   const [duration, setDuration] = useState(0);
   const [incomingCall, setIncomingCall] = useState<Call | null>(null);
   const [deviceError, setDeviceError] = useState<string | null>(null);
+  const [showDialPad, setShowDialPad] = useState(false);
   const deviceRef = useRef<Device | null>(null);
   const activeCallRef = useRef<Call | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
 
+  // Voice tokens expire after 1hr — refetch every 50min to keep the device registered.
   const { data: tokenData, isError: tokenError, refetch: refetchToken } = trpc.inbox.twilio.voiceToken.useQuery(undefined, {
     retry: false,
-    staleTime: 50 * 60 * 1000, // 50 min (token valid 1hr)
+    staleTime: 50 * 60 * 1000,
+    refetchInterval: 50 * 60 * 1000,
+    refetchIntervalInBackground: true,
   });
 
   // ── Initialize Twilio Device ──────────────────────────────────────────────
   useEffect(() => {
     if (!tokenData?.token) return;
+
+    // If the device already exists (token refresh while running), swap the
+    // token in place so an active call survives — destroying the device would
+    // hang up mid-call.
+    if (deviceRef.current) {
+      try {
+        deviceRef.current.updateToken(tokenData.token);
+        return;
+      } catch (err) {
+        console.warn('[Voice] updateToken failed, recreating device:', err);
+        deviceRef.current.destroy();
+        deviceRef.current = null;
+      }
+    }
 
     setDeviceError(null);
 
@@ -183,6 +203,12 @@ export default function VoiceCallPanel({ toNumber, toName, onCallEnd }: VoiceCal
     setIsMuted(newMuted);
   }, [isMuted]);
 
+  // ── DTMF (touch-tone digits during an active call) ───────────────────────
+  const sendDigit = useCallback((digit: string) => {
+    if (!activeCallRef.current || callState !== 'active') return;
+    activeCallRef.current.sendDigits(digit);
+  }, [callState]);
+
   const fmtDuration = (secs: number) => {
     const m = Math.floor(secs / 60).toString().padStart(2, '0');
     const s = (secs % 60).toString().padStart(2, '0');
@@ -263,42 +289,69 @@ export default function VoiceCallPanel({ toNumber, toName, onCallEnd }: VoiceCal
   // ── Active / connecting / ringing ─────────────────────────────────────────
   if (callState !== 'idle') {
     return (
-      <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2.5">
-        <div className="flex items-center gap-2">
-          {callState === 'connecting' || callState === 'ringing' ? (
-            <Loader2 className="w-4 h-4 text-emerald-600 animate-spin" />
-          ) : (
-            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2.5">
+          <div className="flex items-center gap-2">
+            {callState === 'connecting' || callState === 'ringing' ? (
+              <Loader2 className="w-4 h-4 text-emerald-600 animate-spin" />
+            ) : (
+              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            )}
+            <span className="text-sm font-medium text-emerald-800">
+              {callState === 'connecting' ? 'Connecting...' :
+               callState === 'ringing' ? 'Ringing...' :
+               fmtDuration(duration)}
+            </span>
+          </div>
+
+          {callState === 'active' && (
+            <>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={toggleMute}
+                className={`p-1.5 ${isMuted ? 'text-destructive' : 'text-emerald-700'}`}
+                title={isMuted ? 'Unmute' : 'Mute'}
+              >
+                {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setShowDialPad(v => !v)}
+                className={`p-1.5 ${showDialPad ? 'text-emerald-900 bg-emerald-100' : 'text-emerald-700'}`}
+                title="Dial pad (DTMF)"
+              >
+                <Grid3x3 className="w-4 h-4" />
+              </Button>
+            </>
           )}
-          <span className="text-sm font-medium text-emerald-800">
-            {callState === 'connecting' ? 'Connecting...' :
-             callState === 'ringing' ? 'Ringing...' :
-             fmtDuration(duration)}
-          </span>
+
+          <Button
+            size="sm"
+            onClick={hangUp}
+            className="bg-destructive hover:bg-destructive/90 text-white gap-1.5"
+          >
+            <PhoneOff className="w-3.5 h-3.5" />
+            {callState === 'active' ? 'End' : 'Cancel'}
+          </Button>
         </div>
 
-        {callState === 'active' && (
-          <>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={toggleMute}
-              className={`p-1.5 ${isMuted ? 'text-destructive' : 'text-emerald-700'}`}
-              title={isMuted ? 'Unmute' : 'Mute'}
-            >
-              {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-            </Button>
-          </>
+        {callState === 'active' && showDialPad && (
+          <div className="grid grid-cols-3 gap-1.5 bg-white border border-emerald-200 rounded-xl p-3 max-w-[220px]">
+            {DIAL_PAD_KEYS.map(k => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => sendDigit(k)}
+                className="h-10 rounded-lg border border-emerald-200 bg-emerald-50/60 hover:bg-emerald-100 active:bg-emerald-200 text-base font-semibold text-emerald-900 transition-colors"
+                aria-label={`Dial ${k}`}
+              >
+                {k}
+              </button>
+            ))}
+          </div>
         )}
-
-        <Button
-          size="sm"
-          onClick={hangUp}
-          className="bg-destructive hover:bg-destructive/90 text-white gap-1.5"
-        >
-          <PhoneOff className="w-3.5 h-3.5" />
-          {callState === 'active' ? 'End' : 'Cancel'}
-        </Button>
       </div>
     );
   }
