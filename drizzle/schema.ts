@@ -85,10 +85,41 @@ export const messages = mysqlTable("messages", {
   readAt: timestamp("readAt"),
   /** HP user who sent this (null for inbound) */
   sentByUserId: int("sentByUserId"),
+  /** Base64 reply-tracking ID encoding {opportunityId}_{customerId}; embedded in
+   *  outbound subjects as `[#abc123]` and parsed on inbound for opportunity attribution. */
+  replyToken: varchar("replyToken", { length: 64 }),
+  /** Opportunity this message attributes to (resolved from token or sender match). */
+  opportunityId: varchar("opportunityId", { length: 64 }),
+  /** True when this row was created by a customer replying through the portal
+   *  (not via Gmail). Drives the "via portal" badge in the comms timeline. */
+  isPortalReply: boolean("isPortalReply").default(false).notNull(),
+  /** Self-referential FK — id of the root message of this reply thread. Used
+   *  to group portal replies + Gmail replies into a single visual thread. */
+  threadRootId: int("threadRootId"),
 });
 
 export type Message = typeof messages.$inferSelect;
 export type InsertMessage = typeof messages.$inferInsert;
+
+// ─── INBOX: ORPHAN EMAILS ────────────────────────────────────────────────────
+// Inbound emails whose sender doesn't match any customer AND which carry no
+// reply-token. Operator manually attributes them on the admin orphan queue.
+export const orphanEmails = mysqlTable("orphanEmails", {
+  id: int("id").autoincrement().primaryKey(),
+  gmailMessageId: varchar("gmailMessageId", { length: 128 }).notNull().unique(),
+  gmailThreadId: varchar("gmailThreadId", { length: 128 }),
+  fromEmail: varchar("fromEmail", { length: 320 }).notNull(),
+  fromName: varchar("fromName", { length: 255 }),
+  subject: varchar("subject", { length: 512 }),
+  body: text("body"),
+  /** Set when an admin attributes this orphan to a customer (or dismisses it). */
+  resolvedAt: timestamp("resolvedAt"),
+  resolvedCustomerId: varchar("resolvedCustomerId", { length: 64 }),
+  receivedAt: timestamp("receivedAt").defaultNow().notNull(),
+});
+
+export type OrphanEmail = typeof orphanEmails.$inferSelect;
+export type InsertOrphanEmail = typeof orphanEmails.$inferInsert;
 
 // ─── INBOX: CALL LOGS ────────────────────────────────────────────────────────
 // Extended metadata for call-type messages.

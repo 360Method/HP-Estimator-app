@@ -31,7 +31,8 @@ export type AutomationTrigger =
   | "change_order_declined"
   | "offcycle_visit_requested"
   | "portal_onboarding_complete"
-  | "invoice_paid";
+  | "invoice_paid"
+  | "portal_reply";
 
 // ─── Trigger payload shape ────────────────────────────────────────────────────
 export interface TriggerPayload {

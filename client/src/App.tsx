@@ -27,6 +27,7 @@ import PortalDocuments from "./pages/portal/PortalDocuments";
 import PortalWallet from "./pages/portal/PortalWallet";
 import PortalReferral from "./pages/portal/PortalReferral";
 import PortalMessages from "./pages/portal/PortalMessages";
+import PortalCommunicationThread from "./pages/portal/PortalCommunicationThread";
 import PortalRequest from "./pages/portal/PortalRequest";
 import PortalJobDetail from "./pages/portal/PortalJobDetail";
 import PortalJobComplete from "./pages/portal/PortalJobComplete";
@@ -84,6 +85,7 @@ function Router() {
       <Route path="/portal/wallet" component={PortalWallet} />
       <Route path="/portal/referral" component={PortalReferral} />
       <Route path="/portal/messages" component={PortalMessages} />
+      <Route path="/portal/communications/:threadId" component={PortalCommunicationThread} />
       <Route path="/portal/jobs" component={PortalJobs} />
       <Route path="/portal/request" component={PortalRequest} />
       <Route path="/portal/reports/:id" component={PortalReportDetail} />

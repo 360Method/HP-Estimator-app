@@ -25,9 +25,18 @@ import {
   getGmailToken,
   incrementUnread,
   insertMessage,
+  listOpportunities,
   updateConversationLastMessage,
   upsertGmailToken,
 } from "./db";
+import {
+  encodeReplyToken,
+  injectReplyTokenIntoSubject,
+  buildPortalThreadUrl,
+  extractReplyTokenFromSubject,
+  decodeReplyToken,
+} from "./replyToken";
+import { createNotification } from "./leadRouting";
 
 // ─── OAuth2 Client ────────────────────────────────────────────────────────────
 
@@ -125,6 +134,63 @@ function encodeSubject(subject: string): string {
   return `=?UTF-8?B?${Buffer.from(subject, 'utf-8').toString('base64')}?=`;
 }
 
+/**
+ * Auto-resolve a reply token for an outbound email by matching the recipient
+ * to a known customer + their most-recent open opportunity. Returns null if
+ * the recipient isn't a known customer (e.g. internal/team emails) so we
+ * don't stamp tokens on outbound mail that has no place to route back to.
+ *
+ * Callers that already know `opportunityId` + `customerId` (e.g. estimate
+ * sender) can pass them directly via params and skip this lookup.
+ */
+async function resolveReplyAttribution(
+  to: string,
+  explicitOpportunityId?: string,
+  explicitCustomerId?: string,
+): Promise<{ token: string; opportunityId: string; customerId: string } | null> {
+  if (explicitOpportunityId && explicitCustomerId) {
+    return {
+      token: encodeReplyToken({ opportunityId: explicitOpportunityId, customerId: explicitCustomerId }),
+      opportunityId: explicitOpportunityId,
+      customerId: explicitCustomerId,
+    };
+  }
+  const recipient = to.match(/<(.+?)>/)?.[1] ?? to.trim();
+  if (!recipient || !recipient.includes("@")) return null;
+  const customer = await findCustomerByEmail(recipient).catch(() => null);
+  if (!customer) return null;
+  const customerId = explicitCustomerId ?? customer.id;
+  let opportunityId = explicitOpportunityId;
+  if (!opportunityId) {
+    // Most recent non-archived opportunity for this customer.
+    const opps = await listOpportunities(undefined, customer.id, false, 1).catch(() => []);
+    opportunityId = opps[0]?.id;
+  }
+  if (!opportunityId) return null;
+  return {
+    token: encodeReplyToken({ opportunityId, customerId }),
+    opportunityId,
+    customerId,
+  };
+}
+
+/** Build the portal-CTA HTML block that gets appended to outbound emails so
+ *  customers can reply natively in their portal instead of Gmail. */
+function buildPortalReplyCta(token: string): { html: string; plain: string } {
+  const url = buildPortalThreadUrl(token);
+  const html = `
+<table cellpadding="0" cellspacing="0" style="margin-top:32px;border-top:1px solid #e8e0d0;padding-top:20px;width:100%;font-family:Arial,sans-serif;">
+  <tr><td style="padding:14px 18px;background:#f9f7f2;border-radius:8px;">
+    <p style="margin:0 0 6px;font-size:13px;color:#666;">Prefer to reply in your portal?</p>
+    <a href="${url}" style="color:#2D5016;font-size:14px;font-weight:700;text-decoration:none;">
+      Open conversation in your portal &rsaquo;
+    </a>
+  </td></tr>
+</table>`;
+  const plain = `\n\n— — —\nPrefer to reply in your portal? Open this conversation: ${url}`;
+  return { html, plain };
+}
+
 export async function sendEmail(params: {
   fromEmail?: string;
   to: string;
@@ -133,7 +199,12 @@ export async function sendEmail(params: {
   html?: string;
   threadId?: string;
   inReplyTo?: string;
-}): Promise<{ messageId: string; threadId: string }> {
+  /** Pass when the caller already knows attribution (estimates, change orders). */
+  customerId?: string;
+  opportunityId?: string;
+  /** Set to true to skip token + portal-CTA injection (system / internal mail). */
+  skipReplyToken?: boolean;
+}): Promise<{ messageId: string; threadId: string; replyToken: string | null }> {
   // Use help@ as default sender if no fromEmail provided
   const fromEmail = params.fromEmail || "help@handypioneers.com";
   let gmail: ReturnType<typeof google.gmail>;
@@ -142,19 +213,42 @@ export async function sendEmail(params: {
   } catch {
     // Gmail not connected — log and skip silently
     console.warn("[Gmail] sendEmail: not connected, skipping");
-    return { messageId: "", threadId: "" };
+    return { messageId: "", threadId: "", replyToken: null };
+  }
+
+  // ── Attribution: stamp subject + body with reply token if recipient is a customer
+  let attribution: { token: string; opportunityId: string; customerId: string } | null = null;
+  if (!params.skipReplyToken) {
+    attribution = await resolveReplyAttribution(
+      params.to,
+      params.opportunityId,
+      params.customerId,
+    ).catch(() => null);
+  }
+
+  const finalSubject = attribution
+    ? injectReplyTokenIntoSubject(params.subject, attribution.token)
+    : params.subject;
+
+  let finalHtml = params.html;
+  let finalPlain = params.body;
+  if (attribution) {
+    const cta = buildPortalReplyCta(attribution.token);
+    if (finalHtml) finalHtml = finalHtml + cta.html;
+    if (finalPlain) finalPlain = finalPlain + cta.plain;
+    if (!finalHtml && !finalPlain) finalPlain = cta.plain;
   }
 
   const boundary = `boundary_${Date.now()}`;
-  const plainText = params.body ?? (params.html ? params.html.replace(/<[^>]+>/g, "") : "");
+  const plainText = finalPlain ?? (finalHtml ? finalHtml.replace(/<[^>]+>/g, "") : "");
 
   let rawBody: string;
-  if (params.html) {
+  if (finalHtml) {
     // Multipart/alternative: plain + HTML
     const headers = [
       `From: Handy Pioneers <${fromEmail}>`,
       `To: ${params.to}`,
-      `Subject: ${encodeSubject(params.subject)}`,
+      `Subject: ${encodeSubject(finalSubject)}`,
       `MIME-Version: 1.0`,
       `Content-Type: multipart/alternative; boundary="${boundary}"`,
     ];
@@ -172,14 +266,14 @@ export async function sendEmail(params: {
       `--${boundary}`,
       `Content-Type: text/html; charset=utf-8`,
       "",
-      params.html,
+      finalHtml,
       `--${boundary}--`,
     ].join("\r\n");
   } else {
     const headers = [
       `From: Handy Pioneers <${fromEmail}>`,
       `To: ${params.to}`,
-      `Subject: ${encodeSubject(params.subject)}`,
+      `Subject: ${encodeSubject(finalSubject)}`,
       `Content-Type: text/plain; charset=utf-8`,
     ];
     if (params.inReplyTo) {
@@ -202,6 +296,7 @@ export async function sendEmail(params: {
   return {
     messageId: response.data.id!,
     threadId: response.data.threadId!,
+    replyToken: attribution?.token ?? null,
   };
 }
 
@@ -259,17 +354,59 @@ export async function pollInboundEmails(fromEmail: string, afterHistoryId?: stri
         body = Buffer.from(textPart.body.data, "base64").toString("utf-8");
       }
 
-      // Only process emails from known customers — skip newsletters, vendors, etc.
-      const customer = await findCustomerByEmail(senderEmail);
+      // ── Attribution path 1: reply-token in subject (most reliable; routes
+      //    correctly even when customer replies from a different address).
+      const tokenRaw = extractReplyTokenFromSubject(subject);
+      const tokenPayload = tokenRaw ? decodeReplyToken(tokenRaw) : null;
+
+      // ── Attribution path 2: fall back to sender-email match.
+      let customer = await findCustomerByEmail(senderEmail);
+      if (!customer && tokenPayload) {
+        // Token-decoded customerId wins if sender lookup misses (e.g. reply
+        // from a personal address that's not the one on the customer record).
+        const { getCustomerById } = await import("./db");
+        customer = await getCustomerById(tokenPayload.customerId);
+      }
+
       if (!customer) {
-        console.log(`[Gmail] Skipping non-customer email from ${senderEmail}: ${subject}`);
-        // Still mark as read so we don't re-process on next poll
+        // Orphan: no token, no sender match. Drop into the admin queue for
+        // manual attribution rather than silently dropping the email.
+        try {
+          const { insertOrphanEmail } = await import("./db");
+          await insertOrphanEmail({
+            gmailMessageId: msgRef.id,
+            gmailThreadId: threadId || undefined,
+            fromEmail: senderEmail,
+            fromName: senderName || undefined,
+            subject: subject || undefined,
+            body: body.slice(0, 10000),
+            receivedAt: date ? new Date(date) : new Date(),
+          });
+          await createNotification({
+            role: "admin",
+            eventType: "orphan_email",
+            title: `Unattributed email from ${senderName || senderEmail}`,
+            body: subject || body.slice(0, 200),
+            linkUrl: "/admin/orphan-emails",
+            priority: "low",
+          }).catch(() => null);
+          console.log(`[Gmail] Captured orphan email from ${senderEmail}: ${subject}`);
+        } catch (err) {
+          console.error("[Gmail] Failed to capture orphan email:", err);
+        }
         await gmail.users.messages.modify({
           userId: "me",
           id: msgRef.id,
           requestBody: { removeLabelIds: ["UNREAD"] },
         });
         continue;
+      }
+
+      // Resolve opportunity attribution: token wins, then most recent open opp.
+      let attributedOpportunityId: string | undefined = tokenPayload?.opportunityId;
+      if (!attributedOpportunityId) {
+        const opps = await listOpportunities(undefined, customer.id, false, 1).catch(() => []);
+        attributedOpportunityId = opps[0]?.id;
       }
 
       // Find or create conversation linked to this customer
@@ -286,10 +423,29 @@ export async function pollInboundEmails(fromEmail: string, afterHistoryId?: stri
         gmailMessageId: msgRef.id,
         isInternal: false,
         sentAt: date ? new Date(date) : new Date(),
+        replyToken: tokenRaw ?? undefined,
+        opportunityId: attributedOpportunityId,
       });
 
       await updateConversationLastMessage(conv.id, body.slice(0, 255) || subject, "email");
       await incrementUnread(conv.id);
+
+      // Drop a notification so the admin bell rings + click routes back to
+      // the right opportunity (or the customer profile if no opp matched).
+      const customerLabel = [customer.firstName, customer.lastName].filter(Boolean).join(" ") || senderEmail;
+      const linkUrl = attributedOpportunityId
+        ? `/opportunities/${attributedOpportunityId}#comms`
+        : `/customers/${customer.id}#comms`;
+      await createNotification({
+        role: "admin",
+        eventType: "inbound_email",
+        title: `Email reply from ${customerLabel}`,
+        body: subject || body.slice(0, 200),
+        linkUrl,
+        opportunityId: attributedOpportunityId,
+        customerId: customer.id,
+        priority: "normal",
+      }).catch((err) => console.warn("[Gmail] notification create failed:", err));
 
       // Mark as read in Gmail so we don't re-process
       await gmail.users.messages.modify({
@@ -298,7 +454,9 @@ export async function pollInboundEmails(fromEmail: string, afterHistoryId?: stri
         requestBody: { removeLabelIds: ["UNREAD"] },
       });
 
-      console.log(`[Gmail] Processed inbound email from ${senderEmail} (customer: ${customer.id}): ${subject}`);
+      console.log(
+        `[Gmail] Processed inbound email from ${senderEmail} (customer: ${customer.id}, opp: ${attributedOpportunityId ?? "—"}, token: ${tokenRaw ?? "—"}): ${subject}`,
+      );
     }
   } catch (err) {
     console.error("[Gmail] Poll error:", err);
