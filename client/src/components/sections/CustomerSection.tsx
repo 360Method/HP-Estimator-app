@@ -651,6 +651,7 @@ export default function CustomerSection() {
     addCustomerAddress, updateCustomerAddress, removeCustomerAddress, setPrimaryAddress, setBillingAddress,
     updateCustomer: updateCustomerLocal,
     removeCustomer,
+    mergeCustomerOpportunities,
   } = useEstimator();
   const { jobInfo, customerProfile, activityFeed, activeCustomerTab, opportunities, activePipelineArea, activeCustomerId, customers } = state;
   const activeCustomer = customers.find(c => c.id === activeCustomerId);
@@ -964,6 +965,40 @@ export default function CustomerSection() {
   const createOpportunityMutation = trpc.opportunities.create.useMutation({
     onError: (err) => console.warn('[CustomerSection] DB opportunity create failed (local state preserved):', err.message),
   });
+
+  // Pull fresh opportunities for the active customer on every profile open and
+  // merge into local state. The session-level MERGE_DB_CUSTOMERS sync only
+  // runs once at login; without this refresh, leads created elsewhere (e.g. on
+  // a public booking form) never appear in this profile and the count stays
+  // at zero (Marcin's "0 leads despite leads existing" bug, 2026-04-28).
+  const liveOppsQuery = trpc.opportunities.list.useQuery(
+    { customerId: activeCustomerId ?? '', archived: false, limit: 500 },
+    { enabled: !!activeCustomerId, staleTime: 15_000 },
+  );
+  useEffect(() => {
+    if (!activeCustomerId || !liveOppsQuery.data) return;
+    const fresh = (liveOppsQuery.data as any[]).map((o) => ({
+      id: o.id,
+      area: (o.area ?? 'lead') as Opportunity['area'],
+      stage: (o.stage ?? 'New Lead') as Opportunity['stage'],
+      title: o.title ?? '',
+      value: o.value ?? 0,
+      jobNumber: o.jobNumber ?? undefined,
+      createdAt: o.createdAt instanceof Date ? o.createdAt.toISOString() : (o.createdAt ?? new Date().toISOString()),
+      updatedAt: o.updatedAt instanceof Date ? o.updatedAt.toISOString() : (o.updatedAt ?? new Date().toISOString()),
+      notes: o.notes ?? '',
+      archived: !!o.archived,
+      archivedAt: o.archivedAt ?? undefined,
+      sourceLeadId: o.sourceLeadId ?? undefined,
+      sourceEstimateId: o.sourceEstimateId ?? undefined,
+      convertedToEstimateAt: o.convertedToEstimateAt ?? undefined,
+      convertedToJobAt: o.convertedToJobAt ?? undefined,
+      sentAt: o.sentAt ?? undefined,
+      wonAt: o.wonAt ?? undefined,
+      portalApprovedAt: o.portalApprovedAt ?? undefined,
+    })) as Opportunity[];
+    mergeCustomerOpportunities(activeCustomerId, fresh);
+  }, [activeCustomerId, liveOppsQuery.data, mergeCustomerOpportunities]);
 
   // Wrapped address helpers that update both context and DB
   const handleAddAddress = (customerId: string, addr: Parameters<typeof addCustomerAddress>[1]) => {

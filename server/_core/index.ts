@@ -475,6 +475,33 @@ async function ensureLeadNurturerTables() {
     const { ensureDefaultPlaybooks } = await import("../lib/leadNurturer/playbook");
     await ensureDefaultPlaybooks();
 
+    // 0078 backfill: orphan drafts (NULL opportunityId) get pinned to the
+    // customer's most-recent open lead. Marcin's customer profile groups
+    // drafts under their source opportunity; an unattached draft can't tell
+    // him which lead it's about. Idempotent — once the orphans are drained,
+    // re-runs are no-ops.
+    await db.execute(sql`
+      UPDATE \`agentDrafts\` d
+      JOIN (
+        SELECT
+          d2.id AS draftId,
+          (
+            SELECT o.id FROM \`opportunities\` o
+            WHERE o.customerId = d2.customerId
+              AND o.area = 'lead'
+              AND o.archived = 0
+            ORDER BY o.createdAt DESC
+            LIMIT 1
+          ) AS pickedOppId
+        FROM \`agentDrafts\` d2
+        WHERE d2.opportunityId IS NULL
+      ) pick ON pick.draftId = d.id
+      SET d.opportunityId = pick.pickedOppId
+      WHERE pick.pickedOppId IS NOT NULL
+    `).catch((err: unknown) => {
+      console.warn("[boot] agentDrafts opportunityId backfill skipped:", err);
+    });
+
     console.log("[boot] agentDrafts + nurturerPlaybooks ensured");
   } catch (err) {
     console.warn("[boot] ensureLeadNurturerTables failed (non-fatal):", err);

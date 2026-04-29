@@ -303,6 +303,14 @@ type Action =
    * - Opportunities from DB are merged per-customer the same way.
    */
   | { type: 'MERGE_DB_CUSTOMERS'; payload: Customer[] }
+  /**
+   * Merge a fresh per-customer opportunities snapshot into state. Fired when
+   * the customer profile opens — the once-per-session MERGE_DB_CUSTOMERS sync
+   * misses anything created after login (e.g. a lead that lands while the tab
+   * is open). The merge is identical to MERGE_DB_CUSTOMERS' per-customer
+   * branch: DB-newer rows win on shared ids, DB-only rows are appended.
+   */
+  | { type: 'MERGE_CUSTOMER_OPPORTUNITIES'; customerId: string; opportunities: Opportunity[] }
   /** Replace global invoices[] with DB-sourced data; also patches customer.invoices[] */
   | { type: 'MERGE_DB_INVOICES'; payload: Invoice[] }
   /** Replace global scheduleEvents[] with DB-sourced data */
@@ -1589,10 +1597,16 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
       // New customers not yet in local state
       const newCustomers = activePayload.filter(c => !localIds.has(c.id));
       // For existing customers: merge opportunities from DB (update stage/wonAt/portalApprovedAt
-      // for any opportunity whose DB updatedAt is newer than local updatedAt)
+      // for any opportunity whose DB updatedAt is newer than local updatedAt).
+      // Bug 2026-04-28: also union in DB opportunities not yet in local state.
+      // Without this, a lead created on a different device — or any opp that
+      // landed after the customer was first synced into local state — never
+      // appears in the customer profile (Marcin saw "0 leads" despite leads
+      // existing in the DB).
       const updatedCustomers = state.customers.map(c => {
         const dbCust = dbMap.get(c.id);
         if (!dbCust) return c;
+        const localOppMap = new Map((c.opportunities ?? []).map(o => [o.id, o]));
         const dbOppMap = new Map((dbCust.opportunities ?? []).map((o: any) => [o.id, o]));
         const mergedOpps = (c.opportunities ?? []).map(o => {
           const dbOpp = dbOppMap.get(o.id);
@@ -1600,7 +1614,6 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
           const dbUpdated = new Date(dbOpp.updatedAt ?? 0).getTime();
           const localUpdated = new Date(o.updatedAt ?? 0).getTime();
           if (dbUpdated <= localUpdated) return o;
-          // DB is newer — merge stage, wonAt, portalApprovedAt from DB
           return {
             ...o,
             stage: dbOpp.stage ?? o.stage,
@@ -1609,7 +1622,9 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
             updatedAt: dbOpp.updatedAt ?? o.updatedAt,
           };
         });
-        return { ...c, opportunities: mergedOpps };
+        const dbOnly = (dbCust.opportunities ?? [])
+          .filter((o: any) => !localOppMap.has(o.id));
+        return { ...c, opportunities: [...mergedOpps, ...dbOnly] };
       });
       // Also remove any local customers that were merged (mergedIntoId now set in DB)
       const mergedIds = new Set(
@@ -1620,6 +1635,37 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
         : updatedCustomers;
       if (newCustomers.length === 0 && filteredUpdated === state.customers) return state;
       return { ...state, customers: [...newCustomers, ...filteredUpdated] };
+    }
+
+    case 'MERGE_CUSTOMER_OPPORTUNITIES': {
+      const incoming = action.opportunities ?? [];
+      if (incoming.length === 0) return state;
+      const dbMap = new Map(incoming.map(o => [o.id, o]));
+      const merge = (existing: Opportunity[]): Opportunity[] => {
+        const localIds = new Set(existing.map(o => o.id));
+        const patched = existing.map(o => {
+          const dbOpp = dbMap.get(o.id);
+          if (!dbOpp) return o;
+          const dbT = new Date(dbOpp.updatedAt ?? 0).getTime();
+          const localT = new Date(o.updatedAt ?? 0).getTime();
+          if (dbT <= localT) return o;
+          return {
+            ...o,
+            stage: dbOpp.stage ?? o.stage,
+            wonAt: dbOpp.wonAt ?? o.wonAt,
+            portalApprovedAt: dbOpp.portalApprovedAt ?? o.portalApprovedAt,
+            updatedAt: dbOpp.updatedAt ?? o.updatedAt,
+          };
+        });
+        const dbOnly = incoming.filter(o => !localIds.has(o.id));
+        return [...patched, ...dbOnly];
+      };
+      const updatedCustomers = state.customers.map(c =>
+        c.id === action.customerId ? { ...c, opportunities: merge(c.opportunities ?? []) } : c
+      );
+      const updatedOpps =
+        state.activeCustomerId === action.customerId ? merge(state.opportunities) : state.opportunities;
+      return { ...state, customers: updatedCustomers, opportunities: updatedOpps };
     }
 
     case 'MERGE_DB_INVOICES': {
@@ -1817,6 +1863,7 @@ interface EstimatorContextValue {
   setActiveOpportunity: (id: string | null) => void;
   addCustomer: (customer: Customer) => void;
   mergeDbCustomers: (customers: Customer[]) => void;
+  mergeCustomerOpportunities: (customerId: string, opportunities: Opportunity[]) => void;
   mergeDbInvoices: (invoices: Invoice[]) => void;
   mergeDbScheduleEvents: (events: ScheduleEvent[]) => void;
   updateCustomer: (id: string, payload: Partial<Customer>) => void;
@@ -2121,6 +2168,13 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: 'MERGE_DB_CUSTOMERS', payload: customers });
   }, []);
 
+  const mergeCustomerOpportunities = useCallback(
+    (customerId: string, opportunities: Opportunity[]) => {
+      dispatch({ type: 'MERGE_CUSTOMER_OPPORTUNITIES', customerId, opportunities });
+    },
+    [],
+  );
+
   const mergeDbInvoices = useCallback((invoices: Invoice[]) => {
     dispatch({ type: 'MERGE_DB_INVOICES', payload: invoices });
   }, []);
@@ -2328,7 +2382,7 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
       setCustomerProfile, addActivityEvent, setCustomerTab,
       convertLeadToEstimate, convertEstimateToJob, archiveJob,
       setActiveOpportunity,
-      addCustomer, mergeDbCustomers, mergeDbInvoices, mergeDbScheduleEvents, updateCustomer, removeCustomer, setActiveCustomer, setPendingFocus,
+      addCustomer, mergeDbCustomers, mergeCustomerOpportunities, mergeDbInvoices, mergeDbScheduleEvents, updateCustomer, removeCustomer, setActiveCustomer, setPendingFocus,
       addCustomerAddress, updateCustomerAddress, removeCustomerAddress, setPrimaryAddress, setBillingAddress,
       navigateToTopLevel,
       reset,
