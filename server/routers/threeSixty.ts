@@ -182,6 +182,7 @@ const membershipRouter = router({
         stripeSubscriptionId: z.string().optional(),
         annualScanCompleted: z.boolean().optional(),
         annualScanDate: z.number().optional(),
+        annualValuationOptIn: z.boolean().optional(),
       })
     )
     .mutation(async ({ input }) => {
@@ -1187,8 +1188,9 @@ const abandonedLeadRouter = router({
             tags: "[]",
           });
         }
+        const opportunityId = nanoid();
         await createOpportunity({
-          id: nanoid(),
+          id: opportunityId,
           customerId: customer.id,
           area: "lead",
           stage: "Cart Abandoned",
@@ -1200,6 +1202,15 @@ const abandonedLeadRouter = router({
           ].join("\n"),
           archived: false,
         });
+        // Surface the abandoned cart to the Nurturer like every other lead.
+        const { onLeadCreated } = await import("../leadRouting");
+        onLeadCreated({
+          opportunityId,
+          customerId: customer.id,
+          title: `360° ${tier} cart abandoned — ${customerName}`,
+          source: "membership_intent",
+          priority: "normal",
+        }).catch((e) => console.error("[leadRouting] onLeadCreated error:", e));
         return { captured: true };
       } catch (err) {
         console.error("[360 Abandoned Lead] capture failed:", err);
@@ -1366,8 +1377,9 @@ const portfolioAbandonedLeadRouter = router({
         const propSummary = properties
           .map((p) => `${p.label || p.address || p.tier}${p.interiorAddon ? " +interior" : ""}`)
           .join(", ");
+        const opportunityId = nanoid();
         await createOpportunity({
-          id: nanoid(),
+          id: opportunityId,
           customerId: customer.id,
           area: "lead",
           stage: "Cart Abandoned",
@@ -1380,6 +1392,14 @@ const portfolioAbandonedLeadRouter = router({
           ].join("\n"),
           archived: false,
         });
+        const { onLeadCreated } = await import("../leadRouting");
+        onLeadCreated({
+          opportunityId,
+          customerId: customer.id,
+          title: `360° Portfolio cart abandoned — ${customerName ?? customerEmail}`,
+          source: "membership_intent",
+          priority: "normal",
+        }).catch((e) => console.error("[leadRouting] onLeadCreated error:", e));
         return { captured: true };
       } catch (err) {
         console.error("[360 Portfolio Abandoned Lead] capture failed:", err);

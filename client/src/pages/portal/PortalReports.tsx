@@ -399,7 +399,9 @@ export default function PortalReports() {
   if (isLoading) {
     return (
       <PortalLayout>
-        <div className="container py-8 text-sm text-muted-foreground">Loading reports…</div>
+        <div className="container py-10 text-sm text-muted-foreground">
+          Tending to your home reports…
+        </div>
       </PortalLayout>
     );
   }

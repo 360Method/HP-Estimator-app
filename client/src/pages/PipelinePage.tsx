@@ -142,6 +142,9 @@ export default function PipelinePage() {
     }
   };
 
+  // Online-request unread count (for the legacy in-pipeline banner). The
+  // banner now points at the unified Leads inbox rather than the retired
+  // Requests page — see directive: "everything just falls into the Leads tab".
   const unreadQuery = trpc.booking.unreadCount.useQuery(undefined, { refetchInterval: 30_000 });
   const unreadCount = unreadQuery.data?.count ?? 0;
 
@@ -159,10 +162,10 @@ export default function PipelinePage() {
               </span>
             </div>
             <button
-              onClick={() => navigateToTopLevel('requests')}
+              onClick={() => navigateToTopLevel('leads')}
               className="flex items-center gap-1 text-xs font-semibold bg-white/20 hover:bg-white/30 rounded-full px-3 py-1 transition-colors"
             >
-              View Requests <ArrowRight size={12} />
+              View in Leads <ArrowRight size={12} />
             </button>
           </div>
         </div>

@@ -30,6 +30,10 @@ import {
 } from "../drizzle/schema";
 import { sendSms, isTwilioConfigured } from "./twilio";
 import { isNotificationEnabled } from "./routers/notificationPreferences";
+import {
+  cancelPendingFollowupsForCustomer,
+  type EngagementCancelReason,
+} from "./lib/leadNurturer/roadmapFollowup";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -318,7 +322,7 @@ export async function onLeadCreated(params: {
       eventType: "lead_created",
       toRole: "nurturer",
       toUserId: nurturerId ?? null,
-      triggeredBy: "system",
+      triggeredBy: null,
       payloadJson: JSON.stringify({ source: params.source }),
     });
 
@@ -376,7 +380,7 @@ export async function onAppointmentBooked(params: {
       toRole: "consultant",
       fromUserId: current?.assignedUserId ?? null,
       toUserId: consultantId ?? null,
-      triggeredBy: params.triggeredByUserId ? String(params.triggeredByUserId) : "system",
+      triggeredBy: params.triggeredByUserId ?? null,
       payloadJson: JSON.stringify({ when: params.when, appointmentType: params.appointmentType }),
     });
 
@@ -394,8 +398,146 @@ export async function onAppointmentBooked(params: {
       customerId: params.customerId,
       priority: "high",
     });
+
+    // Drain any post-Roadmap follow-up drafts queued for this customer —
+    // the appointment is now the next concrete touchpoint.
+    await onCustomerEngaged(params.customerId, "appointment_scheduled");
+
+    // Customer-facing confirmation — affluent-voice stewardship copy
+    // (per Customer Success Charter, 2026-04-25). Best-effort; the
+    // appointment is already committed to the DB.
+    void sendAppointmentConfirmationToCustomer({
+      customerId: params.customerId,
+      when: params.when,
+      appointmentType: params.appointmentType,
+      consultantUserId: consultantId,
+      opportunityId: params.opportunityId,
+    });
   } catch (err) {
     console.error("[leadRouting] onAppointmentBooked error:", err);
+  }
+}
+
+/**
+ * Generic "customer chose a path" hook. Used by appointment booking,
+ * subscription enrollment, explicit decline, and inbound replies. Currently
+ * just drains the Lead Nurturer's pending drafts — extend here for any
+ * future cadence cancellation needs.
+ */
+export async function onCustomerEngaged(
+  customerId: string,
+  reason: EngagementCancelReason,
+): Promise<void> {
+  try {
+    await cancelPendingFollowupsForCustomer(customerId, reason);
+  } catch (err) {
+    console.error("[leadRouting] onCustomerEngaged error:", err);
+  }
+}
+
+/**
+ * Send the customer-facing appointment confirmation. Pulls customer email +
+ * address from `customers`, consultant name from `users`, and renders the
+ * `appointment_confirmed` (or type-specific) email template. Falls back to
+ * inline HTML if the template seed has not been re-run.
+ */
+async function sendAppointmentConfirmationToCustomer(params: {
+  customerId: string;
+  when: string;
+  appointmentType: "baseline" | "consultation";
+  consultantUserId: number | null;
+  opportunityId: string;
+}): Promise<void> {
+  try {
+    const db = await getDb();
+    if (!db) return;
+    const [c] = await db.select().from(customers).where(eq(customers.id, params.customerId)).limit(1);
+    if (!c?.email) return;
+    const firstName = (c.firstName ?? c.displayName ?? "").trim().split(/\s+/)[0] || "there";
+
+    let consultantName = "your Handy Pioneers consultant";
+    if (params.consultantUserId) {
+      const [u] = await db.select().from(users).where(eq(users.id, params.consultantUserId)).limit(1);
+      if (u?.name) consultantName = u.name;
+    }
+
+    const address = [c.street, c.city, c.state].filter(Boolean).join(", ") || "your home";
+    const portalUrl = process.env.PORTAL_BASE_URL ?? "https://client.handypioneers.com";
+
+    // Parse the `when` ISO/string the schedule subsystem hands us. If parsing
+    // fails (free-text label), fall back to the raw string.
+    const dt = new Date(params.when);
+    const valid = !Number.isNaN(dt.getTime());
+    const appointmentDate = valid
+      ? dt.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })
+      : params.when;
+    const appointmentTime = valid
+      ? dt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
+      : "";
+    const appointmentDuration =
+      params.appointmentType === "baseline" ? "90 minutes to two hours" : "45 to 60 minutes";
+
+    const templateKey =
+      params.appointmentType === "baseline" ? "appt_baseline_scheduled" : "appt_consultation_scheduled";
+    const { renderEmailTemplate } = await import("./emailTemplates");
+    const tpl = await renderEmailTemplate(templateKey, {
+      customerFirstName: firstName,
+      appointmentDate,
+      appointmentTime,
+      appointmentAddress: address,
+      consultantName,
+      appointmentDuration,
+      portalUrl,
+    });
+
+    // Generic fallback if the type-specific template hasn't been seeded yet.
+    const generic = !tpl
+      ? await renderEmailTemplate("appointment_confirmed", {
+          customerFirstName: firstName,
+          appointmentDate,
+          appointmentTime,
+          appointmentAddress: address,
+          consultantName,
+          appointmentDuration,
+          portalUrl,
+        })
+      : null;
+
+    const subject =
+      tpl?.subject ?? generic?.subject ?? `Your visit on ${appointmentDate} is confirmed`;
+    const html =
+      tpl?.html ??
+      generic?.html ??
+      `<p>${firstName},</p>
+<p>Your visit with Handy Pioneers is confirmed.</p>
+<ul>
+  <li><strong>When:</strong> ${appointmentDate}${appointmentTime ? ` at ${appointmentTime}` : ""}</li>
+  <li><strong>Where:</strong> ${address}</li>
+  <li><strong>Visiting:</strong> ${consultantName}</li>
+  <li><strong>Length:</strong> approximately ${appointmentDuration}</li>
+</ul>
+<p>This is a stewardship conversation, not a presentation. We will walk your home with you, listen to what you have in mind, and share what a proper standard of care looks like for the project ahead.</p>
+<p>Need to adjust the time? Reply to this email or call (360) 241-5718.</p>
+<p>— The Handy Pioneers Team</p>`;
+
+    const { sendEmail, isEmailSenderReady } = await import("./gmail");
+    if (isEmailSenderReady()) {
+      await sendEmail({ to: c.email, subject, html }).catch((e) =>
+        console.warn("[appointment ack] email failed:", e),
+      );
+    }
+
+    // Optional SMS — only if the customer opted in to notifications.
+    if (c.sendNotifications && c.mobilePhone && isTwilioConfigured()) {
+      const smsBody = appointmentTime
+        ? `${firstName}, your Handy Pioneers visit is confirmed for ${appointmentDate} at ${appointmentTime}. ${consultantName} will see you. (360) 241-5718 if anything changes.`
+        : `${firstName}, your Handy Pioneers visit is confirmed for ${appointmentDate}. ${consultantName} will see you. (360) 241-5718 if anything changes.`;
+      await sendSms(c.mobilePhone, smsBody).catch((e) =>
+        console.warn("[appointment ack] sms failed:", e),
+      );
+    }
+  } catch (err) {
+    console.warn("[appointment ack] errored:", err);
   }
 }
 
@@ -434,7 +576,7 @@ export async function onSaleSigned(params: {
       toRole: "project_manager",
       fromUserId: current?.assignedUserId ?? null,
       toUserId: pmId ?? null,
-      triggeredBy: params.triggeredByUserId ? String(params.triggeredByUserId) : "system",
+      triggeredBy: params.triggeredByUserId ?? null,
       payloadJson: JSON.stringify({ value: params.value }),
     });
 
@@ -485,7 +627,7 @@ export async function onReassign(params: {
       toRole: params.toRole,
       fromUserId: current?.assignedUserId ?? null,
       toUserId: params.toUserId,
-      triggeredBy: params.triggeredByUserId ? String(params.triggeredByUserId) : "system",
+      triggeredBy: params.triggeredByUserId ?? null,
     });
 
     const customerName = await resolveCustomerName(current?.customerId ?? null);
@@ -589,6 +731,10 @@ export async function countUnreadForUser(userId: number) {
 export async function markNotificationRead(id: number) {
   const db = await getDb();
   if (!db) return;
+  // Bug 3 fix (2026-04-27): readAt is a TIMESTAMP column (migration 0061).
+  // Passing `new Date().toISOString()` produced an ISO string that strict-mode
+  // MySQL rejected, leaving readAt NULL and the unread count stuck. Pass a
+  // Date so drizzle serialises it correctly.
   await db
     .update(notifications)
     .set({ readAt: new Date() })

@@ -99,6 +99,12 @@ export default function AdminLogin() {
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? "Signing in…" : "Sign in"}
           </Button>
+
+          <p className="text-xs text-gray-500 text-center">
+            <a href="/forgot-password" className="underline hover:text-gray-700">
+              Forgot password?
+            </a>
+          </p>
         </form>
 
         <p className="mt-8 text-xs text-gray-400 max-w-sm">

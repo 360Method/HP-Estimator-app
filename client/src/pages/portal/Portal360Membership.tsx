@@ -171,6 +171,68 @@ function RecRow({ rec, onRequest }: {
   );
 }
 
+// ─── Annual Home Health Report Opt-In ────────────────────────────────────────
+// Default OFF (Customer Success Charter §5). When the AI Annual Valuation seat
+// is built out, it reads this flag to schedule the report on the member's
+// onboarding anniversary.
+function AnnualValuationOptIn({ membershipId, initialOptIn }: { membershipId: number; initialOptIn: boolean }) {
+  const [optIn, setOptIn] = useState(initialOptIn);
+  const [pending, setPending] = useState(false);
+  const utils = trpc.useUtils();
+  const mutation = trpc.portal.setAnnualValuationOptIn.useMutation({
+    onSuccess: ({ optIn }) => {
+      setOptIn(optIn);
+      toast.success(optIn ? "Annual Home Health Report enrolled." : "Annual Home Health Report opt-out saved.");
+      utils.portal.getMembership360.invalidate();
+    },
+    onError: (err) => {
+      toast.error(err.message ?? "Could not save your preference.");
+      setOptIn(initialOptIn);
+    },
+    onSettled: () => setPending(false),
+  });
+
+  const toggle = () => {
+    if (pending) return;
+    setPending(true);
+    const next = !optIn;
+    setOptIn(next);
+    mutation.mutate({ membershipId, optIn: next });
+  };
+
+  return (
+    <div className="rounded-xl border border-[#1a2e1a]/15 bg-gradient-to-br from-[#fafaf7] to-[#f4f1e8] p-4 mb-5">
+      <div className="flex items-start gap-3">
+        <div className="w-9 h-9 rounded-full bg-white border border-[#c8922a]/30 flex items-center justify-center shrink-0">
+          <Shield className="w-4 h-4 text-[#1a2e1a]" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-[#1a2e1a]">Annual Home Health Report</p>
+          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+            A comprehensive valuation of your property's standard of care, delivered each year on your membership anniversary. Members can opt in at any time.
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={optIn}
+          onClick={toggle}
+          disabled={pending}
+          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#c8922a]/40 focus:ring-offset-2 ${
+            optIn ? "bg-[#1a2e1a]" : "bg-gray-300"
+          } ${pending ? "opacity-60" : ""}`}
+        >
+          <span
+            className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+              optIn ? "translate-x-5" : "translate-x-0"
+            }`}
+          />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── NON-MEMBER FUNNEL ────────────────────────────────────────────────────────
 
 // ─── Per-tier task lists (for popup) ────────────────────────────────────────
@@ -1029,6 +1091,9 @@ export default function Portal360Membership() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Annual Home Health Report opt-in */}
+        <AnnualValuationOptIn membershipId={membership.id} initialOptIn={!!(membership as any).annualValuationOptIn} />
 
         {/* Upgrade nudge */}
         {canUpgrade && (

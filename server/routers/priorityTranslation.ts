@@ -2,23 +2,12 @@
  * Priority Translation router — lead-magnet intake + processing + portal.
  *
  * Procedures:
- *   submit     (public)    — homeowner posts form + PDF (multipart handled by
- *                            the Express wrapper; the tRPC call receives the
- *                            already-parsed fields and pdfStoragePath).
+ *   submit     (public)    — homeowner posts form + PDF URL. Creates portal
+ *                            account + property + health record + translation
+ *                            row, then fires processing inline (no queue needed).
  *   getStatus  (protected) — portal user checks where their translation is.
- *   process    (internal)  — worker procedure triggered from the queue; runs
- *                            Claude, renders PDF, sends email. Not exposed to
- *                            the client; callers must pass INTERNAL_WORKER_KEY.
- *
- * WIRING (deferred pending broken-git resolution):
- *   - Import path `../_core/trpc` assumes server/_core/trpc.ts is restored.
- *   - Import path `../db` assumes server/db.ts is restored.
- *   - Add to server/routers.ts:
- *       import { priorityTranslationRouter } from "./routers/priorityTranslation";
- *       appRouter: priorityTranslation: priorityTranslationRouter
- *   - Express wrapper needs a multipart endpoint that persists the PDF to the
- *     Railway volume (or R2 if configured), then calls tRPC.submit with the
- *     storage path. See PRIORITY_TRANSLATION_BACKEND.md.
+ *   process    (internal)  — explicit worker trigger (queue-friendly future path).
+ *                            Guarded by INTERNAL_WORKER_KEY.
  */
 
 import { z } from "zod";
@@ -29,6 +18,8 @@ import { getDb } from "../db";
 import {
   priorityTranslations,
   homeHealthRecords,
+  portalProperties,
+  portalAccounts,
   type DbPriorityTranslation,
 } from "../../drizzle/schema.priorityTranslation";
 import {
@@ -45,6 +36,11 @@ import {
 } from "../lib/priorityTranslation/processor";
 import { renderPriorityTranslationPdf } from "../lib/priorityTranslation/pdf";
 import { sendPriorityTranslationReady } from "../lib/priorityTranslation/email";
+import { notifyOwner } from "../_core/notification";
+import { findCustomerByEmail, createCustomer, createOpportunity } from "../db";
+import { onLeadCreated } from "../leadRouting";
+import { scheduleRoadmapFollowup } from "../lib/leadNurturer/roadmapFollowup";
+import { nanoid } from "nanoid";
 
 // ─── Input schemas ──────────────────────────────────────────────────────────
 const submitInput = z.object({
@@ -59,12 +55,180 @@ const submitInput = z.object({
   source: z.string().default("priority_translation_lead_magnet"),
 });
 
+// ─── Core processing logic (called from submit + process endpoint) ───────────
+
+/**
+ * Loads the inspection PDF as a Buffer.
+ * Supports a Railway-volume file path or any publicly reachable URL.
+ */
+async function loadPdfBuffer(args: {
+  pdfStoragePath: string | null;
+  reportUrl: string | null;
+}): Promise<Buffer> {
+  if (args.pdfStoragePath) {
+    const { readFile } = await import("fs/promises");
+    return readFile(args.pdfStoragePath);
+  }
+  if (args.reportUrl) {
+    const res = await fetch(args.reportUrl);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch PDF from ${args.reportUrl}: HTTP ${res.status}`);
+    }
+    const buf = await res.arrayBuffer();
+    return Buffer.from(buf);
+  }
+  throw new Error("Neither pdfStoragePath nor reportUrl is set on this translation row");
+}
+
+async function resolvePropertyAddress(db: any, propertyId: string): Promise<string> {
+  const rows = await db
+    .select()
+    .from(portalProperties)
+    .where(eq(portalProperties.id, propertyId))
+    .limit(1);
+  const p = rows[0];
+  if (!p) return "";
+  return [p.street, p.city, p.state, p.zip].filter(Boolean).join(", ");
+}
+
+async function resolveFirstName(db: any, portalAccountId: string): Promise<string> {
+  const rows = await db
+    .select()
+    .from(portalAccounts)
+    .where(eq(portalAccounts.id, portalAccountId))
+    .limit(1);
+  return rows[0]?.firstName ?? "";
+}
+
+async function resolveEmail(db: any, portalAccountId: string): Promise<string> {
+  const rows = await db
+    .select()
+    .from(portalAccounts)
+    .where(eq(portalAccounts.id, portalAccountId))
+    .limit(1);
+  return rows[0]?.email ?? "";
+}
+
+/**
+ * Look up the CRM customer for a portal account.
+ * Uses portalAccount.customerId if set; falls back to email match.
+ */
+async function resolveCrmCustomerId(db: any, portalAccountId: string): Promise<string | null> {
+  const { customers } = await import("../../drizzle/schema");
+  const acctRows = await db
+    .select()
+    .from(portalAccounts)
+    .where(eq(portalAccounts.id, portalAccountId))
+    .limit(1);
+  const acct = acctRows[0];
+  if (!acct) return null;
+  if (acct.customerId) return acct.customerId;
+  if (!acct.email) return null;
+  const match = await db
+    .select()
+    .from(customers)
+    .where(eq(customers.email, acct.email.toLowerCase()))
+    .limit(1);
+  return match[0]?.id ?? null;
+}
+
+/**
+ * Runs the full 6-step processing pipeline for one translation row.
+ * Safe to call fire-and-forget (catches and records failures).
+ */
+export async function runPriorityTranslation(db: any, translationId: string): Promise<void> {
+  const rows = await db
+    .select()
+    .from(priorityTranslations)
+    .where(eq(priorityTranslations.id, translationId))
+    .limit(1);
+  const row: DbPriorityTranslation | undefined = rows[0];
+  if (!row) throw new Error(`Translation ${translationId} not found`);
+
+  try {
+    // 1. Load PDF buffer.
+    const pdfBuffer = await loadPdfBuffer({
+      pdfStoragePath: row.pdfStoragePath ?? null,
+      reportUrl: row.reportUrl ?? null,
+    });
+
+    // 2. Call Claude (PDF passed natively — no text extraction needed).
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) throw new Error("ANTHROPIC_API_KEY not configured");
+    const propertyAddress = await resolvePropertyAddress(db, row.propertyId);
+    const claudeResponse = await callClaudeForTranslation({ propertyAddress, pdfBuffer, apiKey });
+
+    // 3. Merge findings into home health record.
+    if (row.homeHealthRecordId) {
+      const existing = await db
+        .select()
+        .from(homeHealthRecords)
+        .where(eq(homeHealthRecords.id, row.homeHealthRecordId))
+        .limit(1);
+      const merged = mergeFindings(existing[0]?.findings ?? [], claudeResponse.findings, row.id);
+      await db
+        .update(homeHealthRecords)
+        .set({ findings: merged, summary: claudeResponse.summary_1_paragraph, updatedAt: new Date() })
+        .where(eq(homeHealthRecords.id, row.homeHealthRecordId));
+    }
+
+    // 4. Render branded output PDF.
+    const firstName = await resolveFirstName(db, row.portalAccountId);
+    const pdfOut = await renderPriorityTranslationPdf({ firstName, propertyAddress, claudeResponse });
+
+    // 5. Issue magic link and send email with PDF attached.
+    const portalBaseUrl = process.env.PORTAL_BASE_URL ?? "https://pro.handypioneers.com";
+    const link = await issueMagicLink(db, { portalAccountId: row.portalAccountId, portalBaseUrl });
+    const resendKey = process.env.RESEND_API_KEY;
+    if (!resendKey) throw new Error("RESEND_API_KEY not configured");
+    const toEmail = await resolveEmail(db, row.portalAccountId);
+    await sendPriorityTranslationReady({
+      apiKey: resendKey,
+      to: toEmail,
+      firstName,
+      magicLinkUrl: link.url,
+      pdfBuffer: pdfOut,
+      propertyAddress,
+    });
+
+    // 6. Mark completed.
+    await db
+      .update(priorityTranslations)
+      .set({ status: "completed", claudeResponse, deliveredAt: new Date(), updatedAt: new Date() })
+      .where(eq(priorityTranslations.id, row.id));
+
+    // 7. Schedule Path B nurture follow-up cadence.
+    try {
+      const customerId = await resolveCrmCustomerId(db, row.portalAccountId);
+      if (customerId) {
+        await scheduleRoadmapFollowup({
+          customerId,
+          portalAccountId: row.portalAccountId,
+          homeHealthRecordId: row.homeHealthRecordId,
+          recipientEmail: toEmail,
+        });
+      } else {
+        console.warn(`[PT] no CRM customer for portal account ${row.portalAccountId}; skipping follow-up cadence`);
+      }
+    } catch (followupErr) {
+      console.error("[PT] scheduleRoadmapFollowup failed:", followupErr);
+    }
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    await db
+      .update(priorityTranslations)
+      .set({ status: "failed", failureReason: reason, updatedAt: new Date() })
+      .where(eq(priorityTranslations.id, row.id))
+      .catch(() => null);
+    throw err;
+  }
+}
+
 // ─── Router ─────────────────────────────────────────────────────────────────
 export const priorityTranslationRouter = router({
   /**
-   * Public. Homeowner submits the form. We create the portal account +
-   * property + health record + translation row in submitted state, then
-   * enqueue the async worker. Response is the translation id.
+   * Public. Homeowner submits the form. We create portal account + property +
+   * health record + translation row, then fire processing inline.
    */
   submit: publicProcedure.input(submitInput).mutation(async ({ input }) => {
     const db = await getDb();
@@ -107,24 +271,70 @@ export const priorityTranslationRouter = router({
       pdfStoragePath: input.pdfStoragePath ?? null,
       reportUrl: input.reportUrl ?? null,
       notes: input.notes ?? null,
-      status: "submitted",
+      status: "processing",
     });
 
-    // Enqueue async processing. In dev, call directly; in prod, push to a
-    // queue. Current stub just flips status to "processing" so the UI has
-    // something to poll until the worker lands.
-    await db
-      .update(priorityTranslations)
-      .set({ status: "processing", updatedAt: new Date() })
-      .where(eq(priorityTranslations.id, id));
+    // Create or match a CRM customer so the lead appears in the pipeline.
+    let crmCustomer = await findCustomerByEmail(input.email);
+    if (!crmCustomer) {
+      crmCustomer = await createCustomer({
+        id: nanoid(),
+        firstName: input.firstName,
+        lastName: input.lastName,
+        displayName: `${input.firstName} ${input.lastName}`.trim(),
+        email: input.email.toLowerCase().trim(),
+        mobilePhone: input.phone,
+        street: parsed.street,
+        city: parsed.city,
+        state: parsed.state,
+        zip: parsed.zip,
+        customerType: "homeowner",
+        leadSource: "Priority Translation",
+        sendNotifications: true,
+        tags: "[]",
+      });
+    }
 
-    // TODO: enqueue Path B nurture Sequence 2 here. Depends on the
-    // (currently missing from origin/main) sequence runner module.
+    // Create a pipeline lead so the nurturer can follow up.
+    const leadId = nanoid();
+    await createOpportunity({
+      id: leadId,
+      customerId: crmCustomer.id,
+      area: "lead",
+      stage: "New Lead",
+      title: `Priority Translation — ${input.propertyAddress}`,
+      notes: `Homeowner submitted inspection report via Priority Translation lead magnet.\nEmail: ${input.email} | Phone: ${input.phone}\nPortal account: ${account.id} | Translation: ${id}`,
+      archived: false,
+    });
+
+    // Assign to nurturer + send internal notification.
+    onLeadCreated({
+      opportunityId: leadId,
+      customerId: crmCustomer.id,
+      title: `Priority Translation — ${input.propertyAddress}`,
+      source: "priority_translation",
+      priority: "high",
+    }).catch((e) => console.error("[PT] onLeadCreated error:", e));
+
+    // Also ping owner via notifyOwner (belt-and-suspenders).
+    notifyOwner({
+      title: `New Priority Translation — ${input.firstName} ${input.lastName}`,
+      content: `${input.email} submitted an inspection report for ${input.propertyAddress}. Processing now — they'll receive the PDF within a few minutes.`,
+    }).catch((e) => console.warn("[PT] notifyOwner failed:", e));
+
+    // Fire processing in the background — no queue needed at current volume.
+    const capturedId = id;
+    const capturedDb = db;
+    setImmediate(() => {
+      runPriorityTranslation(capturedDb, capturedId).catch((err) => {
+        console.error(`[PT] Background processing failed for ${capturedId}:`, err);
+      });
+    });
 
     return { id, portalAccountId: account.id, status: "processing" as const };
   }),
 
-  /** Portal user checks a specific translation's state. */
+  /** Portal user polls a specific translation's state. */
   getStatus: protectedProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ input, ctx }) => {
@@ -139,7 +349,6 @@ export const priorityTranslationRouter = router({
       const row = rows[0];
       if (!row) throw new TRPCError({ code: "NOT_FOUND" });
 
-      // Portal users may only see their own translations.
       const portalAccountId = (ctx as any)?.session?.portalAccountId;
       if (portalAccountId && row.portalAccountId !== portalAccountId) {
         throw new TRPCError({ code: "FORBIDDEN" });
@@ -154,12 +363,8 @@ export const priorityTranslationRouter = router({
     }),
 
   /**
-   * Internal worker. Called from the queue consumer. Pulls the translation
-   * row, extracts report text, calls Claude, renders PDF, writes back to
-   * home_health_record, issues a magic link, and sends the email.
-   *
-   * Guarded by a shared secret (INTERNAL_WORKER_KEY env) rather than a user
-   * session so the queue runner can trigger it.
+   * Internal worker trigger. Guarded by INTERNAL_WORKER_KEY.
+   * Useful for a queue runner or manual retry from an admin panel.
    */
   process: publicProcedure
     .input(z.object({ id: z.string(), workerKey: z.string() }))
@@ -171,134 +376,10 @@ export const priorityTranslationRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
-      const rows = await db
-        .select()
-        .from(priorityTranslations)
-        .where(eq(priorityTranslations.id, input.id))
-        .limit(1);
-      const row = rows[0];
-      if (!row) throw new TRPCError({ code: "NOT_FOUND" });
-
-      try {
-        // 1. Load report text.
-        // TODO(wire-up): read from Railway volume or R2 via pdfStoragePath,
-        // or fetch + extract text from reportUrl. Parsing strategy:
-        //   • PDF → pdf-parse or pdfjs-dist
-        //   • URL → puppeteer render + text extraction
-        const reportText = await loadReportText({
-          pdfStoragePath: row.pdfStoragePath,
-          reportUrl: row.reportUrl,
-        });
-
-        // 2. Claude.
-        const apiKey = process.env.ANTHROPIC_API_KEY;
-        if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set");
-        const claudeResponse = await callClaudeForTranslation({
-          propertyAddress: await loadPropertyAddress(db, row.propertyId),
-          reportText,
-          apiKey,
-        });
-
-        // 3. Merge into health record.
-        if (row.homeHealthRecordId) {
-          const existing = await db
-            .select()
-            .from(homeHealthRecords)
-            .where(eq(homeHealthRecords.id, row.homeHealthRecordId))
-            .limit(1);
-          const merged = mergeFindings(existing[0]?.findings ?? [], claudeResponse.findings, row.id);
-          await db
-            .update(homeHealthRecords)
-            .set({
-              findings: merged,
-              summary: claudeResponse.summary_1_paragraph,
-              updatedAt: new Date(),
-            })
-            .where(eq(homeHealthRecords.id, row.homeHealthRecordId));
-        }
-
-        // 4. Render PDF.
-        const firstName = await loadFirstName(db, row.portalAccountId);
-        const pdfBuffer = await renderPriorityTranslationPdf({
-          firstName,
-          propertyAddress: await loadPropertyAddress(db, row.propertyId),
-          claudeResponse,
-        });
-
-        // TODO: persist pdfBuffer to storage, set outputPdfPath.
-
-        // 5. Magic link + email.
-        const portalBaseUrl = process.env.PORTAL_BASE_URL || "https://pro.handypioneers.com";
-        const link = await issueMagicLink(db, {
-          portalAccountId: row.portalAccountId,
-          portalBaseUrl,
-        });
-        const resendKey = process.env.RESEND_API_KEY;
-        if (!resendKey) throw new Error("RESEND_API_KEY not set");
-        await sendPriorityTranslationReady({
-          apiKey: resendKey,
-          to: await loadEmail(db, row.portalAccountId),
-          firstName,
-          magicLinkUrl: link.url,
-          pdfBuffer,
-          propertyAddress: await loadPropertyAddress(db, row.propertyId),
-        });
-
-        // 6. Mark completed.
-        await db
-          .update(priorityTranslations)
-          .set({
-            status: "completed",
-            claudeResponse,
-            deliveredAt: new Date(),
-            updatedAt: new Date(),
-          })
-          .where(eq(priorityTranslations.id, row.id));
-
-        return { ok: true };
-      } catch (err) {
-        await db
-          .update(priorityTranslations)
-          .set({
-            status: "failed",
-            failureReason: err instanceof Error ? err.message : String(err),
-            updatedAt: new Date(),
-          })
-          .where(eq(priorityTranslations.id, row.id));
-        throw err;
-      }
+      await runPriorityTranslation(db, input.id);
+      return { ok: true };
     }),
 });
-
-// ─── Local helpers (kept inline for now; extract if reused) ─────────────────
-async function loadReportText(_args: {
-  pdfStoragePath: string | null;
-  reportUrl: string | null;
-}): Promise<string> {
-  // TODO: implement PDF text extraction + URL fetch. Return inspection body
-  // as plain text for Claude. Stub below keeps the module type-checking.
-  throw new Error("loadReportText not yet implemented — add pdf-parse or pdfjs-dist");
-}
-
-async function loadPropertyAddress(db: any, propertyId: string): Promise<string> {
-  const { portalProperties } = await import("../../drizzle/schema.priorityTranslation");
-  const rows = await db.select().from(portalProperties).where(eq(portalProperties.id, propertyId)).limit(1);
-  const p = rows[0];
-  if (!p) return "";
-  return [p.street, p.city, p.state, p.zip].filter(Boolean).join(", ");
-}
-
-async function loadFirstName(db: any, portalAccountId: string): Promise<string> {
-  const { portalAccounts } = await import("../../drizzle/schema.priorityTranslation");
-  const rows = await db.select().from(portalAccounts).where(eq(portalAccounts.id, portalAccountId)).limit(1);
-  return rows[0]?.firstName ?? "";
-}
-
-async function loadEmail(db: any, portalAccountId: string): Promise<string> {
-  const { portalAccounts } = await import("../../drizzle/schema.priorityTranslation");
-  const rows = await db.select().from(portalAccounts).where(eq(portalAccounts.id, portalAccountId)).limit(1);
-  return rows[0]?.email ?? "";
-}
 
 export type PriorityTranslationRouter = typeof priorityTranslationRouter;
 export type DbPriorityTranslationRow = DbPriorityTranslation;
