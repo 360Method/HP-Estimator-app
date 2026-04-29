@@ -34,6 +34,7 @@ export default function VoiceCallPanel({ toNumber, toName, onCallEnd }: VoiceCal
   const [duration, setDuration] = useState(0);
   const [incomingCall, setIncomingCall] = useState<Call | null>(null);
   const [deviceError, setDeviceError] = useState<string | null>(null);
+  const [deviceReady, setDeviceReady] = useState(false);
   const [showDialPad, setShowDialPad] = useState(false);
   const deviceRef = useRef<Device | null>(null);
   const activeCallRef = useRef<Call | null>(null);
@@ -58,26 +59,46 @@ export default function VoiceCallPanel({ toNumber, toName, onCallEnd }: VoiceCal
     if (deviceRef.current) {
       try {
         deviceRef.current.updateToken(tokenData.token);
+        console.log('[Voice] Token refreshed in place');
         return;
       } catch (err) {
         console.warn('[Voice] updateToken failed, recreating device:', err);
-        deviceRef.current.destroy();
+        try { deviceRef.current.destroy(); } catch { /* ignore */ }
         deviceRef.current = null;
+        setDeviceReady(false);
       }
     }
 
     setDeviceError(null);
-
-    const device = new Device(tokenData.token, {
-      logLevel: 1,
-      codecPreferences: ['opus', 'pcmu'] as any,
-      // 'roaming' lets Twilio pick the closest edge automatically.
-      edge: 'roaming',
-    });
+    setDeviceReady(false);
+    let device: Device;
+    try {
+      device = new Device(tokenData.token, {
+        logLevel: 1,
+        codecPreferences: ['opus', 'pcmu'] as any,
+        // Edge selection: 'roaming' relies on a separate HTTP discovery call
+        // to find the closest edge. If that call is blocked / slow / DNS
+        // fails, the SDK logs "Preferred URI not set; backing off" and the
+        // WebSocket times out. We hardcode an explicit list ordered by
+        // expected proximity to the PNW (umatilla=us-west-or, ashburn=us-east-va,
+        // sao-paulo + others as fallbacks) — the SDK tries them in order.
+        edge: ['umatilla', 'ashburn', 'roaming'] as any,
+      });
+    } catch (err: any) {
+      console.error('[Voice] Device constructor threw:', err);
+      setDeviceError(`Voice init failed: ${err?.message ?? String(err)}`);
+      return;
+    }
 
     device.on('registered', () => {
-      console.log('[Voice] Device registered');
+      console.log('[Voice] Device registered — ready to call');
       setDeviceError(null);
+      setDeviceReady(true);
+    });
+
+    device.on('unregistered', () => {
+      console.log('[Voice] Device unregistered');
+      setDeviceReady(false);
     });
 
     device.on('incoming', (call: Call) => {
@@ -93,26 +114,42 @@ export default function VoiceCallPanel({ toNumber, toName, onCallEnd }: VoiceCal
       // err may be a TwilioError object (with .code) or a plain Error
       const code = err?.code ?? err?.twilioError?.code ?? 0;
       const msg = err?.message ?? err?.twilioError?.message ?? String(err);
-      console.error('[Voice] Device error:', err);
+      console.error(`[Voice] Device error (code ${code}):`, err);
 
       if (code === 31202 || code === 20101) {
-        // JWT signature validation failed — token may be stale or API key mismatch
+        // JWT signature validation failed — token stale or API key mismatch.
         setDeviceError('Voice token invalid. Click to retry.');
+      } else if (code === 31204 || code === 20104) {
+        // Token expired
+        setDeviceError('Voice token expired. Click to retry.');
       } else if (code === 53000) {
         // Generic signaling error — usually transient
         setDeviceError('Signaling error. Click to retry.');
+      } else if (code === 31005) {
+        // WebSocket connection error
+        setDeviceError('Voice connection blocked (firewall?). Click to retry.');
       } else {
-        setDeviceError(msg || 'Voice error. Click to retry.');
+        setDeviceError(msg ? `${msg} (code ${code})` : 'Voice error. Click to retry.');
       }
+      setDeviceReady(false);
       setCallState('idle');
     });
 
-    device.register();
     deviceRef.current = device;
+    // register() is async — readiness is tracked via the 'registered' event
+    // above. We deliberately set the ref BEFORE register() so the cleanup can
+    // always destroy whatever was created.
+    device.register().catch((err) => {
+      console.error('[Voice] Device.register() rejected:', err);
+      setDeviceError(`Voice register failed: ${err?.message ?? String(err)}`);
+    });
 
     return () => {
-      device.destroy();
-      deviceRef.current = null;
+      try { device.destroy(); } catch { /* ignore */ }
+      if (deviceRef.current === device) {
+        deviceRef.current = null;
+        setDeviceReady(false);
+      }
     };
   }, [tokenData?.token]);
 
@@ -159,7 +196,13 @@ export default function VoiceCallPanel({ toNumber, toName, onCallEnd }: VoiceCal
   // ── Make call ────────────────────────────────────────────────────────────
   const makeCall = useCallback(async (number: string) => {
     if (!deviceRef.current) {
-      toast.error('Voice device not ready. Check Twilio configuration.');
+      toast.error('Voice device not initialized — refresh the page.');
+      console.error('[Voice] makeCall: deviceRef.current is null', { tokenData, deviceError });
+      return;
+    }
+    if (!deviceReady) {
+      toast.error('Voice device still connecting — try again in a few seconds.');
+      console.warn('[Voice] makeCall: device not yet registered');
       return;
     }
     setCallState('connecting');
@@ -171,10 +214,11 @@ export default function VoiceCallPanel({ toNumber, toName, onCallEnd }: VoiceCal
       wireCallEvents(call);
       setCallState('ringing');
     } catch (err: any) {
+      console.error('[Voice] connect() threw:', err);
       toast.error(`Failed to connect: ${err?.message ?? String(err)}`);
       setCallState('idle');
     }
-  }, [wireCallEvents]);
+  }, [wireCallEvents, deviceReady, tokenData, deviceError]);
 
   // ── Answer incoming call ──────────────────────────────────────────────────
   const answerCall = useCallback((call: Call) => {
@@ -250,20 +294,22 @@ export default function VoiceCallPanel({ toNumber, toName, onCallEnd }: VoiceCal
 
   // ── Idle state — show call button ─────────────────────────────────────────
   if (callState === 'idle' && toNumber) {
+    const initializing = !tokenData || !deviceReady;
     return (
       <Button
         size="sm"
         variant="outline"
         onClick={() => makeCall(toNumber)}
-        className="gap-2 text-emerald-600 border-emerald-200 hover:bg-emerald-50"
-        disabled={!tokenData}
+        className="gap-2 text-emerald-600 border-emerald-200 hover:bg-emerald-50 disabled:opacity-60"
+        disabled={initializing}
+        title={initializing ? 'Connecting to voice service…' : `Call ${toName || toNumber}`}
       >
-        {!tokenData ? (
+        {initializing ? (
           <Loader2 className="w-3.5 h-3.5 animate-spin" />
         ) : (
           <Phone className="w-3.5 h-3.5" />
         )}
-        Call {toName || toNumber}
+        {initializing ? 'Connecting…' : `Call ${toName || toNumber}`}
       </Button>
     );
   }
