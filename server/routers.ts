@@ -33,6 +33,7 @@ import { automationRulesRouter } from "./routers/automationRules";
 import { emailTemplatesRouter } from "./routers/emailTemplates";
 import { campaignsRouter } from "./routers/campaigns";
 import { priorityTranslationRouter } from "./routers/priorityTranslation";
+import { reengagementRouter } from "./routers/reengagement";
 import { agentDraftsRouter } from "./routers/agentDrafts";
 import { nurturerPlaybooksRouter } from "./routers/agentPlaybooks";
 import { portalRoadmapRouter } from "./routers/portalRoadmap";
@@ -87,6 +88,7 @@ export const appRouter = router({
   emailTemplates: emailTemplatesRouter,
   campaigns: campaignsRouter,
   priorityTranslation: priorityTranslationRouter,
+  reengagement: reengagementRouter,
   agentDrafts: agentDraftsRouter,
   nurturerPlaybooks: nurturerPlaybooksRouter,
   portalRoadmap: portalRoadmapRouter,

@@ -67,6 +67,7 @@ import WorkOrderDetail from "./pages/WorkOrderDetail";
 import Welcome360Page from "./pages/Welcome360Page";
 import AgentDraftsPage from "./pages/admin/AgentDraftsPage";
 import AgentPlaybooksPage from "./pages/admin/AgentPlaybooksPage";
+import ReengagementCampaignPage from "./pages/admin/ReengagementCampaignPage";
 
 // Admin pages (Phase 1 AI agent runtime + KPI dashboard)
 import AdminDashboard from "./pages/admin/AdminDashboard";
@@ -205,6 +206,9 @@ function Router() {
       {/* Lead Nurturer admin — drafts inbox + playbook editor */}
       <Route path="/admin/agents/drafts" component={AgentDraftsPage} />
       <Route path="/admin/agents/playbooks" component={AgentPlaybooksPage} />
+
+      {/* Admin: re-engagement campaign console */}
+      <Route path="/admin/marketing/reengagement-campaign" component={staffOnly(ReengagementCampaignPage)} />
 
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
