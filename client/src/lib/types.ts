@@ -258,7 +258,9 @@ export interface GlobalSettings {
   customTaxPct: number;
 }
 
-export type AppSection = 'customer' | 'opp-details' | 'sales' | 'calculator' | 'estimate' | 'present' | 'customers' | 'jobs' | 'job-details' | 'pipeline' | 'invoice' | 'dashboard' | 'schedule' | 'inbox' | 'reporting' | 'marketing' | 'requests' | 'three-sixty' | 'financials' | 'quickbooks';
+export type AppSection = 'customer' | 'opp-details' | 'sales' | 'calculator' | 'estimate' | 'present' | 'customers' | 'jobs' | 'job-details' | 'pipeline' | 'invoice' | 'dashboard' | 'schedule' | 'inbox' | 'reporting' | 'marketing' | 'leads' | 'three-sixty' | 'financials' | 'quickbooks'
+  // 'requests' is deprecated — kept in the union so old deep-links still type-check; the shell redirects to 'leads'.
+  | 'requests';
 
 // ── Schedule / Calendar Types ──────────────────────────────────
 
@@ -508,6 +510,10 @@ export interface EstimatorState {
   customers: Customer[];
   activeCustomerId: string | null;  // which customer is currently open
   customerNavSource: 'list' | 'search' | 'new' | 'direct' | null; // how we navigated to this customer
+  // When deep-linking from a notification, names a section inside the customer
+  // profile that should auto-scroll into view (e.g. 'pending-review',
+  // 'communications', 'ai-activity'). Cleared after consumption.
+  pendingFocus: string | null;
   // Invoices (working set for active customer)
   invoices: Invoice[];
   // Invoice counter for sequential numbering

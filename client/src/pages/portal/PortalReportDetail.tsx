@@ -6,12 +6,14 @@ import { trpc } from '@/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import PortalLayout from '@/components/PortalLayout';
 import {
   ArrowLeft,
   AlertTriangle,
   CheckCircle2,
   ClipboardList,
   Download,
+  Loader2,
   Wrench,
   ChevronDown,
   ChevronUp,
@@ -80,7 +82,13 @@ export default function PortalReportDetail() {
   );
 
   if (isLoading || !report) {
-    return <div className="container py-8 text-sm text-muted-foreground">Loading report…</div>;
+    return (
+      <PortalLayout>
+        <div className="container py-10 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="w-4 h-4 animate-spin" /> Tending to your report…
+        </div>
+      </PortalLayout>
+    );
   }
 
   const rd = report.reportData;
@@ -92,6 +100,7 @@ export default function PortalReportDetail() {
   const goodCount = items.filter(i => i.condition === 'good').length;
 
   return (
+    <PortalLayout>
     <div className="container py-6 max-w-2xl">
       {/* Header */}
       <div className="flex items-center gap-3 mb-4">
@@ -253,5 +262,6 @@ export default function PortalReportDetail() {
         </CardContent>
       </Card>
     </div>
+    </PortalLayout>
   );
 }

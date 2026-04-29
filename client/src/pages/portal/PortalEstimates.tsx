@@ -49,9 +49,18 @@ export default function PortalEstimates() {
             <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
           </div>
         ) : estimates.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+          <div className="flex flex-col items-center justify-center py-20 text-gray-500 max-w-sm mx-auto text-center">
             <ClipboardList className="w-16 h-16 mb-4 text-gray-300" />
-            <p className="text-base">No estimates yet</p>
+            <p className="text-base font-medium text-gray-700">Your estimates await</p>
+            <p className="text-sm mt-1 text-gray-500">
+              When we've prepared a project bid for your home, it will appear here for your review.
+            </p>
+            <button
+              onClick={() => navigate("/portal/request")}
+              className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-md bg-[#1a2e1a] hover:bg-[#2d4a2d] text-white text-sm font-semibold transition-colors"
+            >
+              Request a project consultation →
+            </button>
           </div>
         ) : (
           <div className="border border-gray-200 rounded-md overflow-hidden">

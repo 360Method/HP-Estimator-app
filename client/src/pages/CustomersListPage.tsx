@@ -543,7 +543,7 @@ export default function CustomersListPage() {
       </div>
 
       {/* ── Table ── */}
-      <div className="flex-1 overflow-auto px-6 pb-6">
+      <div className="flex-1 overflow-auto px-3 sm:px-6 pb-6">
         {totalActive === 0 ? (
           <div className="text-center py-20 border-2 border-dashed border-border rounded-xl mt-4">
             <UserPlus size={32} className="mx-auto mb-3 text-muted-foreground/40" />
@@ -554,7 +554,7 @@ export default function CustomersListPage() {
             </Button>
           </div>
         ) : (
-          <table className="w-full text-sm mt-2">
+          <table className="w-full text-sm mt-2 min-w-[640px]">
             <thead>
               <tr className="border-b border-border">
                 <th className="w-8 py-2 pr-2 text-left">

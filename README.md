@@ -43,7 +43,7 @@ The HP Field Estimator is a full-stack web application built on React 19 + Expre
 | API | tRPC 11 (type-safe end-to-end, no REST boilerplate) |
 | Backend | Express 4, Node.js, TypeScript |
 | Database | MySQL / TiDB via Drizzle ORM |
-| Auth | Manus OAuth (pro side) · Magic-link email (client portal) |
+| Auth | Email + bcrypt (pro side) · Magic-link email (client portal) |
 | Payments | Stripe (card), PayPal (JS SDK) |
 | Messaging | Twilio (SMS/Voice), Gmail API |
 | File Storage | S3-compatible object storage |
@@ -167,14 +167,12 @@ The Drizzle schema (`drizzle/schema.ts`) defines the following primary tables:
 
 ## Environment Variables
 
-All secrets are injected by the Manus platform at runtime. The following variables are available in server code via `server/_core/env.ts`:
+All secrets are injected by Railway at runtime. The following variables are available in server code via `server/_core/env.ts`:
 
 | Variable | Purpose |
 |---|---|
 | `DATABASE_URL` | MySQL/TiDB connection string |
 | `JWT_SECRET` | Session cookie signing |
-| `VITE_APP_ID` | Manus OAuth application ID |
-| `OAUTH_SERVER_URL` | Manus OAuth backend base URL |
 | `STRIPE_SECRET_KEY` | Stripe server-side key |
 | `STRIPE_WEBHOOK_SECRET` | Stripe webhook signature verification |
 | `VITE_STRIPE_PUBLISHABLE_KEY` | Stripe client-side key |
@@ -182,9 +180,9 @@ All secrets are injected by the Manus platform at runtime. The following variabl
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` | Twilio SMS/Voice |
 | `TWILIO_PHONE_NUMBER` | Outbound Twilio number |
 | `GMAIL_CLIENT_ID` / `GMAIL_CLIENT_SECRET` | Gmail OAuth |
-| `BUILT_IN_FORGE_API_KEY` / `BUILT_IN_FORGE_API_URL` | Manus built-in APIs (LLM, storage, notifications) |
+| `BUILT_IN_FORGE_API_KEY` / `BUILT_IN_FORGE_API_URL` | Optional upstream for LLM / maps / notifications proxy (legacy; services degrade gracefully if unset) |
 
-Do not commit `.env` files. Manage secrets through the Manus project settings panel.
+Do not commit `.env` files. Manage secrets through the Railway project settings panel. See `.env.example` for the full list.
 
 ---
 
@@ -241,18 +239,14 @@ When adding new features, add a corresponding test file following the pattern in
 
 ## Deployment
 
-This project is hosted on the Manus platform with automatic CI/CD. To deploy:
-
-1. Save a checkpoint from the Manus management UI (or via the agent).
-2. Click **Publish** in the management UI header.
+This project is hosted on Railway with automatic CI/CD. Pushing to `main` triggers a new build and deploy.
 
 The app is served at:
 
 - **Pro app:** `pro.handypioneers.com`
 - **Client portal:** `client.handypioneers.com`
-- **Fallback:** `handyfield-jkw2dpqj.manus.space`
 
-Do not attempt manual deployment to external providers — the Manus platform handles SSL, CDN, and environment injection automatically.
+SSL, CDN, and environment injection are handled by Railway. Manage env vars from the Railway project dashboard.
 
 ---
 

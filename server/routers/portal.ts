@@ -1,6 +1,6 @@
 /**
  * Portal router — all tRPC procedures for the customer portal.
- * Uses portal session cookies (hp_portal_session) for auth, NOT Manus OAuth.
+ * Uses portal session cookies (hp_portal_session) for auth, NOT staff auth.
  */
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
@@ -14,6 +14,7 @@ import {
   createPortalToken,
   findValidPortalToken,
   markPortalTokenUsed,
+  consumeRoadmapMagicLinkAsPortalCustomer,
   createPortalSession,
   findValidPortalSession,
   deletePortalSession,
@@ -152,7 +153,7 @@ const portalProcedure = publicProcedure.use(async ({ ctx, next }) => {
   return next({ ctx: { ...ctx, portalCustomer: customer } });
 });
 
-// HP staff procedure (requires Manus auth)
+// HP staff procedure (requires staff auth)
 const hpProcedure = protectedProcedure;
 
 // ─── ROUTER ───────────────────────────────────────────────────────────────────
@@ -207,18 +208,38 @@ export const portalRouter = router({
   verifyToken: portalPublicProcedure
     .input(z.object({ token: z.string() }))
     .mutation(async ({ input, ctx }) => {
-      const tokenRow = await findValidPortalToken(input.token);
-      if (!tokenRow || tokenRow.usedAt) {
-        throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid or expired link" });
+      // Two token-issuing systems live in parallel:
+      //   • portalTokens (legacy, int customerId → portalCustomers) — issued
+      //     by the booking/estimate/invoice flows.
+      //   • portalMagicLinks (varchar portalAccountId → portalAccounts) —
+      //     issued by the Roadmap Generator pipeline.
+      //
+      // Try the legacy table first (cheaper, common case); if no match, fall
+      // back to the Roadmap magic-link bridge below. Either way the homeowner
+      // ends up with a portalSession cookie on a portalCustomers row.
+
+      let resolvedCustomerId: number | null = null;
+      const legacyRow = await findValidPortalToken(input.token);
+      if (legacyRow && !legacyRow.usedAt) {
+        await markPortalTokenUsed(legacyRow.id);
+        resolvedCustomerId = legacyRow.customerId;
+      } else {
+        // Roadmap magic-link bridge.
+        const bridged = await consumeRoadmapMagicLinkAsPortalCustomer(input.token);
+        if (bridged) {
+          resolvedCustomerId = bridged.portalCustomerId;
+        }
       }
 
-      await markPortalTokenUsed(tokenRow.id);
+      if (!resolvedCustomerId) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Invalid or expired link" });
+      }
 
       const sessionToken = randomBytes(32).toString("hex");
       const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
 
       await createPortalSession({
-        customerId: tokenRow.customerId,
+        customerId: resolvedCustomerId,
         sessionToken,
         expiresAt,
       });
@@ -235,7 +256,7 @@ export const portalRouter = router({
         });
       }
 
-      const customer = await findPortalCustomerById(tokenRow.customerId);
+      const customer = await findPortalCustomerById(resolvedCustomerId);
       return { customer };
     }),
 
@@ -532,7 +553,7 @@ export const portalRouter = router({
         phone: (ctx.portalCustomer as any).phone ?? undefined,
         referenceNumber: inv.invoiceNumber,
         amount: `$${(input.amountPaid / 100).toFixed(2)}`,
-        description: inv.title ?? undefined,
+        description: (inv as any).title ?? undefined,
       }).catch(() => null);
       return { ok: true };
     }),
@@ -892,6 +913,25 @@ export const portalRouter = router({
         sentAt: new Date(),
       });
 
+      // Phase 5 trigger: invoice.created fans out to Cash Flow AI (forecast
+      // update) and Customer Success (post-create receipt draft). Per Marcin's
+      // decision: AT-CREATE only, no due/overdue chasers.
+      try {
+        const { emitAgentEvent } = await import("../lib/agentRuntime/triggerBus");
+        emitAgentEvent("invoice.created", {
+          invoiceId: invoice?.id,
+          invoiceNumber: input.invoiceNumber,
+          customerId: input.hpCustomerId ?? null,
+          portalCustomerId: customer.id,
+          customerEmail: customer.email,
+          customerName: customer.name,
+          amountDue: input.amountDue,
+          jobTitle: input.jobTitle,
+        }).catch(() => null);
+      } catch {
+        /* never break invoice creation because of agent fan-out */
+      }
+
       // Send magic link email
       const token = randomBytes(32).toString("hex");
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
@@ -1189,11 +1229,42 @@ export const portalRouter = router({
 
       // Auto-create CRM lead opportunity
       let newLeadId: string | undefined;
+      let hpCustomerIdForLead: string | undefined;
       try {
-        const { createOpportunity } = await import('../db');
+        const { createOpportunity, findCustomerByEmail, createCustomer } = await import('../db');
         const { randomBytes } = await import('crypto');
         newLeadId = randomBytes(8).toString('hex');
-        const hpCustomerId = ctx.portalCustomer.hpCustomerId ?? `portal-${ctx.portalCustomer.id}`;
+
+        // Bridge portal-only customers to a real CRM customer row so lead routing
+        // (and every downstream "open the customer profile" link) has something
+        // to resolve. If a portal customer has no hpCustomerId, find or create
+        // one by email.
+        let hpCustomerId = ctx.portalCustomer.hpCustomerId ?? null;
+        if (!hpCustomerId && ctx.portalCustomer.email) {
+          const existing = await findCustomerByEmail(ctx.portalCustomer.email);
+          if (existing) {
+            hpCustomerId = existing.id;
+          } else {
+            const newId = randomBytes(8).toString('hex');
+            const [first, ...rest] = (ctx.portalCustomer.name ?? '').trim().split(/\s+/);
+            const created = await createCustomer({
+              id: newId,
+              firstName: first ?? '',
+              lastName: rest.join(' '),
+              displayName: ctx.portalCustomer.name ?? ctx.portalCustomer.email,
+              email: ctx.portalCustomer.email.toLowerCase().trim(),
+              mobilePhone: ctx.portalCustomer.phone ?? '',
+              sendNotifications: true,
+              customerType: 'homeowner',
+              tags: '[]',
+              leadSource: 'Portal Service Request',
+            });
+            hpCustomerId = created.id;
+          }
+        }
+        if (!hpCustomerId) hpCustomerId = `portal-${ctx.portalCustomer.id}`;
+        hpCustomerIdForLead = hpCustomerId;
+
         const timelineLabel = input.timeline === 'asap' ? 'ASAP' : input.timeline === 'within_week' ? 'Within a week' : 'Flexible';
         await createOpportunity({
           id: newLeadId,
@@ -1211,6 +1282,29 @@ export const portalRouter = router({
         }
       } catch (e) {
         console.error('[Portal] Failed to create CRM lead from service request:', e);
+      }
+
+      // Route the lead through the standard pipeline so the Nurturer is
+      // assigned + notified, and any user-configured `lead_created`
+      // automations (auto-ack SMS, drip sequences, etc.) fire.
+      if (newLeadId && hpCustomerIdForLead) {
+        const { onLeadCreated } = await import('../leadRouting');
+        onLeadCreated({
+          opportunityId: newLeadId,
+          customerId: hpCustomerIdForLead,
+          title: `Portal service request — ${ctx.portalCustomer.name}`,
+          source: 'book_consultation',
+          priority: input.timeline === 'asap' ? 'high' : 'normal',
+        }).catch((e) => console.error('[leadRouting] onLeadCreated error:', e));
+
+        runAutomationsForTrigger('lead_created', {
+          customerName: ctx.portalCustomer.name,
+          customerFirstName: (ctx.portalCustomer.name ?? '').split(' ')[0] ?? '',
+          phone: ctx.portalCustomer.phone ?? '',
+          email: ctx.portalCustomer.email ?? '',
+          description: input.description,
+          referenceNumber: newLeadId,
+        }).catch((e) => console.error('[automation] lead_created error:', e));
       }
 
       // Notify HP team (in-app + SMS)
@@ -1233,6 +1327,34 @@ export const portalRouter = router({
       } catch (e) {
         console.error('[Portal] SMS alert failed:', e);
       }
+
+      // Customer auto-ack — affluent-voice "your request is in our care"
+      // (per Customer Success Charter, 2026-04-25). Best-effort.
+      void (async () => {
+        try {
+          const { renderEmailTemplate } = await import('../emailTemplates');
+          const { sendEmail, isEmailSenderReady } = await import('../gmail');
+          if (!isEmailSenderReady()) return;
+          const portalUrl = process.env.PORTAL_BASE_URL ?? 'https://client.handypioneers.com';
+          const firstName = (ctx.portalCustomer.name ?? '').split(' ')[0] || ctx.portalCustomer.name || 'there';
+          const tpl = await renderEmailTemplate('service_request_acknowledged', {
+            customerFirstName: firstName,
+            portalUrl,
+          });
+          const subject = tpl?.subject ?? `Your request is in our care, ${firstName}`;
+          const html = tpl?.html ?? `<p>${firstName},</p>
+<p>We have received your request and added it to your home's standard-of-care file.</p>
+<p>Your Concierge will review the details and reach out personally to align on next steps and timing — expect to hear from them within one business day.</p>
+<p>Your full home history is always available in your portal: <a href="${portalUrl}">${portalUrl}</a></p>
+<p>For anything time-sensitive, call us directly at (360) 241-5718.</p>
+<p>— The Handy Pioneers Team</p>`;
+          await sendEmail({ to: ctx.portalCustomer.email, subject, html }).catch((err) =>
+            console.warn('[service request ack] email failed:', err),
+          );
+        } catch (err) {
+          console.warn('[service request ack] errored:', err);
+        }
+      })();
 
       return { ok: true, id: req?.id, leadId: newLeadId };
     }),
@@ -2006,6 +2128,39 @@ export const portalRouter = router({
       allMemberships: membershipDetails,
     };
   }),
+
+  /**
+   * Member toggles their Annual Home Health Report opt-in. The toggle lives
+   * on threeSixtyMemberships.annualValuationOptIn and defaults to OFF
+   * (Customer Success Charter §5). The AI Annual Valuation seat reads this
+   * flag to decide whether to schedule the report on the member's onboarding
+   * anniversary.
+   */
+  setAnnualValuationOptIn: portalProcedure
+    .input(z.object({ membershipId: z.number(), optIn: z.boolean() }))
+    .mutation(async ({ input, ctx }) => {
+      const { getDb } = await import('../db');
+      const { threeSixtyMemberships } = await import('../../drizzle/schema');
+      const { eq, and } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
+
+      // Verify the membership belongs to this portal customer (defense in depth).
+      const stripeCustomerId = ctx.portalCustomer.stripeCustomerId;
+      if (!stripeCustomerId) throw new TRPCError({ code: 'NOT_FOUND', message: 'No membership on file' });
+      const [m] = await db
+        .select()
+        .from(threeSixtyMemberships)
+        .where(and(eq(threeSixtyMemberships.id, input.membershipId), eq(threeSixtyMemberships.stripeCustomerId, stripeCustomerId)))
+        .limit(1);
+      if (!m) throw new TRPCError({ code: 'NOT_FOUND', message: 'Membership not found for this account' });
+
+      await db
+        .update(threeSixtyMemberships)
+        .set({ annualValuationOptIn: input.optIn })
+        .where(eq(threeSixtyMemberships.id, input.membershipId));
+      return { ok: true, optIn: input.optIn };
+    }),
 
   /**
    * Portal continuity: most recent completed project for the logged-in customer ONLY.

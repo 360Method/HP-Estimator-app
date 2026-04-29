@@ -1,5 +1,33 @@
 # HP Field Estimator — TODO
 
+## Ritz-Carlton Experience Pass — P1 follow-ups (deferred from PR #ritz-experience-pass-1)
+
+> See `docs/EXPERIENCE_STANDARDS.md` for the operating doc.
+> All P1 items are deliberate scope deferrals — not failures.
+
+- [ ] **CustomerSection redesign** — concierge brief: single-column calm
+      flow, recent activity, current opportunities, last contact, owner
+      notes — all in one quiet scroll. Currently a tab maze.
+- [ ] **InboxPage concierge desk** — AI draft visual language, large
+      approve/refine/send actions, "The desk is quiet" empty state.
+- [ ] **Email shell migration** — port the inline shells in
+      `server/routers/{estimate,gmail,portal}.ts` and
+      `server/threeSixtyWebhook.ts` to `wrapEmailHtml()` from
+      `server/_core/emailShell.ts`.
+- [ ] **Settings → Branding page** — make `--hp-*` tokens DB-editable
+      per tenant (nucleus / white-label requirement).
+- [ ] **Vision banner quote rotation** — pull weekly from
+      BRAND_TONALITY_AND_DIRECTION.md.
+- [ ] **360° member portal home** — apply concierge polish beyond the
+      welcome banner (currently only the hero is updated).
+- [ ] **Roadmap confirmation page** — tighten to design system.
+- [ ] **Status badge palette audit** — unify estimates / invoices /
+      appointments badges on restrained semantic flags from `--hp-*`.
+- [ ] **MetricsBar wordmark** — refine "Field Estimator" wordmark to
+      serif treatment to match the new admin hero.
+- [ ] **PortalLayout chrome** — apply cream/parchment background +
+      hairline borders sitewide.
+
 ## Completed Features
 
 - [x] Estimate Calculator (phases, line items, GM enforcement)
@@ -1498,7 +1526,7 @@
 
 - [x] Add portalReports table to drizzle/schema.ts (id, portalCustomerId, scanId, membershipId, healthScore, reportJson, sentAt, pdfUrl, createdAt)
 - [x] Run pnpm db:push for portalReports
-- [x] Add scans.generatePdf tRPC procedure: build Markdown report, convert via manus-md-to-pdf, upload to S3
+- [x] Add scans.generatePdf tRPC procedure: build Markdown report, convert via md-to-pdf service, upload to S3
 - [x] Add scans.sendToPortal tRPC procedure: write to portalReports, send notification email to customer
 - [x] Build /portal/reports page: list of delivered reports with health score badge
 - [x] Build /portal/reports/:id page: read-only report view (health score, priority repairs, findings, "Request Service" CTA)
@@ -2030,7 +2058,7 @@
 - [x] Add new Settings sections: Financials (tax, deposit, markup, labor rate), Notifications (SMS from name)
 
 ## 360 Gateway + CompanySettings Overhaul (Apr 17)
-- [x] Add hp360funnel manus.space to CORS allowed origins
+- [x] Add hp360funnel legacy host to CORS allowed origins
 - [x] Fix /api/360/checkout response shape to return clean {url} instead of nested tRPC shape
 - [x] Fix portfolio success_url path to /360/confirmation
 - [x] Add drip cancellation on checkout.session.completed webhook (archives Cart Abandoned leads)
@@ -2044,9 +2072,9 @@
 - [x] Add hint text to all fields explaining propagation to rest of app
 
 ## 360 Funnel → Backend Webhook Fix
-- [x] Root cause: Stripe webhook was pointing to handyfield-jkw2dpqj.manus.space, not pro.handypioneers.com
+- [x] Root cause: Stripe webhook was pointing to the legacy fallback host, not pro.handypioneers.com
 - [x] Updated primary Stripe webhook URL to https://pro.handypioneers.com/api/stripe/webhook
-- [x] Added fallback webhook endpoint for handyfield-jkw2dpqj.manus.space with new STRIPE_WEBHOOK_SECRET_FALLBACK
+- [x] Added fallback webhook endpoint for the legacy host with new STRIPE_WEBHOOK_SECRET_FALLBACK
 - [x] Updated webhook handler to try both primary and fallback secrets
 - [x] All 212 tests pass including new stripe.webhook.test.ts (4 tests)
 

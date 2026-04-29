@@ -8,7 +8,8 @@ import {
   ArrowLeft, Building2, CreditCard, Bell, Users,
   FileText, Receipt, Briefcase, UserPlus, GitBranch,
   BookOpen, CheckSquare, Tag, Zap, ChevronDown, ChevronRight,
-  DollarSign, Layers, Settings, ShieldCheck, MapPin, Upload, Phone,
+  DollarSign, Layers, Settings, ShieldCheck, MapPin, Upload, Phone, Bot,
+  Network, Power,
 } from 'lucide-react';
 
 // Sub-page imports
@@ -33,16 +34,18 @@ import ServiceAreaSettings from './ServiceAreaSettings';
 import ImportDataSettings from './ImportDataSettings';
 import PhoneSettings from './PhoneSettings';
 import AutomationsSettings from './AutomationsSettings';
+import AgentChartersSettings from './AgentChartersSettings';
 
 export type SettingsSection =
   | 'company' | 'billing' | 'notifications' | 'team' | 'roles' | 'allowlist'
   | 'estimates' | 'invoices' | 'jobs' | 'leads' | 'pipeline' | 'price-book'
   | 'checklists' | 'job-fields' | 'lead-sources' | 'tags'
-  | 'integrations' | 'service-area' | 'import-data' | 'phone' | 'automations';
+  | 'integrations' | 'service-area' | 'import-data' | 'phone' | 'automations'
+  | 'agent-charters';
 
 interface NavGroup {
   label: string;
-  items: { id: SettingsSection; label: string; icon: React.ElementType }[];
+  items: { id: SettingsSection; label: string; icon: React.ElementType; href?: string }[];
 }
 
 const NAV_GROUPS: NavGroup[] = [
@@ -92,6 +95,14 @@ const NAV_GROUPS: NavGroup[] = [
       { id: 'import-data', label: 'Import Data', icon: Upload },
     ],
   },
+  {
+    label: 'AI Agents',
+    items: [
+      { id: 'agent-charters', label: 'Charters & Playbooks', icon: Bot },
+      { id: 'agent-charters', label: 'Org Chart',           icon: Network, href: '/admin/org-chart' },
+      { id: 'agent-charters', label: 'Engine Control',      icon: Power,   href: '/admin/agents/control' },
+    ],
+  },
 ];
 
 interface Props {
@@ -138,7 +149,8 @@ export default function SettingsPage({ onBack, initialSection = 'company' }: Pro
       case 'service-area':  return <ServiceAreaSettings />;
       case 'import-data':   return <ImportDataSettings />;
       case 'phone':          return <PhoneSettings />;
-      case 'automations':    return <AutomationsSettings />;
+      case 'automations':     return <AutomationsSettings />;
+      case 'agent-charters':  return <AgentChartersSettings />;
     }
   };
 
@@ -172,12 +184,24 @@ export default function SettingsPage({ onBack, initialSection = 'company' }: Pro
                 {group.label}
                 {collapsed ? <ChevronRight size={10} /> : <ChevronDown size={10} />}
               </button>
-              {!collapsed && group.items.map(item => {
+              {!collapsed && group.items.map((item, idx) => {
                 const Icon = item.icon;
-                const isActive = active === item.id;
+                const isActive = !item.href && active === item.id;
+                if (item.href) {
+                  return (
+                    <a
+                      key={`${item.id}-${idx}-${item.href}`}
+                      href={item.href}
+                      className="w-full flex items-center gap-2.5 px-4 py-2 text-sm transition-colors text-left text-foreground hover:bg-muted/60 font-normal"
+                    >
+                      <Icon size={14} className="text-muted-foreground" />
+                      {item.label}
+                    </a>
+                  );
+                }
                 return (
                   <button
-                    key={item.id}
+                    key={`${item.id}-${idx}`}
                     onClick={() => { setActive(item.id); setMobileSidebarOpen(false); }}
                     className={`w-full flex items-center gap-2.5 px-4 py-2 text-sm transition-colors text-left ${
                       isActive

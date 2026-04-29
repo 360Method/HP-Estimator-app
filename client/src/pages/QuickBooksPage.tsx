@@ -27,7 +27,7 @@ export default function QuickBooksPage() {
   const { data: status, isLoading } = trpc.quickbooks.getStatus.useQuery();
 
   const { data: authUrlData } = trpc.quickbooks.getAuthUrl.useQuery(
-    { redirectUri: `${window.location.origin}/settings/quickbooks/callback` },
+    { redirectUri: `${window.location.origin}/api/quickbooks/callback` },
     { enabled: !!(status?.configured && !status?.connected) }
   );
 
@@ -57,27 +57,16 @@ export default function QuickBooksPage() {
     },
   });
 
-  // Handle OAuth callback (code + realmId in URL params)
-  const exchangeCodeMutation = trpc.quickbooks.exchangeCode.useMutation({
-    onSuccess: () => {
-      toast.success("Connected to QuickBooks!");
-      utils.quickbooks.getStatus.invalidate();
-      // Clean URL
-      window.history.replaceState({}, "", "/settings/quickbooks");
-    },
-    onError: (e) => toast.error(`QB connect failed: ${e.message}`),
-  });
-
+  // Handle OAuth success signal from backend callback
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const code = params.get("code");
-    const realmId = params.get("realmId");
-    if (code && realmId) {
-      exchangeCodeMutation.mutate({
-        code,
-        realmId,
-        redirectUri: `${window.location.origin}/settings/quickbooks/callback`,
-      });
+    if (params.get("qb") === "connected") {
+      toast.success("Connected to QuickBooks!");
+      utils.quickbooks.getStatus.invalidate();
+      window.history.replaceState({}, "", window.location.pathname);
+    } else if (params.get("qb") === "error") {
+      toast.error(`QB connect failed: ${params.get("reason") ?? "unknown error"}`);
+      window.history.replaceState({}, "", window.location.pathname);
     }
   }, []);
 
@@ -260,7 +249,7 @@ export default function QuickBooksPage() {
                 {
                   step: "2",
                   title: "Add redirect URI",
-                  desc: `In your QB app settings, add the redirect URI: ${window.location.origin}/settings/quickbooks/callback`,
+                  desc: `In your QB app settings, add the redirect URI: ${window.location.origin}/api/quickbooks/callback`,
                 },
                 {
                   step: "3",
