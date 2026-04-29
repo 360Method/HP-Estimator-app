@@ -1,5 +1,64 @@
 # HP Estimator — Integration Handoff Checklist
 
+## DONE — 2026-04-28 — Twilio in-browser calling (`feat/twilio-in-browser-calling`)
+
+**Per Marcin:** *"Wire Twilio Voice SDK so the in-app Call button on customer profiles actually works."*
+
+### What shipped
+- **`VoiceCallPanel`** — already existed; this PR adds (a) auto token refresh every 50 min via `refetchInterval` + `device.updateToken` so an active call survives the swap, and (b) a DTMF dial pad that calls `call.sendDigits()` while the call is active.
+- **Backend was already wired** — `voiceToken` tRPC procedure (`server/routers/inbox.ts`), `generateVoiceToken` (`server/twilio.ts`, signs with API Key), `/api/twilio/voice/connect` TwiML endpoint, `/api/twilio/voice/status` log webhook (writes to `messages` with `channel='call'`).
+- **`.env.example`** lists the three Voice-only vars: `TWILIO_API_KEY`, `TWILIO_API_SECRET`, `TWILIO_TWIML_APP_SID`. These are *separate* from the SMS-only `TWILIO_AUTH_TOKEN` — Voice SDK refuses to sign tokens with the master Auth Token (Twilio error 20101).
+
+### One-time Twilio Console + Railway setup (Marcin)
+
+#### 1. Twilio Console — create API Key + Secret
+1. Sign in at https://console.twilio.com/ as the Handy Pioneers account owner.
+2. Top-right account menu → **Account → API keys & tokens** (`https://console.twilio.com/us1/account/keys-credentials/api-keys`).
+3. **Create API key** → Friendly name: `HP Voice SDK`, Key type: **Standard**.
+4. Copy the **SID** (`SK…`) → save as `TWILIO_API_KEY`.
+5. Copy the **Secret** (32-char hex, shown once only) → save as `TWILIO_API_SECRET`. ⚠ The secret cannot be retrieved later — if lost, revoke the key and generate a new one.
+
+#### 2. Twilio Console — create TwiML App
+1. Sidebar → **Voice → Manage → TwiML Apps** (`https://console.twilio.com/us1/develop/voice/manage/twiml-apps`).
+2. **Create new TwiML App**:
+   - **Friendly name**: `HP In-Browser Calling`
+   - **Voice → Request URL**: `https://pro.handypioneers.com/api/twilio/voice/connect`  · method: `POST`
+   - **Voice → Status Callback URL**: `https://pro.handypioneers.com/api/twilio/voice/status`  · method: `POST`
+   - Leave Messaging URL blank (SMS uses a separate webhook).
+3. **Save** → copy the App SID (`AP…`) → save as `TWILIO_TWIML_APP_SID`.
+
+#### 3. Railway — set the three new env vars on `HP-Estimator-app`
+```
+TWILIO_API_KEY=SK…              # from step 1
+TWILIO_API_SECRET=…              # from step 1 (32-char hex)
+TWILIO_TWIML_APP_SID=AP…         # from step 2
+```
+`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER` are already set. Trigger a redeploy after saving.
+
+### Manual verification
+- [ ] Open `https://pro.handypioneers.com` → sign in as staff.
+- [ ] Open Margaret Whitfield's profile → click **Call** → browser asks for mic → allow.
+- [ ] Widget shows Connecting → Ringing → running timer when she picks up.
+- [ ] During the call: mute/unmute works; tap a digit on the dial pad and confirm she hears the touch-tone.
+- [ ] Click **End** → timer stops → a `messages` row appears for that conversation with `channel='call'`, `direction='outbound'`, `status='answered'`, populated `durationSecs`.
+- [ ] Leave the tab idle for >55 min → click Call again → still works (token refresh path).
+
+### Troubleshooting
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| `Voice calling requires Twilio setup` | One of `TWILIO_API_KEY`, `TWILIO_API_SECRET`, `TWILIO_TWIML_APP_SID` missing on the server | Recheck Railway env, redeploy. |
+| `Voice token invalid` toast / amber Retry | API Key revoked or key + secret are from different Twilio accounts | Regenerate the API Key (step 1) and update both env vars from the same key. |
+| Call drops immediately on connect | TwiML App Voice URL points at the wrong host | Edit the TwiML App, set Voice URL to `https://pro.handypioneers.com/api/twilio/voice/connect`. |
+| No `messages` row after hangup | StatusCallback URL not set on the TwiML App | Edit the TwiML App, set Status Callback URL to `https://pro.handypioneers.com/api/twilio/voice/status`. |
+| Browser never asks for mic | Page isn't HTTPS — Voice SDK requires a secure context | Test against `pro.handypioneers.com`, not a plain-HTTP preview URL. |
+
+### Out of scope (Phase 2)
+- Per-staff caller-ID — today every outbound call shows the company Twilio number; staff attribution is internal-only via the JWT identity `hp-user-{staffUserId}`.
+- Inbound-call routing into the browser softphone — `device.register()` enables it client-side, but `/api/twilio/voice/inbound` still routes to the existing cell-phone fallback, not to a `<Client>` dial.
+- Call recording — `<Dial>` in the connect TwiML doesn't set `record="…"`; flip on when ready and the existing `downloadAndStoreRecording` helper takes care of S3.
+
+---
+
 ## DONE — 2026-04-27 — Visionary Console Phase 1 (`feat/visionary-console-phase-1`)
 
 **Per Marcin:** *"I do not want to be tied to only using Dispatch as the owner/Visionary."*
