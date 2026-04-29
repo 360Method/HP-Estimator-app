@@ -113,6 +113,36 @@ async function resolveEmail(db: any, portalAccountId: string): Promise<string> {
  * Look up the CRM customer for a portal account.
  * Uses portalAccount.customerId if set; falls back to email match.
  */
+/**
+ * Find the customer's most-recent open lead opportunity, or create one
+ * anchored to the Roadmap delivery so the follow-up cadence's drafts attach
+ * to a specific opportunity in the customer profile (Marcin's "drafts on
+ * opportunities" architecture, 2026-04-28).
+ */
+async function findOrCreateRoadmapLead(db: any, customerId: string): Promise<string> {
+  const { opportunities } = await import("../../drizzle/schema");
+  const { and, desc } = await import("drizzle-orm");
+  const existing = await db
+    .select()
+    .from(opportunities)
+    .where(and(eq(opportunities.customerId, customerId), eq(opportunities.area, "lead"), eq(opportunities.archived, false)))
+    .orderBy(desc(opportunities.createdAt))
+    .limit(1);
+  if (existing[0]) return existing[0].id as string;
+  const id = nanoid();
+  await createOpportunity({
+    id,
+    customerId,
+    area: "lead",
+    stage: "Roadmap delivered",
+    title: "Home Health Roadmap follow-up",
+    value: 0,
+    notes: "Auto-created when the Priority Translation Roadmap was delivered.",
+    archived: false,
+  } as any);
+  return id;
+}
+
 async function resolveCrmCustomerId(db: any, portalAccountId: string): Promise<string | null> {
   const { customers } = await import("../../drizzle/schema");
   const acctRows = await db
@@ -201,8 +231,14 @@ export async function runPriorityTranslation(db: any, translationId: string): Pr
     try {
       const customerId = await resolveCrmCustomerId(db, row.portalAccountId);
       if (customerId) {
+        // Anchor the cadence to a specific lead opportunity so the resulting
+        // drafts surface inside that lead in Marcin's customer profile rather
+        // than as flat customer-level rows. If the customer has no open lead,
+        // create one tied to this Roadmap delivery.
+        const opportunityId = await findOrCreateRoadmapLead(db, customerId);
         await scheduleRoadmapFollowup({
           customerId,
+          opportunityId,
           portalAccountId: row.portalAccountId,
           homeHealthRecordId: row.homeHealthRecordId,
           recipientEmail: toEmail,

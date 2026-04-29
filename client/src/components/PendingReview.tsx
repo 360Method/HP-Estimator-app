@@ -18,13 +18,17 @@ import { useMemo, useState } from "react";
 import {
   AlertCircle,
   Bot,
+  Briefcase,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   Edit3,
   FileText,
   Mail,
   MessageSquare,
   Send,
   Sparkles,
+  Star,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -34,10 +38,18 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import type { Opportunity } from "@/lib/types";
 
 interface PendingReviewProps {
   customerId: string;
   customerFirstName?: string | null;
+  /**
+   * Opportunities for this customer — used to group drafts by their source
+   * opportunity. Marcin's "drafts on opportunities" architecture: a draft
+   * always opens inside the lead/estimate/job it's about, never as a flat
+   * customer-level row.
+   */
+  opportunities?: Opportunity[];
   /**
    * Optional — when set to a token (eg "pending-review"), the section will
    * scroll itself into view on mount. Used by the bell deep-links.
@@ -48,6 +60,7 @@ interface PendingReviewProps {
 export default function PendingReview({
   customerId,
   customerFirstName,
+  opportunities,
   focusToken,
 }: PendingReviewProps) {
   const utils = trpc.useUtils();
@@ -70,11 +83,69 @@ export default function PendingReview({
   const ready = useMemo(() => drafts.filter((d) => d.status === "ready"), [drafts]);
   const totalPending = ready.length + estimates.length;
 
+  // Group everything by opportunityId. Items missing an opportunityId fall
+  // into a synthetic "(no opportunity)" group — should be empty after the
+  // 0078 backfill but the UI never crashes when an unattached row sneaks in.
+  const oppMap = useMemo(() => {
+    const m = new Map<string, Opportunity>();
+    for (const o of opportunities ?? []) m.set(o.id, o);
+    return m;
+  }, [opportunities]);
+
+  type Group = {
+    opportunityId: string | null;
+    opportunity: Opportunity | null;
+    drafts: typeof ready;
+    estimates: typeof estimates;
+  };
+  const groups: Group[] = useMemo(() => {
+    const map = new Map<string, Group>();
+    const keyFor = (id: string | null | undefined) => id ?? "__none__";
+    const ensure = (id: string | null | undefined): Group => {
+      const k = keyFor(id);
+      let g = map.get(k);
+      if (!g) {
+        g = {
+          opportunityId: id ?? null,
+          opportunity: id ? oppMap.get(id) ?? null : null,
+          drafts: [],
+          estimates: [],
+        };
+        map.set(k, g);
+      }
+      return g;
+    };
+    for (const d of ready) ensure((d as any).opportunityId).drafts.push(d);
+    for (const e of estimates) ensure((e as any).opportunityId).estimates.push(e);
+    const arr = Array.from(map.values());
+    // Pin "no-opportunity" group last; otherwise newest opportunity first.
+    arr.sort((a, b) => {
+      if (a.opportunityId === null) return 1;
+      if (b.opportunityId === null) return -1;
+      const at = a.opportunity ? new Date(a.opportunity.createdAt ?? 0).getTime() : 0;
+      const bt = b.opportunity ? new Date(b.opportunity.createdAt ?? 0).getTime() : 0;
+      return bt - at;
+    });
+    return arr;
+  }, [ready, estimates, oppMap]);
+
   // Hide the section entirely when there's nothing for the operator to do —
   // the customer profile shouldn't be cluttered with empty states.
   if (totalPending === 0 && !draftsQ.isLoading && !estimatesQ.isLoading) {
     return null;
   }
+
+  const onChangedDraft = () => {
+    utils.agentDrafts.listForCustomer.invalidate({ customerId });
+    utils.agentDrafts.counts.invalidate();
+    utils.notifications.list.invalidate();
+    utils.notifications.countUnread.invalidate();
+  };
+  const onChangedEstimate = () => {
+    utils.projectEstimator.listPendingForCustomer.invalidate({ customerId });
+    utils.notifications.list.invalidate();
+    utils.notifications.countUnread.invalidate();
+  };
 
   return (
     <div
@@ -93,39 +164,126 @@ export default function PendingReview({
           </Badge>
         </div>
         <p className="mt-1 text-xs text-amber-900/80">
-          Nothing here gets sent to {customerFirstName || "this customer"} until you tap approve.
+          {totalPending} draft{totalPending === 1 ? "" : "s"} pending across{" "}
+          {groups.length} opportunit{groups.length === 1 ? "y" : "ies"}. Nothing
+          here gets sent to {customerFirstName || "this customer"} until you tap approve.
         </p>
       </div>
 
       <div className="px-3 sm:px-4 py-3 space-y-3">
-        {estimates.map((est) => (
-          <ProjectEstimateCard
-            key={`pe-${est.id}`}
-            estimate={est}
+        {groups.map((g) => (
+          <OpportunityDraftGroup
+            key={g.opportunityId ?? "no-opp"}
+            group={g}
             customerFirstName={customerFirstName ?? null}
-            onChanged={() => {
-              utils.projectEstimator.listPendingForCustomer.invalidate({ customerId });
-              utils.notifications.list.invalidate();
-              utils.notifications.countUnread.invalidate();
-            }}
-          />
-        ))}
-        {ready.map((d) => (
-          <NurturerDraftCard
-            key={`d-${d.id}`}
-            draft={d}
-            onChanged={() => {
-              utils.agentDrafts.listForCustomer.invalidate({ customerId });
-              utils.agentDrafts.counts.invalidate();
-              utils.notifications.list.invalidate();
-              utils.notifications.countUnread.invalidate();
-            }}
+            defaultOpen={groups.length <= 2}
+            onChangedDraft={onChangedDraft}
+            onChangedEstimate={onChangedEstimate}
           />
         ))}
         {totalPending === 0 && (draftsQ.isLoading || estimatesQ.isLoading) && (
           <div className="text-xs text-amber-800/70 italic px-1 py-2">Loading…</div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Opportunity-grouped drafts ──────────────────────────────────────────────
+
+function OpportunityDraftGroup({
+  group,
+  customerFirstName,
+  defaultOpen,
+  onChangedDraft,
+  onChangedEstimate,
+}: {
+  group: {
+    opportunityId: string | null;
+    opportunity: Opportunity | null;
+    drafts: any[];
+    estimates: any[];
+  };
+  customerFirstName: string | null;
+  defaultOpen: boolean;
+  onChangedDraft: () => void;
+  onChangedEstimate: () => void;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const total = group.drafts.length + group.estimates.length;
+  const opp = group.opportunity;
+
+  const areaMeta = opp
+    ? opp.area === "lead"
+      ? { Icon: Star, label: "Lead", color: "bg-amber-100 text-amber-800 border-amber-200" }
+      : opp.area === "estimate"
+        ? { Icon: FileText, label: "Estimate", color: "bg-violet-100 text-violet-800 border-violet-200" }
+        : { Icon: Briefcase, label: "Job", color: "bg-blue-100 text-blue-800 border-blue-200" }
+    : { Icon: AlertCircle, label: "Customer-level", color: "bg-stone-100 text-stone-800 border-stone-200" };
+  const AreaIcon = areaMeta.Icon;
+
+  return (
+    <div className="rounded-xl border border-amber-200 bg-white shadow-sm overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center gap-2 px-4 py-3 bg-gradient-to-r from-amber-50/70 to-white text-left hover:bg-amber-50/80 transition-colors"
+        style={{ minHeight: 48 }}
+      >
+        {open ? (
+          <ChevronDown className="w-4 h-4 text-stone-500 shrink-0" />
+        ) : (
+          <ChevronRight className="w-4 h-4 text-stone-500 shrink-0" />
+        )}
+        <Badge variant="outline" className={`${areaMeta.color} text-[10px]`}>
+          <AreaIcon className="w-3 h-3 mr-1" />
+          {areaMeta.label}
+        </Badge>
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold text-stone-900 truncate">
+            {opp?.title || (group.opportunityId ? "Untitled opportunity" : "Not attached to an opportunity")}
+          </div>
+          <div className="text-[11px] text-stone-500 truncate">
+            {opp?.stage ? <>Stage: <span className="font-medium text-stone-700">{opp.stage}</span></> : null}
+            {opp?.createdAt ? <span className="ml-2">· created {fmtAgo(opp.createdAt)}</span> : null}
+          </div>
+        </div>
+        <Badge variant="outline" className="bg-amber-600 text-white border-amber-600 text-[10px]">
+          {total} pending
+        </Badge>
+      </button>
+
+      {open && (
+        <div className="px-3 sm:px-4 py-3 space-y-3 border-t border-amber-100 bg-stone-50/50">
+          {opp ? (
+            <div className="text-[11px] text-stone-600 leading-relaxed bg-white border border-stone-200 rounded-lg px-3 py-2">
+              <span className="font-semibold text-stone-700 uppercase tracking-wider text-[10px]">
+                Source context
+              </span>
+              <div className="mt-1 whitespace-pre-wrap text-stone-700">
+                {opp.notes?.trim() || (
+                  <span className="italic text-stone-400">No notes captured for this opportunity.</span>
+                )}
+              </div>
+            </div>
+          ) : null}
+          {group.estimates.map((est) => (
+            <ProjectEstimateCard
+              key={`pe-${est.id}`}
+              estimate={est}
+              customerFirstName={customerFirstName ?? null}
+              onChanged={onChangedEstimate}
+            />
+          ))}
+          {group.drafts.map((d) => (
+            <NurturerDraftCard
+              key={`d-${d.id}`}
+              draft={d}
+              onChanged={onChangedDraft}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

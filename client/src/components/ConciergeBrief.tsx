@@ -137,10 +137,11 @@ export default function ConciergeBrief({ customer, opportunities }: ConciergeBri
 
   return (
     <>
-      {/* ── Pending Review (drafts impossible to miss) ──────── */}
+      {/* ── Pending Review (drafts grouped by opportunity) ──── */}
       <PendingReview
         customerId={customer.id}
         customerFirstName={customer.firstName ?? null}
+        opportunities={opportunities}
         focusToken={focusToken}
       />
 
