@@ -285,6 +285,55 @@ async function ensurePortalContinuityFlag() {
   }
 }
 
+async function ensurePortalNativeReplyColumns() {
+  // Defensive boot-time migration for `messages` reply-token columns +
+  // `orphanEmails` table. Mirrors the 0064 pattern — apply the change only
+  // when prod DB is missing it, regardless of what drizzle migration tracker
+  // thinks. See migration 0065_portal_native_replies.sql for the canonical SQL.
+  try {
+    const { getDb } = await import("../db");
+    const { sql } = await import("drizzle-orm");
+    const db = await getDb();
+    if (!db) return;
+    const cols: Array<[string, string]> = [
+      ["replyToken", "varchar(64) NULL"],
+      ["opportunityId", "varchar(64) NULL"],
+      ["isPortalReply", "boolean NOT NULL DEFAULT 0"],
+      ["threadRootId", "int NULL"],
+    ];
+    for (const [name, type] of cols) {
+      const [[row]]: any = await db.execute(sql`
+        SELECT COUNT(*) AS c FROM information_schema.columns
+        WHERE table_schema = DATABASE()
+          AND table_name = 'messages'
+          AND column_name = ${name}
+      `);
+      if (row && Number(row.c) === 0) {
+        await db.execute(sql.raw(
+          `ALTER TABLE \`messages\` ADD COLUMN \`${name}\` ${type}`,
+        ));
+        console.log(`[boot] messages.${name} column added`);
+      }
+    }
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`orphanEmails\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`gmailMessageId\` varchar(128) NOT NULL,
+      \`gmailThreadId\` varchar(128),
+      \`fromEmail\` varchar(320) NOT NULL,
+      \`fromName\` varchar(255),
+      \`subject\` varchar(512),
+      \`body\` text,
+      \`resolvedAt\` timestamp NULL,
+      \`resolvedCustomerId\` varchar(64),
+      \`receivedAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT \`orphanEmails_id\` PRIMARY KEY(\`id\`),
+      CONSTRAINT \`orphanEmails_gmailMessageId_unique\` UNIQUE(\`gmailMessageId\`)
+    )`);
+  } catch (err) {
+    console.warn("[boot] ensurePortalNativeReplyColumns failed (non-fatal):", err);
+  }
+}
+
 async function ensureReengagementTables() {
   // The drizzle tracker may diverge from prod; create the re-engagement tables
   // at boot if missing so /admin/marketing/reengagement-campaign works on first
@@ -1131,6 +1180,7 @@ async function ensureDepartmentHeadFlags() {
 async function startServer() {
   await ensurePhoneTables();
   await ensurePortalContinuityFlag();
+  await ensurePortalNativeReplyColumns();
   await ensurePortalCustomersColumns();
   await ensureAnnualValuationOptInColumn();
   await ensurePriorityTranslationTables();

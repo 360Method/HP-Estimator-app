@@ -57,6 +57,12 @@ import {
   addAdminAllowlistEmail,
   removeAdminAllowlistEmail,
   isEmailAllowed,
+  listOrphanEmails,
+  resolveOrphanEmail,
+  findOrCreateConversation,
+  insertMessage,
+  updateConversationLastMessage,
+  getCustomerById,
 } from "./db";
 
 export const appRouter = router({
@@ -164,6 +170,57 @@ export const appRouter = router({
           });
         }
         return { ok: true } as const;
+      }),
+  }),
+
+  orphanEmails: router({
+    /** List inbound emails the poller couldn't attribute to a customer. */
+    list: protectedProcedure
+      .input(z.object({ includeResolved: z.boolean().default(false) }).optional())
+      .query(async ({ input }) => {
+        return listOrphanEmails(input?.includeResolved ?? false, 200);
+      }),
+    /** Attribute an orphan email to a customer (or dismiss with customerId=null).
+     *  Materialises the email into a real `messages` row so it joins the unified feed. */
+    resolve: protectedProcedure
+      .input(z.object({
+        id: z.number(),
+        customerId: z.string().nullable(),
+      }))
+      .mutation(async ({ input }) => {
+        await resolveOrphanEmail(input.id, input.customerId);
+        if (input.customerId) {
+          // Materialise into the canonical conversation so the unified feed picks it up.
+          // Re-fetch the orphan row to get its body + subject.
+          const rows = await listOrphanEmails(true, 1000);
+          const orphan = rows.find(r => r.id === input.id);
+          const customer = await getCustomerById(input.customerId);
+          if (orphan && customer) {
+            const conv = await findOrCreateConversation(
+              null,
+              orphan.fromEmail,
+              orphan.fromName ?? null,
+              customer.id,
+            );
+            await insertMessage({
+              conversationId: conv.id,
+              channel: "email",
+              direction: "inbound",
+              body: orphan.body ?? "",
+              subject: orphan.subject ?? undefined,
+              status: "delivered",
+              gmailMessageId: orphan.gmailMessageId,
+              isInternal: false,
+              sentAt: orphan.receivedAt,
+            });
+            await updateConversationLastMessage(
+              conv.id,
+              (orphan.body ?? orphan.subject ?? "").slice(0, 255),
+              "email",
+            );
+          }
+        }
+        return { ok: true };
       }),
   }),
 

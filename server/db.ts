@@ -30,6 +30,9 @@ import {
   invoices,
   messages,
   opportunities,
+  orphanEmails,
+  type InsertOrphanEmail,
+  type OrphanEmail,
   scheduleEvents,
   users,
   expenses,
@@ -240,6 +243,20 @@ export async function insertMessage(msg: InsertMessage) {
   return created[0];
 }
 
+/** Messages attributed to a specific opportunity (via replyToken or
+ *  pollInboundEmails fallback). Drives the portal communications thread view. */
+export async function listMessagesByOpportunity(
+  opportunityId: string,
+  limit = 200,
+): Promise<typeof messages.$inferSelect[]> {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(messages)
+    .where(eq(messages.opportunityId, opportunityId))
+    .orderBy(asc(messages.sentAt))
+    .limit(limit);
+}
+
 // ─── INBOX: CALL LOG HELPERS ─────────────────────────────────────────────────
 
 export async function listCallLogs(limit = 100, offset = 0) {
@@ -284,6 +301,36 @@ export async function getCallLogsByTwilioSids(sids: string[]) {
   if (!db) return [] as (typeof callLogs.$inferSelect)[];
   const { inArray } = await import("drizzle-orm");
   return db.select().from(callLogs).where(inArray(callLogs.twilioCallSid, sids));
+}
+
+// ─── INBOX: ORPHAN EMAIL HELPERS ─────────────────────────────────────────────
+
+export async function insertOrphanEmail(row: InsertOrphanEmail): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  // ON DUPLICATE KEY = same gmailMessageId already captured. Drop silently so
+  // re-poll attempts don't error.
+  await db.insert(orphanEmails)
+    .values(row)
+    .onDuplicateKeyUpdate({ set: { receivedAt: row.receivedAt ?? new Date() } });
+}
+
+export async function listOrphanEmails(includeResolved = false, limit = 100): Promise<OrphanEmail[]> {
+  const db = await getDb();
+  if (!db) return [];
+  const q = db.select().from(orphanEmails);
+  const where = includeResolved ? undefined : sql`${orphanEmails.resolvedAt} IS NULL`;
+  return where
+    ? q.where(where).orderBy(desc(orphanEmails.receivedAt)).limit(limit)
+    : q.orderBy(desc(orphanEmails.receivedAt)).limit(limit);
+}
+
+export async function resolveOrphanEmail(id: number, customerId: string | null): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(orphanEmails)
+    .set({ resolvedAt: new Date(), resolvedCustomerId: customerId ?? undefined })
+    .where(eq(orphanEmails.id, id));
 }
 
 // ─── GMAIL TOKEN HELPERS ─────────────────────────────────────────────────────

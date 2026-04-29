@@ -72,7 +72,18 @@ import {
   createPortalEstimate,
 } from "../portalDb";
 import { sendEmail } from "../gmail";
-import { updateOpportunity } from "../db";
+import {
+  updateOpportunity,
+  findOrCreateConversation,
+  insertMessage,
+  updateConversationLastMessage,
+  incrementUnread,
+  listMessagesByOpportunity,
+  getCustomerById,
+  getOpportunityById,
+} from "../db";
+import { decodeReplyToken } from "../replyToken";
+import { createNotification } from "../leadRouting";
 import { notifyOwner } from "../_core/notification";
 import { storagePut } from "../storage";
 import { broadcastOpportunityUpdate, broadcastPortalMessage } from "../sse";
@@ -579,6 +590,124 @@ export const portalRouter = router({
         title: `New Portal Message from ${ctx.portalCustomer.name}`,
         content: input.body,
       }).catch(() => null);
+      return { ok: true };
+    }),
+
+  // ── EMAIL THREAD (portal-native replies) ──────────────────────────────────
+  // The customer-facing email CTA lands here. The threadId is the
+  // base64 reply-token from the original outbound — it encodes
+  // {opportunityId, customerId} so we can scope the thread without
+  // exposing internal IDs in the URL.
+
+  /** Read the email thread for `:threadId` (the reply-token from the email). */
+  getThread: portalProcedure
+    .input(z.object({ threadId: z.string().min(1) }))
+    .query(async ({ input, ctx }) => {
+      const payload = decodeReplyToken(input.threadId);
+      if (!payload) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Invalid thread link" });
+      }
+      // Auth check: portal customer must own this thread.
+      const portalHpId = ctx.portalCustomer.hpCustomerId;
+      if (!portalHpId || portalHpId !== payload.customerId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Thread does not belong to this portal account" });
+      }
+      const opp = await getOpportunityById(payload.opportunityId);
+      const customer = await getCustomerById(payload.customerId);
+      const msgs = await listMessagesByOpportunity(payload.opportunityId, 100);
+      return {
+        threadId: input.threadId,
+        opportunityTitle: opp?.title ?? null,
+        opportunityStage: opp?.stage ?? null,
+        customerName: ctx.portalCustomer.name,
+        customerEmail: customer?.email ?? ctx.portalCustomer.email,
+        // Surface only the bits the customer should see — strip internal notes
+        // and any raw gmailMessageId / sentByUserId metadata.
+        messages: msgs
+          .filter(m => !m.isInternal)
+          .map(m => ({
+            id: m.id,
+            channel: m.channel,
+            direction: m.direction,
+            subject: m.subject ?? null,
+            body: m.body ?? "",
+            sentAt: m.sentAt,
+            isPortalReply: m.isPortalReply,
+          })),
+      };
+    }),
+
+  /** Submit a portal-native reply. Lands as an inbound email-channel message
+   *  on the opportunity's conversation, fires the admin notification, and
+   *  optionally hands off to the lead-nurturer follow-up cadence. */
+  replyToThread: portalProcedure
+    .input(z.object({
+      threadId: z.string().min(1),
+      body: z.string().min(1).max(10000),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const payload = decodeReplyToken(input.threadId);
+      if (!payload) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Invalid thread link" });
+      }
+      const portalHpId = ctx.portalCustomer.hpCustomerId;
+      if (!portalHpId || portalHpId !== payload.customerId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "Thread does not belong to this portal account" });
+      }
+      const customer = await getCustomerById(payload.customerId);
+      if (!customer) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Customer not found" });
+      }
+      // Reuse the canonical email-channel conversation for this customer so
+      // the reply lands in the same unified-feed thread the operator sees.
+      const conv = await findOrCreateConversation(
+        null,
+        customer.email || ctx.portalCustomer.email,
+        ctx.portalCustomer.name,
+        customer.id,
+      );
+      await insertMessage({
+        conversationId: conv.id,
+        channel: "email",
+        direction: "inbound",
+        body: input.body,
+        subject: `Portal reply — thread ${input.threadId.slice(0, 8)}`,
+        status: "delivered",
+        isInternal: false,
+        sentAt: new Date(),
+        replyToken: input.threadId,
+        opportunityId: payload.opportunityId,
+        isPortalReply: true,
+      });
+      await updateConversationLastMessage(conv.id, input.body.slice(0, 255), "email");
+      await incrementUnread(conv.id);
+
+      // Operator bell: "customer replied via portal" → click → opportunity comms.
+      await createNotification({
+        role: "admin",
+        eventType: "portal_reply",
+        title: `Portal reply from ${ctx.portalCustomer.name}`,
+        body: input.body.slice(0, 200),
+        linkUrl: `/opportunities/${payload.opportunityId}#comms`,
+        opportunityId: payload.opportunityId,
+        customerId: customer.id,
+        priority: "normal",
+      }).catch(err => console.warn("[portal] reply notification failed:", err));
+
+      await notifyOwner({
+        title: `Portal Reply from ${ctx.portalCustomer.name}`,
+        content: input.body.slice(0, 280),
+      }).catch(() => null);
+
+      // Optional: kick the lead nurturer follow-up cadence. Best-effort.
+      // (customerId on TriggerPayload is portalCustomer.id (int), not the
+      // HP CRM varchar id, so we pass that one instead.)
+      runAutomationsForTrigger("portal_reply", {
+        customerId: ctx.portalCustomer.id,
+        customerName: ctx.portalCustomer.name,
+        email: ctx.portalCustomer.email,
+      }).catch(() => null);
+
       return { ok: true };
     }),
 
