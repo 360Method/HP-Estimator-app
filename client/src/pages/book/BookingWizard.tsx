@@ -22,7 +22,7 @@ import { Loader2, ChevronRight, ChevronLeft, Phone, MapPin, Camera, X, CheckCirc
 const HP_PHONE = "(360) 334-4428";
 const HP_GOLD = "#c8922a";
 const SUCCESS_URL = "https://handypioneers.com/thankyou";
-const MAX_PHOTOS = 5;
+const MAX_PHOTOS = 20;
 const MAX_DESCRIPTION = 2000;
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -221,8 +221,8 @@ function Step2Service({
   return (
     <div className="space-y-5">
       <div className="text-center space-y-1">
-        <h2 className="text-xl font-bold text-gray-900">Tell us about your project</h2>
-        <p className="text-gray-500 text-sm">Share details so we can prepare a great estimate.</p>
+        <h2 className="text-xl font-bold text-gray-900">Tell us about your home</h2>
+        <p className="text-gray-500 text-sm">Tell us what you're considering. This starts a conversation — we'll learn enough to know if we're a good fit.</p>
       </div>
 
       {/* Service type — fixed, single option */}
@@ -363,7 +363,7 @@ function Step3Contact({
     <div className="space-y-4">
       <div className="text-center space-y-1">
         <h2 className="text-xl font-bold text-gray-900">Your contact info</h2>
-        <p className="text-gray-500 text-sm">We'll use this to send your estimate and schedule your visit.</p>
+        <p className="text-gray-500 text-sm">We'll use this to reach out and arrange a thoughtful first conversation.</p>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -580,9 +580,9 @@ function Step4Review({
           style={{ background: HP_GOLD, color: "#fff", border: "none" }}
         >
           {submitting ? (
-            <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Submitting…</>
+            <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Sending…</>
           ) : (
-            <>Submit Request <ChevronRight className="w-4 h-4 ml-1" /></>
+            <>Send to our Concierge <ChevronRight className="w-4 h-4 ml-1" /></>
           )}
         </Button>
       </div>
@@ -609,9 +609,9 @@ function Step5Success() {
         <CheckCircle2 className="w-10 h-10 text-green-600" />
       </div>
       <div className="space-y-2">
-        <h2 className="text-2xl font-bold text-gray-900">Request Submitted!</h2>
+        <h2 className="text-2xl font-bold text-gray-900">We've received your inquiry.</h2>
         <p className="text-gray-500 text-sm max-w-xs mx-auto">
-          We received your request and will be in touch soon. Redirecting you now…
+          Our Concierge is preparing for a thoughtful first conversation with you. We'll be in touch shortly.
         </p>
       </div>
       <Loader2 className="w-5 h-5 animate-spin mx-auto text-gray-400" />
@@ -643,8 +643,8 @@ export default function BookingWizard() {
 
   const uploadPhoto = useCallback(
     async (file: File): Promise<string | null> => {
-      if (file.size > 16 * 1024 * 1024) {
-        toast.error("Photo must be under 16 MB.");
+      if (file.size > 25 * 1024 * 1024) {
+        toast.error("Photo must be under 25 MB.");
         return null;
       }
       setUploading(true);

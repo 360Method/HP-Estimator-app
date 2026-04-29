@@ -7,7 +7,7 @@ import { protectedProcedure, publicProcedure, router } from "../_core/trpc";
 import { storagePut } from "../storage";
 import { randomBytes } from "crypto";
 
-const MAX_SIZE_BYTES = 16 * 1024 * 1024; // 16 MB
+const MAX_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB
 
 export const uploadsRouter = router({
   /** Upload a file (base64-encoded) to S3 and return the CDN URL */
@@ -26,7 +26,7 @@ export const uploadsRouter = router({
 
       const buffer = Buffer.from(raw, "base64");
       if (buffer.byteLength > MAX_SIZE_BYTES) {
-        throw new Error(`File too large: max 16 MB, got ${(buffer.byteLength / 1024 / 1024).toFixed(1)} MB`);
+        throw new Error(`File too large: max 25 MB (got ${(buffer.byteLength / 1024 / 1024).toFixed(1)} MB)`);
       }
 
       const ext = input.filename.split(".").pop() ?? "bin";
@@ -53,7 +53,7 @@ export const uploadsRouter = router({
 
       const buffer = Buffer.from(raw, "base64");
       if (buffer.byteLength > MAX_SIZE_BYTES) {
-        throw new Error(`File too large: max 16 MB`);
+        throw new Error(`File too large: max 25 MB`);
       }
 
       const ext = input.filename.split(".").pop() ?? "jpg";
