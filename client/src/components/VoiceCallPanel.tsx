@@ -76,8 +76,13 @@ export default function VoiceCallPanel({ toNumber, toName, onCallEnd }: VoiceCal
       device = new Device(tokenData.token, {
         logLevel: 1,
         codecPreferences: ['opus', 'pcmu'] as any,
-        // 'roaming' lets Twilio pick the closest edge automatically.
-        edge: 'roaming',
+        // Edge selection: 'roaming' relies on a separate HTTP discovery call
+        // to find the closest edge. If that call is blocked / slow / DNS
+        // fails, the SDK logs "Preferred URI not set; backing off" and the
+        // WebSocket times out. We hardcode an explicit list ordered by
+        // expected proximity to the PNW (umatilla=us-west-or, ashburn=us-east-va,
+        // sao-paulo + others as fallbacks) — the SDK tries them in order.
+        edge: ['umatilla', 'ashburn', 'roaming'] as any,
       });
     } catch (err: any) {
       console.error('[Voice] Device constructor threw:', err);
