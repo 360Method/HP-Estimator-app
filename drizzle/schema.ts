@@ -2423,3 +2423,23 @@ export const agentTeamViolations = mysqlTable("agent_team_violations", {
 });
 export type DbAgentTeamViolation = typeof agentTeamViolations.$inferSelect;
 export type InsertDbAgentTeamViolation = typeof agentTeamViolations.$inferInsert;
+
+// ── Field tech time clock ────────────────────────────────────────────────────
+// One row per clock-in/clock-out pair. Mirrors the columns created in
+// drizzle/0002_time_logs.sql.
+export const timeLogs = mysqlTable("timeLogs", {
+  id: int("id").autoincrement().primaryKey(),
+  techName: varchar("techName", { length: 128 }).notNull(),
+  workOrderId: int("workOrderId"),
+  scheduleEventId: varchar("scheduleEventId", { length: 64 }),
+  opportunityId: varchar("opportunityId", { length: 64 }),
+  customerId: varchar("customerId", { length: 64 }),
+  jobTitle: text("jobTitle"),
+  clockIn: timestamp("clockIn").notNull(),
+  clockOut: timestamp("clockOut"),
+  durationMins: int("durationMins"),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type TimeLog = typeof timeLogs.$inferSelect;
+export type InsertTimeLog = typeof timeLogs.$inferInsert;
