@@ -35,6 +35,7 @@ export default function VoiceCallPanel({ toNumber, toName, onCallEnd }: VoiceCal
   const [incomingCall, setIncomingCall] = useState<Call | null>(null);
   const [deviceError, setDeviceError] = useState<string | null>(null);
   const [deviceReady, setDeviceReady] = useState(false);
+  const [lastErrorCode, setLastErrorCode] = useState<number | null>(null);
   const [showDialPad, setShowDialPad] = useState(false);
   const deviceRef = useRef<Device | null>(null);
   const activeCallRef = useRef<Call | null>(null);
@@ -115,6 +116,7 @@ export default function VoiceCallPanel({ toNumber, toName, onCallEnd }: VoiceCal
       const code = err?.code ?? err?.twilioError?.code ?? 0;
       const msg = err?.message ?? err?.twilioError?.message ?? String(err);
       console.error(`[Voice] Device error (code ${code}):`, err);
+      setLastErrorCode(code || -1);
 
       if (code === 31202 || code === 20101) {
         // JWT signature validation failed — token stale or API key mismatch.
@@ -348,6 +350,12 @@ export default function VoiceCallPanel({ toNumber, toName, onCallEnd }: VoiceCal
                callState === 'ringing' ? 'Ringing...' :
                fmtDuration(duration)}
             </span>
+            {(callState === 'connecting' || callState === 'ringing') && (
+              <span className="text-[10px] font-mono text-emerald-700/70 ml-1">
+                [device:{deviceRef.current?.state ?? 'null'}
+                {lastErrorCode != null ? ` err:${lastErrorCode}` : ''}]
+              </span>
+            )}
           </div>
 
           {callState === 'active' && (
