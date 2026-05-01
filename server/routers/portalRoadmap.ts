@@ -293,6 +293,7 @@ export const portalRoadmapRouter = router({
       pdfUrl: r.outputPdfPath || r.pdfStoragePath || r.reportUrl || null,
       reportUrl: r.reportUrl,
       summary: r.claudeResponse?.summary_1_paragraph ?? null,
+      findings: r.claudeResponse?.findings ?? [],
       findingCount: r.claudeResponse?.findings?.length ?? 0,
       deliveredAt: r.deliveredAt,
       createdAt: r.createdAt,

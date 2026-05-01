@@ -49,7 +49,7 @@ export default function PortalRoadmapSubmitted() {
     { id },
     {
       enabled: id.length > 0,
-      refetchInterval: (q) => {
+      refetchInterval: (q: any) => {
         const s = (q.state.data as any)?.status;
         if (s === "completed" || s === "failed") return false;
         return 5000;

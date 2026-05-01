@@ -26,6 +26,7 @@ import { toast } from 'sonner';
 import ThreeSixtyVisitDetail from '@/pages/ThreeSixtyVisitDetail';
 import ThreeSixtyBaselineWizard from '@/pages/ThreeSixtyBaselineWizard';
 import ThreeSixtyScanDetail from '@/pages/ThreeSixtyScanDetail';
+import OpportunityWorkflowPanel from '@/components/OpportunityWorkflowPanel';
 
 const TIER_ICONS: Record<MemberTier, React.ElementType> = {
   bronze: Shield,
@@ -211,6 +212,11 @@ function MembershipFullDetail({ membershipId, membership }: { membershipId: numb
 
   const openWOs = (workOrders ?? []).filter(wo => wo.status === 'open' || wo.status === 'scheduled' || wo.status === 'in_progress');
   const completedWOs = (workOrders ?? []).filter(wo => wo.status === 'completed');
+  const membershipWorkflowStage = openWOs.some(wo => wo.status === 'scheduled')
+    ? 'scheduled'
+    : completedWOs.length > 0
+      ? 'completed'
+      : (membership.status ?? 'active');
 
   return (
     <Card className="border shadow-sm">
@@ -276,6 +282,21 @@ function MembershipFullDetail({ membershipId, membership }: { membershipId: numb
             </div>
             <div className="text-sm font-bold text-amber-700">{openWOs.length}</div>
           </div>
+        </div>
+
+        <div className="mt-3">
+          <OpportunityWorkflowPanel
+            area="membership"
+            stage={membershipWorkflowStage}
+            value={membership.annualPriceCents ? membership.annualPriceCents / 100 : 0}
+            updatedAt={membership.updatedAt}
+            compact
+            stats={[
+              { label: 'open work orders', value: openWOs.length, tone: openWOs.length > 0 ? 'warn' : 'good' },
+              { label: 'completed visits', value: completedWOs.length },
+              { label: 'linked jobs', value: (linkedJobs ?? []).length },
+            ]}
+          />
         </div>
       </CardHeader>
 

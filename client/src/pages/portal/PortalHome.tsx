@@ -6,11 +6,14 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
+import { deriveThreeSixtyOperatingStatus } from "@/lib/threeSixtyMethod";
 import PortalLayout from "@/components/PortalLayout";
 import OnboardingModal from "@/components/OnboardingModal";
 import { Button } from "@/components/ui/button";
 import ProjectCompleteNudge from "@/components/portal/continuity/ProjectCompleteNudge";
 import HomeHealthScoreWidget from "@/components/portal/continuity/HomeHealthScoreWidget";
+import PortalWhatsNext from "@/components/portal/PortalWhatsNext";
+import PortalProperty360Plan from "@/components/portal/PortalProperty360Plan";
 import { toast } from "sonner";
 import {
   Loader2,
@@ -298,6 +301,12 @@ export default function PortalHome() {
   const totalDue = openInvoices.reduce((sum, inv) => sum + ((inv.amountDue ?? 0) - (inv.amountPaid ?? 0)), 0);
   // Approved estimates with a linked HP opportunity = active jobs
   const activeJobs = estimates.filter((e) => e.status === "approved" && e.hpOpportunityId);
+  const threeSixtyStatus = deriveThreeSixtyOperatingStatus({ membershipData });
+  const methodPhaseLabel = {
+    aware: "Aware",
+    act: "Act",
+    advance: "Advance",
+  }[threeSixtyStatus.currentPhase];
 
   return (
     <PortalLayout>
@@ -342,6 +351,26 @@ export default function PortalHome() {
             </p>
           )}
         </div>
+
+        <PortalWhatsNext
+          estimates={estimates}
+          invoices={invoices}
+          appointments={appointments}
+          activeJobs={activeJobs}
+          membershipData={membershipData}
+          onNavigate={navigate}
+        />
+
+        <PortalProperty360Plan
+          propertyLabel="Primary home"
+          propertyAddress={customer?.address}
+          membershipData={membershipData}
+          estimates={estimates}
+          invoices={invoices}
+          appointments={appointments}
+          activeJobs={activeJobs}
+          onNavigate={navigate}
+        />
 
         {/* ── Continuity: Recent project wrap-up (Path A → B nudge) ── */}
         {recentCompletion && (
@@ -424,6 +453,35 @@ export default function PortalHome() {
                 <span className="truncate">{customer?.address ?? 'Property on file'}</span>
               </div>
             )}
+            <div className="mt-4 rounded-xl border border-emerald-100 bg-white p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-700">Your 360 Method</p>
+                  <p className="mt-0.5 text-sm font-bold text-gray-900">
+                    Step {threeSixtyStatus.currentStep.number}: {threeSixtyStatus.currentStep.customerLabel}
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed text-gray-600">{threeSixtyStatus.nextCustomerAction}</p>
+                </div>
+                <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-700">
+                  {methodPhaseLabel}
+                </span>
+              </div>
+              <div className="mt-3 grid grid-cols-4 gap-1.5">
+                {threeSixtyStatus.seasonalVisits.map((visit) => (
+                  <div key={visit.season} className="rounded-lg border border-gray-100 bg-gray-50 px-1.5 py-1.5 text-center">
+                    <p className="text-[10px] font-semibold text-gray-800">{visit.label}</p>
+                    <p className={`mt-0.5 text-[9px] capitalize ${
+                      visit.status === 'completed' ? 'text-emerald-700' :
+                      visit.status === 'scheduled' ? 'text-blue-700' :
+                      visit.status === 'due' ? 'text-amber-700' :
+                      'text-gray-400'
+                    }`}>
+                      {visit.status.replace('_', ' ')}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
             <div className="mt-4 grid grid-cols-4 gap-2">
               <div className="bg-white rounded-lg border border-emerald-100 px-2 py-2 text-center">
                 <p className="text-lg font-bold text-emerald-700">${(membershipData.laborBankBalance / 100).toFixed(0)}</p>

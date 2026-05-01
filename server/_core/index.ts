@@ -1208,7 +1208,7 @@ async function startServer() {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'", "'unsafe-inline'", "https://maps.googleapis.com", "https://js.stripe.com", "https://www.googletagmanager.com"],
         frameSrc: ["https://js.stripe.com", "https://hooks.stripe.com"],
-        connectSrc: ["'self'", "https://api.stripe.com", "https://maps.googleapis.com", "https://www.google-analytics.com", "https://analytics.google.com", "https://region1.google-analytics.com"],
+        connectSrc: ["'self'", "https://api.stripe.com", "https://js.stripe.com", "https://maps.googleapis.com", "https://fonts.googleapis.com", "https://fonts.gstatic.com", "https://d2xsxph8kpxj0f.cloudfront.net", "https://www.google-analytics.com", "https://analytics.google.com", "https://region1.google-analytics.com"],
         imgSrc: ["'self'", "data:", "blob:", "https:", "http:"],
         styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
         fontSrc: ["'self'", "https://fonts.gstatic.com"],
@@ -1219,7 +1219,11 @@ async function startServer() {
 
   // ── Rate limiting ──
   const globalLimiter = rateLimit({ windowMs: 60 * 1000, max: 100, standardHeaders: true, legacyHeaders: false });
-  const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5, message: "Too many login attempts, try again later" });
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: process.env.NODE_ENV === "development" ? 100 : 5,
+    message: "Too many login attempts, try again later",
+  });
   // Tight limiter for public, unauthenticated POST surfaces that write to DB/Stripe/email.
   const publicWriteLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -2206,6 +2210,11 @@ async function startServer() {
   app.use("/api/auth/login", authLimiter);
   registerAuthRoutes(app);
   seedDefaultAdminIfNeeded().catch(err => console.error("[Auth] seed failed:", err));
+  const backgroundJobsDisabled = process.env.DISABLE_BACKGROUND_JOBS === "true";
+  if (backgroundJobsDisabled) {
+    console.log("[boot] Background jobs disabled by DISABLE_BACKGROUND_JOBS=true");
+  }
+  if (!backgroundJobsDisabled) {
   // ── Gmail poll schedule (every 2 minutes) ────────────────────────────────────────────────────
   setInterval(async () => {
     const email = process.env.GMAIL_CONNECTED_EMAIL;
@@ -2495,6 +2504,7 @@ async function startServer() {
     );
   }, 5 * 60 * 1000);
   console.log("[reengagement] sender scheduler started (runs every 5 minutes)");
+  }
 
   // ── 360° Funnel REST endpoints (called from https://360.handypioneers.com) ──
 
@@ -2762,7 +2772,9 @@ async function startServer() {
   // Scheduler polls for queued tasks assigned to autonomous agents.
   // KPI cron aggregates seat → department daily and department → company weekly.
   // Hierarchy audit logs any Integrator/Head/sub-agent parentage violations.
-  try {
+  if (backgroundJobsDisabled) {
+    console.log("[boot] Agent runtime disabled by DISABLE_BACKGROUND_JOBS=true");
+  } else try {
     const { startScheduler } = await import("../lib/agentRuntime/scheduler");
     const { startKpiCron } = await import("../lib/agentRuntime/kpiRollup");
     const { auditRoster } = await import("../lib/agentRuntime/hierarchy");

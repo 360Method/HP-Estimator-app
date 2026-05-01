@@ -54,10 +54,10 @@ describe('calcMemberDiscount', () => {
       expect(goldDiscount).toBeGreaterThanOrEqual(silverDiscount);
     });
 
-    it('matches example from JSDoc: gold $15,000 job → $1,125 discount', () => {
-      // From the JSDoc: calcMemberDiscount("gold", 1500000) => 112500
+    it('matches step-ladder pricing: gold $15,000 job -> $840 discount', () => {
+      // 12% on first $1k + 8% on next $4k + 4% on remaining $10k.
       const result = calcMemberDiscount('gold', 1500000);
-      expect(result).toBe(112500);
+      expect(result).toBe(84000);
     });
 
     it('discount is always less than job total', () => {

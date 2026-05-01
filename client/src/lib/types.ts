@@ -226,7 +226,27 @@ export interface ChangeOrder {
   rejectedReason?: string;
 }
 
-export type CustomerProfileTab = 'profile' | 'properties' | 'leads' | 'estimates' | 'jobs' | 'invoices' | 'expenses' | 'communication' | 'attachments' | 'notes' | 'portal' | 'membership360';
+export type CustomerProfileTab =
+  | 'overview'
+  | 'opportunities'
+  | 'workflow'
+  | 'membership'
+  | 'communication'
+  | 'documents'
+  | 'billing'
+  | 'portal'
+  | 'history'
+  // Legacy tabs kept for saved local state and old deep links.
+  | 'profile'
+  | 'properties'
+  | 'leads'
+  | 'estimates'
+  | 'jobs'
+  | 'invoices'
+  | 'expenses'
+  | 'attachments'
+  | 'notes'
+  | 'membership360';
 
 export interface JobInfo {
   client: string;
@@ -258,7 +278,7 @@ export interface GlobalSettings {
   customTaxPct: number;
 }
 
-export type AppSection = 'customer' | 'opp-details' | 'sales' | 'calculator' | 'estimate' | 'present' | 'customers' | 'jobs' | 'job-details' | 'pipeline' | 'invoice' | 'dashboard' | 'schedule' | 'inbox' | 'reporting' | 'marketing' | 'leads' | 'three-sixty' | 'financials' | 'quickbooks'
+export type AppSection = 'customer' | 'opp-details' | 'sales' | 'calculator' | 'estimate' | 'present' | 'customers' | 'jobs' | 'job-details' | 'pipeline' | 'invoice' | 'dashboard' | 'workflow' | 'operations' | 'schedule' | 'inbox' | 'reporting' | 'marketing' | 'leads' | 'three-sixty' | 'financials' | 'quickbooks'
   // 'requests' is deprecated — kept in the union so old deep-links still type-check; the shell redirects to 'leads'.
   | 'requests';
 
@@ -696,6 +716,19 @@ export interface Opportunity {
   propertyIdSource?: 'manual' | 'auto-migrated' | null;
   // 360° Membership this job was created from
   membershipId?: number | null;
+  // 360° Method context: keeps every opportunity tied to the customer/property care system
+  threeSixtyStepKey?: string | null;
+  threeSixtySource?:
+    | 'website'
+    | 'inbound_call'
+    | 'baseline'
+    | 'seasonal_visit'
+    | 'customer_request'
+    | 'prior_job_follow_up'
+    | 'membership_recommendation'
+    | null;
+  threeSixtyPriority?: 'red' | 'yellow' | 'green' | null;
+  threeSixtyFinding?: string | null;
   // Lead routing — role-based ownership
   assignedUserId?: number | null;
   assignedRole?: 'nurturer' | 'consultant' | 'project_manager' | null;

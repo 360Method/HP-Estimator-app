@@ -35,7 +35,7 @@ export default function AgentDraftsPage() {
         <Info className="w-4 h-4 text-sky-700 mt-0.5 shrink-0" />
         <div className="text-xs text-sky-900 leading-relaxed">
           <span className="font-semibold">Drafts now live inside the customer profile.</span>{" "}
-          Each row below deep-links to the customer's "Pending Your Review" section so you can edit + approve in context. This page remains the cross-customer operations dashboard.
+          Each row below deep-links to the customer's opportunity-level AI drafts so you can edit, approve, or reject in the right lead, estimate, or job context. This page remains the cross-customer operations dashboard.
         </div>
       </div>
 
@@ -43,7 +43,7 @@ export default function AgentDraftsPage() {
         <p className="text-xs uppercase tracking-[0.2em] text-stone-500">Lead Nurturer</p>
         <h1 className="mt-2 text-3xl font-semibold text-stone-900">Agent drafts</h1>
         <p className="mt-2 max-w-2xl text-sm text-stone-600">
-          Every post-Roadmap follow-up is drafted here for your review. Nothing sends without your tap. Cadence cancels itself the moment a customer books, enrolls, or replies.
+          Every post-Roadmap follow-up is drafted here by opportunity. General nurture can move fast; pricing, scope, payment, and job-specific messages stay approval-gated.
         </p>
       </header>
 

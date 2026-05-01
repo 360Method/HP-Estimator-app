@@ -12,6 +12,11 @@ import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import PortalLayout from "@/components/PortalLayout";
 import { Button } from "@/components/ui/button";
+import {
+  bucketRoadmapItems,
+  formatInvestmentRange,
+  normalizePriorityTranslationFindings,
+} from "@/lib/roadmap";
 import { toast } from "sonner";
 import {
   Loader2,
@@ -72,6 +77,55 @@ function StatusPill({ status }: { status: string }) {
       />
       {s.text}
     </span>
+  );
+}
+
+function RoadmapBuckets({ findings }: { findings?: any[] }) {
+  const items = normalizePriorityTranslationFindings(findings);
+  const buckets = bucketRoadmapItems(items);
+  if (items.length === 0) return null;
+
+  return (
+    <div className="px-5 sm:px-6 py-5 border-t" style={{ borderColor: "#e5e0d3" }}>
+      <p
+        className="text-[11px] tracking-wider font-semibold uppercase mb-3"
+        style={{ color: FOREST }}
+      >
+        Step 4: Priority Roadmap
+      </p>
+      <div className="grid gap-3 sm:grid-cols-3">
+        {buckets.map((bucket) => (
+          <div key={bucket.urgency} className="rounded-2xl border bg-white p-3" style={{ borderColor: "#e5e0d3" }}>
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="text-sm font-bold" style={{ color: FOREST }}>{bucket.label}</p>
+                <p className="text-[11px] text-gray-500">{bucket.horizon}</p>
+              </div>
+              <span className="rounded-full bg-[#faf7f0] px-2 py-0.5 text-[10px] font-bold" style={{ color: GOLD }}>
+                {bucket.items.length}
+              </span>
+            </div>
+            <p className="mt-2 text-[11px] leading-relaxed text-gray-600">{bucket.customerMeaning}</p>
+            <p className="mt-2 text-xs font-semibold" style={{ color: FOREST }}>
+              {formatInvestmentRange(bucket.totalLow, bucket.totalHigh)}
+            </p>
+            <div className="mt-3 space-y-2">
+              {bucket.items.slice(0, 3).map(item => (
+                <div key={item.id} className="rounded-lg bg-[#faf7f0] px-3 py-2">
+                  <p className="text-xs font-semibold text-gray-900">{item.title}</p>
+                  <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-gray-600">{item.finding}</p>
+                </div>
+              ))}
+              {bucket.items.length === 0 && (
+                <p className="rounded-lg border border-dashed px-3 py-3 text-center text-[11px] text-gray-500" style={{ borderColor: "#e5e0d3" }}>
+                  No items here.
+                </p>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -847,6 +901,8 @@ export default function PortalRoadmap() {
                     </p>
                   </div>
                 )}
+
+                <RoadmapBuckets findings={(selected as any).findings} />
               </div>
             )}
           </>

@@ -41,9 +41,11 @@ export default function VoiceCallPanel({ toNumber, toName, onCallEnd }: VoiceCal
   const activeCallRef = useRef<Call | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef<number>(0);
+  const { data: twilioStatus } = trpc.inbox.twilio.status.useQuery(undefined, { staleTime: 30_000 });
 
   // Voice tokens expire after 1hr — refetch every 50min to keep the device registered.
   const { data: tokenData, isError: tokenError, refetch: refetchToken } = trpc.inbox.twilio.voiceToken.useQuery(undefined, {
+    enabled: twilioStatus?.voiceConfigured === true,
     retry: false,
     staleTime: 50 * 60 * 1000,
     refetchInterval: 50 * 60 * 1000,
@@ -262,6 +264,16 @@ export default function VoiceCallPanel({ toNumber, toName, onCallEnd }: VoiceCal
   };
 
   // ── Not configured ────────────────────────────────────────────────────────
+  if (twilioStatus && !twilioStatus.voiceConfigured) {
+    const missing = twilioStatus.missingVoice?.join(', ') || 'voice configuration';
+    return (
+      <div className="flex items-center gap-2 text-xs text-amber-700" title={`Missing: ${missing}`}>
+        <AlertTriangle className="w-3.5 h-3.5" />
+        <span>Voice setup incomplete</span>
+      </div>
+    );
+  }
+
   if (tokenError) {
     return (
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
