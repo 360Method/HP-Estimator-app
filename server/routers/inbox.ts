@@ -20,7 +20,7 @@ import {
   updateConversation,
   updateConversationLastMessage,
 } from "../db";
-import { sendSms, generateVoiceToken, isTwilioConfigured } from "../twilio";
+import { sendSms, generateVoiceToken, getTwilioConfigStatus, isTwilioConfigured } from "../twilio";
 import { findPortalCustomerByHpId, getPortalMessagesByCustomer } from "../portalDb";
 
 // ─── CONVERSATIONS ────────────────────────────────────────────────────────────
@@ -175,10 +175,13 @@ const callLogsRouter = router({
 
 const twilioRouter = router({
   /** Check if Twilio is configured */
-  status: protectedProcedure.query(() => ({
-    configured: isTwilioConfigured(),
-    phoneNumber: isTwilioConfigured() ? process.env.TWILIO_PHONE_NUMBER : null,
-  })),
+  status: protectedProcedure.query(() => {
+    const status = getTwilioConfigStatus();
+    return {
+      configured: status.smsConfigured,
+      ...status,
+    };
+  }),
 
   /** Send an SMS outbound */
   sendSms: protectedProcedure

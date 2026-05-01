@@ -25,6 +25,7 @@ import type { LeadContactType, LeadStage, JobAttachment } from '@/lib/types';
 import { LEAD_STAGES } from '@/lib/types';
 import { ConvertToEstimateModal } from '@/components/ConversionModal';
 import { Globe, Camera, Clock as ClockIcon, Wrench, ChevronDown, ChevronUp } from 'lucide-react';
+import OpportunityWorkflowPanel from '@/components/OpportunityWorkflowPanel';
 
 // ── Helpers ──────────────────────────────────────────────────
 function fmtDateTime(iso: string) {
@@ -295,6 +296,22 @@ export default function LeadNurturingPanel() {
         </Card>
       )}
 
+      <OpportunityWorkflowPanel
+        area="lead"
+        stage={currentStage}
+        value={activeOpp.value}
+        updatedAt={activeOpp.updatedAt}
+        stats={[
+          { label: 'notes logged', value: notes.length },
+          { label: 'attachments', value: attachments.length },
+          { label: phone ? 'phone ready' : 'no phone', value: phone ? 'Yes' : 'No', tone: phone ? 'good' : 'warn' },
+        ]}
+        primaryActionLabel={currentStage === 'Won' ? 'Convert to Estimate' : phone ? 'Draft SMS' : 'Add Contact Info'}
+        secondaryActionLabel={email ? 'Email Customer' : undefined}
+        onPrimaryAction={currentStage === 'Won' ? handleConvert : phone ? () => setSmsOpen(true) : undefined}
+        onSecondaryAction={email ? () => { window.location.href = `mailto:${email}?subject=Following up on your service request`; } : undefined}
+      />
+
       {/* ── STATUS SWITCHER ─────────────────────────────────── */}
       <Card className="border-2 border-primary/10">
         <CardHeader className="pb-2 pt-4">
@@ -335,18 +352,11 @@ export default function LeadNurturingPanel() {
             })}
           </div>
 
-          {/* Next-action CTA */}
-          <div className="flex items-start gap-2.5 rounded-lg bg-primary/5 border border-primary/15 px-3 py-2.5">
-            <span className="text-primary mt-0.5 shrink-0">{stageCfg.ctaIcon}</span>
+          <div className="flex items-center gap-2.5 rounded-lg bg-muted/30 border border-border px-3 py-2.5">
+            <span className="text-primary shrink-0">{stageCfg.ctaIcon}</span>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-foreground">Next Action</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{stageCfg.cta}</p>
+              <p className="text-xs text-muted-foreground">{stageCfg.cta}</p>
             </div>
-            {currentStage === 'Won' && (
-              <Button size="sm" className="gap-1.5 text-xs h-7 shrink-0" onClick={handleConvert}>
-                <ArrowRight size={12} /> Convert to Estimate
-              </Button>
-            )}
           </div>
         </CardContent>
       </Card>

@@ -399,6 +399,32 @@ export const priorityTranslationRouter = router({
     }),
 
   /**
+   * Public status for the post-submit confirmation page.
+   * Intentionally returns only non-sensitive processing state.
+   */
+  getPublicStatus: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+
+      const rows = await db
+        .select({
+          id: priorityTranslations.id,
+          status: priorityTranslations.status,
+          deliveredAt: priorityTranslations.deliveredAt,
+          failureReason: priorityTranslations.failureReason,
+        })
+        .from(priorityTranslations)
+        .where(eq(priorityTranslations.id, input.id))
+        .limit(1);
+      const row = rows[0];
+      if (!row) throw new TRPCError({ code: "NOT_FOUND" });
+
+      return row;
+    }),
+
+  /**
    * Internal worker trigger. Guarded by INTERNAL_WORKER_KEY.
    * Useful for a queue runner or manual retry from an admin panel.
    */

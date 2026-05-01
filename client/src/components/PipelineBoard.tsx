@@ -37,6 +37,7 @@ import { nanoid } from 'nanoid';
 import { toast } from 'sonner';
 import { trpc } from '@/lib/trpc';
 import { ConvertToEstimateModal, ConvertToJobModal } from '@/components/ConversionModal';
+import { getOpportunityHeat } from '@/components/OpportunityWorkflowPanel';
 
 // ── Stage color map ───────────────────────────────────────────
 const STAGE_COLORS: Record<string, string> = {
@@ -131,6 +132,7 @@ function KanbanCard({
   const [showActions, setShowActions] = useState(false);
   const [showConvertToEstimateModal, setShowConvertToEstimateModal] = useState(false);
   const [showConvertToJobModal, setShowConvertToJobModal] = useState(false);
+  const heat = getOpportunityHeat(area, opp.stage, opp.value, opp.updatedAt);
 
   const handleDelete = () => {
     if (window.confirm(`Delete "${opp.title}"? This cannot be undone.`)) {
@@ -143,7 +145,13 @@ function KanbanCard({
     <div
       ref={setNodeRef}
       style={style}
-      className={`bg-white border border-border rounded-xl shadow-sm hover:shadow-md transition-shadow group ${isDragging ? 'opacity-30' : ''}`}
+      className={`bg-white border-2 rounded-xl shadow-sm hover:shadow-md transition-shadow group ${
+        heat.level === 'hot'
+          ? 'border-rose-300'
+          : heat.level === 'warm'
+            ? 'border-amber-300'
+            : 'border-emerald-300'
+      } ${isDragging ? 'opacity-30' : ''}`}
     >
       {/* Card header */}
       <div className="flex items-start gap-2 p-3">
@@ -166,6 +174,10 @@ function KanbanCard({
           )}
           <div className="flex items-center gap-1.5">
             <div className="text-sm font-semibold text-foreground truncate flex-1">{opp.title}</div>
+            <span className={`flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full border text-[9px] font-bold uppercase ${heat.className}`} title={heat.reason}>
+              <span className={`w-1.5 h-1.5 rounded-full ${heat.dotClassName}`} />
+              {heat.label}
+            </span>
             {opp.seqNumber && (
               <span className="flex-shrink-0 px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 text-[9px] font-mono font-bold tracking-wider">
                 {area === 'lead' ? 'L' : area === 'estimate' ? 'E' : 'J'}-{String(opp.seqNumber).padStart(3, '0')}

@@ -6,6 +6,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { router, protectedProcedure } from "../_core/trpc";
 import {
+  getDb,
   listCustomers,
   listCustomersFiltered,
   getCustomerById,
@@ -18,11 +19,33 @@ import {
   updateCustomerAddress,
   deleteCustomerAddress,
   listOpportunities,
+  getOpportunityById,
+  listInvoices,
+  listScheduleEvents,
+  listConversationsByCustomer,
+  listMessages,
+  listMessagesByOpportunity,
+  listCallLogsByConversation,
   detectDuplicates,
   mergeCustomers,
   mergeStubIntoCustomer,
   bulkAddTag,
 } from "../db";
+import {
+  findPortalCustomerByHpId,
+  getPortalAppointmentsByCustomer,
+  getPortalChangeOrdersByCustomer,
+  getPortalDocumentsByCustomer,
+  getPortalEstimatesByCustomer,
+  getPortalInvoicesByCustomer,
+  getPortalInvoicesByHpOpportunityId,
+  getPortalMessagesByCustomer,
+  getMilestonesByJob,
+  getUpdatesByJob,
+  getJobSignOff,
+} from "../portalDb";
+import { threeSixtyMemberships, threeSixtyWorkOrders } from "../../drizzle/schema";
+import { desc, eq, inArray, or } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
 const CustomerInput = z.object({
@@ -114,6 +137,164 @@ export const customersRouter = router({
       if (!customer) throw new TRPCError({ code: "NOT_FOUND", message: "Customer not found" });
       const addresses = await listCustomerAddresses(input.id);
       return { ...customer, addresses };
+    }),
+
+  /**
+   * Canonical customer context.
+   * This is the launch-readiness spine for Customer as the source of truth:
+   * one endpoint that ties CRM records, portal records, communications,
+   * schedules, invoices, memberships, and work orders back to the same customer.
+   */
+  getFullContext: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ input }) => {
+      const customer = await getCustomerById(input.id);
+      if (!customer) throw new TRPCError({ code: "NOT_FOUND", message: "Customer not found" });
+
+      const [
+        addresses,
+        opportunities,
+        invoices,
+        scheduleEvents,
+        conversations,
+        portalCustomer,
+      ] = await Promise.all([
+        listCustomerAddresses(input.id),
+        listOpportunities(undefined, input.id, false, 2000),
+        listInvoices({ customerId: input.id, limit: 500 }),
+        listScheduleEvents({ customerId: input.id, limit: 500 }),
+        listConversationsByCustomer(input.id, 50),
+        findPortalCustomerByHpId(input.id).catch(() => null),
+      ]);
+
+      const conversationDetails = await Promise.all(
+        conversations.map(async (conversation) => {
+          const [messages, callLogs] = await Promise.all([
+            listMessages(conversation.id, 100, 0),
+            listCallLogsByConversation(conversation.id),
+          ]);
+          return { conversation, messages: [...messages].reverse(), callLogs };
+        }),
+      );
+
+      const portal = portalCustomer
+        ? {
+            customer: portalCustomer,
+            estimates: await getPortalEstimatesByCustomer(portalCustomer.id),
+            invoices: await getPortalInvoicesByCustomer(portalCustomer.id),
+            appointments: await getPortalAppointmentsByCustomer(portalCustomer.id),
+            messages: await getPortalMessagesByCustomer(portalCustomer.id),
+            changeOrders: await getPortalChangeOrdersByCustomer(portalCustomer.id),
+            documents: await getPortalDocumentsByCustomer(portalCustomer.id),
+          }
+        : null;
+
+      const db = await getDb();
+      const memberships = db
+        ? await db
+            .select()
+            .from(threeSixtyMemberships)
+            .where(
+              or(
+                eq(threeSixtyMemberships.customerId, input.id),
+                eq(threeSixtyMemberships.hpCustomerId, input.id),
+              ),
+            )
+            .orderBy(desc(threeSixtyMemberships.createdAt))
+        : [];
+      const membershipIds = memberships.map((m) => m.id);
+      const workOrders = db && membershipIds.length
+        ? await db
+            .select()
+            .from(threeSixtyWorkOrders)
+            .where(inArray(threeSixtyWorkOrders.membershipId, membershipIds))
+            .orderBy(desc(threeSixtyWorkOrders.createdAt))
+        : [];
+
+      const opportunitySummaries = await Promise.all(
+        opportunities.map(async (opportunity) => ({
+          opportunity,
+          invoices: invoices.filter((invoice) => invoice.opportunityId === opportunity.id),
+          scheduleEvents: scheduleEvents.filter((event) => event.opportunityId === opportunity.id),
+          portalEstimate: portal?.estimates.find((estimate) => estimate.hpOpportunityId === opportunity.id) ?? null,
+          portalInvoices: await getPortalInvoicesByHpOpportunityId(opportunity.id).catch(() => []),
+          portalChangeOrders: portal?.changeOrders.filter((changeOrder) => changeOrder.hpOpportunityId === opportunity.id) ?? [],
+          messages: await listMessagesByOpportunity(opportunity.id, 100),
+          milestones: await getMilestonesByJob(opportunity.id),
+          updates: await getUpdatesByJob(opportunity.id),
+          signOff: await getJobSignOff(opportunity.id),
+        })),
+      );
+
+      return {
+        customer,
+        addresses,
+        opportunities,
+        opportunitySummaries,
+        invoices,
+        scheduleEvents,
+        conversations: conversationDetails,
+        portal,
+        memberships,
+        workOrders,
+      };
+    }),
+
+  /**
+   * Canonical job/opportunity context.
+   * Use this for the future customer > job detail screen and for reconciling
+   * what staff see internally with what customers see in the portal.
+   */
+  getJobContext: protectedProcedure
+    .input(z.object({ opportunityId: z.string() }))
+    .query(async ({ input }) => {
+      const opportunity = await getOpportunityById(input.opportunityId);
+      if (!opportunity) throw new TRPCError({ code: "NOT_FOUND", message: "Opportunity not found" });
+
+      const [customer, portalCustomer] = await Promise.all([
+        getCustomerById(opportunity.customerId),
+        findPortalCustomerByHpId(opportunity.customerId).catch(() => null),
+      ]);
+
+      const [
+        invoices,
+        scheduleEvents,
+        messages,
+        milestones,
+        updates,
+        signOff,
+        portalInvoices,
+      ] = await Promise.all([
+        listInvoices({ opportunityId: opportunity.id, limit: 200 }),
+        listScheduleEvents({ opportunityId: opportunity.id, limit: 200 }),
+        listMessagesByOpportunity(opportunity.id, 200),
+        getMilestonesByJob(opportunity.id),
+        getUpdatesByJob(opportunity.id),
+        getJobSignOff(opportunity.id),
+        getPortalInvoicesByHpOpportunityId(opportunity.id).catch(() => []),
+      ]);
+
+      const portalEstimate = portalCustomer
+        ? (await getPortalEstimatesByCustomer(portalCustomer.id)).find((estimate) => estimate.hpOpportunityId === opportunity.id) ?? null
+        : null;
+      const portalChangeOrders = portalCustomer
+        ? (await getPortalChangeOrdersByCustomer(portalCustomer.id)).filter((changeOrder) => changeOrder.hpOpportunityId === opportunity.id)
+        : [];
+
+      return {
+        customer,
+        opportunity,
+        invoices,
+        scheduleEvents,
+        messages,
+        portalCustomer,
+        portalEstimate,
+        portalInvoices,
+        portalChangeOrders,
+        milestones,
+        updates,
+        signOff,
+      };
     }),
 
   /** Create a new customer */

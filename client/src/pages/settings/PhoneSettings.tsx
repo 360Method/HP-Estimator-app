@@ -8,7 +8,7 @@
 import { useState } from 'react';
 import {
   Phone, PhoneForwarded, Bot, Voicemail, TestTube, Save, Loader2,
-  Clock, ChevronDown, ChevronUp, Sparkles, AlertTriangle,
+  Clock, ChevronDown, ChevronUp, Sparkles, AlertTriangle, CheckCircle2, XCircle,
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -216,6 +216,7 @@ function PromptEditor({
 
 export default function PhoneSettings() {
   const { data: settings, isLoading, refetch } = trpc.phone.getSettings.useQuery();
+  const { data: twilioStatus } = trpc.inbox.twilio.status.useQuery(undefined, { staleTime: 30_000 });
 
   const [mode, setMode] = useState<ForwardingMode | null>(null);
   const [forwardingNumber, setForwardingNumber] = useState<string | null>(null);
@@ -309,6 +310,9 @@ export default function PhoneSettings() {
   ];
 
   const isForwardingMode = effectiveMode === 'forward_to_number' || effectiveMode === 'forward_to_ai';
+  const businessPhone = twilioStatus?.phoneNumber || '+1 (360) 838-6731';
+  const voiceReady = twilioStatus?.voiceConfigured ?? false;
+  const smsReady = twilioStatus?.smsConfigured ?? false;
 
   return (
     <div className="p-6 max-w-2xl space-y-8">
@@ -320,9 +324,52 @@ export default function PhoneSettings() {
         <div>
           <h2 className="text-lg font-bold text-foreground">Phone Settings</h2>
           <p className="text-sm text-muted-foreground">
-            Configure inbound call routing for <span className="font-medium text-foreground">+1 (360) 838-6731</span>
+            Configure inbound call routing for <span className="font-medium text-foreground">{businessPhone}</span>
           </p>
         </div>
+      </div>
+
+      {/* Twilio readiness */}
+      <div className={`rounded-lg border p-4 space-y-3 ${voiceReady ? 'border-emerald-300 bg-emerald-50/50' : 'border-amber-300 bg-amber-50/50'}`}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Twilio Readiness</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Confirms the app can send texts, receive calls, and place browser calls.
+            </p>
+          </div>
+          <Badge variant={voiceReady ? 'default' : 'secondary'} className="shrink-0">
+            {voiceReady ? 'Ready' : 'Needs setup'}
+          </Badge>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <div className="rounded-md border border-border bg-background px-3 py-2">
+            <div className="flex items-center gap-1.5 text-xs font-medium">
+              {smsReady ? <CheckCircle2 size={13} className="text-emerald-600" /> : <XCircle size={13} className="text-amber-600" />}
+              SMS
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-1">{smsReady ? 'Configured' : 'Missing SMS keys'}</p>
+          </div>
+          <div className="rounded-md border border-border bg-background px-3 py-2">
+            <div className="flex items-center gap-1.5 text-xs font-medium">
+              {voiceReady ? <CheckCircle2 size={13} className="text-emerald-600" /> : <XCircle size={13} className="text-amber-600" />}
+              Browser calling
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-1">{voiceReady ? 'Configured' : 'Missing Voice keys'}</p>
+          </div>
+          <div className="rounded-md border border-border bg-background px-3 py-2">
+            <div className="flex items-center gap-1.5 text-xs font-medium">
+              <Phone size={13} className="text-muted-foreground" />
+              Phone number
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-1 font-mono">{businessPhone}</p>
+          </div>
+        </div>
+        {!!twilioStatus?.missingVoice?.length && (
+          <p className="text-xs text-amber-700">
+            Missing config: <span className="font-mono">{twilioStatus.missingVoice.join(', ')}</span>
+          </p>
+        )}
       </div>
 
       {/* Routing mode */}
@@ -500,7 +547,7 @@ export default function PhoneSettings() {
             Test Call
           </h3>
           <p className="text-xs text-muted-foreground mt-1">
-            Place a test call from +1 (360) 838-6731 to verify Twilio is working.
+            Place a test call from {businessPhone} to verify Twilio is working.
           </p>
         </div>
         <div className="flex gap-2">

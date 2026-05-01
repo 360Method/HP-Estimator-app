@@ -5,6 +5,7 @@ import { httpBatchLink, TRPCClientError } from "@trpc/client";
 import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 import App from "./App";
+import { installAnalytics } from "./analytics";
 import { getLoginUrl } from "./const";
 import "./index.css";
 
@@ -60,8 +61,20 @@ createRoot(document.getElementById("root")!).render(
   </trpc.Provider>
 );
 
-// Register service worker for PWA offline support
-if ('serviceWorker' in navigator) {
+installAnalytics();
+
+// Keep local preview uncached so auth/API fixes are visible immediately.
+if (import.meta.env.DEV && 'serviceWorker' in navigator) {
+  navigator.serviceWorker
+    .getRegistrations()
+    .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
+    .then(() => caches?.keys?.())
+    .then((keys) => Promise.all((keys ?? []).map((key) => caches.delete(key))))
+    .catch((err) => console.warn('[SW] Dev cleanup failed:', err));
+}
+
+// Register service worker for production PWA offline support.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker
       .register('/sw.js')

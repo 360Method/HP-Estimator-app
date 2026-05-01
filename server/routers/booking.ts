@@ -20,7 +20,6 @@ import {
 } from "../db";
 import { notifyOwner } from "../_core/notification";
 import { onLeadCreated } from "../leadRouting";
-import { sendEmail } from "../gmail";
 import { nanoid } from "nanoid";
 import { runAutomationsForTrigger } from "../automationEngine";
 import { renderEmailTemplate } from "../emailTemplates";

@@ -63,6 +63,21 @@ export function isTwilioConfigured() {
   return !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_PHONE_NUMBER);
 }
 
+export function getTwilioConfigStatus() {
+  const smsRequired = ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_PHONE_NUMBER"] as const;
+  const voiceRequired = ["TWILIO_API_KEY", "TWILIO_API_SECRET", "TWILIO_TWIML_APP_SID"] as const;
+  const missingSms = smsRequired.filter((key) => !process.env[key]);
+  const missingVoice = [...missingSms, ...voiceRequired.filter((key) => !process.env[key])];
+
+  return {
+    smsConfigured: missingSms.length === 0,
+    voiceConfigured: missingVoice.length === 0,
+    missingSms,
+    missingVoice,
+    phoneNumber: missingSms.length === 0 ? process.env.TWILIO_PHONE_NUMBER ?? null : null,
+  };
+}
+
 // ─── Outbound SMS ─────────────────────────────────────────────────────────────
 
 export async function sendSms(to: string, body: string): Promise<{ sid: string; status: string }> {

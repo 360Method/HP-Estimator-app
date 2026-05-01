@@ -883,7 +883,22 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
       if (!action.payload) {
         // Preserve the current section if navigating to a top-level page (dashboard, pipeline, jobs)
         // Only fall back to 'customers' if we were inside a customer-specific section
-        const topLevelSections: AppSection[] = ['dashboard', 'pipeline', 'jobs', 'customers'];
+        const topLevelSections: AppSection[] = [
+          'dashboard',
+          'pipeline',
+          'workflow',
+          'operations',
+          'jobs',
+          'customers',
+          'schedule',
+          'inbox',
+          'leads',
+          'financials',
+          'marketing',
+          'reporting',
+          'three-sixty',
+          'quickbooks',
+        ];
         const nextSection: AppSection = topLevelSections.includes(state.activeSection)
           ? state.activeSection
           : 'customers';
@@ -1014,6 +1029,13 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
         sourceLeadId: action.leadId,
         archived: false,
         clientSnapshot: lead.clientSnapshot,
+        propertyId: lead.propertyId,
+        propertyIdSource: lead.propertyIdSource,
+        membershipId: lead.membershipId,
+        threeSixtyStepKey: lead.threeSixtyStepKey ?? 'baseline',
+        threeSixtySource: lead.threeSixtySource ?? 'customer_request',
+        threeSixtyPriority: lead.threeSixtyPriority ?? null,
+        threeSixtyFinding: lead.threeSixtyFinding ?? null,
         // Transfer lead data if user opted in
         leadNotes: action.transferNotes ?? [],
         leadAttachments: action.transferAttachments ?? [],
@@ -1071,6 +1093,13 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
         sourceLeadId: estimate.sourceLeadId,
         archived: false,
         clientSnapshot: estimate.clientSnapshot,
+        propertyId: estimate.propertyId,
+        propertyIdSource: estimate.propertyIdSource,
+        membershipId: estimate.membershipId,
+        threeSixtyStepKey: estimate.threeSixtyStepKey === 'prioritize' ? 'schedule' : (estimate.threeSixtyStepKey ?? 'schedule'),
+        threeSixtySource: estimate.threeSixtySource ?? null,
+        threeSixtyPriority: estimate.threeSixtyPriority ?? null,
+        threeSixtyFinding: estimate.threeSixtyFinding ?? null,
       };
 
       const event = makeActivity(
@@ -1345,6 +1374,13 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
           ...existingJob,
           sourceEstimateId: action.estimateId,
           value: action.totalPrice,
+          propertyId: existingJob.propertyId ?? estimate.propertyId,
+          propertyIdSource: existingJob.propertyIdSource ?? estimate.propertyIdSource,
+          membershipId: existingJob.membershipId ?? estimate.membershipId,
+          threeSixtyStepKey: existingJob.threeSixtyStepKey ?? (estimate.threeSixtyStepKey === 'prioritize' ? 'schedule' : estimate.threeSixtyStepKey ?? 'schedule'),
+          threeSixtySource: existingJob.threeSixtySource ?? estimate.threeSixtySource ?? null,
+          threeSixtyPriority: existingJob.threeSixtyPriority ?? estimate.threeSixtyPriority ?? null,
+          threeSixtyFinding: existingJob.threeSixtyFinding ?? estimate.threeSixtyFinding ?? null,
           updatedAt: now,
         };
       } else {
@@ -1365,6 +1401,13 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
           sourceLeadId: estimate.sourceLeadId,
           archived: false,
           clientSnapshot: estimate.clientSnapshot,
+          propertyId: estimate.propertyId,
+          propertyIdSource: estimate.propertyIdSource,
+          membershipId: estimate.membershipId,
+          threeSixtyStepKey: estimate.threeSixtyStepKey === 'prioritize' ? 'schedule' : (estimate.threeSixtyStepKey ?? 'schedule'),
+          threeSixtySource: estimate.threeSixtySource ?? null,
+          threeSixtyPriority: estimate.threeSixtyPriority ?? null,
+          threeSixtyFinding: estimate.threeSixtyFinding ?? null,
           // Attach signed estimate and SOW to the new job
           ...(action.signedEstimateDataUrl ? { jobSignedEstimateDataUrl: action.signedEstimateDataUrl } : {}),
           ...(action.signedEstimateFilename ? { jobSignedEstimateFilename: action.signedEstimateFilename } : {}),

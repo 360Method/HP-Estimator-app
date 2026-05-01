@@ -3,7 +3,7 @@
 //
 // Layout:
 //   Header: Customer name, Call button, Add Card button, Lifetime Value badge
-//   Top nav tabs: Profile | Leads | Estimates | Jobs | Invoices | Communication | Attachments | Notes
+//   Top nav tabs: Overview | Properties | Opportunities | Membership | Billing | Portal
 //   Profile tab:
 //     Left sidebar (1/3): Summary, Contact Info, Payment Method,
 //                         Communication Prefs, Tags, Lead Source
@@ -53,6 +53,26 @@ import { toast } from 'sonner';
 import { nanoid } from 'nanoid';
 import CustomerMembershipPanel from '@/components/CustomerMembershipPanel';
 import ConciergeBrief from '@/components/ConciergeBrief';
+import { getOpportunityHeat, getWorkflowStep } from '@/components/OpportunityWorkflowPanel';
+import {
+  THREE_SIXTY_METHOD_PHASES,
+  THREE_SIXTY_OPERATOR_LADDER,
+  VANCOUVER_PNW_SEASONAL_FOCUS,
+  deriveThreeSixtyPropertyBoard,
+  deriveThreeSixtyMembershipEnginePlan,
+  deriveThreeSixtyOperatingStatus,
+  inferOpportunityThreeSixtyStep,
+  getCustomerFacingStepAction,
+  getThreeSixtyRoleResponsibility,
+  type ThreeSixtyPhaseId,
+} from '@/lib/threeSixtyMethod';
+import {
+  bucketRoadmapItems,
+  buildRoadmapItemsFromOpportunities,
+  formatInvestmentRange,
+  roadmapSummary,
+  type RoadmapItem,
+} from '@/lib/roadmap';
 
 // ─── Constants ────────────────────────────────────────────────
 const LEAD_SOURCES: LeadSource[] = [
@@ -60,20 +80,30 @@ const LEAD_SOURCES: LeadSource[] = [
   'Yelp', 'Direct Mail', 'Repeat Customer', 'Other',
 ];
 
-const CUSTOMER_TABS: { key: CustomerProfileTab; label: string; icon: React.ReactNode }[] = [
-  { key: 'profile', label: 'Profile', icon: <User size={13} /> },
+const CUSTOMER_OPERATING_TABS: { key: CustomerProfileTab; label: string; icon: React.ReactNode }[] = [
+  { key: 'overview', label: 'Overview', icon: <User size={13} /> },
   { key: 'properties', label: 'Properties', icon: <Building2 size={13} /> },
-  { key: 'membership360', label: '360°', icon: <RefreshCw size={13} /> },
-  { key: 'leads', label: 'Leads', icon: <Star size={13} /> },
-  { key: 'estimates', label: 'Estimates', icon: <FileText size={13} /> },
-  { key: 'jobs', label: 'Jobs', icon: <Briefcase size={13} /> },
-  { key: 'invoices', label: 'Invoices', icon: <Wallet size={13} /> },
-  { key: 'expenses', label: 'Expenses', icon: <Receipt size={13} /> },
-  { key: 'communication', label: 'Communication', icon: <MessageSquare size={13} /> },
-  { key: 'attachments', label: 'Attachments', icon: <Paperclip size={13} /> },
-  { key: 'notes', label: 'Notes', icon: <Edit3 size={13} /> },
+  { key: 'opportunities', label: 'Opportunities', icon: <GitMerge size={13} /> },
+  { key: 'membership', label: 'Membership', icon: <RefreshCw size={13} /> },
+  { key: 'billing', label: 'Billing', icon: <Wallet size={13} /> },
   { key: 'portal', label: 'Portal', icon: <ExternalLink size={13} /> },
 ];
+
+const LEGACY_CUSTOMER_TAB_REDIRECTS: Partial<Record<CustomerProfileTab, CustomerProfileTab>> = {
+  profile: 'overview',
+  leads: 'opportunities',
+  estimates: 'opportunities',
+  jobs: 'opportunities',
+  workflow: 'opportunities',
+  membership360: 'membership',
+  invoices: 'billing',
+  expenses: 'billing',
+  communication: 'overview',
+  documents: 'overview',
+  attachments: 'overview',
+  history: 'overview',
+  notes: 'overview',
+};
 
 const STAGE_COLORS: Record<string, string> = {
   'New Lead': 'bg-blue-100 text-blue-800 border-blue-200',
@@ -694,6 +724,8 @@ export default function CustomerSection() {
   const [editingAddressId, setEditingAddressId] = useState<string | null>(null);
   const [addrForm, setAddrForm] = useState({ label: 'Home', street: '', unit: '', city: 'Vancouver', state: 'WA', zip: '', lat: undefined as number | undefined, lng: undefined as number | undefined, propertyNotes: '' });
   const [addrLatLng, setAddrLatLng] = useState<{ lat?: number; lng?: number }>({}); // for map preview in form
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
+  const [selectedPropertyPhase, setSelectedPropertyPhase] = useState<ThreeSixtyPhaseId>('aware');
   // Merge dialog state
   const [showMergeDialog, setShowMergeDialog] = useState(false);
   // Stub merge dialog state (for unknown-caller auto-created customers)
@@ -723,15 +755,22 @@ export default function CustomerSection() {
        '')
     : '';
   const displayName = customerFullName || jobInfo.client || 'New Customer';
+  const currentCustomerTab = LEGACY_CUSTOMER_TAB_REDIRECTS[activeCustomerTab] ?? activeCustomerTab;
+  useEffect(() => {
+    const redirected = LEGACY_CUSTOMER_TAB_REDIRECTS[activeCustomerTab];
+    if (redirected) setCustomerTab(redirected);
+  }, [activeCustomerTab, setCustomerTab]);
   const areaMap: Record<CustomerProfileTab, PipelineArea | null> = {
+    overview: null, opportunities: null, workflow: null, membership: null, documents: null, billing: null, history: null,
     profile: null, properties: null, leads: 'lead', estimates: 'estimate', jobs: 'job',
     invoices: null, expenses: null, communication: null, attachments: null, notes: null, portal: null,
     membership360: null,
   };
 
   const handleTabClick = (tab: CustomerProfileTab) => {
-    setCustomerTab(tab);
-    const area = areaMap[tab];
+    const nextTab = LEGACY_CUSTOMER_TAB_REDIRECTS[tab] ?? tab;
+    setCustomerTab(nextTab);
+    const area = areaMap[nextTab];
     if (area) setPipelineArea(area);
   };
 
@@ -765,6 +804,16 @@ export default function CustomerSection() {
   const feedContactEmail = unifiedFeedData?.contactEmail ?? null;
   // Unread count for the badge in the profile header
   const unreadBadgeCount = unifiedFeedData?.unreadCount ?? 0;
+  const { data: customerContext, isLoading: customerContextLoading } = trpc.customers.getFullContext.useQuery(
+    { id: activeCustomerId! },
+    { enabled: !!activeCustomerId, staleTime: 30_000 }
+  );
+  const launchGaps = (customerContext?.opportunitySummaries ?? []).filter((summary: any) =>
+    summary.opportunity.area !== 'lead' &&
+    !summary.portalEstimate &&
+    summary.portalInvoices.length === 0 &&
+    summary.messages.length === 0
+  );
 
   // Auto-refresh unified feed on SSE new_message events
   useInboxSSE({
@@ -1111,7 +1160,74 @@ export default function CustomerSection() {
                   </div>
                 ) : null;
               })}
+              {(() => {
+                const active = opportunities.filter(o => !o.archived);
+                const hot = active.filter(o => getOpportunityHeat(o.area, o.stage, o.value, o.updatedAt).level === 'hot');
+                const warm = active.filter(o => getOpportunityHeat(o.area, o.stage, o.value, o.updatedAt).level === 'warm');
+                if (active.length === 0) return null;
+                return (
+                  <div className="pt-2 mt-2 border-t border-border space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-rose-700 font-medium">Hot</span>
+                      <span className="font-semibold">{hot.length}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-amber-700 font-medium">Warm</span>
+                      <span className="font-semibold">{warm.length}</span>
+                    </div>
+                    {hot.slice(0, 3).map(o => (
+                      <button
+                        key={o.id}
+                        className="w-full text-left rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-[11px] text-rose-800 hover:bg-rose-100"
+                        onClick={() => {
+                          setActiveOpportunity(o.id);
+                          setSection('opp-details');
+                        }}
+                      >
+                        <span className="font-semibold uppercase">{o.area}</span> · {o.title}
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
+          </div>
+        </div>
+
+        {/* Launch alignment */}
+        <div className="card-section">
+          <div className="card-section-header text-xs font-semibold uppercase tracking-wider">
+            <ShieldCheck size={13} />
+            <span>Customer Truth</span>
+          </div>
+          <div className="card-section-body space-y-2">
+            {customerContextLoading ? (
+              <div className="text-xs text-muted-foreground">Checking linked records...</div>
+            ) : (
+              <>
+                {[
+                  { label: 'Portal account', value: customerContext?.portal?.customer ? 'Linked' : 'Not linked', ok: !!customerContext?.portal?.customer },
+                  { label: 'Opportunities', value: String(customerContext?.opportunities?.length ?? 0), ok: (customerContext?.opportunities?.length ?? 0) > 0 },
+                  { label: 'Invoices', value: String(customerContext?.invoices?.length ?? 0), ok: true },
+                  { label: 'Messages & calls', value: String(customerContext?.conversations?.reduce((sum: number, c: any) => sum + (c.messages?.length ?? 0) + (c.callLogs?.length ?? 0), 0) ?? 0), ok: true },
+                  { label: '360 memberships', value: String(customerContext?.memberships?.length ?? 0), ok: true },
+                  { label: 'Work orders', value: String(customerContext?.workOrders?.length ?? 0), ok: true },
+                ].map(item => (
+                  <div key={item.label} className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">{item.label}</span>
+                    <span className={`font-medium ${item.ok ? 'text-foreground' : 'text-amber-700'}`}>{item.value}</span>
+                  </div>
+                ))}
+                {launchGaps.length > 0 && (
+                  <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    {launchGaps.length} estimate/job record{launchGaps.length === 1 ? '' : 's'} need portal links or job-scoped messages before launch.
+                    <div className="mt-1 text-[11px] text-amber-700">
+                      {launchGaps.slice(0, 3).map((summary: any) => summary.opportunity.title).join(', ')}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
 
@@ -1744,6 +1860,685 @@ export default function CustomerSection() {
   };
 
   // ── Placeholder tab ──
+  const roleForOpportunity = (opp: Opportunity) => {
+    if (opp.area === 'lead') return 'Lead Desk';
+    if (opp.area === 'estimate') return 'Consultant Desk';
+    if (opp.area === 'job') {
+      if (['New Job', 'Deposit Needed', 'Deposit Collected', 'Need to Order Materials', 'Waiting on Materials', 'Materials Received', 'Unscheduled', 'Scheduled'].includes(opp.stage)) return 'PM Desk';
+      if (['In Progress', 'Completed', 'Awaiting Sign-Off'].includes(opp.stage)) return 'Field Desk';
+      if (opp.stage === 'Invoice Paid') return 'Retainment Desk';
+      if (opp.stage === 'Invoice Sent') return 'Closeout Desk';
+    }
+    return 'Retainment Desk';
+  };
+
+  const openOpportunityCommand = (id: string) => {
+    setActiveOpportunity(id);
+    setSection('opp-details');
+  };
+
+  const CustomerOpportunityCommandCard = ({ opp }: { opp: Opportunity }) => {
+    const heat = getOpportunityHeat(opp.area, opp.stage, opp.value, opp.updatedAt);
+    const step = getWorkflowStep(opp.area, opp.stage);
+    const methodStep = inferOpportunityThreeSixtyStep(opp);
+    return (
+      <div className={`rounded-xl border-l-4 bg-white p-4 shadow-sm ${heat.className}`}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="font-semibold text-sm text-foreground truncate">{opp.title}</h3>
+              <Badge variant="outline" className={heat.className}>
+                <span className={`mr-1.5 h-2 w-2 rounded-full ${heat.dotClassName}`} />
+                {heat.label}
+              </Badge>
+              <Badge variant="secondary" className="capitalize">{opp.area}</Badge>
+              <Badge variant="outline" className="text-[10px]">
+                360: {methodStep.number}. {methodStep.name}
+              </Badge>
+              {opp.threeSixtyPriority && (
+                <Badge
+                  variant="outline"
+                  className={`text-[10px] capitalize ${
+                    opp.threeSixtyPriority === 'red' ? 'border-rose-200 bg-rose-50 text-rose-700' :
+                    opp.threeSixtyPriority === 'yellow' ? 'border-amber-200 bg-amber-50 text-amber-700' :
+                    'border-emerald-200 bg-emerald-50 text-emerald-700'
+                  }`}
+                >
+                  {opp.threeSixtyPriority}
+                </Badge>
+              )}
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {opp.stage} · {fmtDollar(opp.value || 0)} · Owner: {roleForOpportunity(opp)}
+            </p>
+            {opp.threeSixtyFinding && (
+              <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{opp.threeSixtyFinding}</p>
+            )}
+          </div>
+          <Button size="sm" variant="outline" onClick={() => openOpportunityCommand(opp.id)}>
+            Open Command
+            <ChevronRight className="ml-1 h-3.5 w-3.5" />
+          </Button>
+        </div>
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          <div className="rounded-lg border bg-background px-3 py-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Next action</p>
+            <p className="mt-1 text-sm leading-relaxed">{step.nextAction}</p>
+          </div>
+          <div className="rounded-lg border bg-background px-3 py-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Customer sees</p>
+            <p className="mt-1 text-sm leading-relaxed">{step.customerReceives}</p>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const activeOpps = opportunities.filter(o => !o.archived);
+  const propertyRecords = (() => {
+    const properties = (activeCustomer as any)?.properties ?? [];
+    if (properties.length > 0) return properties;
+    const addresses = (activeCustomer as any)?.addresses ?? [];
+    if (addresses.length > 0) return addresses;
+    if (activeCustomer?.street || jobInfo.address) {
+      return [{
+        id: 'primary-property',
+        label: 'Primary Home',
+        street: activeCustomer?.street || jobInfo.address || '',
+        unit: activeCustomer?.unit || '',
+        city: activeCustomer?.city || jobInfo.city || '',
+        state: activeCustomer?.state || jobInfo.state || '',
+        zip: activeCustomer?.zip || jobInfo.zip || '',
+        isPrimary: true,
+        propertyNotes: activeCustomer?.addressNotes || '',
+      }];
+    }
+    return [];
+  })();
+  const activeProperty = propertyRecords.find((property: any) => property.id === selectedPropertyId)
+    ?? propertyRecords.find((property: any) => property.isPrimary)
+    ?? propertyRecords[0]
+    ?? null;
+  const propertyBoard = deriveThreeSixtyPropertyBoard({
+    propertyId: activeProperty?.id ?? null,
+    propertyLabel: activeProperty?.label ?? 'Primary property',
+    opportunities: activeOpps,
+  });
+  const threeSixtyStatus = deriveThreeSixtyOperatingStatus({
+    memberships: customerContext?.memberships,
+    workOrders: customerContext?.workOrders,
+    opportunities: activeOpps,
+    latestScan,
+  });
+  const membershipEnginePlan = deriveThreeSixtyMembershipEnginePlan(threeSixtyStatus);
+  const hotOpps = activeOpps.filter(o => getOpportunityHeat(o.area, o.stage, o.value, o.updatedAt).level === 'hot');
+  const leadOpps = activeOpps.filter(o => o.area === 'lead');
+  const estimateOpps = activeOpps.filter(o => o.area === 'estimate');
+  const jobOpps = activeOpps.filter(o => o.area === 'job');
+
+  const CustomerThreeSixtyStatusPanel = () => {
+    const statusToneClass = {
+      good: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+      watch: 'border-amber-200 bg-amber-50 text-amber-800',
+      urgent: 'border-rose-200 bg-rose-50 text-rose-800',
+      empty: 'border-slate-200 bg-slate-50 text-slate-700',
+    }[threeSixtyStatus.healthTone];
+    const seasonClass = {
+      completed: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+      scheduled: 'bg-blue-50 text-blue-800 border-blue-200',
+      due: 'bg-amber-50 text-amber-800 border-amber-200',
+      included: 'bg-slate-50 text-slate-700 border-slate-200',
+      not_included: 'bg-slate-50 text-slate-400 border-slate-200',
+    };
+    return (
+      <div className="rounded-xl border bg-white p-4">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">360 Method status</p>
+            <h3 className="mt-1 text-base font-semibold">
+              {threeSixtyStatus.currentStep.number}. {threeSixtyStatus.currentStep.name} / {threeSixtyStatus.currentPhase.toUpperCase()}
+            </h3>
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{threeSixtyStatus.nextInternalAction}</p>
+          </div>
+          <Badge className={statusToneClass}>
+            {threeSixtyStatus.healthScore == null ? 'No score' : `Score ${threeSixtyStatus.healthScore}/100`}
+          </Badge>
+        </div>
+        <div className="grid gap-3 md:grid-cols-4">
+          <div className="rounded-lg border bg-background px-3 py-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Baseline</p>
+            <p className="mt-1 text-sm font-medium capitalize">{threeSixtyStatus.baselineStatus}</p>
+          </div>
+          <div className="rounded-lg border bg-background px-3 py-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Labor bank</p>
+            <p className="mt-1 text-sm font-medium">{fmtDollar(threeSixtyStatus.laborBankBalanceCents / 100)}</p>
+          </div>
+          <div className="rounded-lg border bg-background px-3 py-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Open work</p>
+            <p className="mt-1 text-sm font-medium">{threeSixtyStatus.openWorkOrders.length} work order{threeSixtyStatus.openWorkOrders.length === 1 ? '' : 's'}</p>
+          </div>
+          <div className="rounded-lg border bg-background px-3 py-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Priority</p>
+            <p className="mt-1 text-sm font-medium">
+              <span className="text-rose-600">{threeSixtyStatus.priorityCounts.red} red</span>
+              <span className="text-muted-foreground"> / </span>
+              <span className="text-amber-600">{threeSixtyStatus.priorityCounts.yellow} yellow</span>
+            </p>
+          </div>
+        </div>
+        <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Membership engine</p>
+              <p className="mt-1 text-sm font-semibold text-emerald-950">{membershipEnginePlan.current.label}</p>
+              <p className="mt-1 text-sm text-emerald-900">{membershipEnginePlan.current.internalAction}</p>
+              <p className="mt-2 text-xs text-emerald-800">Complete when: {membershipEnginePlan.current.completionSignal}</p>
+            </div>
+            <Badge variant="outline" className="border-emerald-300 bg-white text-emerald-800">
+              {membershipEnginePlan.current.owner}
+            </Badge>
+          </div>
+          {membershipEnginePlan.next && (
+            <p className="mt-3 rounded-md border border-emerald-200 bg-white px-3 py-2 text-xs text-emerald-900">
+              Next in flywheel: <span className="font-semibold">{membershipEnginePlan.next.label}</span> - {membershipEnginePlan.next.internalAction}
+            </p>
+          )}
+        </div>
+        <div className="mt-4 grid gap-2 sm:grid-cols-4">
+          {threeSixtyStatus.seasonalVisits.map(visit => (
+            <div key={visit.season} className={`rounded-lg border px-3 py-2 ${seasonClass[visit.status]}`}>
+              <p className="text-sm font-medium">{visit.label}</p>
+              <p className="mt-0.5 text-[11px] capitalize">{visit.status.replace('_', ' ')}</p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 rounded-lg border bg-muted/30 px-3 py-2">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Customer-facing next step</p>
+          <p className="mt-1 text-sm">{threeSixtyStatus.nextCustomerAction}</p>
+        </div>
+      </div>
+    );
+  };
+
+  const PropertyThreeSixtyWorkspace = () => {
+    const activePhase = propertyBoard.phases.find(phase => phase.id === selectedPropertyPhase) ?? propertyBoard.phases[0];
+    const propertyAddress = activeProperty
+      ? [activeProperty.street, activeProperty.city, activeProperty.state, activeProperty.zip].filter(Boolean).join(', ')
+      : 'No property selected';
+    const scopedPropertyOpps = activeOpps.filter((opp: Opportunity) => !activeProperty?.id || !opp.propertyId || opp.propertyId === activeProperty.id);
+    const roadmapItems = buildRoadmapItemsFromOpportunities(scopedPropertyOpps);
+
+    const downloadRoadmapDraft = async (items: RoadmapItem[]) => {
+      if (items.length === 0) {
+        toast.info('Add at least one property opportunity or finding before exporting a roadmap.');
+        return;
+      }
+      const { jsPDF } = await import('jspdf');
+      const pdf = new jsPDF({ unit: 'pt', format: 'letter' });
+      const buckets = bucketRoadmapItems(items);
+      const summary = roadmapSummary(items);
+      const left = 48;
+      let y = 56;
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(18);
+      pdf.text('360 Method Priority Roadmap Draft', left, y);
+      y += 22;
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(10);
+      pdf.text(`${activeProperty?.label ?? 'Primary property'} - ${propertyAddress}`, left, y);
+      y += 16;
+      pdf.text(`Review before sending. Total planning range: ${formatInvestmentRange(summary.totalLow, summary.totalHigh)}`, left, y);
+      y += 24;
+
+      for (const bucket of buckets) {
+        if (y > 700) {
+          pdf.addPage();
+          y = 56;
+        }
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(13);
+        pdf.text(`${bucket.label.toUpperCase()} - ${bucket.horizon} - ${formatInvestmentRange(bucket.totalLow, bucket.totalHigh)}`, left, y);
+        y += 16;
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(9);
+        pdf.text(bucket.internalMeaning, left, y, { maxWidth: 500 });
+        y += 20;
+        for (const item of bucket.items) {
+          if (y > 700) {
+            pdf.addPage();
+            y = 56;
+          }
+          pdf.setFont('helvetica', 'bold');
+          pdf.setFontSize(10);
+          pdf.text(item.title, left, y, { maxWidth: 500 });
+          y += 13;
+          pdf.setFont('helvetica', 'normal');
+          pdf.setFontSize(9);
+          pdf.text(`${formatInvestmentRange(item.investmentLow, item.investmentHigh)} - ${item.finding}`, left, y, { maxWidth: 500 });
+          y += 24;
+        }
+        if (bucket.items.length === 0) {
+          pdf.setFont('helvetica', 'italic');
+          pdf.setFontSize(9);
+          pdf.text('No items in this bucket yet.', left, y);
+          y += 18;
+        }
+        y += 8;
+      }
+      pdf.save(`360-roadmap-draft-${activeCustomerId ?? 'customer'}.pdf`);
+    };
+
+    return (
+      <div className="rounded-xl border bg-white p-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Property 360 Method</p>
+            <h3 className="mt-1 text-lg font-semibold">{activeProperty?.label ?? 'Primary property'}</h3>
+            <p className="mt-1 text-sm text-muted-foreground">{propertyAddress}</p>
+          </div>
+          <Badge variant="outline" className="bg-emerald-50 text-emerald-800">
+            Customer - Property - 360 Method - Opportunities
+          </Badge>
+        </div>
+
+        <div className="mt-4 grid gap-2 sm:grid-cols-3">
+          {propertyBoard.phases.map(phase => {
+            const count = phase.steps.reduce((sum, step) => sum + step.opportunities.length, 0);
+            return (
+              <button
+                key={phase.id}
+                onClick={() => setSelectedPropertyPhase(phase.id)}
+                className={`rounded-lg border px-3 py-3 text-left transition-colors ${
+                  selectedPropertyPhase === phase.id
+                    ? 'border-primary bg-primary/5 text-primary'
+                    : 'border-border bg-background hover:bg-muted'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-semibold">{phase.name}</p>
+                  <span className="rounded-full bg-white px-2 py-0.5 text-xs font-semibold">{count}</span>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">{phase.promise}</p>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mt-4 grid gap-3 lg:grid-cols-3">
+          {activePhase.steps.map(step => {
+            const ownerModel = getThreeSixtyRoleResponsibility(step.owner);
+            return (
+            <div key={step.key} className="rounded-lg border bg-background p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Step {step.number}
+                  </p>
+                  <h4 className="mt-1 text-sm font-semibold">{step.name}</h4>
+                </div>
+                <Badge variant="secondary" className="shrink-0 text-[10px]">{step.owner}</Badge>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">{step.operatorOutcome}</p>
+              {step.key === 'prioritize' && (
+                <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">Roadmap Generator</p>
+                      <h5 className="mt-1 text-sm font-semibold text-amber-950">Internal consultant draft</h5>
+                      <p className="mt-1 text-xs leading-relaxed text-amber-900">
+                        This is Step 4. Review NOW / SOON / WAIT, investment ranges, and source findings before anything is sent to the portal.
+                      </p>
+                    </div>
+                    <Button size="sm" variant="outline" className="bg-white" onClick={() => downloadRoadmapDraft(roadmapItems)}>
+                      <Download className="mr-1.5 h-3.5 w-3.5" />
+                      Draft PDF
+                    </Button>
+                  </div>
+                  {roadmapItems.length === 0 ? (
+                    <p className="mt-3 rounded-md border border-dashed border-amber-300 bg-white px-3 py-3 text-center text-xs text-amber-800">
+                      No source findings yet. Add a lead, estimate, job, or consultant finding to generate this property's roadmap.
+                    </p>
+                  ) : (
+                    <div className="mt-3 grid gap-2 md:grid-cols-3">
+                      {bucketRoadmapItems(roadmapItems).map(bucket => (
+                        <div key={bucket.urgency} className="rounded-lg border bg-white p-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <p className="text-sm font-semibold">{bucket.label}</p>
+                              <p className="text-[11px] text-muted-foreground">{bucket.horizon}</p>
+                            </div>
+                            <Badge variant="outline" className="text-[10px]">{bucket.items.length}</Badge>
+                          </div>
+                          <p className="mt-2 text-xs font-medium">{formatInvestmentRange(bucket.totalLow, bucket.totalHigh)}</p>
+                          <div className="mt-2 space-y-1.5">
+                            {bucket.items.slice(0, 3).map(item => (
+                              <button
+                                key={item.id}
+                                className="w-full rounded-md border bg-background px-2 py-2 text-left hover:bg-muted"
+                                onClick={() => item.sourceOpportunityId && openOpportunityCommand(item.sourceOpportunityId)}
+                              >
+                                <p className="truncate text-xs font-medium">{item.title}</p>
+                                <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">{item.finding}</p>
+                              </button>
+                            ))}
+                            {bucket.items.length === 0 && (
+                              <p className="rounded-md border border-dashed px-2 py-2 text-center text-[11px] text-muted-foreground">No items.</p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="mt-3 rounded-md border bg-white px-3 py-2 text-xs text-muted-foreground">
+                    Send rule: roadmap items with dollar ranges must be consultant-reviewed before portal delivery.
+                  </div>
+                </div>
+              )}
+              <div className="mt-3 rounded-md border bg-white px-3 py-2">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Customer next step</p>
+                <p className="mt-1 text-xs leading-relaxed">{getCustomerFacingStepAction(step)}</p>
+              </div>
+              {ownerModel && (
+                <div className="mt-2 rounded-md border bg-white px-3 py-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Role owns</p>
+                  <p className="mt-1 text-xs leading-relaxed">{ownerModel.owns}</p>
+                </div>
+              )}
+              <div className="mt-3 space-y-2">
+                {step.opportunities.length === 0 ? (
+                  <p className="rounded-md border border-dashed bg-white px-3 py-3 text-center text-xs text-muted-foreground">
+                    No opportunities here yet.
+                  </p>
+                ) : (
+                  step.opportunities.map((opp: Opportunity) => (
+                    <CustomerOpportunityCommandCard key={opp.id} opp={opp} />
+                  ))
+                )}
+              </div>
+            </div>
+            );
+          })}
+        </div>
+
+        {activePhase.id === 'advance' && (
+          <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-700">Step 9 disclaimer</p>
+            <p className="mt-1 text-xs leading-relaxed text-slate-600">
+              CFO Intelligence is property documentation and planning support. Handy Pioneers is not acting as a financial advisor,
+              appraiser, or licensed real estate agent. The record is intended to help the customer discuss property value,
+              sale readiness, insurance, refinance, or planning questions with qualified professionals.
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const CustomerOverviewTab = () => (
+    <div className="space-y-5">
+      {activeCustomer && <ConciergeBrief customer={activeCustomer} opportunities={opportunities} />}
+      <PropertyThreeSixtyWorkspace />
+      <CustomerThreeSixtyStatusPanel />
+      <div className="grid gap-3 sm:grid-cols-4">
+        <div className="rounded-xl border bg-white p-4">
+          <p className="text-xs text-muted-foreground">Active opportunities</p>
+          <p className="mt-1 text-2xl font-bold">{activeOpps.length}</p>
+        </div>
+        <div className="rounded-xl border bg-white p-4">
+          <p className="text-xs text-muted-foreground">Hot items</p>
+          <p className="mt-1 text-2xl font-bold text-rose-600">{hotOpps.length}</p>
+        </div>
+        <div className="rounded-xl border bg-white p-4">
+          <p className="text-xs text-muted-foreground">Pipeline value</p>
+          <p className="mt-1 text-2xl font-bold">{fmtDollar(activeOpps.reduce((s, o) => s + (o.value || 0), 0))}</p>
+        </div>
+        <div className="rounded-xl border bg-white p-4">
+          <p className="text-xs text-muted-foreground">Open balance</p>
+          <p className="mt-1 text-2xl font-bold">{fmtDollar(customerProfile.outstandingBalance || 0)}</p>
+        </div>
+      </div>
+      <div className="rounded-xl border bg-white p-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold">360 Membership Flywheel</h3>
+            <p className="text-xs text-muted-foreground">Move this customer toward recurring care, seasonal visits, and future repair opportunities.</p>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => handleTabClick('membership')}>
+            Open Membership Vault
+          </Button>
+        </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-lg border bg-emerald-50 px-3 py-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Core offer</p>
+            <p className="mt-1 text-sm font-medium text-emerald-950">360 Home Method</p>
+          </div>
+          <div className="rounded-lg border bg-background px-3 py-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Recurring value</p>
+            <p className="mt-1 text-sm">Seasonal visits, labor bank, member discounts, reports.</p>
+          </div>
+          <div className="rounded-lg border bg-background px-3 py-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Next business move</p>
+            <p className="mt-1 text-sm">Keep them in the membership loop after every one-off job.</p>
+          </div>
+        </div>
+      </div>
+      <div className="rounded-xl border bg-white p-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold">Needs Attention</h3>
+            <p className="text-xs text-muted-foreground">Priority opportunities for this customer.</p>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => handleTabClick('workflow')}>View Workflow</Button>
+        </div>
+        {hotOpps.length === 0 ? (
+          <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">No hot opportunities for this customer right now.</p>
+        ) : (
+          <div className="space-y-3">
+            {hotOpps.slice(0, 4).map(opp => <CustomerOpportunityCommandCard key={opp.id} opp={opp} />)}
+          </div>
+        )}
+      </div>
+      <ProfileTab />
+    </div>
+  );
+
+  const CustomerOpportunitiesTab = () => {
+    const groups: Array<[string, Opportunity[]]> = [
+      ['Lead', leadOpps],
+      ['Estimate', estimateOpps],
+      ['Job', jobOpps],
+    ];
+    return (
+      <div className="space-y-5">
+        <div className="rounded-xl border bg-white p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-base font-semibold">Customer Opportunities</h3>
+              <p className="text-xs text-muted-foreground">All revenue work for this customer, regardless of which desk owns the next action.</p>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => setIntakeModal('lead')}>New Lead</Button>
+              <Button size="sm" variant="outline" onClick={() => setIntakeModal('estimate')}>New Estimate</Button>
+              <Button size="sm" variant="outline" onClick={() => setIntakeModal('job')}>New Job</Button>
+            </div>
+          </div>
+        </div>
+        {groups.map(([label, opps]) => (
+          <div key={label} className="space-y-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}s ({opps.length})</h3>
+            {opps.length === 0 ? (
+              <p className="rounded-lg border border-dashed p-5 text-sm text-muted-foreground">No {label.toLowerCase()} opportunities.</p>
+            ) : (
+              <div className="space-y-3">
+                {opps.map(opp => <CustomerOpportunityCommandCard key={opp.id} opp={opp} />)}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const CustomerWorkflowTab = () => {
+    const desks = ['Lead Desk', 'Consultant Desk', 'PM Desk', 'Field Desk', 'Closeout Desk', 'Retainment Desk'];
+    return (
+      <div className="space-y-4">
+        {desks.map(desk => {
+          const deskOpps = activeOpps.filter(opp => roleForOpportunity(opp) === desk);
+          return (
+            <div key={desk} className="rounded-xl border bg-white p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold">{desk}</h3>
+                  <p className="text-xs text-muted-foreground">This customer's work owned by this role.</p>
+                </div>
+                <Badge variant="secondary">{deskOpps.length}</Badge>
+              </div>
+              {deskOpps.length === 0 ? (
+                <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">Nothing on this desk for this customer.</p>
+              ) : (
+                <div className="space-y-3">
+                  {deskOpps.map(opp => <CustomerOpportunityCommandCard key={opp.id} opp={opp} />)}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const CustomerMembershipTab = () => (
+    <div className="space-y-5">
+      <div className="rounded-xl border bg-emerald-50 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Core operating system</p>
+            <h3 className="mt-1 text-lg font-semibold">360 Method Membership Vault</h3>
+            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+              The membership is the recurring care engine for this customer. One-off jobs should feed back into baseline, seasonal walkthroughs, priority planning, labor bank, reports, and the next recommended action.
+            </p>
+          </div>
+          <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">Aware - Act - Advance</Badge>
+        </div>
+      </div>
+
+      <CustomerThreeSixtyStatusPanel />
+
+      <div className="rounded-xl border bg-white p-4">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold">Operator Delivery Roadmap</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              This is the professional version of the DIY 360 Method: HP owns the walkthrough, prioritization, execution, and retainment loop.
+            </p>
+          </div>
+          <Badge variant="outline">9 steps / 3 phases</Badge>
+        </div>
+        <div className="grid gap-3 lg:grid-cols-3">
+          {THREE_SIXTY_METHOD_PHASES.map(phase => (
+            <div key={phase.id} className="rounded-lg border bg-background p-3">
+              <div className="mb-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Phase</p>
+                <h4 className="text-sm font-semibold">{phase.name}</h4>
+                <p className="mt-1 text-xs text-muted-foreground">{phase.promise}</p>
+              </div>
+              <div className="space-y-2">
+                {phase.steps.map(step => (
+                  <div key={step.key} className="rounded-md border bg-white px-3 py-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-medium">{step.number}. {step.name}</p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{step.operatorOutcome}</p>
+                      </div>
+                      <Badge variant="secondary" className="shrink-0 text-[10px]">{step.owner}</Badge>
+                    </div>
+                    <p className="mt-2 border-t pt-2 text-[11px] text-muted-foreground">
+                      AI support: {step.aiSupport}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+        <div className="rounded-xl border bg-white p-4">
+          <h3 className="text-sm font-semibold">Pacific Northwest Seasonal Focus</h3>
+          <p className="mt-1 text-xs text-muted-foreground">Default regional operating lens for Vancouver / Clark County customers.</p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {VANCOUVER_PNW_SEASONAL_FOCUS.map(item => (
+              <div key={item.season} className="rounded-lg border bg-background px-3 py-2">
+                <p className="text-sm font-medium">{item.season}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{item.focus}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="rounded-xl border bg-white p-4">
+          <h3 className="text-sm font-semibold">How one-off jobs feed the flywheel</h3>
+          <div className="mt-3 space-y-2">
+            {THREE_SIXTY_OPERATOR_LADDER.map((item, index) => (
+              <div key={item} className="flex gap-2 text-sm">
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-[11px] font-semibold text-emerald-800">
+                  {index + 1}
+                </span>
+                <span className="text-muted-foreground">{item}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <CustomerMembershipPanel customerId={activeCustomerId ?? ''} />
+    </div>
+  );
+
+  const CustomerDocumentsTab = () => (
+    <div className="space-y-4">
+      <CustomerAttachmentsTab customerId={activeCustomerId ?? ''} />
+    </div>
+  );
+
+  const CustomerBillingTab = () => (
+    <div className="space-y-6">
+      <InvoiceSection />
+      <CustomerExpensesTab
+        customerId={activeCustomerId ?? ''}
+        opportunityOptions={opportunities
+          .filter(o => o.area === 'job' && !o.archived)
+          .map(o => ({ id: o.id, title: o.title || o.coNumber || o.id }))}
+      />
+    </div>
+  );
+
+  const CustomerHistoryTab = () => (
+    <div className="space-y-5">
+      {activeCustomerId && <CustomerActivityFeed customerId={activeCustomerId} />}
+      <div className="card-section">
+        <div className="card-section-header">
+          <Edit3 size={15} />
+          <span>Internal Notes</span>
+        </div>
+        <div className="card-section-body space-y-3">
+          <div className="flex gap-2">
+            <input type="text" value={newNote} onChange={e => setNewNote(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && addNote()}
+              placeholder="Add a note..." className="field-input flex-1" />
+            <button onClick={addNote} className="px-3 py-2 bg-primary text-primary-foreground rounded-lg text-xs font-semibold hover:bg-primary/90 transition-colors">
+              Add
+            </button>
+          </div>
+          <textarea value={customerProfile.privateNotes} onChange={e => setCustomerProfile({ privateNotes: e.target.value })}
+            placeholder="Private notes about this customer..." rows={6} className="field-input w-full resize-none" />
+        </div>
+      </div>
+    </div>
+  );
+
   const PlaceholderTab = ({ label }: { label: string }) => (
     <div className="text-center py-16 text-muted-foreground border-2 border-dashed border-border rounded-xl">
       <div className="text-lg font-semibold mb-2">{label}</div>
@@ -2006,10 +2801,9 @@ export default function CustomerSection() {
       <div className="bg-white border-b border-border sticky top-[var(--header-h,112px)] z-10">
         <div className="max-w-6xl mx-auto px-4">
           <div className="flex overflow-x-auto scrollbar-hide -mb-px gap-0">
-            {CUSTOMER_TABS.map(tab => {
-              const count = tab.key === 'leads' ? opportunities.filter(o => o.area === 'lead' && !o.archived).length
-                : tab.key === 'estimates' ? opportunities.filter(o => o.area === 'estimate' && !o.archived).length
-                : tab.key === 'jobs' ? opportunities.filter(o => o.area === 'job' && !o.archived).length
+            {CUSTOMER_OPERATING_TABS.map(tab => {
+              const count = tab.key === 'opportunities' ? opportunities.filter(o => !o.archived).length
+                : tab.key === 'workflow' ? opportunities.filter(o => getOpportunityHeat(o.area, o.stage, o.value, o.updatedAt).level === 'hot' && !o.archived).length
                 : 0;
               return (
                 <button
@@ -2017,7 +2811,7 @@ export default function CustomerSection() {
                   data-tab={tab.key}
                   onClick={() => handleTabClick(tab.key)}
                   className={`shrink-0 flex items-center gap-1 px-3 sm:px-4 py-3 text-xs font-semibold whitespace-nowrap border-b-2 transition-colors ${
-                    activeCustomerTab === tab.key
+                    currentCustomerTab === tab.key
                       ? 'border-primary text-primary'
                       : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
                   }`}
@@ -2026,7 +2820,7 @@ export default function CustomerSection() {
                   {tab.label}
                   {count > 0 && (
                     <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold ${
-                      activeCustomerTab === tab.key ? 'bg-primary text-white' : 'bg-muted text-muted-foreground'
+                      currentCustomerTab === tab.key ? 'bg-primary text-white' : 'bg-muted text-muted-foreground'
                     }`}>
                       {count}
                     </span>
@@ -2040,11 +2834,18 @@ export default function CustomerSection() {
 
       {/* ── Tab Content ── */}
       <div className="max-w-6xl mx-auto px-4 py-6">
-        {activeCustomerTab === 'profile' && activeCustomer && (
+        {currentCustomerTab === 'overview' && <CustomerOverviewTab />}
+        {currentCustomerTab === 'opportunities' && <CustomerOpportunitiesTab />}
+        {currentCustomerTab === 'workflow' && <CustomerWorkflowTab />}
+        {currentCustomerTab === 'membership' && <CustomerMembershipTab />}
+        {currentCustomerTab === 'documents' && <CustomerDocumentsTab />}
+        {currentCustomerTab === 'billing' && <CustomerBillingTab />}
+        {currentCustomerTab === 'history' && <CustomerHistoryTab />}
+        {currentCustomerTab === activeCustomerTab && activeCustomerTab === 'profile' && activeCustomer && (
           <ConciergeBrief customer={activeCustomer} opportunities={opportunities} />
         )}
-        {activeCustomerTab === 'profile' && ProfileTab()}
-        {activeCustomerTab === 'properties' && (
+        {currentCustomerTab === activeCustomerTab && activeCustomerTab === 'profile' && ProfileTab()}
+        {currentCustomerTab === activeCustomerTab && activeCustomerTab === 'properties' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
@@ -2056,9 +2857,11 @@ export default function CustomerSection() {
             </div>
             <PropertySelectorGrid
               customerId={activeCustomerId ?? ''}
-              activePropertyId={null}
+              activePropertyId={activeProperty?.id ?? null}
               onSelectProperty={(prop) => {
-                toast.success(`Viewing ${prop.label} — ${prop.street || prop.city || 'property'}`);
+                setSelectedPropertyId(prop.id);
+                setSelectedPropertyPhase('aware');
+                toast.success(`Viewing ${prop.label} - ${prop.street || prop.city || 'property'}`);
               }}
               customerAddress={{
                 street: activeCustomer?.street ?? (jobInfo as any).street ?? '',
@@ -2069,11 +2872,12 @@ export default function CustomerSection() {
                 addressNotes: activeCustomer?.addressNotes,
               }}
             />
+            <PropertyThreeSixtyWorkspace />
           </div>
         )}
-        {(activeCustomerTab === 'leads' || activeCustomerTab === 'estimates' || activeCustomerTab === 'jobs') && PipelineTab()}
-        {activeCustomerTab === 'invoices' && <InvoiceSection />}
-        {activeCustomerTab === 'expenses' && (
+        {currentCustomerTab === activeCustomerTab && (activeCustomerTab === 'leads' || activeCustomerTab === 'estimates' || activeCustomerTab === 'jobs') && PipelineTab()}
+        {currentCustomerTab === activeCustomerTab && activeCustomerTab === 'invoices' && <InvoiceSection />}
+        {currentCustomerTab === activeCustomerTab && activeCustomerTab === 'expenses' && (
           <CustomerExpensesTab
             customerId={activeCustomerId ?? ''}
             opportunityOptions={opportunities
@@ -2099,13 +2903,13 @@ export default function CustomerSection() {
             }}
           />
         )}
-        {activeCustomerTab === 'attachments' && (
+        {currentCustomerTab === activeCustomerTab && activeCustomerTab === 'attachments' && (
           <CustomerAttachmentsTab customerId={activeCustomerId ?? ''} />
         )}
         {activeCustomerTab === 'portal' && (
           <CustomerPortalTab customerId={activeCustomerId ?? ''} />
         )}
-        {activeCustomerTab === 'membership360' && (
+        {currentCustomerTab === activeCustomerTab && activeCustomerTab === 'membership360' && (
           <CustomerMembershipPanel customerId={activeCustomerId ?? ''} />
         )}
         {(activeCustomerTab as any) === 'attachments_LEGACY_UNUSED' && (
@@ -2193,7 +2997,7 @@ export default function CustomerSection() {
             })()}
           </div>
         )}
-        {activeCustomerTab === 'notes' && (
+        {currentCustomerTab === activeCustomerTab && activeCustomerTab === 'notes' && (
           <div className="card-section">
             <div className="card-section-header">
               <Edit3 size={15} />

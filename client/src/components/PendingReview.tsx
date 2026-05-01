@@ -151,22 +151,21 @@ export default function PendingReview({
     <div
       ref={sectionRef}
       data-focus="pending-review"
-      className="rounded-2xl border-2 border-amber-300 bg-gradient-to-br from-amber-50 to-orange-50 shadow-sm overflow-hidden mb-6"
+      className="rounded-2xl border border-sky-200 bg-gradient-to-br from-sky-50 to-white shadow-sm overflow-hidden mb-6"
     >
-      <div className="px-4 sm:px-6 pt-4 pb-3 border-b border-amber-200/60 bg-white/40">
+      <div className="px-4 sm:px-6 pt-4 pb-3 border-b border-sky-200/60 bg-white/60">
         <div className="flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 text-amber-700" />
-          <h2 className="text-sm font-bold text-amber-900 uppercase tracking-wider">
-            Pending your review
+          <Bot className="w-4 h-4 text-sky-700" />
+          <h2 className="text-sm font-bold text-sky-900 uppercase tracking-wider">
+            AI Drafts by Opportunity
           </h2>
-          <Badge variant="outline" className="ml-auto bg-amber-600 text-white border-amber-600 text-[10px]">
+          <Badge variant="outline" className="ml-auto bg-sky-700 text-white border-sky-700 text-[10px]">
             {totalPending}
           </Badge>
         </div>
-        <p className="mt-1 text-xs text-amber-900/80">
-          {totalPending} draft{totalPending === 1 ? "" : "s"} pending across{" "}
-          {groups.length} opportunit{groups.length === 1 ? "y" : "ies"}. Nothing
-          here gets sent to {customerFirstName || "this customer"} until you tap approve.
+        <p className="mt-1 text-xs text-sky-900/80">
+          {totalPending} draft{totalPending === 1 ? "" : "s"} grouped by the lead, estimate, or job they belong to.
+          Pricing, scope, payment, and job-specific details still require approval before anything reaches {customerFirstName || "this customer"}.
         </p>
       </div>
 
@@ -182,7 +181,7 @@ export default function PendingReview({
           />
         ))}
         {totalPending === 0 && (draftsQ.isLoading || estimatesQ.isLoading) && (
-          <div className="text-xs text-amber-800/70 italic px-1 py-2">Loading…</div>
+          <div className="text-xs text-sky-800/70 italic px-1 py-2">Loading...</div>
         )}
       </div>
     </div>

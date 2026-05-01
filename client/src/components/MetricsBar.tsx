@@ -40,8 +40,9 @@ import SettingsPage from '@/pages/settings/SettingsPage';
 import NotificationBell from '@/components/NotificationBell';
 import {
   Search, LayoutDashboard, Users, Inbox, GitBranch,
-  DollarSign, BarChart2, Megaphone, Settings,
+  Settings,
   ChevronDown, ArrowLeft, Plus, Menu, X, Briefcase, CalendarDays, RefreshCw, BookOpen, Star,
+  Workflow, ShieldCheck,
 } from 'lucide-react';
 
 const HP_LOGO = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg';
@@ -51,34 +52,25 @@ interface MetricsBarProps {
 }
 
 const BUILDER_TABS: { id: AppSection; icon: string; label: string; shortLabel: string }[] = [
-  { id: 'opp-details', icon: '📌', label: 'Details',    shortLabel: 'Details'  },
-  { id: 'sales',       icon: '🛍', label: 'Sales View', shortLabel: 'Sales'    },
-  { id: 'calculator',  icon: '🧮', label: 'Calculator', shortLabel: 'Calc'     },
-  { id: 'estimate',    icon: '📄', label: 'Estimate',   shortLabel: 'Estimate' },
-  { id: 'invoice',     icon: '💳', label: 'Invoice',    shortLabel: 'Invoice'  },
+  { id: 'opp-details', icon: '📌', label: 'Command',     shortLabel: 'Command' },
+  { id: 'calculator',  icon: '🧮', label: 'Scope/Price', shortLabel: 'Scope' },
+  { id: 'estimate',    icon: '📄', label: 'Proposal',    shortLabel: 'Proposal' },
 ];
 
 const JOB_BUILDER_TABS: { id: AppSection; icon: string; label: string; shortLabel: string }[] = [
-  { id: 'opp-details', icon: '📌', label: 'Details',    shortLabel: 'Details'  },
-  { id: 'job-details', icon: '📋', label: 'Job Details', shortLabel: 'Job'     },
-  { id: 'calculator',  icon: '🧮', label: 'Calculator',  shortLabel: 'Calc'    },
-  { id: 'estimate',    icon: '📄', label: 'Estimate',    shortLabel: 'Estimate'},
-  { id: 'invoice',     icon: '💳', label: 'Invoice',     shortLabel: 'Invoice' },
+  { id: 'opp-details', icon: '📌', label: 'Command',     shortLabel: 'Command' },
+  { id: 'job-details', icon: '📋', label: 'Work Plan',   shortLabel: 'Plan' },
+  { id: 'calculator',  icon: '🧮', label: 'Scope/Price', shortLabel: 'Scope' },
+  { id: 'invoice',     icon: '💳', label: 'Billing',     shortLabel: 'Billing' },
 ];
 
 const BACKEND_NAV: { icon: React.ElementType; label: string; section: AppSection | null }[] = [
-  { icon: LayoutDashboard, label: 'Dashboard',  section: 'dashboard' as AppSection },
-  { icon: Star,            label: 'Leads',      section: 'leads' as AppSection },
+  { icon: LayoutDashboard, label: 'Command',    section: 'dashboard' as AppSection },
   { icon: Users,           label: 'Customers',  section: 'customers' },
-  { icon: Briefcase,       label: 'Jobs',       section: 'jobs'      },
-  { icon: CalendarDays,    label: 'Schedule',   section: 'schedule' as AppSection },
-  { icon: GitBranch,       label: 'Pipeline',   section: 'pipeline'  },
+  { icon: Workflow,        label: 'Workflow',   section: 'workflow' as AppSection },
   { icon: Inbox,           label: 'Inbox',      section: 'inbox' as AppSection },
-  { icon: DollarSign,      label: 'Financials', section: 'financials' as AppSection },
-  { icon: BarChart2,       label: 'Reporting',  section: 'reporting' as AppSection },
-  { icon: Megaphone,       label: 'Marketing',  section: 'marketing' as AppSection },
-  { icon: RefreshCw,       label: 'Members',    section: 'three-sixty' as AppSection },
-  { icon: BookOpen,        label: 'QuickBooks', section: 'quickbooks' as AppSection },
+  { icon: CalendarDays,    label: 'Schedule',   section: 'schedule' as AppSection },
+  { icon: ShieldCheck,     label: 'Operations', section: 'operations' as AppSection },
 ];
 
 export default function MetricsBar({ totals }: MetricsBarProps) {
@@ -215,16 +207,6 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
     setShowMobileNav(false);
   };
 
-  const handleGoToJobs = () => {
-    navigateToTopLevel('jobs');
-    setShowMobileNav(false);
-  };
-
-  const handleGoToPipeline = () => {
-    navigateToTopLevel('pipeline');
-    setShowMobileNav(false);
-  };
-
   const handleGoToDashboard = () => {
     navigateToTopLevel('dashboard');
     setShowMobileNav(false);
@@ -241,24 +223,13 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
     markAllPortalReadMutation.mutate();
   };
 
-  const handleGoToLeads = () => {
-    navigateToTopLevel('leads' as AppSection);
-    setShowMobileNav(false);
-  };
-
   const handleNavClick = (section: AppSection | null, label: string) => {
     if (section === 'customers') { handleGoToCustomers(); return; }
-    if (section === 'jobs') { handleGoToJobs(); return; }
-    if (section === 'pipeline') { handleGoToPipeline(); return; }
+    if (section === 'workflow') { navigateToTopLevel('workflow' as AppSection); setShowMobileNav(false); return; }
     if (section === 'dashboard') { handleGoToDashboard(); return; }
+    if (section === 'operations') { navigateToTopLevel('operations' as AppSection); setShowMobileNav(false); return; }
     if (section === 'schedule') { handleGoToSchedule(); return; }
     if (section === 'inbox') { handleGoToInbox(); return; }
-    if (section === 'leads') { handleGoToLeads(); return; }
-    if (section === 'reporting') { setSection('reporting'); return; }
-    if (section === 'marketing') { setSection('marketing'); return; }
-    if (section === 'three-sixty') { setSection('three-sixty'); return; }
-    if (section === 'financials') { setSection('financials'); setShowMobileNav(false); return; }
-    if (section === 'quickbooks') { setSection('quickbooks'); setShowMobileNav(false); return; }
     handleBackendNav(label);
   };
 
@@ -274,7 +245,7 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
             <img src={HP_LOGO} alt="HP" className="w-8 h-8 object-contain rounded shrink-0" />
             <div className="hidden sm:block">
               <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest leading-none">Handy Pioneers</div>
-              <div className="text-xs font-bold text-foreground leading-tight">Field Estimator</div>
+              <div className="text-xs font-bold text-foreground leading-tight">Operating System</div>
             </div>
           </div>
 
@@ -330,9 +301,9 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
           {!searchOpen && (
             <nav className="hidden md:flex items-center gap-0.5">
               {BACKEND_NAV.map(({ icon: Icon, label, section }) => {
-                // Leads carries the live ops badge: total of unread online requests
+                // Workflow carries the live ops badge: total of unread online requests
                 // + leads created in the last 24h (the things still awaiting first touch).
-                const leadBadge = label === 'Leads' ? (unreadCount + newLeadCount) : 0;
+                const leadBadge = label === 'Workflow' ? (unreadCount + newLeadCount) : 0;
                 const showInboxBadge = portalUnreadCount > 0 && label === 'Inbox';
                 return (
                   <button
@@ -458,7 +429,7 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
         <div className="md:hidden border-t border-border bg-white">
           <div className="px-3 py-2 grid grid-cols-4 gap-1">
             {BACKEND_NAV.map(({ icon: Icon, label, section }) => {
-              const leadBadge = label === 'Leads' ? (unreadCount + newLeadCount) : 0;
+              const leadBadge = label === 'Workflow' ? (unreadCount + newLeadCount) : 0;
               const showInboxBadge = portalUnreadCount > 0 && label === 'Inbox';
               return (
                 <button
@@ -630,12 +601,26 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
                 <span>Pipeline</span>
               </span>
             </div>
+          ) : state.activeSection === 'workflow' ? (
+            <div className="flex items-center py-2 gap-2">
+              <span className="text-[11px] font-semibold text-primary flex items-center gap-1.5">
+                <Workflow className="w-3.5 h-3.5" />
+                <span>Workflow</span>
+              </span>
+            </div>
+          ) : state.activeSection === 'operations' ? (
+            <div className="flex items-center py-2 gap-2">
+              <span className="text-[11px] font-semibold text-primary flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>Operations</span>
+              </span>
+            </div>
           ) : state.activeSection === 'dashboard' ? (
             /* ── Dashboard nav ── */
             <div className="flex items-center py-2 gap-2">
               <span className="text-[11px] font-semibold text-primary flex items-center gap-1.5">
                 <LayoutDashboard className="w-3.5 h-3.5" />
-                <span>Dashboard</span>
+                <span>Command</span>
               </span>
             </div>
           ) : state.activeSection === 'schedule' ? (

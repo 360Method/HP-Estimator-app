@@ -32,6 +32,8 @@ import ThreeSixtyPage from '@/pages/ThreeSixtyPage';
 import FinancialsPage from '@/pages/FinancialsPage';
 import QuickBooksPage from '@/pages/QuickBooksPage';
 import OpportunityDetailsTab from '@/components/sections/OpportunityDetailsTab';
+import WorkflowPage from '@/pages/WorkflowPage';
+import OperationsPage from '@/pages/OperationsPage';
 
 export default function Home() {
   const { user, loading } = useAuth();
@@ -80,6 +82,10 @@ function AdminApp() {
         <JobsListPage />
       ) : state.activeSection === 'pipeline' ? (
         <PipelinePage />
+      ) : state.activeSection === 'workflow' ? (
+        <WorkflowPage />
+      ) : state.activeSection === 'operations' ? (
+        <OperationsPage />
       ) : state.activeSection === 'schedule' ? (
         <SchedulePage />
       ) : state.activeSection === 'inbox' ? (

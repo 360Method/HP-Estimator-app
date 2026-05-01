@@ -31,6 +31,7 @@ import {
 import type { LeadContactType, JobAttachment, EstimateStage, JobStage, Opportunity, LeadNote } from '@/lib/types';
 import { ESTIMATE_STAGES, JOB_STAGES } from '@/lib/types';
 import AddressMapPreview from '@/components/AddressMapPreview';
+import OpportunityWorkflowPanel from '@/components/OpportunityWorkflowPanel';
 
 // ── Lightbox ──────────────────────────────────────────────────
 function Lightbox({ images, index, onClose }: { images: string[]; index: number; onClose: () => void }) {
@@ -436,6 +437,22 @@ function EstimateDetailsPanelInner({
           )}
         </CardContent>
       </Card>
+
+      <OpportunityWorkflowPanel
+        area={activeOpp.area === 'estimate' ? 'estimate' : 'job'}
+        stage={currentStage}
+        value={activeOpp.value}
+        updatedAt={activeOpp.updatedAt}
+        stats={[
+          { label: 'notes logged', value: notes.length },
+          { label: 'attachments', value: attachments.length },
+          { label: isApproved ? 'approved' : 'not approved', value: isApproved ? 'Yes' : 'No', tone: isApproved ? 'good' : 'default' },
+        ]}
+        primaryActionLabel={activeOpp.area === 'estimate' ? 'Draft Customer Message' : 'Draft Job Update'}
+        secondaryActionLabel={email ? 'Email Customer' : undefined}
+        onPrimaryAction={phone ? () => setSmsOpen(true) : undefined}
+        onSecondaryAction={email ? () => { window.location.href = `mailto:${email}?subject=${activeOpp.area === 'estimate' ? 'Your Handy Pioneers estimate' : 'Project update from Handy Pioneers'}`; } : undefined}
+      />
 
       {/* ── SCOPE / DESCRIPTION ─────────────────────────────── */}
       <Card>

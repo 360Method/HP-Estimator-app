@@ -36,6 +36,7 @@ import { toast } from 'sonner';
 import { nanoid } from 'nanoid';
 import AddressMapPreview from '@/components/AddressMapPreview';
 import { generateSOW } from '@/lib/generateSOW';
+import OpportunityWorkflowPanel from '@/components/OpportunityWorkflowPanel';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
@@ -1261,6 +1262,23 @@ export default function JobDetailsSection() {
           </div>
         </div>
       </div>
+
+      <OpportunityWorkflowPanel
+        area="job"
+        stage={activeOpp.stage}
+        value={activeOpp.value}
+        updatedAt={activeOpp.updatedAt}
+        stats={[
+          { label: 'tasks done', value: `${completedCount}/${tasks.length}`, tone: tasks.length > 0 && completedCount === tasks.length ? 'good' : 'default' },
+          { label: 'attachments', value: allAttachments.length },
+          { label: 'change orders', value: changeOrders.length, tone: hasPendingCO ? 'warn' : 'default' },
+          { label: 'activity items', value: jobActivity.length },
+        ]}
+        primaryActionLabel={displayPhone ? 'Draft Job Update' : undefined}
+        secondaryActionLabel={displayEmail ? 'Email Customer' : undefined}
+        onPrimaryAction={displayPhone ? () => setSmsOpen(true) : undefined}
+        onSecondaryAction={displayEmail ? () => { window.location.href = `mailto:${displayEmail}?subject=Project update from Handy Pioneers`; } : undefined}
+      />
 
       {/* ── Stage Selector ── */}
       <Section icon={<Briefcase size={13} />} title="Job Stage" defaultOpen={true}>
