@@ -2,7 +2,8 @@
 // HP Field Estimator v2 — Calculation Engine
 // ============================================================
 
-import { LineItem, PhaseGroup, GlobalSettings, Tier, CustomLineItem } from './types';
+import { LineItem, PhaseGroup, GlobalSettings, Tier, CustomLineItem, PricingMode, ProductionRateAudit } from './types';
+import { auditLineItemProduction, calcProductionHours, getProductionAudit } from './productionRateAudit';
 
 // ─── MARKUP / GM MATH ─────────────────────────────────────────
 // Markup % is applied as: price = hardCost / (1 - GM)
@@ -80,10 +81,21 @@ export interface LineItemResult {
   flagged: boolean;
   hasData: boolean;
   sowLine: string;
+  productionAudit: ProductionRateAudit;
+  baseLaborHrs: number;
+  minimumLaborApplied: boolean;
+  complexityFactor: number;
+  accessFactor: number;
+  mobilizationHours: number;
+  disposalProtectionHours: number;
+  subcontractorAllowance: number;
+  pricingMode: PricingMode;
+  productionWarnings: string[];
 }
 
 export function calcLineItem(item: LineItem, global: GlobalSettings): LineItemResult {
   const hasData = item.qty > 0 && item.enabled;
+  const productionAudit = getProductionAudit(item);
 
   if (!hasData) {
     return {
@@ -93,6 +105,16 @@ export function calcLineItem(item: LineItem, global: GlobalSettings): LineItemRe
       hardCost: 0, price: 0, matPrice: 0, laborPrice: 0,
       gm: 0, flagged: item.flagged, hasData: false,
       sowLine: '',
+      productionAudit,
+      baseLaborHrs: 0,
+      minimumLaborApplied: false,
+      complexityFactor: productionAudit.complexityFactor,
+      accessFactor: productionAudit.accessFactor,
+      mobilizationHours: productionAudit.mobilizationHours,
+      disposalProtectionHours: productionAudit.disposalProtectionHours,
+      subcontractorAllowance: productionAudit.subcontractorAllowance,
+      pricingMode: productionAudit.pricingMode,
+      productionWarnings: [],
     };
   }
 
@@ -118,9 +140,14 @@ export function calcLineItem(item: LineItem, global: GlobalSettings): LineItemRe
 
   let laborCost = 0;
   let laborHrs = 0;
+  let baseLaborHrs = 0;
+  let minimumLaborApplied = false;
   if (item.laborMode === 'hr') {
-    laborHrs = item.qty * item.hrsPerUnit;
-    laborCost = laborHrs * item.laborRate;
+    const productionHours = calcProductionHours(item.qty, productionAudit);
+    baseLaborHrs = productionHours.baseHours;
+    minimumLaborApplied = productionHours.minimumApplied;
+    laborHrs = productionHours.totalHours;
+    laborCost = laborHrs * productionAudit.laborCostRate;
   } else {
     laborCost = item.qty * item.flatRatePerUnit;
   }
@@ -129,7 +156,7 @@ export function calcLineItem(item: LineItem, global: GlobalSettings): LineItemRe
     ? calcPaintCost(item.qty, item.paintPrep, item.paintRate)
     : { mat: 0, labor: 0, hrs: 0 };
 
-  const hardCost = matCost + laborCost + pp.mat + pp.labor;
+  const hardCost = matCost + laborCost + pp.mat + pp.labor + productionAudit.subcontractorAllowance;
   // Use per-item markup override if set, otherwise fall back to global
   const effectiveMarkup = item.markupPct !== null && item.markupPct !== undefined ? item.markupPct : global.markupPct;
   const { price, gm, flagged: markupFlagged } = applyMarkup(hardCost, effectiveMarkup);
@@ -151,6 +178,16 @@ export function calcLineItem(item: LineItem, global: GlobalSettings): LineItemRe
     hardCost, price, matPrice, laborPrice,
     gm, flagged: item.flagged || markupFlagged, hasData: true,
     sowLine,
+    productionAudit,
+    baseLaborHrs,
+    minimumLaborApplied,
+    complexityFactor: productionAudit.complexityFactor,
+    accessFactor: productionAudit.accessFactor,
+    mobilizationHours: productionAudit.mobilizationHours,
+    disposalProtectionHours: productionAudit.disposalProtectionHours,
+    subcontractorAllowance: productionAudit.subcontractorAllowance,
+    pricingMode: productionAudit.pricingMode,
+    productionWarnings: auditLineItemProduction(item, laborHrs, hardCost).map(flag => flag.title),
   };
 }
 
@@ -215,12 +252,18 @@ export interface CustomItemResult {
   gm: number;
   sowLine: string;
   hasData: boolean;
+  productionAudit: ProductionRateAudit;
+  laborHrs: number;
+  minimumLaborApplied: boolean;
+  pricingMode: PricingMode;
 }
 
 export function calcCustomItem(ci: CustomLineItem, global: GlobalSettings): CustomItemResult {
+  const productionAudit = getProductionAudit(ci);
   const matCost = ci.qty * ci.matCostPerUnit;
-  const laborCost = ci.qty * ci.laborHrsPerUnit * ci.laborRate;
-  const hardCost = matCost + laborCost;
+  const productionHours = calcProductionHours(ci.qty, productionAudit);
+  const laborCost = productionHours.totalHours * productionAudit.laborCostRate;
+  const hardCost = matCost + laborCost + productionAudit.subcontractorAllowance;
   // Use per-item markup override if set, otherwise fall back to global
   const effectiveMarkup = ci.markupPct !== null && ci.markupPct !== undefined ? ci.markupPct : global.markupPct;
   const { price, gm } = applyMarkup(hardCost, effectiveMarkup);
@@ -228,7 +271,14 @@ export function calcCustomItem(ci: CustomLineItem, global: GlobalSettings): Cust
   const matPrice = Math.round(price * matFraction);
   const laborPrice = price - matPrice;
   const sowLine = `${ci.description} — ${ci.qty} ${ci.unitType}`;
-  return { id: ci.id, phaseId: ci.phaseId, description: ci.description, qty: ci.qty, unitType: ci.unitType, hardCost, matCost, laborCost, price, matPrice, laborPrice, gm, sowLine, hasData: hardCost > 0 };
+  return {
+    id: ci.id, phaseId: ci.phaseId, description: ci.description, qty: ci.qty, unitType: ci.unitType,
+    hardCost, matCost, laborCost, price, matPrice, laborPrice, gm, sowLine, hasData: hardCost > 0,
+    productionAudit,
+    laborHrs: productionHours.totalHours,
+    minimumLaborApplied: productionHours.minimumApplied,
+    pricingMode: productionAudit.pricingMode,
+  };
 }
 
 // ─── TOTALS ───────────────────────────────────────────────

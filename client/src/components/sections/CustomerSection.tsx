@@ -53,6 +53,7 @@ import { toast } from 'sonner';
 import { nanoid } from 'nanoid';
 import CustomerMembershipPanel from '@/components/CustomerMembershipPanel';
 import ConciergeBrief from '@/components/ConciergeBrief';
+import BaselineWalkthroughPanel from '@/components/BaselineWalkthroughPanel';
 import { getOpportunityHeat, getWorkflowStep } from '@/components/OpportunityWorkflowPanel';
 import {
   THREE_SIXTY_METHOD_PHASES,
@@ -2179,6 +2180,19 @@ export default function CustomerSection() {
                 <Badge variant="secondary" className="shrink-0 text-[10px]">{step.owner}</Badge>
               </div>
               <p className="mt-2 text-xs text-muted-foreground">{step.operatorOutcome}</p>
+              {step.key === 'baseline' && activePhase.id === 'aware' && (
+                <div className="mt-3">
+                  <BaselineWalkthroughPanel
+                    customerName={
+                      activeCustomer
+                        ? [activeCustomer.firstName, activeCustomer.lastName].filter(Boolean).join(' ') || activeCustomer.displayName || activeCustomer.company || 'Customer'
+                        : 'Customer'
+                    }
+                    propertyLabel={activeProperty?.label ?? 'Primary property'}
+                    propertyAddress={propertyAddress}
+                  />
+                </div>
+              )}
               {step.key === 'prioritize' && (
                 <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
                   <div className="flex flex-wrap items-start justify-between gap-3">
