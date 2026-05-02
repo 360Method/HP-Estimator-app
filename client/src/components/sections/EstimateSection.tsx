@@ -302,7 +302,7 @@ function EstimateHeader({ jobInfo, estimateNumber, today }: {
 
 // ─── Main component ───────────────────────────────────────────
 export default function EstimateSection() {
-  const { state, setSummaryNotes, setClientNote, setSection, updateOpportunity, upsertPhaseOverride, removePhaseOverride, setGlobal, updateCustomItem } = useEstimator();
+  const { state, setSummaryNotes, setClientNote, setSection, updateOpportunity, upsertPhaseOverride, removePhaseOverride, setGlobal, updateCustomItem, setEstimateAudit } = useEstimator();
   const [showMatLabor, setShowMatLabor] = useState(false);
   const [expandedPhases, setExpandedPhases] = useState<Set<number>>(new Set());
   const [showTC, setShowTC] = useState(false);
@@ -591,6 +591,8 @@ export default function EstimateSection() {
 
   // Active customer for pre-filling email/phone
   const activeCustomer = state.customers.find(c => c.id === state.activeCustomerId);
+  const isCustomerReady = state.estimateProposal.status === 'ready_for_customer' && !!state.estimateProposal.approvedAt;
+  const approvedCustomerSummary = state.estimateProposal.customerSummary || state.clientNote;
 
   // ─── Render ─────────────────────────────────────────────────
   return (
@@ -628,10 +630,26 @@ export default function EstimateSection() {
           )}
           hpCustomerId={activeCustomer?.id}
           hpOpportunityId={state.activeOpportunityId ?? undefined}
+          isCustomerReady={isCustomerReady}
+          approvalSummary={approvedCustomerSummary}
+          approvalStatusLabel={state.estimateProposal.status.replaceAll('_', ' ')}
           defaultEmail={activeCustomer?.email || state.jobInfo.email || ''}
           defaultPhone={activeCustomer?.mobilePhone || state.jobInfo.phone || ''}
           onClose={() => setShowSendDialog(false)}
           onSent={() => {
+            setEstimateAudit({
+              history: [
+                {
+                  id: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}`,
+                  type: 'proposal_sent',
+                  title: 'Estimate sent to customer',
+                  summary: 'Approved estimate package was delivered through the send dialog.',
+                  createdAt: new Date().toISOString(),
+                  actor: state.userProfile.firstName || state.userProfile.email || 'Consultant',
+                },
+                ...state.estimateAudit.history,
+              ],
+            });
             if (state.activeOpportunityId) {
               updateOpportunity(state.activeOpportunityId, { sentAt: new Date().toISOString() });
             }

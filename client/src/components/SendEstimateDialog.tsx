@@ -19,6 +19,9 @@ export interface SendEstimateDialogProps {
   lineItemsText?: string;
   /** Structured JSON string — array of phase objects with line items */
   lineItemsJson?: string;
+  isCustomerReady?: boolean;
+  approvalSummary?: string;
+  approvalStatusLabel?: string;
   portalUrl?: string;
   hpCustomerId?: string;
   /** Pro-side opportunity ID — stored so portal approval can mark it won */
@@ -45,6 +48,9 @@ export default function SendEstimateDialog({
   scopeSummary,
   lineItemsText,
   lineItemsJson,
+  isCustomerReady = false,
+  approvalSummary,
+  approvalStatusLabel = 'Not approved',
   portalUrl,
   hpCustomerId,
   hpOpportunityId,
@@ -80,6 +86,7 @@ export default function SendEstimateDialog({
 
   const fmt = (n: number) =>
     '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const customerScopeSummary = approvalSummary?.trim() || scopeSummary || '';
 
   const handleSend = () => {
     if (!sendViaEmail && !sendViaSms) {
@@ -94,6 +101,10 @@ export default function SendEstimateDialog({
       toast.error('Enter a phone number for SMS');
       return;
     }
+    if (!isCustomerReady) {
+      toast.error('Estimate must be approved in the consultant workflow before customer delivery');
+      return;
+    }
     sendMutation.mutate({
       sendEmail: sendViaEmail,
       sendSms: sendViaSms,
@@ -105,7 +116,7 @@ export default function SendEstimateDialog({
       totalPrice,
       depositLabel,
       depositAmount,
-      scopeSummary,
+      scopeSummary: customerScopeSummary,
       lineItemsText,
       lineItemsJson,
       portalUrl,
@@ -168,6 +179,9 @@ export default function SendEstimateDialog({
             </div>
 
             <div className="px-6 py-5 space-y-5">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-700">
+                <strong>Customer package boundary:</strong> this send includes the approved scope summary, customer-safe line items, price, deposit, and portal link only. Internal audit notes, gross margin, and labor assumptions are not sent.
+              </div>
               {/* ── Channel toggles ── */}
               <div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Send via</p>
@@ -230,6 +244,20 @@ export default function SendEstimateDialog({
               )}
 
               {/* ── Portal link note ── */}
+              {!isCustomerReady && (
+                <div className="flex items-start gap-2 px-3 py-2.5 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800">
+                  <AlertCircle size={13} className="shrink-0 mt-0.5" />
+                  <span>This estimate is blocked from customer delivery until the consultant workflow marks it ready. Current status: <strong>{approvalStatusLabel}</strong>.</span>
+                </div>
+              )}
+
+              {isCustomerReady && approvalSummary && (
+                <div className="px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-700">
+                  <strong>Approved customer summary:</strong>
+                  <div className="mt-1 line-clamp-3">{approvalSummary}</div>
+                </div>
+              )}
+
               {portalUrl && (
                 <div className="flex items-start gap-2 px-3 py-2.5 bg-green-50 border border-green-200 rounded-lg text-xs text-green-800">
                   <CheckCircle2 size={13} className="shrink-0 mt-0.5 text-green-600" />
@@ -255,7 +283,7 @@ export default function SendEstimateDialog({
               </button>
               <button
                 onClick={handleSend}
-                disabled={sendMutation.isPending || (!sendViaEmail && !sendViaSms)}
+                disabled={sendMutation.isPending || !isCustomerReady || (!sendViaEmail && !sendViaSms)}
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {sendMutation.isPending ? (

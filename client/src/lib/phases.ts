@@ -4,6 +4,7 @@
 // ============================================================
 
 import { PhaseGroup, LineItem, TierData, DimensionOption } from './types';
+import { withProductionAudit } from './productionRateAudit';
 
 // Helper to build a TierData set
 function tiers(
@@ -1475,7 +1476,7 @@ const phase18: PhaseGroup = {
 // 14  Electrical Finish      (devices, fixtures, panels)
 // 16  Appliances & Special.  (appliances, specialties)
 // 17  Final Cleaning & Close (punch list, cleaning, walkthrough)
-export const ALL_PHASES: PhaseGroup[] = [
+const BASE_PHASES: PhaseGroup[] = [
   phase1,   // 1  Pre-Construction
   phase2,   // 2  Demo & Rough Work
   phase8,   // 3  Framing & Carpentry  ← moved up (was 8)
@@ -1495,6 +1496,11 @@ export const ALL_PHASES: PhaseGroup[] = [
   phase17,  // 17 Final Cleaning       (unchanged)
   phase18,  // 18 Handyman & Maintenance
 ];
+
+export const ALL_PHASES: PhaseGroup[] = BASE_PHASES.map(phase => ({
+  ...phase,
+  items: phase.items.map(item => withProductionAudit(item, phase)),
+}));
 
 
 export const DEFAULTS = {

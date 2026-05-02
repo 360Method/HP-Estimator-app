@@ -24,6 +24,27 @@ export type UnitType =
 export type Tier = 'good' | 'better' | 'best';
 export type LaborMode = 'hr' | 'flat';
 export type PaintPrep = 'none' | 'caulk' | 'full';
+export type PricingMode = 'self_performed' | 'subcontractor' | 'allowance' | 'fixed_price';
+export type ProductionConfidence = 'high' | 'medium' | 'low';
+export type ProductionAuditStatus = 'keep' | 'adjust' | 'split' | 'replace' | 'field_validate';
+
+export interface ProductionRateAudit {
+  baseHoursPerUnit: number;
+  recommendedHoursPerUnit: number;
+  laborCostRate: number;
+  recommendedSellRate?: number;
+  minChargeHours: number;
+  mobilizationHours: number;
+  complexityFactor: number;
+  accessFactor: number;
+  disposalProtectionHours: number;
+  subcontractorAllowance: number;
+  pricingMode: PricingMode;
+  confidence: ProductionConfidence;
+  auditStatus: ProductionAuditStatus;
+  auditNotes: string;
+  overrideReason: string;
+}
 
 export interface TierData {
   rate: number;   // $/unit hard cost
@@ -74,6 +95,8 @@ export interface LineItem {
   // v4: dimension/size options
   dimensionOptions?: DimensionOption[];  // available sizes/dimensions
   selectedDimension?: string;            // currently selected dimension value
+  // v5: production-rate audit metadata layered onto the legacy catalog item
+  productionAudit?: ProductionRateAudit;
 }
 
 // AI cost analysis result for custom items
@@ -100,6 +123,8 @@ export interface CustomLineItem {
   markupPct: number | null;
   // v3: AI analysis result
   aiAnalysis?: AiCostAnalysis;
+  // v5: production-rate audit metadata for custom scope lines
+  productionAudit?: ProductionRateAudit;
 }
 
 // Editable estimate line item override (for Estimate stage customization)
@@ -124,6 +149,105 @@ export interface PhaseGroup {
   icon: string;
   description: string;   // customer-facing phase description for estimate
   items: LineItem[];
+}
+
+export type ConsultantWorkflowStep = 'prep' | 'scope' | 'measurements' | 'calculator' | 'audit' | 'proposal';
+export type EstimateReadinessStatus = 'draft' | 'needs_review' | 'ready_for_customer' | 'sent' | 'approved';
+
+export interface ConsultantWorkflowMeta {
+  currentStep: ConsultantWorkflowStep;
+  completedSteps: ConsultantWorkflowStep[];
+  problemStatement: string;
+  customerGoals: string;
+  affectedAreas: string;
+  urgency: string;
+  constraints: string;
+  decisionFactors: string;
+  measurementNotes: string;
+  findingNotes: string;
+  photoNotes: string;
+  linkedPhotoAttachmentIds: string[];
+  scheduleAssumptions: string;
+  internalAssumptions: string;
+}
+
+export interface EstimateAuditIssue {
+  id: string;
+  severity: 'blocking' | 'review' | 'info';
+  area: string;
+  message: string;
+  fix: string;
+}
+
+export interface EstimateAuditSuggestion {
+  id: string;
+  title: string;
+  suggestion: string;
+  customerSafe: boolean;
+}
+
+export interface EstimatePricingRisk {
+  id: string;
+  level: 'red' | 'yellow' | 'green';
+  message: string;
+}
+
+export interface EstimateApprovalCheck {
+  id: string;
+  label: string;
+  passed: boolean;
+  required: boolean;
+}
+
+export interface EstimateAlternateScopeItem {
+  id: string;
+  title: string;
+  summary: string;
+  investmentRange: string;
+}
+
+export interface EstimateAuditMeta {
+  lastRunAt: string | null;
+  source: 'claude' | 'rules' | null;
+  providerConfigured: boolean;
+  readinessScore: number;
+  blockingIssues: EstimateAuditIssue[];
+  suggestedFixes: EstimateAuditSuggestion[];
+  pricingRisks: EstimatePricingRisk[];
+  scopeQuestions: string[];
+  customerSummaryDraft: string;
+  recommendedAlternates: EstimateAlternateScopeItem[];
+  approvalChecklist: EstimateApprovalCheck[];
+  approvedAt: string | null;
+  approvedBy: string | null;
+  history: EstimateAuditHistoryEvent[];
+}
+
+export interface EstimateProposalMeta {
+  status: EstimateReadinessStatus;
+  customerSummary: string;
+  alternates: EstimateAlternateScopeItem[];
+  nextStep: string;
+  approvedAt: string | null;
+  approvedBy: string | null;
+}
+
+export interface EstimateAuditHistoryEvent {
+  id: string;
+  type: 'audit_run' | 'proposal_ready' | 'proposal_sent' | 'approval_blocked';
+  title: string;
+  summary: string;
+  createdAt: string;
+  actor: string;
+}
+
+export interface EstimatePricebookMeta {
+  catalogVersion: string;
+  region: string;
+  source: 'frontend_catalog';
+  futureAdminReady: boolean;
+  reviewedAt: string | null;
+  reviewedBy: string | null;
 }
 
 // ── Customer Profile (extended) ──────────────────────────
@@ -517,6 +641,10 @@ export interface EstimatorState {
   signature: string | null;                    // base64 PNG of e-signature
   signedAt: string | null;                     // ISO timestamp of signature
   signedBy: string | null;                     // name of signer
+  consultantWorkflow: ConsultantWorkflowMeta;
+  estimateAudit: EstimateAuditMeta;
+  estimateProposal: EstimateProposalMeta;
+  estimatePricebook: EstimatePricebookMeta;
   // CRM pipeline
   opportunities: Opportunity[];
   activePipelineArea: PipelineArea;
@@ -654,6 +782,12 @@ export interface EstimateSnapshot {
   signedBy: string | null;
   depositType: 'pct' | 'flat';
   depositValue: number;
+  consultantWorkflow?: ConsultantWorkflowMeta;
+  audit?: EstimateAuditMeta;
+  proposal?: EstimateProposalMeta;
+  pricebook?: EstimatePricebookMeta;
+  approvedAt?: string | null;
+  approvedBy?: string | null;
 }
 
 export interface Opportunity {

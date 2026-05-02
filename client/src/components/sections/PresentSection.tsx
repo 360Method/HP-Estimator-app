@@ -453,7 +453,7 @@ function ColVisPanel({ cols, onChange, onClose }: { cols: Record<ColKey, boolean
 
 // ─── Main PresentSection ──────────────────────────────────────
 export default function PresentSection() {
-  const { state, setSection, setSignature, clearSignature } = useEstimator();
+  const { state, setSection, setSignature, clearSignature, setEstimateAudit } = useEstimator();
   const [showSigPad, setShowSigPad] = useState(false);
   const [showColPanel, setShowColPanel] = useState(false);
   const [cols, setCols] = useState<Record<ColKey, boolean>>(DEFAULT_COLS);
@@ -463,6 +463,8 @@ export default function PresentSection() {
   const docRef = useRef<HTMLDivElement>(null);
 
   const { jobInfo } = state;
+  const isCustomerReady = state.estimateProposal.status === 'ready_for_customer' && !!state.estimateProposal.approvedAt;
+  const approvedCustomerSummary = state.estimateProposal.customerSummary || state.clientNote;
 
   const toggleCol = useCallback((k: ColKey, v: boolean) => {
     setCols(prev => ({ ...prev, [k]: v }));
@@ -953,11 +955,29 @@ export default function PresentSection() {
           defaultPhone={activeCustomer?.mobilePhone || jobInfo.phone || ''}
           hpCustomerId={activeCustomer?.id}
           hpOpportunityId={state.activeOpportunityId ?? undefined}
+          isCustomerReady={isCustomerReady}
+          approvalSummary={approvedCustomerSummary}
+          approvalStatusLabel={state.estimateProposal.status.replaceAll('_', ' ')}
           taxEnabled={taxEnabled}
           taxRateCode={taxRateCode}
           customTaxPct={customTaxPct}
           taxAmount={taxAmount / 100}
           onClose={() => setShowSendDialog(false)}
+          onSent={() => {
+            setEstimateAudit({
+              history: [
+                {
+                  id: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}`,
+                  type: 'proposal_sent',
+                  title: 'Estimate sent to customer',
+                  summary: 'Approved estimate package was delivered from presentation view.',
+                  createdAt: new Date().toISOString(),
+                  actor: state.userProfile.firstName || state.userProfile.email || 'Consultant',
+                },
+                ...state.estimateAudit.history,
+              ],
+            });
+          }}
         />
       )}
 

@@ -9,10 +9,63 @@ import {
   Opportunity, PipelineArea, CustomerProfile, ActivityEvent, CustomerProfileTab,
   OpportunityStage, Customer, Invoice, InvoiceLineItem, ScheduleEvent,
   EstimateSnapshot, CustomerAddress, JobTask, JobAttachment, CustomRole, LeadNote,
+  ConsultantWorkflowMeta, EstimateAuditMeta, EstimateProposalMeta, EstimatePricebookMeta,
 } from '@/lib/types';
 import { ALL_PHASES, DEFAULTS } from '@/lib/phases';
 import { generateProjectSchedule } from '@/lib/generateProjectSchedule';
 import { nanoid } from 'nanoid';
+
+const defaultConsultantWorkflow = (): ConsultantWorkflowMeta => ({
+  currentStep: 'prep',
+  completedSteps: [],
+  problemStatement: '',
+  customerGoals: '',
+  affectedAreas: '',
+  urgency: '',
+  constraints: '',
+  decisionFactors: '',
+  measurementNotes: '',
+  findingNotes: '',
+  photoNotes: '',
+  linkedPhotoAttachmentIds: [],
+  scheduleAssumptions: '',
+  internalAssumptions: '',
+});
+
+const defaultEstimateAudit = (): EstimateAuditMeta => ({
+  lastRunAt: null,
+  source: null,
+  providerConfigured: false,
+  readinessScore: 0,
+  blockingIssues: [],
+  suggestedFixes: [],
+  pricingRisks: [],
+  scopeQuestions: [],
+  customerSummaryDraft: '',
+  recommendedAlternates: [],
+  approvalChecklist: [],
+  approvedAt: null,
+  approvedBy: null,
+  history: [],
+});
+
+const defaultEstimateProposal = (): EstimateProposalMeta => ({
+  status: 'draft',
+  customerSummary: '',
+  alternates: [],
+  nextStep: '',
+  approvedAt: null,
+  approvedBy: null,
+});
+
+const defaultEstimatePricebook = (): EstimatePricebookMeta => ({
+  catalogVersion: 'frontend-catalog-v1',
+  region: 'Vancouver / Clark County, WA',
+  source: 'frontend_catalog',
+  futureAdminReady: true,
+  reviewedAt: null,
+  reviewedBy: null,
+});
 
 const initialState: EstimatorState = {
   activeSection: 'dashboard',
@@ -53,6 +106,10 @@ const initialState: EstimatorState = {
   signature: null,
   signedAt: null,
   signedBy: null,
+  consultantWorkflow: defaultConsultantWorkflow(),
+  estimateAudit: defaultEstimateAudit(),
+  estimateProposal: defaultEstimateProposal(),
+  estimatePricebook: defaultEstimatePricebook(),
   // CRM pipeline
   opportunities: [],
   activePipelineArea: 'lead' as PipelineArea,
@@ -187,6 +244,10 @@ type Action =
   | { type: 'SET_SUMMARY_NOTES'; payload: string }
   | { type: 'SET_ESTIMATOR_NOTES'; payload: string }
   | { type: 'SET_CLIENT_NOTE'; payload: string }
+  | { type: 'SET_CONSULTANT_WORKFLOW'; payload: Partial<ConsultantWorkflowMeta> }
+  | { type: 'SET_ESTIMATE_AUDIT'; payload: Partial<EstimateAuditMeta> }
+  | { type: 'SET_ESTIMATE_PROPOSAL'; payload: Partial<EstimateProposalMeta> }
+  | { type: 'SET_ESTIMATE_PRICEBOOK'; payload: Partial<EstimatePricebookMeta> }
   | { type: 'UPSERT_ESTIMATE_OVERRIDE'; payload: EstimateLineOverride }
   | { type: 'REMOVE_ESTIMATE_OVERRIDE'; itemId: string }
   | { type: 'UPSERT_PHASE_OVERRIDE'; payload: EstimatePhaseOverride }
@@ -379,13 +440,11 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
 
     case 'SET_GLOBAL': {
       const newGlobal = { ...state.global, ...action.payload };
-      const syncLabor = action.payload.laborRate !== undefined;
       const syncPaint = action.payload.paintRate !== undefined;
       const phases = state.phases.map(phase => ({
         ...phase,
         items: phase.items.map(item => ({
           ...item,
-          laborRate: syncLabor ? newGlobal.laborRate : item.laborRate,
           paintRate: syncPaint ? newGlobal.paintRate : item.paintRate,
         })),
       }));
@@ -434,6 +493,14 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
       return { ...state, estimatorNotes: action.payload };
     case 'SET_CLIENT_NOTE':
       return { ...state, clientNote: action.payload };
+    case 'SET_CONSULTANT_WORKFLOW':
+      return { ...state, consultantWorkflow: { ...state.consultantWorkflow, ...action.payload } };
+    case 'SET_ESTIMATE_AUDIT':
+      return { ...state, estimateAudit: { ...state.estimateAudit, ...action.payload } };
+    case 'SET_ESTIMATE_PROPOSAL':
+      return { ...state, estimateProposal: { ...state.estimateProposal, ...action.payload } };
+    case 'SET_ESTIMATE_PRICEBOOK':
+      return { ...state, estimatePricebook: { ...state.estimatePricebook, ...action.payload } };
 
     case 'UPSERT_ESTIMATE_OVERRIDE': {
       const exists = state.estimateOverrides.find(o => o.itemId === action.payload.itemId);
@@ -593,6 +660,12 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
           signedBy: state.signedBy,
           depositType: state.depositType,
           depositValue: state.depositValue,
+          consultantWorkflow: state.consultantWorkflow,
+          audit: state.estimateAudit,
+          proposal: state.estimateProposal,
+          pricebook: state.estimatePricebook,
+          approvedAt: state.estimateProposal.approvedAt ?? state.estimateAudit.approvedAt,
+          approvedBy: state.estimateProposal.approvedBy ?? state.estimateAudit.approvedBy,
         };
         updatedOpportunities = state.opportunities.map(o =>
           o.id === state.activeOpportunityId
@@ -655,6 +728,10 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
         signedBy: snap?.signedBy ?? null,
         depositType: snap?.depositType ?? 'pct',
         depositValue: snap?.depositValue ?? 50,
+        consultantWorkflow: { ...defaultConsultantWorkflow(), ...(snap?.consultantWorkflow ?? {}) },
+        estimateAudit: { ...defaultEstimateAudit(), ...(snap?.audit ?? {}) },
+        estimateProposal: { ...defaultEstimateProposal(), ...(snap?.proposal ?? {}) },
+        estimatePricebook: { ...defaultEstimatePricebook(), ...(snap?.pricebook ?? {}) },
       };
     }
 
@@ -1889,6 +1966,10 @@ interface EstimatorContextValue {
   setSummaryNotes: (v: string) => void;
   setEstimatorNotes: (v: string) => void;
   setClientNote: (v: string) => void;
+  setConsultantWorkflow: (payload: Partial<ConsultantWorkflowMeta>) => void;
+  setEstimateAudit: (payload: Partial<EstimateAuditMeta>) => void;
+  setEstimateProposal: (payload: Partial<EstimateProposalMeta>) => void;
+  setEstimatePricebook: (payload: Partial<EstimatePricebookMeta>) => void;
   upsertEstimateOverride: (override: EstimateLineOverride) => void;
   removeEstimateOverride: (itemId: string) => void;
   upsertPhaseOverride: (override: EstimatePhaseOverride) => void;
@@ -2021,6 +2102,10 @@ function mergePhasesWithCatalog(persistedPhases: any[]): typeof ALL_PHASES {
         enabled: persistedItem.enabled ?? catalogItem.enabled,
         paintPrep: persistedItem.paintPrep ?? catalogItem.paintPrep,
         salesSelected: persistedItem.salesSelected ?? catalogItem.salesSelected,
+        productionAudit: {
+          ...(catalogItem.productionAudit ?? {}),
+          ...(persistedItem.productionAudit ?? {}),
+        },
       };
     }),
   }));
@@ -2146,6 +2231,14 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
   const setSummaryNotes = useCallback((v: string) => dispatch({ type: 'SET_SUMMARY_NOTES', payload: v }), []);
   const setEstimatorNotes = useCallback((v: string) => dispatch({ type: 'SET_ESTIMATOR_NOTES', payload: v }), []);
   const setClientNote = useCallback((v: string) => dispatch({ type: 'SET_CLIENT_NOTE', payload: v }), []);
+  const setConsultantWorkflow = useCallback((payload: Partial<ConsultantWorkflowMeta>) =>
+    dispatch({ type: 'SET_CONSULTANT_WORKFLOW', payload }), []);
+  const setEstimateAudit = useCallback((payload: Partial<EstimateAuditMeta>) =>
+    dispatch({ type: 'SET_ESTIMATE_AUDIT', payload }), []);
+  const setEstimateProposal = useCallback((payload: Partial<EstimateProposalMeta>) =>
+    dispatch({ type: 'SET_ESTIMATE_PROPOSAL', payload }), []);
+  const setEstimatePricebook = useCallback((payload: Partial<EstimatePricebookMeta>) =>
+    dispatch({ type: 'SET_ESTIMATE_PRICEBOOK', payload }), []);
   const upsertEstimateOverride = useCallback((override: EstimateLineOverride) =>
     dispatch({ type: 'UPSERT_ESTIMATE_OVERRIDE', payload: override }), []);
   const removeEstimateOverride = useCallback((itemId: string) =>
@@ -2418,6 +2511,7 @@ export function EstimatorProvider({ children }: { children: React.ReactNode }) {
       state, setSection, setJobInfo, setGlobal, updateItem,
       addCustomItem, updateCustomItem, removeCustomItem,
       setFieldNotes, setSummaryNotes, setEstimatorNotes, setClientNote,
+      setConsultantWorkflow, setEstimateAudit, setEstimateProposal, setEstimatePricebook,
       upsertEstimateOverride, removeEstimateOverride,
       upsertPhaseOverride, removePhaseOverride,
       setSignature, clearSignature,
