@@ -65,6 +65,7 @@ import {
   inferOpportunityThreeSixtyStep,
   getCustomerFacingStepAction,
   getThreeSixtyRoleResponsibility,
+  type ThreeSixtyOperatorRole,
   type ThreeSixtyPhaseId,
 } from '@/lib/threeSixtyMethod';
 import {
@@ -1861,7 +1862,7 @@ export default function CustomerSection() {
   };
 
   // ── Placeholder tab ──
-  const roleForOpportunity = (opp: Opportunity) => {
+  const roleForOpportunity = (opp: Opportunity): ThreeSixtyOperatorRole => {
     if (opp.area === 'lead') return 'Lead Desk';
     if (opp.area === 'estimate') return 'Consultant Desk';
     if (opp.area === 'job') {
@@ -1873,9 +1874,132 @@ export default function CustomerSection() {
     return 'Retainment Desk';
   };
 
+  const opportunityPriorityScore = (opp: Opportunity) => {
+    const heat = getOpportunityHeat(opp.area, opp.stage, opp.value, opp.updatedAt);
+    const heatScore = heat.level === 'hot' ? 400 : heat.level === 'warm' ? 250 : 100;
+    const methodPriority = opp.threeSixtyPriority === 'red' ? 300 : opp.threeSixtyPriority === 'yellow' ? 150 : 0;
+    const valueScore = Math.min(Math.floor((opp.value || 0) / 1000), 100);
+    const staleDays = Math.floor((Date.now() - new Date(opp.updatedAt || opp.createdAt).getTime()) / 86_400_000);
+    return heatScore + methodPriority + valueScore + Math.min(staleDays * 4, 80);
+  };
+
+  const customerVisibilityPolicy = (opp: Opportunity) => {
+    const methodStep = inferOpportunityThreeSixtyStep(opp);
+    const hasMoney = (opp.value || 0) > 0 || opp.area === 'estimate' || opp.stage.includes('Invoice') || opp.stage.includes('Deposit');
+    const requiresReview =
+      hasMoney ||
+      methodStep.key === 'prioritize' ||
+      methodStep.key === 'upgrade' ||
+      methodStep.key === 'cfo_intelligence';
+
+    if (requiresReview) {
+      return {
+        label: 'Review before customer',
+        detail: 'Scope, price, schedule, roadmap, or property-intelligence language needs human approval before portal visibility.',
+        className: 'border-amber-200 bg-amber-50 text-amber-800',
+      };
+    }
+
+    return {
+      label: 'AI can prep draft',
+      detail: 'AI can draft the next touch, but the desk owner still controls sending.',
+      className: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+    };
+  };
+
   const openOpportunityCommand = (id: string) => {
     setActiveOpportunity(id);
     setSection('opp-details');
+  };
+
+  const renderCustomerActionQueuePanel = () => {
+    const actionOpps = [...activeOpps]
+      .sort((a, b) => opportunityPriorityScore(b) - opportunityPriorityScore(a))
+      .slice(0, 6);
+
+    return (
+      <div className="rounded-xl border bg-white p-4">
+        <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-primary">Customer action queue</p>
+            <h3 className="mt-1 text-base font-semibold">What needs attention next</h3>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Ranked by heat, 360 priority, value, and stale follow-up so each desk sees the next move without searching through tabs.
+            </p>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => handleTabClick('workflow')}>
+            View role desks
+          </Button>
+        </div>
+
+        {actionOpps.length === 0 ? (
+          <div className="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">
+            No active opportunities. Start with a lead, baseline walkthrough, seasonal visit, or membership recommendation.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {actionOpps.map((opp, index) => {
+              const heat = getOpportunityHeat(opp.area, opp.stage, opp.value, opp.updatedAt);
+              const workflow = getWorkflowStep(opp.area, opp.stage);
+              const methodStep = inferOpportunityThreeSixtyStep(opp);
+              const role = roleForOpportunity(opp);
+              const roleModel = getThreeSixtyRoleResponsibility(role);
+              const visibility = customerVisibilityPolicy(opp);
+              return (
+                <div key={opp.id} className="rounded-lg border bg-background px-3 py-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                          {index + 1}
+                        </span>
+                        <h4 className="text-sm font-semibold text-foreground">{opp.title}</h4>
+                        <Badge variant="outline" className={heat.className}>
+                          <span className={`mr-1.5 h-2 w-2 rounded-full ${heat.dotClassName}`} />
+                          {heat.label}
+                        </Badge>
+                        <Badge variant="secondary">{role}</Badge>
+                        <Badge variant="outline" className="text-[10px]">
+                          {methodStep.number}. {methodStep.name}
+                        </Badge>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {opp.area} / {opp.stage} / {fmtDollar(opp.value || 0)}
+                      </p>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => openOpportunityCommand(opp.id)}>
+                      Open Command
+                      <ChevronRight className="ml-1 h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+
+                  <div className="mt-3 grid gap-2 lg:grid-cols-[1fr_1fr_0.9fr]">
+                    <div className="rounded-md border bg-white px-3 py-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Desk action</p>
+                      <p className="mt-1 text-xs leading-relaxed">{workflow.nextAction}</p>
+                    </div>
+                    <div className="rounded-md border bg-white px-3 py-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">AI support</p>
+                      <p className="mt-1 text-xs leading-relaxed">{methodStep.aiSupport}</p>
+                    </div>
+                    <div className={`rounded-md border px-3 py-2 ${visibility.className}`}>
+                      <p className="text-[11px] font-semibold uppercase tracking-wide">{visibility.label}</p>
+                      <p className="mt-1 text-xs leading-relaxed">{visibility.detail}</p>
+                    </div>
+                  </div>
+
+                  {roleModel && (
+                    <div className="mt-2 text-[11px] text-muted-foreground">
+                      Review trigger: {roleModel.reviewRequiredFor.slice(0, 3).join(', ')}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
   };
 
   const CustomerOpportunityCommandCard = ({ opp }: { opp: Opportunity }) => {
@@ -2291,6 +2415,7 @@ export default function CustomerSection() {
   const CustomerOverviewTab = () => (
     <div className="space-y-5">
       {activeCustomer && <ConciergeBrief customer={activeCustomer} opportunities={opportunities} />}
+      {renderCustomerActionQueuePanel()}
       <PropertyThreeSixtyWorkspace />
       <CustomerThreeSixtyStatusPanel />
       <div className="grid gap-3 sm:grid-cols-4">
@@ -2397,6 +2522,7 @@ export default function CustomerSection() {
     const desks = ['Lead Desk', 'Consultant Desk', 'PM Desk', 'Field Desk', 'Closeout Desk', 'Retainment Desk'];
     return (
       <div className="space-y-4">
+        {renderCustomerActionQueuePanel()}
         {desks.map(desk => {
           const deskOpps = activeOpps.filter(opp => roleForOpportunity(opp) === desk);
           return (
