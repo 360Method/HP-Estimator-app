@@ -168,7 +168,7 @@ function ViewInProfileButton({ customerId }: { customerId: string }) {
       size="sm"
       variant="outline"
       onClick={() => {
-        setActiveCustomer(customerId, "direct", "pending-review");
+        setActiveCustomer(customerId, "direct", "communications");
         navigate("/");
       }}
       title="View in customer profile"

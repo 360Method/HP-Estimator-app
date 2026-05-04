@@ -659,8 +659,8 @@ export interface EstimatorState {
   activeCustomerId: string | null;  // which customer is currently open
   customerNavSource: 'list' | 'search' | 'new' | 'direct' | null; // how we navigated to this customer
   // When deep-linking from a notification, names a section inside the customer
-  // profile that should auto-scroll into view (e.g. 'pending-review',
-  // 'communications', 'ai-activity'). Cleared after consumption.
+  // profile that should auto-scroll into view (e.g. 'communications',
+  // 'ai-activity'). Cleared after consumption.
   pendingFocus: string | null;
   // Invoices (working set for active customer)
   invoices: Invoice[];

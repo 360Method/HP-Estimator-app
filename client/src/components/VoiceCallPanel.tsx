@@ -24,11 +24,13 @@ interface VoiceCallPanelProps {
   toNumber?: string;
   /** Display name for the call */
   toName?: string;
+  /** Optional button label. Defaults to Call + name/number. */
+  label?: string;
   /** Called when the call ends */
   onCallEnd?: (durationSecs: number) => void;
 }
 
-export default function VoiceCallPanel({ toNumber, toName, onCallEnd }: VoiceCallPanelProps) {
+export default function VoiceCallPanel({ toNumber, toName, label, onCallEnd }: VoiceCallPanelProps) {
   const [callState, setCallState] = useState<CallState>('idle');
   const [isMuted, setIsMuted] = useState(false);
   const [duration, setDuration] = useState(0);
@@ -315,6 +317,7 @@ export default function VoiceCallPanel({ toNumber, toName, onCallEnd }: VoiceCal
         variant="outline"
         onClick={() => makeCall(toNumber)}
         className="max-w-full gap-2 text-emerald-600 border-emerald-200 hover:bg-emerald-50 disabled:opacity-60"
+        aria-label={label || `Call ${toName || toNumber}`}
         disabled={initializing}
         title={initializing ? 'Connecting to voice service…' : `Call ${toName || toNumber}`}
       >
@@ -323,7 +326,7 @@ export default function VoiceCallPanel({ toNumber, toName, onCallEnd }: VoiceCal
         ) : (
           <Phone className="w-3.5 h-3.5" />
         )}
-        {initializing ? 'Connecting…' : `Call ${toName || toNumber}`}
+        {initializing ? 'Connecting...' : (label || `Call ${toName || toNumber}`)}
       </Button>
     );
   }

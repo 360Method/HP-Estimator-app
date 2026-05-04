@@ -110,7 +110,7 @@ export default function NewLeadBanner() {
   const handleOpen = (n: typeof banners[number]) => {
     markRead.mutate({ id: n.id });
     if (n.customerId) {
-      const focus = n.eventType === "draft_needs_approval" ? "pending-review" : null;
+      const focus = n.eventType === "draft_needs_approval" ? "communications" : null;
       setActiveCustomer(n.customerId, "direct", focus);
     } else {
       navigateToTopLevel("leads");

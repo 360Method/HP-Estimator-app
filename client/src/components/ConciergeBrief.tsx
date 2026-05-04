@@ -27,7 +27,7 @@ import { trpc } from "@/lib/trpc";
 import { Customer, Opportunity } from "@/lib/types";
 import { useEstimator } from "@/contexts/EstimatorContext";
 import { Badge } from "@/components/ui/badge";
-import PendingReview from "@/components/PendingReview";
+import VoiceCallPanel from "@/components/VoiceCallPanel";
 
 interface ConciergeBriefProps {
   customer: Customer;
@@ -107,15 +107,6 @@ export default function ConciergeBrief({ customer, opportunities }: ConciergeBri
       enabled: !!customer.email,
     },
     {
-      label: "Call",
-      icon: Phone,
-      onClick: () => {
-        const tel = customer.mobilePhone || customer.homePhone || customer.workPhone;
-        if (tel) window.location.href = `tel:${tel}`;
-      },
-      enabled: !!(customer.mobilePhone || customer.homePhone || customer.workPhone),
-    },
-    {
       label: "SMS",
       icon: MessageSquare,
       onClick: () => setCustomerTab("communication"),
@@ -135,16 +126,12 @@ export default function ConciergeBrief({ customer, opportunities }: ConciergeBri
     },
   ];
 
+  const callNumber = customer.mobilePhone || customer.homePhone || customer.workPhone || "";
+  const callName = [customer.firstName, customer.lastName].filter(Boolean).join(" ") || customer.displayName || "customer";
+
   return (
     <>
       {/* ── Pending Review (drafts grouped by opportunity) ──── */}
-      <PendingReview
-        customerId={customer.id}
-        customerFirstName={customer.firstName ?? null}
-        opportunities={opportunities}
-        focusToken={focusToken}
-      />
-
       <div className="rounded-2xl border border-border bg-gradient-to-br from-slate-50 via-white to-amber-50/30 shadow-sm overflow-hidden mb-6">
       {/* ── Header strip ─────────────────────────────────────── */}
       <div className="px-4 sm:px-6 pt-4 pb-3 border-b border-border/60">
@@ -286,6 +273,20 @@ export default function ConciergeBrief({ customer, opportunities }: ConciergeBri
       {/* ── Quick action bar ─────────────────────────────────── */}
       <div className="px-2 sm:px-4 py-2 bg-white">
         <div className="grid grid-cols-5 gap-1">
+          <div className="flex items-center justify-center">
+            {callNumber ? (
+              <VoiceCallPanel toNumber={callNumber} toName={callName} label="Call" />
+            ) : (
+              <button
+                disabled
+                className="flex flex-col items-center justify-center gap-0.5 py-2 rounded-lg text-[10px] font-semibold text-muted-foreground/30 cursor-not-allowed"
+                style={{ minHeight: 44 }}
+              >
+                <Phone className="w-4 h-4" />
+                Call
+              </button>
+            )}
+          </div>
           {actions.map(({ label, icon: Icon, onClick, enabled }) => (
             <button
               key={label}

@@ -79,7 +79,7 @@ function navigationFromEvent(eventType: string): {
 } {
   switch (eventType) {
     case 'draft_needs_approval':
-      return { tab: 'profile', focus: 'pending-review' };
+      return { tab: 'communication', focus: 'communications' };
     case 'voicemail_received':
     case 'voicemail.received':
     case 'missed_call':
