@@ -288,23 +288,23 @@ function DeskCard({
   const staleDays = daysSince(opp.updatedAt);
 
   return (
-    <Card className={`border-l-4 ${opp.heat.className}`}>
+    <Card className={`max-w-full overflow-hidden border-l-4 ${opp.heat.className}`}>
       <CardContent className="p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
+        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="font-semibold text-sm text-foreground truncate">{opp.title}</h3>
-              <Badge variant="outline" className={opp.heat.className}>
+              <h3 className="min-w-0 max-w-full break-words text-sm font-semibold leading-snug text-foreground">{opp.title}</h3>
+              <Badge variant="outline" className={`shrink-0 ${opp.heat.className}`}>
                 <span className={`mr-1.5 h-2 w-2 rounded-full ${opp.heat.dotClassName}`} />
                 {opp.heat.label}
               </Badge>
-              <Badge variant="secondary" className="capitalize">{opp.area}</Badge>
-              <Badge variant="outline" className="text-[10px]">
+              <Badge variant="secondary" className="shrink-0 capitalize">{opp.area}</Badge>
+              <Badge variant="outline" className="shrink-0 text-[10px]">
                 360: {opp.methodStep.number}. {opp.methodStep.name}
               </Badge>
               <Badge
                 variant="outline"
-                className={`text-[10px] capitalize ${
+                className={`shrink-0 text-[10px] capitalize ${
                   opp.methodPriority === 'red' ? 'border-rose-200 bg-rose-50 text-rose-700' :
                   opp.methodPriority === 'yellow' ? 'border-amber-200 bg-amber-50 text-amber-700' :
                   'border-emerald-200 bg-emerald-50 text-emerald-700'
@@ -313,14 +313,14 @@ function DeskCard({
                 {opp.methodPriority}
               </Badge>
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="mt-1 break-words text-xs text-muted-foreground">
               {opp.customerName} · {opp.stage} · {fmtMoney(opp.value)}
             </p>
             {opp.threeSixtyFinding && (
-              <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{opp.threeSixtyFinding}</p>
+              <p className="mt-1 line-clamp-2 break-words text-xs text-muted-foreground">{opp.threeSixtyFinding}</p>
             )}
           </div>
-          <Button size="sm" variant="ghost" onClick={() => onOpen(opp)} className="shrink-0">
+          <Button size="sm" variant="ghost" onClick={() => onOpen(opp)} className="w-full shrink-0 sm:w-auto">
             Open
             <ChevronRight className="ml-1 h-3.5 w-3.5" />
           </Button>
@@ -329,26 +329,26 @@ function DeskCard({
         <div className="mt-3 grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Next best action</p>
-            <p className="mt-1 text-sm leading-relaxed text-foreground">{step.nextAction}</p>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="mt-1 break-words text-sm leading-relaxed text-foreground">{step.nextAction}</p>
+            <p className="mt-1 break-words text-xs text-muted-foreground">
               AI prep: {step.aiDraft}
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="mt-1 break-words text-xs text-muted-foreground">
               Complete when: {workflow.completionSignal}
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="mt-1 break-words text-xs text-muted-foreground">
               360 outcome: {opp.methodStep.operatorOutcome}
             </p>
           </div>
-          <div className="flex flex-wrap gap-2 md:justify-end">
+          <div className="flex min-w-0 flex-wrap gap-2 md:justify-end">
             {opp.customerPhone && (
-              <a className="inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-medium hover:bg-accent" href={`tel:${opp.customerPhone}`}>
+              <a className="inline-flex min-h-8 items-center rounded-md border px-2.5 py-1 text-xs font-medium hover:bg-accent" href={`tel:${opp.customerPhone}`}>
                 <Phone className="mr-1.5 h-3.5 w-3.5" />
                 Call
               </a>
             )}
             {opp.customerEmail && (
-              <a className="inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-medium hover:bg-accent" href={`mailto:${opp.customerEmail}`}>
+              <a className="inline-flex min-h-8 items-center rounded-md border px-2.5 py-1 text-xs font-medium hover:bg-accent" href={`mailto:${opp.customerEmail}`}>
                 <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
                 Email
               </a>
@@ -359,10 +359,10 @@ function DeskCard({
           </div>
         </div>
 
-        <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
-          <span className="rounded-full bg-background/80 px-2 py-0.5">Bucket: {bucketLabel(opp)}</span>
-          <span className="rounded-full bg-background/80 px-2 py-0.5">Updated {staleDays === 0 ? 'today' : `${staleDays}d ago`}</span>
-          <span className="rounded-full bg-background/80 px-2 py-0.5">Customer sees: {step.customerReceives}</span>
+        <div className="mt-3 flex max-w-full flex-wrap gap-2 text-[11px] text-muted-foreground">
+          <span className="max-w-full break-words rounded-full bg-background/80 px-2 py-0.5">Bucket: {bucketLabel(opp)}</span>
+          <span className="max-w-full break-words rounded-full bg-background/80 px-2 py-0.5">Updated {staleDays === 0 ? 'today' : `${staleDays}d ago`}</span>
+          <span className="max-w-full break-words rounded-full bg-background/80 px-2 py-0.5">Customer sees: {step.customerReceives}</span>
         </div>
       </CardContent>
     </Card>
@@ -491,9 +491,9 @@ export default function WorkflowPage() {
       </div>
 
       <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
-        <div className="grid gap-5 lg:grid-cols-[320px_1fr]">
-          <aside className="space-y-4">
-            <Card>
+        <div className="grid min-w-0 gap-5 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
+          <aside className="min-w-0 space-y-4">
+            <Card className="max-w-full overflow-hidden">
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Icon className="h-4 w-4 text-primary" />
@@ -501,21 +501,21 @@ export default function WorkflowPage() {
                 </CardTitle>
                 <p className="text-xs text-muted-foreground">{activeDefinition.owner}</p>
               </CardHeader>
-              <CardContent className="space-y-4 text-sm">
+              <CardContent className="space-y-4 break-words text-sm">
                 <p className="leading-relaxed">{activeDefinition.mission}</p>
                 <div className="rounded-lg border bg-muted/40 p-3">
                   <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    <Bot className="h-3.5 w-3.5" />
+                    <Bot className="h-3.5 w-3.5 shrink-0" />
                     AI support
                   </p>
-                  <p className="mt-1 text-sm">{activeDefinition.aiRole}</p>
+                  <p className="mt-1 break-words text-sm">{activeDefinition.aiRole}</p>
                 </div>
                 <div className="rounded-lg border bg-emerald-50 p-3">
                   <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-emerald-700">
-                    <RefreshCw className="h-3.5 w-3.5" />
+                    <RefreshCw className="h-3.5 w-3.5 shrink-0" />
                     360 operating lens
                   </p>
-                  <p className="mt-1 text-sm text-emerald-950">
+                  <p className="mt-1 break-words text-sm text-emerald-950">
                     Red means risk or money needs human attention. Yellow means plan the next step. Green means maintain, retain, or document.
                   </p>
                 </div>
@@ -523,9 +523,9 @@ export default function WorkflowPage() {
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Desk outcomes</p>
                   <div className="mt-2 space-y-2">
                     {activeDefinition.outcomes.map(outcome => (
-                      <div key={outcome} className="flex items-center gap-2 text-sm">
-                        <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                        {outcome}
+                      <div key={outcome} className="flex items-start gap-2 text-sm">
+                        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                        <span className="min-w-0 break-words">{outcome}</span>
                       </div>
                     ))}
                   </div>
@@ -533,14 +533,14 @@ export default function WorkflowPage() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="max-w-full overflow-hidden">
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-sm">
                   <ShieldCheck className="h-4 w-4" />
                   Approval Rules
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-2 text-xs text-muted-foreground">
+              <CardContent className="space-y-2 break-words text-xs text-muted-foreground">
                 <p>Safe to automate: reminders, detail requests, appointment prep, and general updates.</p>
                 <p>Human review: customer-specific summaries, job updates, and follow-ups.</p>
                 <p>Approval required: pricing, scope, payment links, change orders, sign-off, and firm schedule promises.</p>
@@ -548,15 +548,15 @@ export default function WorkflowPage() {
             </Card>
           </aside>
 
-          <main className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+          <main className="min-w-0 space-y-4">
+            <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-bold text-foreground">Next Work</h2>
                 <p className="text-sm text-muted-foreground">Sorted by hot/warm/cool, value, and stale days.</p>
               </div>
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <Flame className="h-3.5 w-3.5 text-rose-500" />
-                Red gets handled first, then yellow, then green.
+              <div className="flex min-w-0 items-start gap-2 text-xs text-muted-foreground">
+                <Flame className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-500" />
+                <span className="min-w-0 break-words">Red gets handled first, then yellow, then green.</span>
               </div>
             </div>
 
