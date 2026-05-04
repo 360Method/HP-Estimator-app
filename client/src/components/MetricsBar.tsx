@@ -1,22 +1,22 @@
 // ============================================================
-// MetricsBar — App header + slim metrics context bar
-// Design: HP Industrial — mobile-first, clean white, slate borders
+// MetricsBar â€” App header + slim metrics context bar
+// Design: HP Industrial â€” mobile-first, clean white, slate borders
 //
 // Mobile layout (< sm):
 //   - Logo only (no wordmark), search icon tap-to-expand, New button
 //   - Backend nav icons hidden; hamburger menu placeholder
 //   - Breadcrumb collapses to short labels
 //
-// Desktop layout (≥ md):
+// Desktop layout (â‰¥ md):
 //   - Full logo + wordmark, search bar, all backend nav icons
 //   - Full breadcrumb labels
 //
 // Navigation logic:
-//   - activeOpportunityId null → customer profile, no builder tabs
-//   - activeOpportunityId set → estimate builder, all 4 tabs + breadcrumb
+//   - activeOpportunityId null â†’ customer profile, no builder tabs
+//   - activeOpportunityId set â†’ estimate builder, all 4 tabs + breadcrumb
 // ============================================================
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import AIEstimateChat from '@/components/AIEstimateChat';
 import { fmtDollar, fmtPct, getMarginFlag, TotalsResult } from '@/lib/calc';
 import { useEstimator } from '@/contexts/EstimatorContext';
@@ -52,16 +52,16 @@ interface MetricsBarProps {
 }
 
 const BUILDER_TABS: { id: AppSection; icon: string; label: string; shortLabel: string }[] = [
-  { id: 'opp-details', icon: '📌', label: 'Command',     shortLabel: 'Command' },
-  { id: 'calculator',  icon: '🧮', label: 'Scope/Price', shortLabel: 'Scope' },
-  { id: 'estimate',    icon: '📄', label: 'Proposal',    shortLabel: 'Proposal' },
+  { id: 'opp-details', icon: 'ðŸ“Œ', label: 'Command',     shortLabel: 'Command' },
+  { id: 'calculator',  icon: 'ðŸ§®', label: 'Scope/Price', shortLabel: 'Scope' },
+  { id: 'estimate',    icon: 'ðŸ“„', label: 'Proposal',    shortLabel: 'Proposal' },
 ];
 
 const JOB_BUILDER_TABS: { id: AppSection; icon: string; label: string; shortLabel: string }[] = [
-  { id: 'opp-details', icon: '📌', label: 'Command',     shortLabel: 'Command' },
-  { id: 'job-details', icon: '📋', label: 'Work Plan',   shortLabel: 'Plan' },
-  { id: 'calculator',  icon: '🧮', label: 'Scope/Price', shortLabel: 'Scope' },
-  { id: 'invoice',     icon: '💳', label: 'Billing',     shortLabel: 'Billing' },
+  { id: 'opp-details', icon: 'ðŸ“Œ', label: 'Command',     shortLabel: 'Command' },
+  { id: 'job-details', icon: 'ðŸ“‹', label: 'Work Plan',   shortLabel: 'Plan' },
+  { id: 'calculator',  icon: 'ðŸ§®', label: 'Scope/Price', shortLabel: 'Scope' },
+  { id: 'invoice',     icon: 'ðŸ’³', label: 'Billing',     shortLabel: 'Billing' },
 ];
 
 const BACKEND_NAV: { icon: React.ElementType; label: string; section: AppSection | null }[] = [
@@ -77,7 +77,7 @@ const BACKEND_NAV: { icon: React.ElementType; label: string; section: AppSection
 export default function MetricsBar({ totals }: MetricsBarProps) {
   const { totalHard, totalPrice, totalGP, totalGM } = totals;
   const { state, setSection, setActiveOpportunity, setActiveCustomer, addCustomer, reset, navigateToTopLevel } = useEstimator();
-  // Unread leads badge (online requests + leads created in last 24h) — poll every 60s.
+  // Unread leads badge (online requests + leads created in last 24h) â€” poll every 60s.
   // The leads.counts query is the new source of truth; booking.unreadCount stays
   // around for back-compat with anything that still imports it, but the nav
   // surfaces the unified counter.
@@ -158,6 +158,100 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
   };
 
   const closeModal = () => setActiveModal(null);
+  const activeSearchCustomerName = state.jobInfo.client || 'Active customer';
+
+  const pendingSearchResults = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (q.length < 2) return [];
+
+    const matches: Array<{
+      id: string;
+      type: 'customer' | 'opportunity';
+      label: string;
+      meta: string;
+      customerId: string;
+      opportunityId?: string;
+    }> = [];
+
+    for (const customer of state.customers) {
+      const name = [customer.firstName, customer.lastName].filter(Boolean).join(' ') || customer.displayName || customer.company || 'Unnamed customer';
+      const customerFields = [
+        name,
+        customer.company,
+        customer.email,
+        customer.mobilePhone,
+        customer.homePhone,
+        customer.workPhone,
+        customer.street,
+        customer.city,
+        customer.zip,
+        ...(customer.tags ?? []),
+      ].filter(Boolean).join(' ').toLowerCase();
+
+      if (customerFields.includes(q)) {
+        matches.push({
+          id: `customer-${customer.id}`,
+          type: 'customer',
+          label: name,
+          meta: [customer.email, customer.mobilePhone || customer.homePhone || customer.workPhone].filter(Boolean).join(' Â· ') || 'Customer profile',
+          customerId: customer.id,
+        });
+      }
+
+      for (const opp of customer.opportunities ?? []) {
+        const oppFields = [
+          opp.title,
+          opp.stage,
+          opp.area,
+          opp.notes,
+          opp.clientSnapshot?.jobType,
+          opp.clientSnapshot?.scope,
+          opp.clientSnapshot?.address,
+        ].filter(Boolean).join(' ').toLowerCase();
+
+        if (oppFields.includes(q)) {
+          matches.push({
+            id: `opp-${customer.id}-${opp.id}`,
+            type: 'opportunity',
+            label: opp.title,
+            meta: `${name} Â· ${opp.area} Â· ${opp.stage}`,
+            customerId: customer.id,
+            opportunityId: opp.id,
+          });
+        }
+      }
+    }
+
+    for (const opp of state.opportunities) {
+      if (matches.some(match => match.opportunityId === opp.id)) continue;
+      const oppFields = [opp.title, opp.stage, opp.area, opp.notes, opp.clientSnapshot?.client].filter(Boolean).join(' ').toLowerCase();
+      if (!oppFields.includes(q)) continue;
+      matches.push({
+        id: `active-opp-${opp.id}`,
+        type: 'opportunity',
+        label: opp.title,
+        meta: `${opp.clientSnapshot?.client || activeSearchCustomerName} Â· ${opp.area} Â· ${opp.stage}`,
+        customerId: state.activeCustomerId ?? '',
+        opportunityId: opp.id,
+      });
+    }
+
+    return matches.slice(0, 8);
+  }, [activeSearchCustomerName, searchQuery, state.activeCustomerId, state.customers, state.opportunities]);
+
+  const openPendingSearchResult = (result: typeof pendingSearchResults[number]) => {
+    setSearchQuery('');
+    setSearchOpen(false);
+    if (result.type === 'customer' || !result.opportunityId) {
+      setActiveCustomer(result.customerId, 'search');
+      return;
+    }
+    if (result.customerId && result.customerId !== state.activeCustomerId) {
+      setActiveCustomer(result.customerId, 'search');
+    }
+    setActiveOpportunity(result.opportunityId);
+    setSection('opp-details');
+  };
 
   const minGM = totalHard < 2000 ? 0.40 : 0.30;
   const gmFlag = getMarginFlag(totalGM, totalHard);
@@ -191,12 +285,12 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
   const handleReset = () => {
     if (window.confirm('Clear all estimate data and start fresh?')) {
       reset();
-      toast.success('Estimate cleared — ready for a new job');
+      toast.success('Estimate cleared â€” ready for a new job');
     }
   };
 
   const handleBackendNav = (label: string) => {
-    toast.info(`${label} — coming soon`, { description: 'This module is part of the upcoming HP backend.' });
+    toast.info(`${label} â€” coming soon`, { description: 'This module is part of the upcoming HP backend.' });
   };
 
   const handleBackToProfile = () => {
@@ -243,7 +337,7 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
   return (
     <div className="sticky top-0 z-30 bg-white border-b border-border shadow-sm no-print">
 
-      {/* ── TOP APP HEADER ─────────────────────────────────────── */}
+      {/* â”€â”€ TOP APP HEADER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="px-3 sm:px-4 md:px-6">
         <div className="flex items-center gap-2 h-14">
 
@@ -259,16 +353,32 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
           {/* Divider */}
           <div className="h-6 w-px bg-border shrink-0 hidden sm:block mx-1" />
 
-          {/* Search bar — desktop */}
+          {/* Search bar â€” desktop */}
           <div className="flex-1 max-w-xs relative hidden sm:block">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
             <input
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search estimates, clients…"
+              onKeyDown={e => {
+                if (e.key === 'Escape') setSearchQuery('');
+                if (e.key === 'Enter' && pendingSearchResults[0]) openPendingSearchResult(pendingSearchResults[0]);
+              }}
+              placeholder="Search estimates, clientsâ€¦"
               className="w-full pl-8 pr-3 py-1.5 text-xs bg-muted/60 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground"
             />
+            {searchQuery.trim().length >= 2 && (
+              <div className="absolute left-0 right-0 top-full z-[80] mt-2 max-h-80 overflow-y-auto rounded-lg border border-border bg-white p-1 shadow-xl">
+                {pendingSearchResults.length > 0 ? pendingSearchResults.map(result => (
+                  <button key={result.id} onMouseDown={e => e.preventDefault()} onClick={() => openPendingSearchResult(result)} className="w-full rounded-md px-3 py-2 text-left hover:bg-muted">
+                    <div className="truncate text-xs font-semibold text-foreground">{result.label}</div>
+                    <div className="truncate text-[11px] text-muted-foreground">{result.type === 'customer' ? 'Customer' : 'Opportunity'} - {result.meta}</div>
+                  </button>
+                )) : (
+                  <div className="px-3 py-3 text-xs text-muted-foreground">No matches found.</div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Mobile search expand */}
@@ -281,9 +391,25 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
                   type="text"
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
-                  placeholder="Search…"
+                  onKeyDown={e => {
+                    if (e.key === 'Escape') setSearchQuery('');
+                    if (e.key === 'Enter' && pendingSearchResults[0]) openPendingSearchResult(pendingSearchResults[0]);
+                  }}
+                  placeholder="Searchâ€¦"
                   className="w-full pl-8 pr-3 py-1.5 text-xs bg-muted/60 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring"
                 />
+                {searchQuery.trim().length >= 2 && (
+                  <div className="absolute left-0 right-0 top-full z-[80] mt-2 max-h-80 overflow-y-auto rounded-lg border border-border bg-white p-1 shadow-xl">
+                    {pendingSearchResults.length > 0 ? pendingSearchResults.map(result => (
+                      <button key={result.id} onMouseDown={e => e.preventDefault()} onClick={() => openPendingSearchResult(result)} className="w-full rounded-md px-3 py-2 text-left hover:bg-muted">
+                        <div className="truncate text-xs font-semibold text-foreground">{result.label}</div>
+                        <div className="truncate text-[11px] text-muted-foreground">{result.type === 'customer' ? 'Customer' : 'Opportunity'} - {result.meta}</div>
+                      </button>
+                    )) : (
+                      <div className="px-3 py-3 text-xs text-muted-foreground">No matches found.</div>
+                    )}
+                  </div>
+                )}
               </div>
               <button onClick={() => setSearchOpen(false)} className="p-1.5 rounded text-muted-foreground hover:text-foreground">
                 <X className="w-4 h-4" />
@@ -294,7 +420,7 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
           {/* Spacer */}
           {!searchOpen && <div className="flex-1" />}
 
-          {/* Search icon — mobile only */}
+          {/* Search icon â€” mobile only */}
           {!searchOpen && (
             <button
               onClick={() => setSearchOpen(true)}
@@ -304,7 +430,7 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
             </button>
           )}
 
-          {/* Backend module nav icons — desktop */}
+          {/* Backend module nav icons â€” desktop */}
           {!searchOpen && (
             <nav className="hidden md:flex items-center gap-0.5">
               {BACKEND_NAV.map(({ icon: Icon, label, section }) => {
@@ -348,7 +474,7 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
           {/* Divider */}
           {!searchOpen && <div className="h-6 w-px bg-border shrink-0 hidden md:block" />}
 
-          {/* Settings + My Account — desktop */}
+          {/* Settings + My Account â€” desktop */}
           {!searchOpen && (
             <div className="hidden sm:flex items-center gap-1">
               <NotificationBell />
@@ -419,7 +545,7 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
             </div>
           )}
 
-          {/* Hamburger — mobile only (shows nav drawer) */}
+          {/* Hamburger â€” mobile only (shows nav drawer) */}
           {!searchOpen && (
             <button
               onClick={() => setShowMobileNav(v => !v)}
@@ -431,7 +557,7 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
         </div>
       </div>
 
-      {/* ── MOBILE NAV DRAWER ─────────────────────────────────── */}
+      {/* â”€â”€ MOBILE NAV DRAWER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {showMobileNav && (
         <div className="md:hidden border-t border-border bg-white">
           <div className="px-3 py-2 grid grid-cols-4 gap-1">
@@ -484,7 +610,7 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
         </div>
       )}
 
-      {/* ── SLIM METRICS CONTEXT BAR ───────────────────────────── */}
+      {/* â”€â”€ SLIM METRICS CONTEXT BAR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {insideOpportunity && !isCustomerFacing && totalPrice > 0 && (
         <div className="bg-slate-50 border-t border-border">
           <div className="px-3 sm:px-4 md:px-6">
@@ -497,7 +623,7 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
               <MetricPill
                 label="GM"
                 value={fmtPct(totalGM)}
-                sub={totalGM >= minGM - 0.001 ? '✓' : '✗'}
+                sub={totalGM >= minGM - 0.001 ? 'âœ“' : 'âœ—'}
                 valueClass={gmColor}
               />
               <div className="h-4 w-px bg-border shrink-0 hidden sm:block" />
@@ -507,7 +633,7 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
         </div>
       )}
 
-      {/* ── Intake Modals ── */}
+      {/* â”€â”€ Intake Modals â”€â”€ */}
       {/* When inside a customer profile, pre-fill the active customer into intake modals */}
       {(() => {
         const customerPrefill = activeCustomerRecord ? {
@@ -533,14 +659,14 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
         );
       })()}
 
-      {/* ── AI Estimate Chat drawer ── */}
+      {/* â”€â”€ AI Estimate Chat drawer â”€â”€ */}
       <AIEstimateChat open={aiEstimateOpen} onClose={() => setAiEstimateOpen(false)} />
 
-      {/* ── NAVIGATION BAR ─────────────────────────────────────── */}
+      {/* â”€â”€ NAVIGATION BAR â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="border-t border-border bg-white">
         <div className="px-3 sm:px-4 md:px-6">
           {insideOpportunity ? (
-            /* ── Estimate builder tabs (inside an opportunity) ── */
+            /* â”€â”€ Estimate builder tabs (inside an opportunity) â”€â”€ */
             <div className="flex items-stretch">
               {/* Back to profile */}
               <button
@@ -562,7 +688,7 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
 
               <div className="flex-1" />
 
-              {/* Builder section tabs — Leads show only Details; Estimates get Sales/Calc/Estimate/Invoice; Jobs get Job Details/Calc/Estimate/Invoice */}
+              {/* Builder section tabs â€” Leads show only Details; Estimates get Sales/Calc/Estimate/Invoice; Jobs get Job Details/Calc/Estimate/Invoice */}
               {(activeOpp?.area === 'lead'
                 ? BUILDER_TABS.filter(t => t.id === 'opp-details')
                 : activeOpp?.area === 'job'
@@ -585,15 +711,15 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
               ))}
             </div>
           ) : state.activeSection === 'customers' ? (
-            /* ── Customers list nav ── */
+            /* â”€â”€ Customers list nav â”€â”€ */
             <div className="flex items-center py-2 gap-2">
               <span className="text-[11px] font-semibold text-primary flex items-center gap-1.5">
-                <span className="text-sm">👥</span>
+                <span className="text-sm">ðŸ‘¥</span>
                 <span>All Customers</span>
               </span>
             </div>
           ) : state.activeSection === 'jobs' ? (
-            /* ── Jobs list nav ── */
+            /* â”€â”€ Jobs list nav â”€â”€ */
             <div className="flex items-center py-2 gap-2">
               <span className="text-[11px] font-semibold text-primary flex items-center gap-1.5">
                 <Briefcase className="w-3.5 h-3.5" />
@@ -601,7 +727,7 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
               </span>
             </div>
           ) : state.activeSection === 'pipeline' ? (
-            /* ── Pipeline nav ── */
+            /* â”€â”€ Pipeline nav â”€â”€ */
             <div className="flex items-center py-2 gap-2">
               <span className="text-[11px] font-semibold text-primary flex items-center gap-1.5">
                 <GitBranch className="w-3.5 h-3.5" />
@@ -623,7 +749,7 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
               </span>
             </div>
           ) : state.activeSection === 'dashboard' ? (
-            /* ── Dashboard nav ── */
+            /* â”€â”€ Dashboard nav â”€â”€ */
             <div className="flex items-center py-2 gap-2">
               <span className="text-[11px] font-semibold text-primary flex items-center gap-1.5">
                 <LayoutDashboard className="w-3.5 h-3.5" />
@@ -631,55 +757,55 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
               </span>
             </div>
           ) : state.activeSection === 'schedule' ? (
-            /* ── Schedule nav ── */
+            /* â”€â”€ Schedule nav â”€â”€ */
             <div className="flex items-center py-2 gap-2">
               <span className="text-[11px] font-semibold text-primary flex items-center gap-1.5">
-                <span className="text-sm">📅</span>
+                <span className="text-sm">ðŸ“…</span>
                 <span>Schedule</span>
               </span>
             </div>
           ) : state.activeSection === 'financials' ? (
-            /* ── Financials nav ── */
+            /* â”€â”€ Financials nav â”€â”€ */
             <div className="flex items-center py-2 gap-2">
               <span className="text-[11px] font-semibold text-primary flex items-center gap-1.5">
-                <span className="text-sm">💰</span>
+                <span className="text-sm">ðŸ’°</span>
                 <span>Financials</span>
               </span>
             </div>
           ) : state.activeSection === 'quickbooks' ? (
-            /* ── QuickBooks nav ── */
+            /* â”€â”€ QuickBooks nav â”€â”€ */
             <div className="flex items-center py-2 gap-2">
               <span className="text-[11px] font-semibold text-primary flex items-center gap-1.5">
-                <span className="text-sm">📖</span>
+                <span className="text-sm">ðŸ“–</span>
                 <span>QuickBooks</span>
               </span>
             </div>
           ) : state.activeSection === 'marketing' ? (
-            /* ── Marketing nav ── */
+            /* â”€â”€ Marketing nav â”€â”€ */
             <div className="flex items-center py-2 gap-2">
               <span className="text-[11px] font-semibold text-primary flex items-center gap-1.5">
-                <span className="text-sm">📣</span>
+                <span className="text-sm">ðŸ“£</span>
                 <span>Marketing</span>
               </span>
             </div>
           ) : state.activeSection === 'reporting' || state.activeSection === 'three-sixty' ? (
-            /* ── Reporting nav ── */
+            /* â”€â”€ Reporting nav â”€â”€ */
             <div className="flex items-center py-2 gap-2">
               <span className="text-[11px] font-semibold text-primary flex items-center gap-1.5">
-                <span className="text-sm">📊</span>
+                <span className="text-sm">ðŸ“Š</span>
                 <span>Reports</span>
               </span>
             </div>
           ) : state.activeSection === 'inbox' ? (
-            /* ── Inbox nav ── */
+            /* â”€â”€ Inbox nav â”€â”€ */
             <div className="flex items-center py-2 gap-2">
               <span className="text-[11px] font-semibold text-primary flex items-center gap-1.5">
-                <span className="text-sm">📥</span>
+                <span className="text-sm">ðŸ“¥</span>
                 <span>Inbox</span>
               </span>
             </div>
           ) : (state.activeSection === 'leads' || state.activeSection === 'requests') ? (
-            /* ── Leads nav (folded in former Requests) ── */
+            /* â”€â”€ Leads nav (folded in former Requests) â”€â”€ */
             <div className="flex items-center py-2 gap-2">
               <span className="text-[11px] font-semibold text-primary flex items-center gap-1.5">
                 <Star className="w-3.5 h-3.5 text-amber-500" />
@@ -687,12 +813,12 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
               </span>
             </div>
           ) : state.activeSection === 'customer' && !state.activeCustomerId ? (
-            /* ── Empty / no customer selected ── */
+            /* â”€â”€ Empty / no customer selected â”€â”€ */
             <div className="flex items-center py-2 gap-2">
               <span className="text-[11px] text-muted-foreground">Select a customer to get started</span>
             </div>
           ) : (
-            /* ── Profile-only nav (inside a customer profile) ── */
+            /* â”€â”€ Profile-only nav (inside a customer profile) â”€â”€ */
             <div className="flex items-stretch">
               {/* Only show back button when we drilled in from the Customers list or search */}
               {(state.customerNavSource === 'list' || state.customerNavSource === 'search') && (
@@ -712,7 +838,7 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
               </div>
               <div className="flex-1" />
               <span className="hidden sm:flex items-center px-4 py-2 text-[11px] text-muted-foreground">
-                Open an opportunity →
+                Open an opportunity â†’
               </span>
             </div>
           )}
