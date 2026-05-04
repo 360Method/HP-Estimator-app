@@ -37,6 +37,7 @@ import {
   getOpportunityWorkflowDefinition,
   type RevenueRoleId,
 } from '@/lib/revenueWorkflow';
+import VoiceCallPanel from '@/components/VoiceCallPanel';
 
 type DeskKey =
   | 'lead'
@@ -278,10 +279,12 @@ function DeskCard({
   opp,
   onOpen,
   onCustomer,
+  onCall,
 }: {
   opp: DeskOpportunity;
   onOpen: (opp: DeskOpportunity) => void;
   onCustomer: (opp: DeskOpportunity) => void;
+  onCall: (opp: DeskOpportunity) => void;
 }) {
   const step = getWorkflowStep(opp.area, opp.stage);
   const workflow = getOpportunityWorkflowDefinition(opp);
@@ -342,10 +345,14 @@ function DeskCard({
           </div>
           <div className="flex min-w-0 flex-wrap gap-2 md:justify-end">
             {opp.customerPhone && (
-              <a className="inline-flex min-h-8 items-center rounded-md border px-2.5 py-1 text-xs font-medium hover:bg-accent" href={`tel:${opp.customerPhone}`}>
+              <button
+                type="button"
+                className="inline-flex min-h-8 items-center rounded-md border px-2.5 py-1 text-xs font-medium hover:bg-accent"
+                onClick={() => onCall(opp)}
+              >
                 <Phone className="mr-1.5 h-3.5 w-3.5" />
                 Call
-              </a>
+              </button>
             )}
             {opp.customerEmail && (
               <a className="inline-flex min-h-8 items-center rounded-md border px-2.5 py-1 text-xs font-medium hover:bg-accent" href={`mailto:${opp.customerEmail}`}>
@@ -372,6 +379,7 @@ function DeskCard({
 export default function WorkflowPage() {
   const { state, setActiveCustomer, setActiveOpportunity, setSection } = useEstimator();
   const [activeDesk, setActiveDesk] = useState<DeskKey>('lead');
+  const [callTarget, setCallTarget] = useState<{ number: string; name: string } | null>(null);
 
   const allOpps = useMemo(
     () => collectOpportunities(state.customers, state.opportunities, state.activeCustomerId),
@@ -402,6 +410,11 @@ export default function WorkflowPage() {
   const openCustomer = (opp: DeskOpportunity) => {
     if (opp.customerId) setActiveCustomer(opp.customerId);
     setSection('customer');
+  };
+
+  const startCall = (opp: DeskOpportunity) => {
+    if (!opp.customerPhone) return;
+    setCallTarget({ number: opp.customerPhone, name: opp.customerName });
   };
 
   return (
@@ -549,6 +562,20 @@ export default function WorkflowPage() {
           </aside>
 
           <main className="min-w-0 space-y-4">
+            {callTarget && (
+              <Card>
+                <CardContent className="flex flex-wrap items-center justify-between gap-3 p-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Calling</p>
+                    <p className="truncate text-sm font-medium">{callTarget.name}</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <VoiceCallPanel toNumber={callTarget.number} toName={callTarget.name} label="Call" />
+                    <Button size="sm" variant="ghost" onClick={() => setCallTarget(null)}>Close</Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
             <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-bold text-foreground">Next Work</h2>
@@ -573,7 +600,7 @@ export default function WorkflowPage() {
             ) : (
               <div className="space-y-3">
                 {deskOpps.map(opp => (
-                  <DeskCard key={opp.id} opp={opp} onOpen={openOpportunity} onCustomer={openCustomer} />
+                  <DeskCard key={opp.id} opp={opp} onOpen={openOpportunity} onCustomer={openCustomer} onCall={startCall} />
                 ))}
               </div>
             )}
