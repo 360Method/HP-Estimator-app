@@ -67,6 +67,7 @@ const JOB_BUILDER_TABS: { id: AppSection; icon: string; label: string; shortLabe
 const BACKEND_NAV: { icon: React.ElementType; label: string; section: AppSection | null }[] = [
   { icon: LayoutDashboard, label: 'Command',    section: 'dashboard' as AppSection },
   { icon: Users,           label: 'Customers',  section: 'customers' },
+  { icon: Star,            label: 'Leads',      section: 'leads' as AppSection },
   { icon: Workflow,        label: 'Workflow',   section: 'workflow' as AppSection },
   { icon: Inbox,           label: 'Inbox',      section: 'inbox' as AppSection },
   { icon: CalendarDays,    label: 'Schedule',   section: 'schedule' as AppSection },
@@ -223,8 +224,14 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
     markAllPortalReadMutation.mutate();
   };
 
+  const handleGoToLeads = () => {
+    navigateToTopLevel('leads' as AppSection);
+    setShowMobileNav(false);
+  };
+
   const handleNavClick = (section: AppSection | null, label: string) => {
     if (section === 'customers') { handleGoToCustomers(); return; }
+    if (section === 'leads') { handleGoToLeads(); return; }
     if (section === 'workflow') { navigateToTopLevel('workflow' as AppSection); setShowMobileNav(false); return; }
     if (section === 'dashboard') { handleGoToDashboard(); return; }
     if (section === 'operations') { navigateToTopLevel('operations' as AppSection); setShowMobileNav(false); return; }
@@ -301,9 +308,9 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
           {!searchOpen && (
             <nav className="hidden md:flex items-center gap-0.5">
               {BACKEND_NAV.map(({ icon: Icon, label, section }) => {
-                // Workflow carries the live ops badge: total of unread online requests
+                // Leads carries the live intake badge: unread online requests
                 // + leads created in the last 24h (the things still awaiting first touch).
-                const leadBadge = label === 'Workflow' ? (unreadCount + newLeadCount) : 0;
+                const leadBadge = label === 'Leads' ? (unreadCount + newLeadCount) : 0;
                 const showInboxBadge = portalUnreadCount > 0 && label === 'Inbox';
                 return (
                   <button
@@ -429,7 +436,7 @@ export default function MetricsBar({ totals }: MetricsBarProps) {
         <div className="md:hidden border-t border-border bg-white">
           <div className="px-3 py-2 grid grid-cols-4 gap-1">
             {BACKEND_NAV.map(({ icon: Icon, label, section }) => {
-              const leadBadge = label === 'Workflow' ? (unreadCount + newLeadCount) : 0;
+              const leadBadge = label === 'Leads' ? (unreadCount + newLeadCount) : 0;
               const showInboxBadge = portalUnreadCount > 0 && label === 'Inbox';
               return (
                 <button
