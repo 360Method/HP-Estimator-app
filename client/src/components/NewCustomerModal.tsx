@@ -42,7 +42,9 @@ const EMPTY: Omit<Customer, 'id' | 'createdAt' | 'lifetimeValue' | 'outstandingB
   mobilePhone: '',
   homePhone: '',
   workPhone: '',
+  additionalPhones: [],
   email: '',
+  additionalEmails: [],
   role: '',
   customerType: 'homeowner',
   doNotService: false,
@@ -114,6 +116,36 @@ export default function NewCustomerModal({ onClose, onCreated }: Props) {
   const removeTag = (tag: string) =>
     setForm(f => ({ ...f, tags: f.tags.filter(t => t !== tag) }));
 
+  const updateAdditionalPhone = (index: number, patch: Partial<{ label: string; number: string }>) => {
+    setForm(f => ({
+      ...f,
+      additionalPhones: (f.additionalPhones ?? []).map((phone, i) => i === index ? { ...phone, ...patch } : phone),
+    }));
+  };
+
+  const updateAdditionalEmail = (index: number, patch: Partial<{ label: string; address: string }>) => {
+    setForm(f => ({
+      ...f,
+      additionalEmails: (f.additionalEmails ?? []).map((email, i) => i === index ? { ...email, ...patch } : email),
+    }));
+  };
+
+  const addAdditionalPhone = () => {
+    setForm(f => ({ ...f, additionalPhones: [...(f.additionalPhones ?? []), { label: 'Alt', number: '' }] }));
+  };
+
+  const addAdditionalEmail = () => {
+    setForm(f => ({ ...f, additionalEmails: [...(f.additionalEmails ?? []), { label: 'Alt', address: '' }] }));
+  };
+
+  const removeAdditionalPhone = (index: number) => {
+    setForm(f => ({ ...f, additionalPhones: (f.additionalPhones ?? []).filter((_, i) => i !== index) }));
+  };
+
+  const removeAdditionalEmail = (index: number) => {
+    setForm(f => ({ ...f, additionalEmails: (f.additionalEmails ?? []).filter((_, i) => i !== index) }));
+  };
+
   const createCustomerMutation = trpc.customers.create.useMutation({
     onError: (err) => console.warn('[NewCustomerModal] DB create failed (local state preserved):', err.message),
   });
@@ -154,6 +186,7 @@ export default function NewCustomerModal({ onClose, onCreated }: Props) {
       mobilePhone: customer.mobilePhone || '',
       homePhone: customer.homePhone || '',
       workPhone: customer.workPhone || '',
+      additionalPhones: JSON.stringify((customer.additionalPhones ?? []).filter(phone => phone.number.trim())),
       street: customer.street || '',
       unit: customer.unit || '',
       city: customer.city || '',
@@ -169,6 +202,7 @@ export default function NewCustomerModal({ onClose, onCreated }: Props) {
       referredBy: customer.referredBy || '',
       sendNotifications: customer.sendNotifications ?? true,
       sendMarketingOptIn: customer.sendMarketingOptIn ?? false,
+      additionalEmails: JSON.stringify((customer.additionalEmails ?? []).filter(email => email.address.trim())),
     });
     onCreated(customer);
     toast.success(`Customer "${customer.displayName || customer.firstName}" created`);
@@ -290,12 +324,67 @@ export default function NewCustomerModal({ onClose, onCreated }: Props) {
                 </div>
               </div>
 
-              {/* Add email / phone buttons */}
-              <div className="flex gap-3">
-                <button className="intake-add-btn" onClick={() => toast.info('Additional email fields coming soon')}>
+              {(form.additionalPhones?.length || 0) > 0 && (
+                <div className="space-y-2 rounded-lg border border-border bg-slate-50/70 p-3">
+                  <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    <Phone size={12} /> Additional phones
+                  </p>
+                  {form.additionalPhones?.map((phone, index) => (
+                    <div key={index} className="grid grid-cols-[84px_1fr_auto] gap-2">
+                      <input
+                        value={phone.label}
+                        onChange={e => updateAdditionalPhone(index, { label: e.target.value })}
+                        placeholder="Label"
+                        className="intake-field text-xs"
+                      />
+                      <input
+                        type="tel"
+                        value={phone.number}
+                        onChange={e => updateAdditionalPhone(index, { number: e.target.value })}
+                        placeholder="(360) 555-0101"
+                        className="intake-field text-xs"
+                      />
+                      <button onClick={() => removeAdditionalPhone(index)} className="p-2 text-muted-foreground hover:text-destructive">
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {(form.additionalEmails?.length || 0) > 0 && (
+                <div className="space-y-2 rounded-lg border border-border bg-slate-50/70 p-3">
+                  <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    <Mail size={12} /> Additional emails
+                  </p>
+                  {form.additionalEmails?.map((email, index) => (
+                    <div key={index} className="grid grid-cols-[84px_1fr_auto] gap-2">
+                      <input
+                        value={email.label}
+                        onChange={e => updateAdditionalEmail(index, { label: e.target.value })}
+                        placeholder="Label"
+                        className="intake-field text-xs"
+                      />
+                      <input
+                        type="email"
+                        value={email.address}
+                        onChange={e => updateAdditionalEmail(index, { address: e.target.value })}
+                        placeholder="alt@example.com"
+                        className="intake-field text-xs"
+                      />
+                      <button onClick={() => removeAdditionalEmail(index)} className="p-2 text-muted-foreground hover:text-destructive">
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-3">
+                <button className="intake-add-btn" onClick={addAdditionalEmail}>
                   <Plus size={13} /> Email
                 </button>
-                <button className="intake-add-btn" onClick={() => toast.info('Additional phone fields coming soon')}>
+                <button className="intake-add-btn" onClick={addAdditionalPhone}>
                   <Plus size={13} /> Phone
                 </button>
               </div>
