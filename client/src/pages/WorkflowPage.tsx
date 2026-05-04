@@ -419,21 +419,21 @@ export default function WorkflowPage() {
                 Every card is still tied to one customer and one opportunity. The desk only answers who owns the next move.
               </p>
             </div>
-            <div className="grid grid-cols-4 gap-2 text-center">
+            <div className="grid w-full grid-cols-2 gap-2 text-center sm:w-auto sm:grid-cols-4">
               <div className="rounded-lg border bg-background px-3 py-2">
-                <p className="text-lg font-bold">{deskOpps.length}</p>
+                <p className="text-base font-bold sm:text-lg">{deskOpps.length}</p>
                 <p className="text-[10px] text-muted-foreground">On desk</p>
               </div>
               <div className="rounded-lg border bg-background px-3 py-2">
-                <p className="text-lg font-bold text-rose-600">{needsMeNow}</p>
+                <p className="text-base font-bold text-rose-600 sm:text-lg">{needsMeNow}</p>
                 <p className="text-[10px] text-muted-foreground">Hot</p>
               </div>
-              <div className="rounded-lg border bg-background px-3 py-2">
-                <p className="text-lg font-bold">{fmtMoney(deskValue)}</p>
+              <div className="min-w-0 rounded-lg border bg-background px-2 py-2 sm:px-3">
+                <p className="truncate text-base font-bold sm:text-lg">{fmtMoney(deskValue)}</p>
                 <p className="text-[10px] text-muted-foreground">Value</p>
               </div>
               <div className="rounded-lg border bg-background px-3 py-2">
-                <p className="text-lg font-bold">
+                <p className="text-base font-bold sm:text-lg">
                   <span className="text-rose-600">{redCount}</span>
                   <span className="text-muted-foreground">/</span>
                   <span className="text-amber-600">{yellowCount}</span>
@@ -445,7 +445,7 @@ export default function WorkflowPage() {
             </div>
           </div>
 
-          <div className="mt-5 grid gap-2 md:grid-cols-7">
+          <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-7">
             {DESKS.map(desk => {
               const DeskIcon = desk.icon;
               const count = allOpps.filter(opp => isForDesk(opp, desk.key)).length;
@@ -455,7 +455,7 @@ export default function WorkflowPage() {
                 <button
                   key={desk.key}
                   onClick={() => setActiveDesk(desk.key)}
-                  className={`rounded-lg border px-3 py-3 text-left transition-colors ${
+                  className={`min-w-0 rounded-lg border px-3 py-3 text-left transition-colors ${
                     activeDesk === desk.key
                       ? 'border-primary bg-primary/5 text-primary'
                       : 'border-border bg-white text-muted-foreground hover:bg-muted'
@@ -465,7 +465,7 @@ export default function WorkflowPage() {
                     <DeskIcon className="h-4 w-4" />
                     <span className="text-xs font-bold">{count}</span>
                   </div>
-                  <p className="mt-2 text-xs font-semibold text-foreground">{desk.label}</p>
+                  <p className="mt-2 truncate text-xs font-semibold text-foreground">{desk.label}</p>
                   {hot > 0 && <p className="mt-1 text-[10px] font-semibold text-rose-600">{hot} hot</p>}
                   {red > 0 && hot === 0 && <p className="mt-1 text-[10px] font-semibold text-rose-600">{red} red</p>}
                 </button>

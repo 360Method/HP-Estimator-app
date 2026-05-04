@@ -27,6 +27,7 @@ import LeadNurturingPanel from '@/components/sections/LeadNurturingPanel';
 import EstimateDetailsPanel from '@/components/sections/EstimateDetailsPanel';
 import ConsultantBrief from '@/components/sections/ConsultantBrief';
 import PmHandoffBrief from '@/components/sections/PmHandoffBrief';
+import VoiceCallPanel from '@/components/VoiceCallPanel';
 import { ConvertToEstimateModal } from '@/components/ConversionModal';
 import CustomerActivityFeed from '@/components/CustomerActivityFeed';
 import { getOpportunityHeat, getWorkflowStep } from '@/components/OpportunityWorkflowPanel';
@@ -134,6 +135,7 @@ function OpportunityCommandCenter({
   const priorChain = chain.filter(opp => opp.id !== activeOpp.id);
   const stages = stagesForOpportunity(activeOpp);
   const desk = commandPlan.role.deskLabel;
+  const hasCallablePhone = /\d/.test(contact.phone);
   const priorityClass =
     activeOpp.threeSixtyPriority === 'red' ? 'border-rose-200 bg-rose-50 text-rose-700' :
     activeOpp.threeSixtyPriority === 'yellow' ? 'border-amber-200 bg-amber-50 text-amber-700' :
@@ -169,13 +171,15 @@ function OpportunityCommandCenter({
               {contact.name} · {activeOpp.stage} · {fmtDollar(activeOpp.value)}
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {onCall && (
+          <div className="flex min-w-0 flex-wrap gap-2">
+            {hasCallablePhone ? (
+              <VoiceCallPanel toNumber={contact.phone} toName={contact.name} />
+            ) : onCall ? (
               <Button size="sm" onClick={onCall}>
                 <Phone className="mr-1.5 h-3.5 w-3.5" />
                 Call
               </Button>
-            )}
+            ) : null}
             {onEmail && (
               <Button size="sm" variant="outline" onClick={onEmail}>
                 <Mail className="mr-1.5 h-3.5 w-3.5" />

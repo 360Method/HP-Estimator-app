@@ -314,7 +314,7 @@ export default function VoiceCallPanel({ toNumber, toName, onCallEnd }: VoiceCal
         size="sm"
         variant="outline"
         onClick={() => makeCall(toNumber)}
-        className="gap-2 text-emerald-600 border-emerald-200 hover:bg-emerald-50 disabled:opacity-60"
+        className="max-w-full gap-2 text-emerald-600 border-emerald-200 hover:bg-emerald-50 disabled:opacity-60"
         disabled={initializing}
         title={initializing ? 'Connecting to voice service…' : `Call ${toName || toNumber}`}
       >
