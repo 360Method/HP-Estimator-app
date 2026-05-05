@@ -272,7 +272,7 @@ export default function ConciergeBrief({ customer, opportunities }: ConciergeBri
 
       {/* ── Quick action bar ─────────────────────────────────── */}
       <div className="px-2 sm:px-4 py-2 bg-white">
-        <div className="grid grid-cols-5 gap-1">
+        <div className="grid grid-cols-2 gap-1 sm:grid-cols-5">
           <div className="flex items-center justify-center">
             {callNumber ? (
               <VoiceCallPanel toNumber={callNumber} toName={callName} label="Call" />

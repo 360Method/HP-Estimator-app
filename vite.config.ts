@@ -20,6 +20,19 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined;
+          if (id.includes("jspdf") || id.includes("html2canvas") || id.includes("dompurify")) return "pdf-vendor";
+          if (id.includes("@stripe") || id.includes("stripe")) return "stripe-vendor";
+          if (id.includes("@twilio")) return "voice-vendor";
+          if (id.includes("react") || id.includes("wouter") || id.includes("@tanstack")) return "react-vendor";
+          if (id.includes("lucide-react") || id.includes("@radix-ui")) return "ui-vendor";
+          return "vendor";
+        },
+      },
+    },
   },
   server: {
     host: true,

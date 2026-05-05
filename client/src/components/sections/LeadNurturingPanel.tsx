@@ -26,6 +26,7 @@ import { LEAD_STAGES } from '@/lib/types';
 import { ConvertToEstimateModal } from '@/components/ConversionModal';
 import { Globe, Camera, Clock as ClockIcon, Wrench, ChevronDown, ChevronUp } from 'lucide-react';
 import OpportunityWorkflowPanel from '@/components/OpportunityWorkflowPanel';
+import VoiceCallPanel from '@/components/VoiceCallPanel';
 
 // ── Helpers ──────────────────────────────────────────────────
 function fmtDateTime(iso: string) {
@@ -373,14 +374,12 @@ export default function LeadNurturingPanel() {
             <div className="flex flex-wrap gap-2">
               {phone && (
                 <>
-                  <a
-                    href={`tel:${phone}`}
-                    onClick={() => addLeadNote(activeOpp.id, { text: `Called ${phone}`, type: 'call' })}
-                  >
-                    <Button variant="outline" size="sm" className="gap-2 text-green-700 border-green-300 hover:bg-green-50 font-semibold">
-                      <Phone className="w-3.5 h-3.5" /> Call {phone}
-                    </Button>
-                  </a>
+                  <VoiceCallPanel
+                    toNumber={phone}
+                    toName={activeOpp.title}
+                    label={`Call ${phone}`}
+                    onCallEnd={() => addLeadNote(activeOpp.id, { text: `Called ${phone}`, type: 'call' })}
+                  />
                   <Button
                     variant="outline"
                     size="sm"

@@ -1341,7 +1341,7 @@ export default function CustomerSection() {
                 {jobInfo.phone && (
                   <div className="flex items-center gap-2 text-sm">
                     <Phone size={13} className="text-muted-foreground shrink-0" />
-                    <a href={`tel:${jobInfo.phone}`} className="text-primary hover:underline">{jobInfo.phone}</a>
+                    <VoiceCallPanel toNumber={jobInfo.phone} toName={jobInfo.client || 'customer'} label={jobInfo.phone} />
                   </div>
                 )}
                 {/* Additional phones */}
@@ -1349,7 +1349,7 @@ export default function CustomerSection() {
                   <div key={i} className="flex items-center gap-2 text-sm">
                     <Phone size={13} className="text-muted-foreground shrink-0" />
                     <span className="text-[10px] text-muted-foreground bg-muted px-1 rounded">{p.label}</span>
-                    <a href={`tel:${p.number}`} className="text-primary hover:underline">{p.number}</a>
+                    <VoiceCallPanel toNumber={p.number} toName={jobInfo.client || 'customer'} label={p.number} />
                   </div>
                 ))}
                 {jobInfo.email && (

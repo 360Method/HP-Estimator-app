@@ -13,6 +13,7 @@ import {
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { ScheduleEvent, ScheduleEventType, Customer, Opportunity } from '@/lib/types';
 import { trpc } from '@/lib/trpc';
+import VoiceCallPanel from '@/components/VoiceCallPanel';
 
 // ── Color palette per event type ──────────────────────────────
 const EVENT_COLORS: Record<ScheduleEventType, { bg: string; border: string; text: string; dot: string; badge: string }> = {
@@ -229,7 +230,9 @@ function EventDetailPanel({ event, customer, opportunity, onClose, onEdit, onDel
               <User className="w-4 h-4 text-gray-400 shrink-0" />
               <span>{customer.displayName}</span>
               {customer.mobilePhone && (
-                <a href={`tel:${customer.mobilePhone}`} className="text-blue-600 text-xs ml-auto">{customer.mobilePhone}</a>
+                <span className="ml-auto">
+                  <VoiceCallPanel toNumber={customer.mobilePhone} toName={customer.displayName} label={customer.mobilePhone} />
+                </span>
               )}
             </div>
           )}

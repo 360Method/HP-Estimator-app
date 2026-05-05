@@ -637,7 +637,6 @@ export default function OpportunityDetailsTab() {
         onBackToCustomer={handleBackToCustomer}
         onOpenAncestor={openAncestor}
         onUpdateOpportunity={payload => updateOpportunity(activeOpp.id, payload)}
-        onCall={contact.phone !== '—' ? () => { window.location.href = `tel:${contact.phone}`; } : undefined}
         onEmail={contact.email !== '—' ? () => { window.location.href = `mailto:${contact.email}?subject=${activeOpp.area === 'lead' ? 'Following up on your project' : activeOpp.area === 'estimate' ? 'Your Handy Pioneers estimate' : 'Project update from Handy Pioneers'}`; } : undefined}
       />
       {/* Approved / locked banner */}
@@ -780,7 +779,7 @@ export default function OpportunityDetailsTab() {
               {contact.phone !== '—' && (
                 <div className="flex items-center gap-2 text-sm">
                   <Phone className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                  <a href={`tel:${contact.phone}`} className="text-primary hover:underline">{contact.phone}</a>
+                  <VoiceCallPanel toNumber={contact.phone} toName={contact.name} label={contact.phone} />
                 </div>
               )}
               {contact.email !== '—' && (

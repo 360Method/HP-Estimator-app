@@ -46,6 +46,7 @@ import { Progress } from '@/components/ui/progress';
 import {
   Collapsible, CollapsibleContent, CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import VoiceCallPanel from '@/components/VoiceCallPanel';
 
 // ── Helpers ───────────────────────────────────────────────────
 const fmt$ = (n: number) =>
@@ -1193,10 +1194,10 @@ export default function JobDetailsSection() {
               </div>
               <div className="space-y-1.5">
                 {displayPhone && (
-                  <a href={`tel:${displayPhone}`} className="flex items-center gap-2 text-sm text-foreground hover:text-primary transition-colors">
+                  <div className="flex items-center gap-2 text-sm text-foreground">
                     <Phone size={13} className="text-muted-foreground flex-shrink-0" />
                     {displayPhone}
-                  </a>
+                  </div>
                 )}
                 {displayEmail && (
                   <a href={`mailto:${displayEmail}`} className="flex items-center gap-2 text-sm text-foreground hover:text-primary transition-colors truncate">
@@ -1214,10 +1215,7 @@ export default function JobDetailsSection() {
               {/* Quick actions */}
               <div className="flex flex-wrap gap-2 pt-1">
                 {displayPhone && (
-                  <a href={`tel:${displayPhone}`}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400 text-xs font-semibold hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors">
-                    <Phone size={12} /> Call
-                  </a>
+                  <VoiceCallPanel toNumber={displayPhone} toName={displayName || 'customer'} label="Call" />
                 )}
                 {displayPhone && (
                   <button
