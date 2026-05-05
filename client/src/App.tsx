@@ -2,7 +2,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch, useLocation } from "wouter";
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
+import type { ComponentType } from "react";
 
 // ── GA4 helpers ───────────────────────────────────────────────────────────────
 declare global {
@@ -30,72 +31,79 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { EstimatorProvider } from "./contexts/EstimatorContext";
 import { PortalProvider } from "./contexts/PortalContext";
-import Home from "./pages/Home";
-import DataMigrationPage from "./pages/DataMigrationPage";
+
+const PageLoader = () => (
+  <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">
+    Loading...
+  </div>
+);
+
+const Home = lazy(() => import("./pages/Home"));
+const DataMigrationPage = lazy(() => import("./pages/DataMigrationPage"));
 
 // Booking wizard (public)
-import BookingWizard from "./pages/book/BookingWizard";
+const BookingWizard = lazy(() => import("./pages/book/BookingWizard"));
 
 // Portal pages
-import PortalHome from "./pages/portal/PortalHome";
-import PortalLogin from "./pages/portal/PortalLogin";
-import PortalAppointments from "./pages/portal/PortalAppointments";
-import PortalInvoices from "./pages/portal/PortalInvoices";
-import PortalInvoiceDetail from "./pages/portal/PortalInvoiceDetail";
-import PortalEstimates from "./pages/portal/PortalEstimates";
-import PortalEstimateDetail from "./pages/portal/PortalEstimateDetail";
-import PortalGallery from "./pages/portal/PortalGallery";
-import PortalDocuments from "./pages/portal/PortalDocuments";
-import PortalWallet from "./pages/portal/PortalWallet";
-import PortalReferral from "./pages/portal/PortalReferral";
-import PortalMessages from "./pages/portal/PortalMessages";
-import PortalCommunicationThread from "./pages/portal/PortalCommunicationThread";
-import PortalRequest from "./pages/portal/PortalRequest";
-import PortalJobDetail from "./pages/portal/PortalJobDetail";
-import PortalJobComplete from "./pages/portal/PortalJobComplete";
-import PortalChangeOrderDetail from "./pages/portal/PortalChangeOrderDetail";
-import PortalJobs from "./pages/portal/PortalJobs";
-import PortalReports from "./pages/portal/PortalReports";
-import PortalReportDetail from "./pages/portal/PortalReportDetail";
-import PortalRoadmap from "./pages/portal/PortalRoadmap";
-import Portal360Membership from "./pages/portal/Portal360Membership";
-import PortalEnrollmentConfirmation from "./pages/portal/PortalEnrollmentConfirmation";
-import PortalRoadmapSubmitted from "./pages/portal/PortalRoadmapSubmitted";
-import PortalSchedule from "./pages/portal/PortalSchedule";
-import PortalConsultationSubmitted from "./pages/portal/PortalConsultationSubmitted";
-import PortalProjectDetail from "./pages/portal/PortalProjectDetail";
-import WorkOrderDetail from "./pages/WorkOrderDetail";
+const PortalHome = lazy(() => import("./pages/portal/PortalHome"));
+const PortalLogin = lazy(() => import("./pages/portal/PortalLogin"));
+const PortalAppointments = lazy(() => import("./pages/portal/PortalAppointments"));
+const PortalInvoices = lazy(() => import("./pages/portal/PortalInvoices"));
+const PortalInvoiceDetail = lazy(() => import("./pages/portal/PortalInvoiceDetail"));
+const PortalEstimates = lazy(() => import("./pages/portal/PortalEstimates"));
+const PortalEstimateDetail = lazy(() => import("./pages/portal/PortalEstimateDetail"));
+const PortalGallery = lazy(() => import("./pages/portal/PortalGallery"));
+const PortalDocuments = lazy(() => import("./pages/portal/PortalDocuments"));
+const PortalWallet = lazy(() => import("./pages/portal/PortalWallet"));
+const PortalReferral = lazy(() => import("./pages/portal/PortalReferral"));
+const PortalMessages = lazy(() => import("./pages/portal/PortalMessages"));
+const PortalCommunicationThread = lazy(() => import("./pages/portal/PortalCommunicationThread"));
+const PortalRequest = lazy(() => import("./pages/portal/PortalRequest"));
+const PortalJobDetail = lazy(() => import("./pages/portal/PortalJobDetail"));
+const PortalJobComplete = lazy(() => import("./pages/portal/PortalJobComplete"));
+const PortalChangeOrderDetail = lazy(() => import("./pages/portal/PortalChangeOrderDetail"));
+const PortalJobs = lazy(() => import("./pages/portal/PortalJobs"));
+const PortalReports = lazy(() => import("./pages/portal/PortalReports"));
+const PortalReportDetail = lazy(() => import("./pages/portal/PortalReportDetail"));
+const PortalRoadmap = lazy(() => import("./pages/portal/PortalRoadmap"));
+const Portal360Membership = lazy(() => import("./pages/portal/Portal360Membership"));
+const PortalEnrollmentConfirmation = lazy(() => import("./pages/portal/PortalEnrollmentConfirmation"));
+const PortalRoadmapSubmitted = lazy(() => import("./pages/portal/PortalRoadmapSubmitted"));
+const PortalSchedule = lazy(() => import("./pages/portal/PortalSchedule"));
+const PortalConsultationSubmitted = lazy(() => import("./pages/portal/PortalConsultationSubmitted"));
+const PortalProjectDetail = lazy(() => import("./pages/portal/PortalProjectDetail"));
+const WorkOrderDetail = lazy(() => import("./pages/WorkOrderDetail"));
 
 // Field tech PWA pages
-import TechLogin from "./pages/TechLogin";
-import TechDashboard from "./pages/TechDashboard";
-import TechJobDetail from "./pages/TechJobDetail";
+const TechLogin = lazy(() => import("./pages/TechLogin"));
+const TechDashboard = lazy(() => import("./pages/TechDashboard"));
+const TechJobDetail = lazy(() => import("./pages/TechJobDetail"));
 
-import Welcome360Page from "./pages/Welcome360Page";
-import AgentDraftsPage from "./pages/admin/AgentDraftsPage";
-import AgentPlaybooksPage from "./pages/admin/AgentPlaybooksPage";
-import ReengagementCampaignPage from "./pages/admin/ReengagementCampaignPage";
+const Welcome360Page = lazy(() => import("./pages/Welcome360Page"));
+const AgentDraftsPage = lazy(() => import("./pages/admin/AgentDraftsPage"));
+const AgentPlaybooksPage = lazy(() => import("./pages/admin/AgentPlaybooksPage"));
+const ReengagementCampaignPage = lazy(() => import("./pages/admin/ReengagementCampaignPage"));
 
 // Admin pages (Phase 1 AI agent runtime + KPI dashboard)
-import AdminDashboard from "./pages/admin/AdminDashboard";
-import AiAgentsList from "./pages/admin/AiAgentsList";
-import AiAgentDetail from "./pages/admin/AiAgentDetail";
-import AiAgentTasks from "./pages/admin/AiAgentTasks";
-import DepartmentDetail from "./pages/admin/DepartmentDetail";
-import AdminSchedulingPage from "./pages/admin/AdminSchedulingPage";
-import IntegratorChat from "./pages/admin/IntegratorChat";
-import VisionaryConsole from "./pages/admin/VisionaryConsole";
-import AgentTeamsPage from "./pages/admin/AgentTeamsPage";
-import AdminVendorsList from "./pages/admin/AdminVendorsList";
-import AdminVendorDetail from "./pages/admin/AdminVendorDetail";
-import AdminVendorNew from "./pages/admin/AdminVendorNew";
-import AgentsControl from "./pages/admin/AgentsControl";
-import AgentsRuns from "./pages/admin/AgentsRuns";
-import OrgChart from "./pages/admin/OrgChart";
+const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
+const AiAgentsList = lazy(() => import("./pages/admin/AiAgentsList"));
+const AiAgentDetail = lazy(() => import("./pages/admin/AiAgentDetail"));
+const AiAgentTasks = lazy(() => import("./pages/admin/AiAgentTasks"));
+const DepartmentDetail = lazy(() => import("./pages/admin/DepartmentDetail"));
+const AdminSchedulingPage = lazy(() => import("./pages/admin/AdminSchedulingPage"));
+const IntegratorChat = lazy(() => import("./pages/admin/IntegratorChat"));
+const VisionaryConsole = lazy(() => import("./pages/admin/VisionaryConsole"));
+const AgentTeamsPage = lazy(() => import("./pages/admin/AgentTeamsPage"));
+const AdminVendorsList = lazy(() => import("./pages/admin/AdminVendorsList"));
+const AdminVendorDetail = lazy(() => import("./pages/admin/AdminVendorDetail"));
+const AdminVendorNew = lazy(() => import("./pages/admin/AdminVendorNew"));
+const AgentsControl = lazy(() => import("./pages/admin/AgentsControl"));
+const AgentsRuns = lazy(() => import("./pages/admin/AgentsRuns"));
+const OrgChart = lazy(() => import("./pages/admin/OrgChart"));
 
 // Self-serve password reset (public)
-import ForgotPassword from "./pages/ForgotPassword";
-import ResetPassword from "./pages/ResetPassword";
+const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 
 // Domains that should serve only the customer portal (no admin app).
 // On these hostnames any /admin or /onboarding URL is hidden behind a
@@ -123,10 +131,10 @@ function PortalDomainRoot() {
  * Wraps an admin/internal route component so it 404s on the customer
  * subdomain. Use for everything under /admin and /onboarding.
  */
-function staffOnly<P>(Component: (props: P) => React.ReactNode) {
+function staffOnly<P extends object>(Component: ComponentType<P>) {
   return (props: P) => {
     if (isPortalDomain) return <NotFound />;
-    return <>{Component(props)}</>;
+    return <Component {...props} />;
   };
 }
 
@@ -237,7 +245,9 @@ function App() {
           <PortalProvider>
             <TooltipProvider>
               <Toaster />
-              <Router />
+              <Suspense fallback={<PageLoader />}>
+                <Router />
+              </Suspense>
             </TooltipProvider>
           </PortalProvider>
         </EstimatorProvider>
