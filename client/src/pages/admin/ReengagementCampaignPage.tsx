@@ -96,7 +96,7 @@ function Console() {
   const onCreate = () => {
     const name = window.prompt(
       "Campaign name",
-      `HCP Reactivation — ${new Date().toISOString().slice(0, 10)}`,
+      `Database Reactivation - ${new Date().toISOString().slice(0, 10)}`,
     );
     if (!name) return;
     createCampaign.mutate({ name, segment: "custom" });
@@ -139,7 +139,7 @@ function Console() {
           <Card>
             <CardContent className="py-10 text-center text-muted-foreground">
               Create a campaign to start. The first one is typically named
-              "HCP Reactivation — {new Date().toISOString().slice(0, 10)}".
+              "Database Reactivation - {new Date().toISOString().slice(0, 10)}".
             </CardContent>
           </Card>
         )}

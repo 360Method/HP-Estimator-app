@@ -21,7 +21,7 @@ const HP_COMPANY = {
   email: 'help@handypioneers.com',
   website: 'http://handypioneers.com',
   license: 'HANDYP*761NH',
-  terms: 'https://pro.housecallpro.com/HandyPioneers/701055/terms',
+  terms: 'https://handypioneers.com/terms',
 };
 
 // ── Helpers ─────────────────────────────────────────────────

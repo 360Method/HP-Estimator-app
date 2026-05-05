@@ -371,7 +371,7 @@ export default function EstimatorDashboard() {
               </div>
               <div>
                 <p className="text-sm font-medium" style={{ color: 'var(--hp-charcoal)' }}>Your customer roster awaits its first steward — bring in existing clients to begin.</p>
-                <p className="text-xs" style={{ color: 'var(--hp-slate)' }}>HouseCall Pro exports, Google Contacts, and generic CSV files all welcome.</p>
+                <p className="text-xs" style={{ color: 'var(--hp-slate)' }}>Legacy exports, Google Contacts, and generic CSV files all welcome.</p>
               </div>
             </div>
             <div className="flex items-center gap-2">

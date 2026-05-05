@@ -3,6 +3,7 @@ import {
   BookOpen,
   Bot,
   Calculator,
+  CheckCircle2,
   Database,
   GitBranch,
   Megaphone,
@@ -11,7 +12,9 @@ import {
   ShieldCheck,
   Users,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { useEstimator } from '@/contexts/EstimatorContext';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -82,11 +85,93 @@ const OPS = [
   },
 ] as const;
 
+type CutoverStatus = 'needs-review' | 'testing' | 'ready';
+
+const CUTOVER_STATUS_LABEL: Record<CutoverStatus, string> = {
+  'needs-review': 'Needs Review',
+  testing: 'Testing',
+  ready: 'Ready',
+};
+
+const CUTOVER_STATUS_CLASS: Record<CutoverStatus, string> = {
+  'needs-review': 'border-amber-200 bg-amber-50 text-amber-700',
+  testing: 'border-blue-200 bg-blue-50 text-blue-700',
+  ready: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+};
+
+const CUTOVER_ITEMS = [
+  {
+    id: 'migrated-data',
+    title: 'Migrated data reconciliation',
+    detail: 'Spot-check customers, properties, jobs, invoices, notes, and statuses imported from the old system.',
+  },
+  {
+    id: 'phone-sms',
+    title: 'Phone and SMS',
+    detail: 'Verify inbound routing, outbound browser calls, SMS, call logs, and customer timeline records.',
+  },
+  {
+    id: 'email-inbox',
+    title: 'Email and inbox',
+    detail: 'Verify Gmail connection, outbound messages, inbound replies, and AI review queues.',
+  },
+  {
+    id: 'estimates-invoices',
+    title: 'Estimate to invoice lifecycle',
+    detail: 'Confirm calculator, proposal approval, job conversion, invoice, deposit, and payment flow.',
+  },
+  {
+    id: 'schedule-tech',
+    title: 'Schedule and field tech',
+    detail: 'Confirm scheduled work appears for the technician and completion updates the internal job.',
+  },
+  {
+    id: 'client-portal',
+    title: 'Client portal',
+    detail: 'Confirm the customer sees only approved scopes, next steps, payments, memberships, and updates.',
+  },
+  {
+    id: 'quickbooks',
+    title: 'QuickBooks and accounting',
+    detail: 'Verify customer matching, invoice sync, payment reconciliation, exceptions, and tax handling.',
+  },
+  {
+    id: 'go-live-smoke',
+    title: 'Go-live smoke test',
+    detail: 'Run one complete customer lifecycle before turning off old operating habits.',
+  },
+] as const;
+
+const CUTOVER_STORAGE_KEY = 'hp_housecall_cutover_status';
+
 export default function OperationsPage() {
   const { setSection } = useEstimator();
+  const [cutoverStatuses, setCutoverStatuses] = useState<Record<string, CutoverStatus>>(() => {
+    try {
+      const raw = localStorage.getItem(CUTOVER_STORAGE_KEY);
+      if (!raw) return {};
+      return JSON.parse(raw) as Record<string, CutoverStatus>;
+    } catch {
+      return {};
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(CUTOVER_STORAGE_KEY, JSON.stringify(cutoverStatuses));
+    } catch {}
+  }, [cutoverStatuses]);
 
   const openSettings = (section?: string) => {
     window.dispatchEvent(new CustomEvent('open-settings', { detail: { section: section ?? 'general' } }));
+  };
+
+  const cycleCutoverStatus = (id: string) => {
+    setCutoverStatuses(prev => {
+      const current = prev[id] ?? 'needs-review';
+      const next: CutoverStatus = current === 'needs-review' ? 'testing' : current === 'testing' ? 'ready' : 'needs-review';
+      return { ...prev, [id]: next };
+    });
   };
 
   return (
@@ -151,6 +236,50 @@ export default function OperationsPage() {
             );
           })}
         </div>
+
+        <Card className="mt-6">
+          <CardHeader className="pb-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <CheckCircle2 className="h-4 w-4 text-primary" />
+                  HouseCall Cutover Readiness
+                </CardTitle>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  The API migration already happened. This is the operating checklist for proving the replacement works before relying on it with live customers.
+                </p>
+              </div>
+              <Badge variant="outline" className="w-fit">
+                Internal only
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 md:grid-cols-2">
+              {CUTOVER_ITEMS.map(item => {
+                const status = cutoverStatuses[item.id] ?? 'needs-review';
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => cycleCutoverStatus(item.id)}
+                    className="rounded-lg border border-border bg-white p-4 text-left transition hover:border-primary/40 hover:bg-muted/30"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-foreground">{item.title}</p>
+                        <p className="mt-1 text-sm text-muted-foreground">{item.detail}</p>
+                      </div>
+                      <Badge variant="outline" className={CUTOVER_STATUS_CLASS[status]}>
+                        {CUTOVER_STATUS_LABEL[status]}
+                      </Badge>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
 
         <div className="mt-6 grid gap-4 lg:grid-cols-3">
           <Card>

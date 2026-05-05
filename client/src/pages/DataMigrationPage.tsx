@@ -261,7 +261,7 @@ export default function DataMigrationPage({ embedded = false }: DataMigrationPag
                 </div>
                 <div>
                   <CardTitle className="text-base">Import Customers</CardTitle>
-                  <CardDescription>Upload a CSV from HouseCall Pro, Google Contacts, or any CRM.</CardDescription>
+                  <CardDescription>Fallback CSV import for Google Contacts, legacy exports, or any CRM.</CardDescription>
                 </div>
               </div>
             </CardHeader>
@@ -269,7 +269,7 @@ export default function DataMigrationPage({ embedded = false }: DataMigrationPag
               <div className="bg-muted/40 rounded-lg p-3 text-xs text-muted-foreground space-y-1">
                 <p className="font-medium text-foreground">Supported columns (case-insensitive):</p>
                 <p className="font-mono leading-relaxed">Display Name, First Name, Last Name, Company, Email, Mobile, Street, City, State, Zip, Customer Type, Lead Source, Notes, Tags</p>
-                <p className="text-muted-foreground/70 mt-1">HouseCall Pro exports are supported automatically.</p>
+                <p className="text-muted-foreground/70 mt-1">Legacy job-management exports are supported automatically.</p>
               </div>
 
               <div className="flex gap-2">
@@ -337,7 +337,7 @@ export default function DataMigrationPage({ embedded = false }: DataMigrationPag
                 </div>
                 <div>
                   <CardTitle className="text-base">Import Jobs</CardTitle>
-                  <CardDescription>Upload job history from HouseCall Pro or any job management system.</CardDescription>
+                  <CardDescription>Fallback job-history import for any job management system.</CardDescription>
                 </div>
               </div>
             </CardHeader>
@@ -449,9 +449,19 @@ export default function DataMigrationPage({ embedded = false }: DataMigrationPag
                 </div>
               ) : null}
 
+              <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm">
+                <p className="font-medium text-foreground">Cutover checks before go-live</p>
+                <div className="mt-2 grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+                  <div className="flex gap-2"><CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-primary" />Record counts match the migrated export.</div>
+                  <div className="flex gap-2"><CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-primary" />Duplicates and missing customers are reviewed.</div>
+                  <div className="flex gap-2"><CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-primary" />Job statuses map to the correct workflow stages.</div>
+                  <div className="flex gap-2"><CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-primary" />Portal-visible records are safe for customers.</div>
+                </div>
+              </div>
+
               <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/30 rounded-lg p-3">
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span>Data migration complete. You can re-run imports at any time from the Customers page.</span>
+                <span>Import complete. Reconcile migrated records in Operations before relying on the app with live customers.</span>
               </div>
 
               <div className="flex justify-end pt-2">
