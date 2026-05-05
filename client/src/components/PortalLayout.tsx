@@ -167,6 +167,16 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
           {/* Right: CTAs + user */}
           <div className="flex items-center gap-2">
             <Link href="/portal/messages">
+              <Button variant="outline" size="sm" className="sm:hidden h-9 w-9 p-0" aria-label="Send a message">
+                <MessageSquare className="w-4 h-4" />
+              </Button>
+            </Link>
+            <Link href="/portal/request">
+              <Button size="sm" className="sm:hidden h-9 w-9 p-0" style={{ background: '#c8922a', color: '#fff' }} aria-label="Book online">
+                <Calendar className="w-4 h-4" />
+              </Button>
+            </Link>
+            <Link href="/portal/messages">
               <Button variant="outline" size="sm" className="hidden sm:flex items-center gap-1.5 text-xs">
                 <MessageSquare className="w-3.5 h-3.5" />
                 Send a message

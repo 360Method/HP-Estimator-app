@@ -984,7 +984,7 @@ export default function Portal360Membership() {
 
         {/* Property switcher */}
         {allMemberships.length > 1 && (
-          <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-1">
+          <div className="flex flex-wrap items-center gap-2 mb-4">
             <span className="text-xs text-muted-foreground shrink-0">Property:</span>
             {allMemberships.map((m, i) => {
               const t = TIER_LABELS[m.membership.tier ?? "bronze"] ?? TIER_LABELS.bronze;
@@ -1005,7 +1005,7 @@ export default function Portal360Membership() {
         )}
 
         {/* Summary row */}
-        <div className="grid grid-cols-3 gap-3 mb-5">
+        <div className="grid grid-cols-1 gap-3 mb-5 sm:grid-cols-3">
           <div className="bg-white border rounded-xl p-3 text-center">
             <CalendarCheck className="w-5 h-5 text-[#c8922a] mx-auto mb-1" />
             <p className="text-xs text-muted-foreground">Renews</p>

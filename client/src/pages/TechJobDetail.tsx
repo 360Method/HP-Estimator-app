@@ -178,9 +178,9 @@ export default function TechJobDetail() {
             </div>
           )}
           {phone && (
-            <div className="flex items-center gap-3">
-              <Phone size={18} className="text-gray-400 shrink-0" />
-              <a href={`tel:${phone}`} className="text-sm font-semibold" style={{ color: '#7A5D12' }}>
+            <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-3">
+              <Phone size={18} className="shrink-0" style={{ color: '#7A5D12' }} />
+              <a href={`tel:${phone}`} className="min-h-9 flex flex-1 items-center text-sm font-semibold" style={{ color: '#7A5D12' }}>
                 {phone}
               </a>
             </div>
