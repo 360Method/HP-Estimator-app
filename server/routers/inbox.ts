@@ -130,13 +130,26 @@ const messagesRouter = router({
       isInternal: z.boolean().default(false),
     }))
     .mutation(async ({ input, ctx }) => {
+      let twilioDelivery: { sid: string; status: string } | null = null;
+      if (input.channel === "sms" && !input.isInternal) {
+        if (!isTwilioConfigured()) {
+          throw new Error("Twilio not configured. Add credentials in Settings > Secrets.");
+        }
+        const conversation = await getConversationById(input.conversationId);
+        if (!conversation?.contactPhone) {
+          throw new Error("Conversation has no phone number for SMS delivery.");
+        }
+        twilioDelivery = await sendSms(conversation.contactPhone, input.body);
+      }
+
       const msg = await insertMessage({
         conversationId: input.conversationId,
         channel: input.channel,
         direction: "outbound",
         body: input.body,
         subject: input.subject,
-        status: "sent",
+        status: twilioDelivery?.status ?? "sent",
+        twilioSid: twilioDelivery?.sid,
         isInternal: input.isInternal,
         sentAt: new Date(),
         sentByUserId: ctx.user?.id,
@@ -210,7 +223,10 @@ const twilioRouter = router({
 
   /** Get a Twilio Voice access token for in-browser calling */
   voiceToken: protectedProcedure.query(({ ctx }) => {
-    if (!isTwilioConfigured()) throw new Error("Twilio not configured.");
+    const status = getTwilioConfigStatus();
+    if (!status.voiceConfigured) {
+      throw new Error(`Twilio Voice not configured. Missing: ${status.missingVoice.join(", ")}`);
+    }
     const identity = `hp-user-${ctx.user?.id ?? "guest"}`;
     const token = generateVoiceToken(identity);
     return { token, identity };

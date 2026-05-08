@@ -18,7 +18,7 @@ import {
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import Stripe from "stripe";
-import { handleInboundSms, handleCallStatusUpdate, generateVoiceToken, isTwilioConfigured, downloadAndStoreRecording } from "../twilio";
+import { handleInboundSms, handleCallStatusUpdate, downloadAndStoreRecording, normalizePhoneForTwilio } from "../twilio";
 import twilio from "twilio";
 import { exchangeGmailCode, pollInboundEmails, sendOverdueReminderEmail, isGmailConfigured } from "../gmail";
 import { runEmailManagerPipeline } from "../emailManagerAI";
@@ -63,9 +63,22 @@ function verifyTwilioRequest(req: express.Request, routePath: string): boolean {
   const forwardedHost = (req.headers["x-forwarded-host"] as string) || req.get("host") || "localhost";
   const proto = forwardedProto.split(",")[0].trim();
   const host = forwardedHost.split(",")[0].trim();
-  const url = `${proto}://${host}${routePath}`;
+  const candidateUrls = new Set<string>([`${proto}://${host}${routePath}`]);
+  for (const base of [
+    process.env.TWILIO_WEBHOOK_BASE_URL,
+    process.env.PUBLIC_APP_URL,
+    process.env.APP_BASE_URL,
+    process.env.PORTAL_BASE_URL,
+  ]) {
+    if (!base) continue;
+    try {
+      candidateUrls.add(new URL(routePath, base.endsWith("/") ? base : `${base}/`).toString());
+    } catch {
+      // Ignore malformed optional public URL env vars.
+    }
+  }
   try {
-    return twilio.validateRequest(authToken, sig ?? "", url, req.body);
+    return [...candidateUrls].some((url) => twilio.validateRequest(authToken, sig ?? "", url, req.body));
   } catch (err) {
     console.warn(`[Twilio] Signature validation threw for ${routePath}:`, err);
     return false;
@@ -1200,18 +1213,25 @@ async function startServer() {
   await ensureReengagementTables();
   const app = express();
   const server = createServer(app);
+  const twilioBrowserSources = [
+    "https://*.twilio.com",
+    "wss://*.twilio.com",
+    "https://*.twiliocdn.com",
+  ];
 
   // ── Security headers (Helmet) ──
   app.use(helmet({
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'", "'unsafe-inline'", "https://maps.googleapis.com", "https://js.stripe.com", "https://www.googletagmanager.com"],
+        scriptSrc: ["'self'", "'unsafe-inline'", "https://maps.googleapis.com", "https://js.stripe.com", "https://www.googletagmanager.com", "https://*.twiliocdn.com"],
         frameSrc: ["https://js.stripe.com", "https://hooks.stripe.com"],
-        connectSrc: ["'self'", "https://api.stripe.com", "https://js.stripe.com", "https://maps.googleapis.com", "https://fonts.googleapis.com", "https://fonts.gstatic.com", "https://d2xsxph8kpxj0f.cloudfront.net", "https://www.google-analytics.com", "https://analytics.google.com", "https://region1.google-analytics.com"],
+        connectSrc: ["'self'", "https://api.stripe.com", "https://js.stripe.com", "https://maps.googleapis.com", "https://fonts.googleapis.com", "https://fonts.gstatic.com", "https://d2xsxph8kpxj0f.cloudfront.net", "https://www.google-analytics.com", "https://analytics.google.com", "https://region1.google-analytics.com", ...twilioBrowserSources],
         imgSrc: ["'self'", "data:", "blob:", "https:", "http:"],
+        mediaSrc: ["'self'", "data:", "blob:", "https://*.twilio.com", "https://*.twiliocdn.com"],
         styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
         fontSrc: ["'self'", "https://fonts.gstatic.com"],
+        workerSrc: ["'self'", "blob:"],
       },
     },
     crossOriginEmbedderPolicy: false,
@@ -1556,6 +1576,16 @@ async function startServer() {
     const VoiceResponse = twilio.twiml.VoiceResponse;
     const twiml = new VoiceResponse();
     if (to) {
+      let destination: string;
+      try {
+        destination = normalizePhoneForTwilio(String(to));
+      } catch {
+        twiml.say("Invalid destination phone number.");
+        res.set("Content-Type", "text/xml");
+        res.send(twiml.toString());
+        return;
+      }
+
       // Two-party-consent disclosure (WA/OR/CA all require both parties to know).
       // Plays to the called party only — opt-out via VOICE_RECORDING_DISCLOSURE=off.
       const recordingEnabled = process.env.VOICE_RECORDING !== "off";
@@ -1590,7 +1620,7 @@ async function startServer() {
         dialOpts.recordingStatusCallbackEvent = "completed";
       }
       const dial = twiml.dial(dialOpts);
-      dial.number(to);
+      dial.number(destination);
     } else {
       twiml.say("No destination specified.");
     }
