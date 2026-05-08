@@ -1654,17 +1654,30 @@ async function startServer() {
       const { getCallLogByTwilioSid, updateCallLog } = await import("../db");
       const appUrl = await downloadAndStoreRecording(recordingUrl, callSid);
       if (!appUrl) {
-        console.warn(`[Voice Recording] Download failed for ${callSid}`);
-        return;
+        console.warn(`[Voice Recording] Download failed for ${callSid}; keeping Twilio proxy fallback`);
       }
       const callLog = await getCallLogByTwilioSid(callSid);
       if (callLog?.id) {
-        await updateCallLog(callLog.id, { recordingAppUrl: appUrl, recordingUrl }).catch((err) =>
+        await updateCallLog(callLog.id, appUrl ? { recordingAppUrl: appUrl, recordingUrl } : { recordingUrl }).catch((err) =>
           console.warn(`[Voice Recording] updateCallLog failed for ${callSid}:`, err),
         );
         console.log(`[Voice Recording] Stored recording for ${callSid} → ${appUrl}`);
       } else {
-        console.warn(`[Voice Recording] No call_logs row for sid=${callSid} yet (status callback hasn't fired)`);
+        let attached = false;
+        for (let attempt = 1; attempt <= 6; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+          const retryLog = await getCallLogByTwilioSid(callSid);
+          if (retryLog?.id) {
+            await updateCallLog(retryLog.id, appUrl ? { recordingAppUrl: appUrl, recordingUrl } : { recordingUrl }).catch((err) =>
+              console.warn(`[Voice Recording] retry updateCallLog failed for ${callSid}:`, err),
+            );
+            attached = true;
+            break;
+          }
+        }
+        if (!attached) {
+          console.warn(`[Voice Recording] No call_logs row for sid=${callSid} after retries`);
+        }
       }
     } catch (err) {
       console.error("[Twilio Voice recording]", err);
@@ -1779,7 +1792,7 @@ async function startServer() {
               if (!appUrl) return;
               const { getCallLogByTwilioSid, updateCallLog } = await import("../db");
               const log = await getCallLogByTwilioSid(CallSid).catch(() => null);
-              if (log?.id) await updateCallLog(log.id, { recordingUrl: appUrl }).catch(console.warn);
+              if (log?.id) await updateCallLog(log.id, { recordingAppUrl: appUrl, recordingUrl: RecordingUrl }).catch(console.warn);
             })
             .catch(console.warn);
         }

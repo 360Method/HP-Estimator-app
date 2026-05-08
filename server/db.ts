@@ -555,25 +555,23 @@ export async function findCustomerByPhone(phone: string): Promise<DbCustomer | n
   return rows[0] ?? null;
 }
 
-/**
- * Given an inbound caller phone, find the matching CRM customer.
- * If none exists, auto-create a stub customer so every call is anchored
- * to a real customer record. Returns { customer, wasCreated }.
- */
-export async function findOrCreateCustomerFromCall(
-  callerPhone: string,
+export async function findOrCreateCustomerFromPhone(
+  phone: string,
+  options: { displayName?: string; leadSource?: string } = {},
 ): Promise<{ customer: DbCustomer; wasCreated: boolean }> {
-  const existing = await findCustomerByPhone(callerPhone);
+  const existing = await findCustomerByPhone(phone);
   if (existing) return { customer: existing, wasCreated: false };
   const { nanoid } = await import('nanoid');
   const id = nanoid(12);
+  const displayName = options.displayName?.trim() || `Unknown Contact ${phone}`;
+  const nameParts = displayName.split(/\s+/).filter(Boolean);
   const stub: InsertDbCustomer = {
     id,
-    firstName: 'Unknown',
-    lastName: 'Caller',
-    displayName: `Unknown Caller ${callerPhone}`,
+    firstName: nameParts[0] || 'Unknown',
+    lastName: nameParts.slice(1).join(' ') || 'Contact',
+    displayName,
     company: '',
-    mobilePhone: callerPhone,
+    mobilePhone: phone,
     homePhone: '',
     workPhone: '',
     email: '',
@@ -582,7 +580,7 @@ export async function findOrCreateCustomerFromCall(
     doNotService: false,
     street: '', unit: '', city: '', state: '', zip: '',
     billsTo: '',
-    leadSource: 'inbound_call',
+    leadSource: options.leadSource ?? 'manual_contact',
     referredBy: '',
     sendNotifications: false,
     sendMarketingOptIn: false,
@@ -591,6 +589,20 @@ export async function findOrCreateCustomerFromCall(
   };
   const customer = await createCustomer(stub);
   return { customer, wasCreated: true };
+}
+
+/**
+ * Given an inbound caller phone, find the matching CRM customer.
+ * If none exists, auto-create a stub customer so every call is anchored
+ * to a real customer record. Returns { customer, wasCreated }.
+ */
+export async function findOrCreateCustomerFromCall(
+  callerPhone: string,
+): Promise<{ customer: DbCustomer; wasCreated: boolean }> {
+  return findOrCreateCustomerFromPhone(callerPhone, {
+    displayName: `Unknown Caller ${callerPhone}`,
+    leadSource: 'inbound_call',
+  });
 }
 
 export async function createCustomer(data: InsertDbCustomer): Promise<DbCustomer> {

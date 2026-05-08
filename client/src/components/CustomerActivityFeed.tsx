@@ -20,6 +20,7 @@ import {
 import { trpc } from '@/lib/trpc';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { useInboxSSE } from '@/hooks/useInboxSSE';
+import { getRecordingPlaybackUrl } from '@/lib/recordings';
 
 // ── Helpers ──────────────────────────────────────────────────
 function fmtRelative(iso: string) {
@@ -131,14 +132,19 @@ export default function CustomerActivityFeed({ customerId, onOpenInInbox, compac
               </div>
               <p className="text-sm text-foreground line-clamp-2">{item.body || '(no content)'}</p>
               {/* Recording player for call items */}
-              {item.channel === 'call' && (item as any).recordingAppUrl && (
-                <audio
-                  controls
-                  src={(item as any).recordingAppUrl}
-                  className="mt-2 h-8 w-full max-w-xs"
-                  preload="none"
-                />
-              )}
+              {(() => {
+                const recordingUrl = item.channel === 'call'
+                  ? getRecordingPlaybackUrl((item as any).recordingAppUrl, (item as any).recordingUrl)
+                  : null;
+                return recordingUrl ? (
+                  <audio
+                    controls
+                    src={recordingUrl}
+                    className="mt-2 h-8 w-full max-w-xs"
+                    preload="none"
+                  />
+                ) : null;
+              })()}
               {/* Attachment */}
               {item.attachmentUrl && (
                 <a
