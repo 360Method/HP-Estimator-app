@@ -60,33 +60,78 @@ function getTwilioClient() {
 }
 
 export function isTwilioConfigured() {
-  return !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_PHONE_NUMBER);
+  return !!(
+    process.env.TWILIO_ACCOUNT_SID &&
+    process.env.TWILIO_AUTH_TOKEN &&
+    (process.env.TWILIO_PHONE_NUMBER || process.env.TWILIO_MESSAGING_SERVICE_SID)
+  );
 }
 
 export function getTwilioConfigStatus() {
-  const smsRequired = ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_PHONE_NUMBER"] as const;
+  const smsRequired = ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN"];
   const voiceRequired = ["TWILIO_API_KEY", "TWILIO_API_SECRET", "TWILIO_TWIML_APP_SID"] as const;
   const missingSms = smsRequired.filter((key) => !process.env[key]);
-  const missingVoice = [...missingSms, ...voiceRequired.filter((key) => !process.env[key])];
+  if (!process.env.TWILIO_PHONE_NUMBER && !process.env.TWILIO_MESSAGING_SERVICE_SID) {
+    missingSms.push("TWILIO_PHONE_NUMBER or TWILIO_MESSAGING_SERVICE_SID");
+  }
+  const missingVoice = Array.from(new Set([
+    ...missingSms,
+    ...(!process.env.TWILIO_PHONE_NUMBER ? ["TWILIO_PHONE_NUMBER"] : []),
+    ...voiceRequired.filter((key) => !process.env[key]),
+  ]));
 
   return {
     smsConfigured: missingSms.length === 0,
     voiceConfigured: missingVoice.length === 0,
     missingSms,
     missingVoice,
-    phoneNumber: missingSms.length === 0 ? process.env.TWILIO_PHONE_NUMBER ?? null : null,
+    phoneNumber: process.env.TWILIO_PHONE_NUMBER ?? null,
+    messagingServiceConfigured: !!process.env.TWILIO_MESSAGING_SERVICE_SID,
   };
 }
 
 // ─── Outbound SMS ─────────────────────────────────────────────────────────────
 
+export function normalizePhoneForTwilio(rawPhone: string): string {
+  const raw = rawPhone.trim();
+  if (!raw) throw new Error("Phone number required");
+
+  const withoutExtension = raw.replace(/\s*(?:ext\.?|x)\s*\d+$/i, "");
+  const digits = withoutExtension.replace(/\D/g, "");
+  const normalized = withoutExtension.trim().startsWith("+")
+    ? `+${digits}`
+    : digits.length === 10
+      ? `+1${digits}`
+      : digits.length === 11 && digits.startsWith("1")
+        ? `+${digits}`
+        : `+${digits}`;
+
+  if (!/^\+[1-9]\d{9,14}$/.test(normalized)) {
+    throw new Error("Phone number must be a valid E.164 number. US numbers can be entered as 10 digits.");
+  }
+
+  return normalized;
+}
+
 export async function sendSms(to: string, body: string): Promise<{ sid: string; status: string }> {
   const client = getTwilioClient();
   const from = process.env.TWILIO_PHONE_NUMBER;
-  if (!from) throw new Error("TWILIO_PHONE_NUMBER not configured");
+  const messagingServiceSid = process.env.TWILIO_MESSAGING_SERVICE_SID;
+  if (!from && !messagingServiceSid) {
+    throw new Error("TWILIO_PHONE_NUMBER or TWILIO_MESSAGING_SERVICE_SID not configured");
+  }
 
-  const msg = await client.messages.create({ to, from, body });
-  return { sid: msg.sid, status: msg.status };
+  const payload = messagingServiceSid
+    ? { to: normalizePhoneForTwilio(to), messagingServiceSid, body }
+    : { to: normalizePhoneForTwilio(to), from: normalizePhoneForTwilio(from!), body };
+
+  try {
+    const msg = await client.messages.create(payload);
+    return { sid: msg.sid, status: msg.status };
+  } catch (err: any) {
+    const code = err?.code ? ` (${err.code})` : "";
+    throw new Error(`Twilio SMS failed${code}: ${err?.message ?? String(err)}`);
+  }
 }
 
 // ─── Inbound SMS Webhook ──────────────────────────────────────────────────────
