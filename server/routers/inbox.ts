@@ -6,6 +6,7 @@ import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
 import {
   findOrCreateConversation,
+  findOrCreateCustomerFromPhone,
   getConversationById,
   getCallLogsByTwilioSids,
   incrementUnread,
@@ -20,7 +21,7 @@ import {
   updateConversation,
   updateConversationLastMessage,
 } from "../db";
-import { sendSms, generateVoiceToken, getTwilioConfigStatus, isTwilioConfigured } from "../twilio";
+import { sendSms, generateVoiceToken, getTwilioConfigStatus, isTwilioConfigured, normalizePhoneForTwilio } from "../twilio";
 import { findPortalCustomerByHpId, getPortalMessagesByCustomer } from "../portalDb";
 
 // ─── CONVERSATIONS ────────────────────────────────────────────────────────────
@@ -221,6 +222,61 @@ const twilioRouter = router({
       return msg;
     }),
 
+  /** Send an SMS to any phone number and anchor it to a customer thread */
+  sendDirectSms: protectedProcedure
+    .input(z.object({
+      to: z.string(),
+      body: z.string().min(1).max(1600),
+      contactName: z.string().trim().min(1).max(120).optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      if (!isTwilioConfigured()) throw new Error("Twilio not configured. Add credentials in Settings > Secrets.");
+
+      const normalizedTo = normalizePhoneForTwilio(input.to);
+      const { customer } = await findOrCreateCustomerFromPhone(normalizedTo, {
+        displayName: input.contactName,
+        leadSource: "manual_sms",
+      });
+
+      const phoneKey = normalizedTo.replace(/\D/g, "").slice(-10);
+      const samePhone = (phone?: string | null) =>
+        (phone ?? "").replace(/\D/g, "").slice(-10) === phoneKey;
+      const existingCustomerConvs = await listConversationsByCustomer(customer.id, 25);
+      let conversation = existingCustomerConvs.find((c) => samePhone(c.contactPhone));
+
+      if (!conversation) {
+        conversation = await findOrCreateConversation(
+          normalizedTo,
+          null,
+          customer.displayName ?? input.contactName ?? normalizedTo,
+          customer.id,
+        );
+      }
+
+      if (!conversation.customerId || !conversation.contactPhone || !conversation.contactName) {
+        await updateConversation(conversation.id, {
+          customerId: conversation.customerId ?? customer.id,
+          contactPhone: conversation.contactPhone ?? normalizedTo,
+          contactName: conversation.contactName ?? customer.displayName ?? input.contactName ?? normalizedTo,
+        });
+      }
+
+      const { sid, status } = await sendSms(normalizedTo, input.body);
+      const msg = await insertMessage({
+        conversationId: conversation.id,
+        channel: "sms",
+        direction: "outbound",
+        body: input.body,
+        status,
+        twilioSid: sid,
+        isInternal: false,
+        sentAt: new Date(),
+        sentByUserId: ctx.user?.id,
+      });
+      await updateConversationLastMessage(conversation.id, input.body, "sms");
+      return { message: msg, conversationId: conversation.id, customer };
+    }),
+
   /** Get a Twilio Voice access token for in-browser calling */
   voiceToken: protectedProcedure.query(({ ctx }) => {
     const status = getTwilioConfigStatus();
@@ -291,25 +347,37 @@ const unifiedFeedRouter = router({
         senderName: m.senderName ?? null,
       }));
 
-      // 4. Enrich call feed items with recordingAppUrl from callLogs
+      // 4. Enrich call feed items with playable recording metadata from callLogs
       const callTwilioSids = convMessages
         .filter(m => m.channel === 'call' && m.twilioSid)
         .map(m => m.twilioSid!);
-      const callLogMap = new Map<string, string | null>();
+      const callLogMap = new Map<string, {
+        recordingAppUrl: string | null;
+        recordingUrl: string | null;
+        voicemailAppUrl: string | null;
+        voicemailUrl: string | null;
+      }>();
       if (callTwilioSids.length) {
         const logs = await getCallLogsByTwilioSids(callTwilioSids);
         for (const log of logs) {
-          if (log.twilioCallSid) callLogMap.set(log.twilioCallSid, (log as any).recordingAppUrl ?? log.recordingUrl ?? null);
+          if (log.twilioCallSid) {
+            callLogMap.set(log.twilioCallSid, {
+              recordingAppUrl: (log as any).recordingAppUrl ?? null,
+              recordingUrl: log.recordingUrl ?? null,
+              voicemailAppUrl: (log as any).voicemailAppUrl ?? null,
+              voicemailUrl: (log as any).voicemailUrl ?? null,
+            });
+          }
         }
       }
       const enrichedConvMessages = convMessages.map(m =>
         m.channel === 'call' && m.twilioSid && callLogMap.has(m.twilioSid)
-          ? { ...m, recordingAppUrl: callLogMap.get(m.twilioSid) ?? null }
-          : { ...m, recordingAppUrl: null }
+          ? { ...m, ...callLogMap.get(m.twilioSid)! }
+          : { ...m, recordingAppUrl: null, recordingUrl: null, voicemailAppUrl: null, voicemailUrl: null }
       );
 
       // 5. Merge and sort chronologically (oldest first)
-      const feed = [...enrichedConvMessages, ...portalFeedItems.map(m => ({ ...m, recordingAppUrl: null }))].sort(
+      const feed = [...enrichedConvMessages, ...portalFeedItems.map(m => ({ ...m, recordingAppUrl: null, recordingUrl: null, voicemailAppUrl: null, voicemailUrl: null }))].sort(
         (a, b) => new Date(a.sentAt).getTime() - new Date(b.sentAt).getTime()
       );
 

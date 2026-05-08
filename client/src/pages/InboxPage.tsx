@@ -14,11 +14,21 @@ import {
   Send, Inbox, Users, Globe,
   PhoneIncoming, PhoneOutgoing,
   RefreshCw, MoreHorizontal, ChevronLeft,
-  CheckCheck, AlertCircle, Clock, MessageCircle,
+  CheckCheck, AlertCircle, Clock, MessageCircle, Grid3x3,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import type { Customer } from '@/lib/types';
+import { getRecordingPlaybackUrl } from '@/lib/recordings';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Channel = 'sms' | 'email' | 'note';
@@ -39,6 +49,8 @@ interface FeedItem {
   attachmentUrl: string | null;
   attachmentMime: string | null;
 }
+
+const DIAL_PAD_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'] as const;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function getInitials(name: string | null | undefined) {
@@ -82,6 +94,63 @@ function fmtDateLabel(d: Date | string | null | undefined) {
   return date.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
 }
 
+function normalizePhoneInput(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const withoutExtension = trimmed.replace(/\s*(?:ext\.?|x)\s*\d+$/i, '');
+  const digits = withoutExtension.replace(/\D/g, '');
+  const normalized = withoutExtension.trim().startsWith('+')
+    ? `+${digits}`
+    : digits.length === 10
+      ? `+1${digits}`
+      : digits.length === 11 && digits.startsWith('1')
+        ? `+${digits}`
+        : `+${digits}`;
+  return /^\+[1-9]\d{9,14}$/.test(normalized) ? normalized : null;
+}
+
+function dbCustomerToInboxCustomer(dbCust: any): Customer {
+  let tags: string[] = [];
+  try { tags = JSON.parse(dbCust.tags ?? '[]'); } catch { tags = []; }
+
+  return {
+    id: dbCust.id,
+    firstName: dbCust.firstName ?? '',
+    lastName: dbCust.lastName ?? '',
+    displayName: dbCust.displayName ?? '',
+    company: dbCust.company ?? '',
+    mobilePhone: dbCust.mobilePhone ?? '',
+    homePhone: dbCust.homePhone ?? '',
+    workPhone: dbCust.workPhone ?? '',
+    additionalPhones: [],
+    email: dbCust.email ?? '',
+    additionalEmails: [],
+    role: dbCust.role ?? '',
+    customerType: (dbCust.customerType ?? 'homeowner') as Customer['customerType'],
+    doNotService: dbCust.doNotService ?? false,
+    street: dbCust.street ?? '',
+    unit: dbCust.unit ?? '',
+    city: dbCust.city ?? '',
+    state: dbCust.state ?? '',
+    zip: dbCust.zip ?? '',
+    addressNotes: dbCust.addressNotes ?? '',
+    customerNotes: dbCust.customerNotes ?? '',
+    billsTo: dbCust.billsTo ?? '',
+    tags,
+    leadSource: (dbCust.leadSource ?? '') as Customer['leadSource'],
+    referredBy: dbCust.referredBy ?? '',
+    sendNotifications: dbCust.sendNotifications ?? true,
+    sendMarketingOptIn: dbCust.sendMarketingOptIn ?? false,
+    createdAt: dbCust.createdAt instanceof Date
+      ? dbCust.createdAt.toISOString()
+      : (dbCust.createdAt ?? new Date().toISOString()),
+    lifetimeValue: dbCust.lifetimeValue ?? 0,
+    outstandingBalance: dbCust.outstandingBalance ?? 0,
+    opportunities: [],
+    defaultTaxCode: dbCust.defaultTaxCode ?? undefined,
+  };
+}
+
 // ─── Channel badge ────────────────────────────────────────────────────────────
 const CHANNEL_ICON: Record<string, React.ElementType> = {
   sms: MessageCircle,
@@ -115,19 +184,7 @@ function ChannelBadge({ channel }: { channel: string }) {
  * Extracts the Recording SID from the Twilio URL and routes through /api/twilio/recording/:sid.
  */
 function getRecordingProxyUrl(recordingAppUrl?: string | null, recordingUrl?: string | null): string | null {
-  // If we already have an app S3 URL (not a Twilio domain), use it directly
-  if (recordingAppUrl && !recordingAppUrl.includes('api.twilio.com')) {
-    return recordingAppUrl;
-  }
-  // Extract Recording SID from Twilio URL (format: .../Recordings/RE<32hex>)
-  const urlToExtract = recordingAppUrl || recordingUrl;
-  if (urlToExtract) {
-    const match = urlToExtract.match(/Recordings\/(RE[0-9a-f]{32})/i);
-    if (match) {
-      return `/api/twilio/recording/${match[1]}`;
-    }
-  }
-  return null;
+  return getRecordingPlaybackUrl(recordingAppUrl, recordingUrl);
 }
 
 // ─── Feed bubble ──────────────────────────────────────────────────────────────────────────────
@@ -265,7 +322,7 @@ function CustomerListItem({
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function InboxPage() {
-  const { state, setInboxCustomer, setActiveCustomer, navigateToTopLevel } = useEstimator();
+  const { state, setInboxCustomer, setActiveCustomer, navigateToTopLevel, mergeDbCustomers } = useEstimator();
   const { inboxCustomerId } = state;
 
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
@@ -275,6 +332,10 @@ export default function InboxPage() {
   const [composeSubject, setComposeSubject] = useState('');
   const [mobileScreen, setMobileScreen] = useState<MobileScreen>('list');
   const [threadTab, setThreadTab] = useState<'all' | 'calls'>('all');
+  const [directDialOpen, setDirectDialOpen] = useState(false);
+  const [directPhone, setDirectPhone] = useState('');
+  const [directContactName, setDirectContactName] = useState('');
+  const [directSmsBody, setDirectSmsBody] = useState('');
 
   const threadEndRef = useRef<HTMLDivElement>(null);
 
@@ -305,6 +366,21 @@ export default function InboxPage() {
   });
   const sendSms = trpc.inbox.twilio.sendSms.useMutation({
     onSuccess: () => { setComposeBody(''); refetchFeed(); refetchActivity(); },
+    onError: (err) => toast.error(`SMS failed: ${err.message}`),
+  });
+  const sendDirectSms = trpc.inbox.twilio.sendDirectSms.useMutation({
+    onSuccess: (result) => {
+      mergeDbCustomers([dbCustomerToInboxCustomer(result.customer)]);
+      setSelectedCustomerId(result.customer.id);
+      setMobileScreen('thread');
+      setComposeChannel('sms');
+      setDirectDialOpen(false);
+      setDirectPhone('');
+      setDirectContactName('');
+      setDirectSmsBody('');
+      refetchActivity();
+      toast.success('SMS sent');
+    },
     onError: (err) => toast.error(`SMS failed: ${err.message}`),
   });
   const sendEmailMutation = trpc.gmail.sendEmail.useMutation({
@@ -386,6 +462,34 @@ export default function InboxPage() {
     () => customerList.find(c => c.id === selectedCustomerId) ?? null,
     [customerList, selectedCustomerId]
   );
+
+  const normalizedDirectPhone = useMemo(() => normalizePhoneInput(directPhone), [directPhone]);
+  const directPhoneIsValid = !!normalizedDirectPhone;
+
+  const appendDirectDialDigit = useCallback((key: string) => {
+    setDirectPhone((current) => `${current}${key}`);
+  }, []);
+
+  const backspaceDirectDial = useCallback(() => {
+    setDirectPhone((current) => current.slice(0, -1));
+  }, []);
+
+  const handleDirectSms = useCallback(() => {
+    if (!normalizedDirectPhone) {
+      toast.error('Enter a valid phone number');
+      return;
+    }
+    if (!directSmsBody.trim()) return;
+    if (!twilioStatus?.configured) {
+      toast.error('Twilio not configured - add credentials in Settings > Secrets');
+      return;
+    }
+    sendDirectSms.mutate({
+      to: normalizedDirectPhone,
+      contactName: directContactName.trim() || undefined,
+      body: directSmsBody.trim(),
+    });
+  }, [normalizedDirectPhone, directSmsBody, directContactName, twilioStatus?.configured, sendDirectSms]);
 
   // ── Feed grouped by date ──
   const groupedFeed = useMemo(() => {
@@ -475,9 +579,19 @@ export default function InboxPage() {
             </span>
           )}
         </div>
-        <button onClick={() => refetchActivity()} className="p-1.5 rounded hover:bg-muted transition-colors">
-          <RefreshCw className="w-3.5 h-3.5 text-muted-foreground" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setDirectDialOpen(true)}
+            className="h-8 px-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors inline-flex items-center gap-1.5 text-xs font-semibold"
+            title="Dial or text any number"
+          >
+            <Phone className="w-3.5 h-3.5" />
+            <span>Dial/Text</span>
+          </button>
+          <button onClick={() => refetchActivity()} className="p-1.5 rounded hover:bg-muted transition-colors">
+            <RefreshCw className="w-3.5 h-3.5 text-muted-foreground" />
+          </button>
+        </div>
       </div>
       <div className="px-3 py-2 border-b border-border flex-shrink-0">
         <div className="relative">
@@ -785,6 +899,141 @@ export default function InboxPage() {
   // ─── Layout ───────────────────────────────────────────────────────────────
   return (
     <>
+      <Dialog open={directDialOpen} onOpenChange={setDirectDialOpen}>
+        <DialogContent className="max-h-[92vh] overflow-y-auto p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Grid3x3 className="h-4 w-4" />
+              Dial or text
+            </DialogTitle>
+            <DialogDescription>
+              Call or send SMS to a number that is not in the customer list.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-muted-foreground">Phone number</label>
+              <Input
+                value={directPhone}
+                onChange={(e) => setDirectPhone(e.target.value)}
+                inputMode="tel"
+                autoComplete="tel"
+                placeholder="(360) 555-0100"
+                className="h-12 text-lg font-semibold tracking-wide"
+              />
+              {directPhone && (
+                <p className={`text-xs ${directPhoneIsValid ? 'text-emerald-600' : 'text-destructive'}`}>
+                  {directPhoneIsValid ? normalizedDirectPhone : 'Enter a valid US or E.164 phone number.'}
+                </p>
+              )}
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              {DIAL_PAD_KEYS.map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => appendDirectDialDigit(key)}
+                  className="h-12 rounded-lg border border-border bg-background text-lg font-semibold hover:bg-muted active:bg-muted/80"
+                  aria-label={`Dial ${key}`}
+                >
+                  {key}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setDirectPhone('')}
+                className="h-11 rounded-lg border border-border text-xs font-semibold text-muted-foreground hover:bg-muted"
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                onClick={() => appendDirectDialDigit('+')}
+                className="h-11 rounded-lg border border-border text-base font-semibold hover:bg-muted"
+                aria-label="Dial plus"
+              >
+                +
+              </button>
+              <button
+                type="button"
+                onClick={backspaceDirectDial}
+                className="h-11 rounded-lg border border-border text-xs font-semibold text-muted-foreground hover:bg-muted"
+              >
+                Backspace
+              </button>
+            </div>
+
+            <div className="rounded-lg border border-border p-3 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold">Call now</p>
+                  <p className="text-xs text-muted-foreground">Uses Twilio Voice from the browser.</p>
+                </div>
+                {normalizedDirectPhone ? (
+                  <VoiceCallPanel
+                    toNumber={normalizedDirectPhone}
+                    toName={directContactName.trim() || normalizedDirectPhone}
+                    label="Call"
+                    onCallEnd={(secs) => {
+                      refetchActivity();
+                      toast.success(`Call ended - ${Math.floor(secs / 60)}m ${secs % 60}s`);
+                    }}
+                  />
+                ) : (
+                  <Button size="sm" variant="outline" disabled className="gap-2">
+                    <Phone className="w-3.5 h-3.5" />
+                    Call
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border p-3 space-y-3">
+              <div>
+                <p className="text-sm font-semibold">Send SMS</p>
+                <p className="text-xs text-muted-foreground">Creates or links a customer thread after sending.</p>
+              </div>
+              <Input
+                value={directContactName}
+                onChange={(e) => setDirectContactName(e.target.value)}
+                placeholder="Optional name"
+                className="h-9"
+              />
+              <Textarea
+                value={directSmsBody}
+                onChange={(e) => setDirectSmsBody(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                    e.preventDefault();
+                    handleDirectSms();
+                  }
+                }}
+                placeholder="Type a text message..."
+                className="min-h-[96px] resize-none"
+              />
+              {!twilioStatus?.configured && (
+                <p className="text-xs text-amber-600">SMS setup is incomplete in Settings.</p>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDirectDialOpen(false)}>
+              Close
+            </Button>
+            <Button
+              onClick={handleDirectSms}
+              disabled={!directPhoneIsValid || !directSmsBody.trim() || sendDirectSms.isPending}
+              className="gap-2"
+            >
+              {sendDirectSms.isPending ? <Clock className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              Send text
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {/* Mobile */}
       <div className="md:hidden flex flex-col h-[calc(100vh-57px)] overflow-hidden">
         {mobileScreen === 'list' ? CustomerListPanel : ThreadPanel}

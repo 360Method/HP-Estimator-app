@@ -13,7 +13,7 @@
  */
 
 import twilio from "twilio";
-import { findOrCreateConversation, findOrCreateCustomerFromCall, getCallLogByTwilioSid, incrementUnread, insertCallLog, insertMessage, updateCallLog, updateConversationLastMessage, updateConversation } from "./db";
+import { findOrCreateConversation, findOrCreateCustomerFromCall, findOrCreateCustomerFromPhone, getCallLogByTwilioSid, incrementUnread, insertCallLog, insertMessage, updateCallLog, updateConversationLastMessage, updateConversation } from "./db";
 import { storagePut } from "./storage";
 import { runAutomationsForTrigger } from "./automationEngine";
 
@@ -212,8 +212,15 @@ export async function handleCallStatusUpdate(params: {
   if (!terminalStatuses.includes(CallStatus)) return;
 
   const callerPhone = Direction === "inbound" ? From : To;
-  // Auto-link to customer (or create stub) on every call
-  const { customer, wasCreated } = await findOrCreateCustomerFromCall(callerPhone).catch(() => ({ customer: null, wasCreated: false }));
+  // Auto-link to customer (or create stub) on every call.
+  const { customer, wasCreated } = await (
+    Direction === "inbound"
+      ? findOrCreateCustomerFromCall(callerPhone)
+      : findOrCreateCustomerFromPhone(callerPhone, {
+          displayName: `Unknown Contact ${callerPhone}`,
+          leadSource: "manual_call",
+        })
+  ).catch(() => ({ customer: null, wasCreated: false }));
   if (wasCreated && customer) {
     console.log(`[Twilio] Auto-created customer stub for unknown caller ${callerPhone} → ${customer.id}`);
   }
