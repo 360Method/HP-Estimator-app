@@ -318,7 +318,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunResult> {
       db,
       `${agent.seatName} needs approval`,
       output.slice(0, 280) || "Draft awaiting your review.",
-      `/admin/ai-agents/tasks`
+      `/admin/ai-agents/tasks?taskId=${taskId}`
     );
   } else {
     await db
