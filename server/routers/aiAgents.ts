@@ -8,7 +8,7 @@
 
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
-import { and, desc, eq, gte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, sql } from "drizzle-orm";
 import { adminProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
 import {
@@ -307,14 +307,43 @@ export const aiAgentsRouter = router({
             .from(aiAgentTasks)
             .orderBy(desc(aiAgentTasks.createdAt))
             .limit(input.limit);
-      // Join agent seatName for display
-      const d2 = await db();
       const ids = Array.from(new Set(rows.map((r) => r.agentId)));
+      const taskIds = rows.map((r) => r.id);
       const agents = ids.length
-        ? await d2.select().from(aiAgents)
+        ? await d.select().from(aiAgents).where(inArray(aiAgents.id, ids))
         : [];
-      const byId = new Map(agents.map((a) => [a.id, a.seatName] as const));
-      return rows.map((r) => ({ ...r, seatName: byId.get(r.agentId) ?? `#${r.agentId}` }));
+      const runRows = taskIds.length
+        ? await d
+            .select()
+            .from(aiAgentRuns)
+            .where(inArray(aiAgentRuns.taskId, taskIds))
+            .orderBy(desc(aiAgentRuns.createdAt))
+        : [];
+      const agentById = new Map(agents.map((a) => [a.id, a] as const));
+      const latestRunByTask = new Map<number, (typeof runRows)[number]>();
+      for (const run of runRows) {
+        if (!latestRunByTask.has(run.taskId)) latestRunByTask.set(run.taskId, run);
+      }
+      return rows.map((r) => {
+        const agent = agentById.get(r.agentId);
+        const latestRun = latestRunByTask.get(r.id);
+        return {
+          ...r,
+          seatName: agent?.seatName ?? `#${r.agentId}`,
+          agentDepartment: agent?.department ?? null,
+          agentRole: agent?.role ?? null,
+          agentStatus: agent?.status ?? null,
+          latestRunId: latestRun?.id ?? null,
+          latestRunInput: latestRun?.input ?? null,
+          latestRunOutput: latestRun?.output ?? null,
+          latestRunToolCalls: latestRun?.toolCalls ?? null,
+          latestRunStatus: latestRun?.status ?? null,
+          latestRunErrorMessage: latestRun?.errorMessage ?? null,
+          latestRunCreatedAt: latestRun?.createdAt ?? null,
+          latestRunCostUsd: latestRun?.costUsd ?? null,
+          latestRunDurationMs: latestRun?.durationMs ?? null,
+        };
+      });
     }),
 
   approveTask: adminProcedure
@@ -327,6 +356,39 @@ export const aiAgentsRouter = router({
     .input(z.object({ taskId: z.number(), reason: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
       return rejectTask({ taskId: input.taskId, userId: ctx.user.id, reason: input.reason });
+    }),
+
+  requestRevision: adminProcedure
+    .input(z.object({ taskId: z.number(), feedback: z.string().min(5).max(2000) }))
+    .mutation(async ({ ctx, input }) => {
+      const d = await db();
+      const [task] = await d.select().from(aiAgentTasks).where(eq(aiAgentTasks.id, input.taskId)).limit(1);
+      if (!task) throw new TRPCError({ code: "NOT_FOUND", message: "Task not found" });
+
+      await rejectTask({
+        taskId: input.taskId,
+        userId: ctx.user.id,
+        reason: `Revision requested: ${input.feedback}`,
+      });
+
+      let originalTriggerPayload: unknown = task.triggerPayload;
+      try {
+        originalTriggerPayload = task.triggerPayload ? JSON.parse(task.triggerPayload) : {};
+      } catch {
+        originalTriggerPayload = task.triggerPayload;
+      }
+
+      return runAgent({
+        agentId: task.agentId,
+        triggerType: "manual",
+        triggerPayload: {
+          source: "approval_queue_revision",
+          originalTaskId: task.id,
+          originalTriggerType: task.triggerType,
+          originalTriggerPayload,
+          reviewerFeedback: input.feedback,
+        },
+      });
     }),
 
   // ── Phase 5: bulk control + observability ──────────────────────────────────

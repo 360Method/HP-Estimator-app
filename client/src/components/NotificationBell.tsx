@@ -15,6 +15,7 @@
 
 import { useMemo, useState } from 'react';
 import { Bell, Check, CheckCheck, User } from 'lucide-react';
+import { useLocation } from 'wouter';
 import {
   Sheet,
   SheetContent,
@@ -24,7 +25,7 @@ import {
 } from '@/components/ui/sheet';
 import { trpc } from '@/lib/trpc';
 import { useEstimator } from '@/contexts/EstimatorContext';
-import type { CustomerProfileTab } from '@/lib/types';
+import type { AppSection, CustomerProfileTab } from '@/lib/types';
 
 function formatRelative(date: Date | string | null | undefined): string {
   if (!date) return '';
@@ -109,9 +110,53 @@ function navigationFromEvent(eventType: string): {
   }
 }
 
+function parseRelativeUrl(linkUrl: string | null | undefined): URL | null {
+  if (!linkUrl) return null;
+  try {
+    return new URL(linkUrl, window.location.origin);
+  } catch {
+    return null;
+  }
+}
+
+function safeInternalPath(url: URL): string | null {
+  if (url.origin !== window.location.origin) return null;
+  return `${url.pathname}${url.search}${url.hash}`;
+}
+
+function sectionFromParam(section: string | null): AppSection | null {
+  const known: AppSection[] = [
+    'dashboard',
+    'customers',
+    'customer',
+    'pipeline',
+    'workflow',
+    'operations',
+    'schedule',
+    'inbox',
+    'reporting',
+    'marketing',
+    'leads',
+    'three-sixty',
+    'financials',
+    'quickbooks',
+    'jobs',
+  ];
+  return section && known.includes(section as AppSection) ? (section as AppSection) : null;
+}
+
 export default function NotificationBell() {
   const [open, setOpen] = useState(false);
-  const { setActiveCustomer, setCustomerTab, navigateToTopLevel } = useEstimator();
+  const [, navigate] = useLocation();
+  const {
+    setActiveCustomer,
+    setActiveOpportunity,
+    setCustomerTab,
+    setInboxConversation,
+    setInboxCustomer,
+    setPendingFocus,
+    navigateToTopLevel,
+  } = useEstimator();
 
   const { data: unreadData } = trpc.notifications.countUnread.useQuery(undefined, {
     refetchInterval: 30_000,
@@ -153,9 +198,83 @@ export default function NotificationBell() {
     customerId: string | null | undefined,
     eventType: string,
     isUnread: boolean,
+    linkUrl?: string | null,
+    opportunityId?: string | null,
   ) => {
     if (isUnread) markRead.mutate({ id });
     setOpen(false);
+
+    const url = parseRelativeUrl(linkUrl);
+    if (url) {
+      const internalPath = safeInternalPath(url);
+      const section = sectionFromParam(url.searchParams.get('section'));
+      const linkedCustomerId =
+        url.searchParams.get('customer') ||
+        url.searchParams.get('customerId') ||
+        customerId ||
+        null;
+      const linkedOpportunityId =
+        url.searchParams.get('opportunity') ||
+        url.searchParams.get('opportunityId') ||
+        opportunityId ||
+        null;
+      const conversationId = Number(url.searchParams.get('conversationId') ?? 0);
+      const channel = url.searchParams.get('channel');
+      const focus = url.searchParams.get('focus') || url.hash.replace(/^#/, '') || null;
+
+      if (internalPath && url.pathname.startsWith('/admin/')) {
+        navigate(internalPath);
+        return;
+      }
+
+      if (url.pathname === '/inbox' || section === 'inbox') {
+        if (linkedCustomerId) setInboxCustomer(linkedCustomerId);
+        if (Number.isFinite(conversationId) && conversationId > 0) {
+          setInboxConversation(
+            conversationId,
+            channel === 'sms' || channel === 'email' || channel === 'note' ? channel : null,
+          );
+        }
+        navigateToTopLevel('inbox');
+        return;
+      }
+
+      if (section === 'customer' && linkedCustomerId) {
+        const { tab } = navigationFromEvent(eventType);
+        setActiveCustomer(linkedCustomerId, 'direct', focus);
+        window.setTimeout(() => {
+          setCustomerTab(tab);
+          if (linkedOpportunityId) setActiveOpportunity(linkedOpportunityId);
+        }, 0);
+        return;
+      }
+
+      if (section) {
+        if (linkedOpportunityId) setPendingFocus(`opportunity:${linkedOpportunityId}`);
+        navigateToTopLevel(section);
+        return;
+      }
+
+      const customerPathMatch = url.pathname.match(/^\/customers\/([^/]+)/);
+      if (customerPathMatch) {
+        const { tab } = navigationFromEvent(eventType);
+        setActiveCustomer(decodeURIComponent(customerPathMatch[1]), 'direct', focus);
+        window.setTimeout(() => setCustomerTab(tab), 0);
+        return;
+      }
+
+      const jobPathMatch = url.pathname.match(/^\/jobs\/([^/]+)/);
+      if (jobPathMatch) {
+        setPendingFocus(`opportunity:${decodeURIComponent(jobPathMatch[1])}`);
+        navigateToTopLevel('pipeline');
+        return;
+      }
+    }
+
+    if (eventType === 'ai_agent') {
+      navigate('/admin/ai-agents/tasks');
+      return;
+    }
 
     if (customerId) {
       const { tab, focus } = navigationFromEvent(eventType);
@@ -166,12 +285,15 @@ export default function NotificationBell() {
       // so if Marcin was previously viewing customer X's "communication" tab
       // and the bell sends him to customer Y, Y opens on the wrong tab. Set
       // the target tab explicitly every time.
-      window.setTimeout(() => setCustomerTab(tab), 0);
+      window.setTimeout(() => {
+        setCustomerTab(tab);
+        if (opportunityId) setActiveOpportunity(opportunityId);
+      }, 0);
       return;
     }
 
     // No customer FK — fall back to the generic top-level surface.
-    navigateToTopLevel('inbox');
+    navigateToTopLevel(eventType.includes('lead') ? 'leads' : 'workflow');
   };
 
   return (
@@ -232,7 +354,7 @@ export default function NotificationBell() {
               return (
                 <button
                   key={n.id}
-                  onClick={() => handleRowClick(n.id, n.customerId, n.eventType, isUnread)}
+                  onClick={() => handleRowClick(n.id, n.customerId, n.eventType, isUnread, n.linkUrl, n.opportunityId)}
                   className={`w-full text-left px-4 py-3 border-b border-border border-l-4 hover:bg-muted/40 transition-colors ${priorityAccent(n.priority)} ${isUnread ? 'bg-blue-50/40' : 'bg-white'}`}
                   style={{ minHeight: 64 }}
                 >

@@ -43,6 +43,9 @@ export async function approveTask(args: {
   } catch {
     toolCalls = [];
   }
+  if (toolCalls.length === 0) {
+    throw new Error(`Task ${args.taskId} has no executable proposal to approve`);
+  }
 
   let executed = 0;
   const errors: string[] = [];
