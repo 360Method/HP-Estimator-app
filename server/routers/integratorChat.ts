@@ -31,6 +31,7 @@ import {
 } from "../../drizzle/schema";
 import { getAnthropicToolDefinitions, getTool } from "../lib/agentRuntime/tools";
 import { priceRun } from "../lib/agentRuntime/pricing";
+import { evaluateToolApproval, type ApprovalPolicyResult } from "../lib/agentRuntime/approvalPolicy";
 // Side-effect: registers Phase-2 tool wrappers.
 import "../lib/agentRuntime/phase2Tools";
 
@@ -235,7 +236,7 @@ export const integratorChatRouter = router({
         output?: unknown;
         error?: string;
         requiresApproval?: boolean;
-      }> = [];
+      } & Partial<ApprovalPolicyResult>> = [];
 
       // Create a synthetic task row so any tool that requires the agent runtime's
       // task context (e.g. kpis.record uses ctx.taskId) can write through cleanly.
@@ -250,12 +251,17 @@ export const integratorChatRouter = router({
 
       for (const req of toolRequests) {
         const tool = getTool(req.key);
+        const policy = evaluateToolApproval(req.key, tool, req.input);
         if (!tool) {
-          toolCallsLog.push({ key: req.key, input: req.input, error: "Unknown tool" });
+          toolCallsLog.push({ key: req.key, input: req.input, error: "Unknown tool", ...policy });
           continue;
         }
-        if (tool.requiresApproval) {
-          toolCallsLog.push({ key: req.key, input: req.input, requiresApproval: true });
+        if (policy.approvalDecision === "blocked") {
+          toolCallsLog.push({ key: req.key, input: req.input, error: policy.approvalReason, ...policy });
+          continue;
+        }
+        if (policy.approvalDecision === "requires_approval") {
+          toolCallsLog.push({ key: req.key, input: req.input, requiresApproval: true, ...policy });
           continue;
         }
         try {
@@ -263,21 +269,23 @@ export const integratorChatRouter = router({
             input: req.input,
             ctx: { agentId: integrator.id, taskId, db: d },
           });
-          toolCallsLog.push({ key: req.key, input: req.input, output: out });
+          toolCallsLog.push({ key: req.key, input: req.input, output: out, ...policy });
         } catch (err) {
           toolCallsLog.push({
             key: req.key,
             input: req.input,
             error: err instanceof Error ? err.message : String(err),
+            ...policy,
           });
         }
       }
 
-      const needsApproval = toolCallsLog.some((c) => c.requiresApproval);
+      const needsApproval = toolCallsLog.some((c) => c.approvalDecision === "requires_approval");
+      const hasBlocked = toolCallsLog.some((c) => c.approvalDecision === "blocked");
       await d
         .update(aiAgentTasks)
         .set({
-          status: needsApproval ? "awaiting_approval" : "completed",
+          status: needsApproval ? "awaiting_approval" : hasBlocked ? "failed" : "completed",
           completedAt: needsApproval ? null : new Date(),
         })
         .where(eq(aiAgentTasks.id, taskId));
@@ -293,8 +301,8 @@ export const integratorChatRouter = router({
         outputTokens,
         costUsd: costUsd.toFixed(4),
         durationMs: 0,
-        status: "success",
-        errorMessage: null,
+        status: hasBlocked ? "tool_error" : "success",
+        errorMessage: hasBlocked ? "One or more tool calls were blocked by approval policy." : null,
       });
 
       const assistantInsert = await d.insert(integratorChatMessages).values({

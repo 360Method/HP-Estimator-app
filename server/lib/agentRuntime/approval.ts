@@ -37,19 +37,22 @@ export async function approveTask(args: {
   ).slice(-1)[0];
   if (!latestRun) throw new Error(`No run to approve for task ${args.taskId}`);
 
-  let toolCalls: Array<{ key: string; input: Record<string, unknown> }> = [];
+  let toolCalls: Array<{ key: string; input: Record<string, unknown>; approvalDecision?: string }> = [];
   try {
     toolCalls = JSON.parse(latestRun.toolCalls ?? "[]");
   } catch {
     toolCalls = [];
   }
-  if (toolCalls.length === 0) {
+  const executableCalls = toolCalls.filter(
+    (call) => !call.approvalDecision || call.approvalDecision === "requires_approval"
+  );
+  if (executableCalls.length === 0) {
     throw new Error(`Task ${args.taskId} has no executable proposal to approve`);
   }
 
   let executed = 0;
   const errors: string[] = [];
-  for (const call of toolCalls) {
+  for (const call of executableCalls) {
     const tool = getTool(call.key);
     if (!tool) {
       errors.push(`Unknown tool ${call.key}`);
