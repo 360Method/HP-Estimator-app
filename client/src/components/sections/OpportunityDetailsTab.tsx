@@ -33,6 +33,7 @@ import CustomerActivityFeed from '@/components/CustomerActivityFeed';
 import { getOpportunityHeat, getWorkflowStep } from '@/components/OpportunityWorkflowPanel';
 import {
   THREE_SIXTY_METHOD_STEPS,
+  getThreeSixtySopGate,
   inferOpportunityThreeSixtyStep,
   type ThreeSixtyMethodStep,
 } from '@/lib/threeSixtyMethod';
@@ -132,6 +133,7 @@ function OpportunityCommandCenter({
   const heat = getOpportunityHeat(activeOpp.area, activeOpp.stage, activeOpp.value, activeOpp.updatedAt);
   const brainRecommendation = trpc.aiBrain.recommendOpportunityNextStep.useMutation();
   const tasks = commandPlan.tasks;
+  const sopGate = getThreeSixtySopGate(methodStep.key);
   const priorChain = chain.filter(opp => opp.id !== activeOpp.id);
   const stages = stagesForOpportunity(activeOpp);
   const desk = commandPlan.role.deskLabel;
@@ -411,6 +413,19 @@ function OpportunityCommandCenter({
               </label>
             </div>
           </div>
+
+          {sopGate && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">SOP gate</p>
+              <p className="mt-1 text-sm font-semibold text-amber-950">{sopGate.source}</p>
+              <p className="mt-2 text-xs font-medium text-amber-900">Required before advancing</p>
+              <ul className="mt-1 space-y-1 text-xs text-amber-900">
+                {sopGate.cannotAdvanceIfMissing.map(item => <li key={item}>- {item}</li>)}
+              </ul>
+              <p className="mt-2 text-xs font-medium text-amber-900">Customer visible when</p>
+              <p className="mt-1 text-xs text-amber-900">{sopGate.customerVisibleWhen}</p>
+            </div>
+          )}
 
           <div className="rounded-lg border p-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">What happened before</p>

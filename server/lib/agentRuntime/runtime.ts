@@ -32,6 +32,7 @@ import {
   type DbAiAgent,
 } from "../../../drizzle/schema";
 import { getTool, getAnthropicToolDefinitions } from "./tools";
+import { evaluateToolApproval, type ApprovalPolicyResult } from "./approvalPolicy";
 import { priceRun } from "./pricing";
 
 const DEFAULT_MAX_TOKENS = 2048;
@@ -49,7 +50,7 @@ export type RunResult = {
   status: "success" | "failed" | "tool_error" | "cost_exceeded" | "timed_out" | "awaiting_approval";
   costUsd: number;
   output: string;
-  toolCalls: Array<{ key: string; input: unknown; output?: unknown; approved?: boolean; error?: string }>;
+  toolCalls: Array<ToolCallLog>;
 };
 
 export type RunAgentInput = {
@@ -59,6 +60,14 @@ export type RunAgentInput = {
   /** If provided, reuse the task row (e.g. approval re-run) instead of creating one. */
   existingTaskId?: number;
 };
+
+type ToolCallLog = {
+  key: string;
+  input: unknown;
+  output?: unknown;
+  approved?: boolean;
+  error?: string;
+} & Partial<ApprovalPolicyResult>;
 
 export async function runAgent(input: RunAgentInput): Promise<RunResult> {
   const db = await getDb();
@@ -142,7 +151,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunResult> {
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
   let totalCostUsd = 0;
-  const collectedToolCalls: Array<{ key: string; input: unknown; output?: unknown; error?: string }> = [];
+  const collectedToolCalls: ToolCallLog[] = [];
   const textParts: string[] = [];
   // Conversation accumulator. We seed with the trigger as the first user turn.
   const messages: Anthropic.MessageParam[] = [
@@ -207,18 +216,24 @@ export async function runAgent(input: RunAgentInput): Promise<RunResult> {
       break;
     }
 
-    // Approval gate: if any requested tool requires human approval, park the
-    // entire run. The accumulated turn so far is preserved; approval.ts will
-    // dispatch the parked tool calls after a human OK.
-    const approvalNeeded = turnToolUses.some((u) => {
+    // Approval policy: only risky calls park. Safe internal/basic follow-up
+    // calls execute inline; blocked calls return policy errors to the model.
+    const policyByToolUse = new Map<string, ApprovalPolicyResult>();
+    for (const u of turnToolUses) {
       const key = nameToKey.get(u.name) ?? u.name;
-      return getTool(key)?.requiresApproval === true;
-    });
+      policyByToolUse.set(u.id, evaluateToolApproval(key, getTool(key), u.input));
+    }
+    const approvalNeeded = Array.from(policyByToolUse.values()).some(
+      (policy) => policy.approvalDecision === "requires_approval"
+    );
     if (approvalNeeded) {
       parkedForApproval = true;
       for (const u of turnToolUses) {
         const key = nameToKey.get(u.name) ?? u.name;
-        collectedToolCalls.push({ key, input: u.input });
+        const policy = policyByToolUse.get(u.id);
+        if (policy?.approvalDecision === "requires_approval") {
+          collectedToolCalls.push({ key, input: u.input, ...policy });
+        }
       }
       finalStatus = "awaiting_approval";
       break;
@@ -231,13 +246,25 @@ export async function runAgent(input: RunAgentInput): Promise<RunResult> {
     for (const u of turnToolUses) {
       const key = nameToKey.get(u.name) ?? u.name;
       const tool = getTool(key);
+      const policy = policyByToolUse.get(u.id) ?? evaluateToolApproval(key, tool, u.input);
       if (!tool) {
         toolError = `Unknown tool ${key}`;
-        collectedToolCalls.push({ key, input: u.input, error: toolError });
+        collectedToolCalls.push({ key, input: u.input, error: toolError, ...policy });
         toolResultBlocks.push({
           type: "tool_result",
           tool_use_id: u.id,
           content: `Error: tool '${key}' is not registered.`,
+          is_error: true,
+        });
+        continue;
+      }
+      if (policy.approvalDecision === "blocked") {
+        toolError = policy.approvalReason;
+        collectedToolCalls.push({ key, input: u.input, error: toolError, ...policy });
+        toolResultBlocks.push({
+          type: "tool_result",
+          tool_use_id: u.id,
+          content: `Blocked by approval policy: ${policy.approvalReason}`,
           is_error: true,
         });
         continue;
@@ -247,7 +274,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunResult> {
           input: u.input,
           ctx: { agentId: agent.id, taskId, db },
         });
-        collectedToolCalls.push({ key, input: u.input, output: out });
+        collectedToolCalls.push({ key, input: u.input, output: out, ...policy });
         toolResultBlocks.push({
           type: "tool_result",
           tool_use_id: u.id,
@@ -256,7 +283,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunResult> {
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         toolError = msg;
-        collectedToolCalls.push({ key, input: u.input, error: msg });
+        collectedToolCalls.push({ key, input: u.input, error: msg, ...policy });
         toolResultBlocks.push({
           type: "tool_result",
           tool_use_id: u.id,

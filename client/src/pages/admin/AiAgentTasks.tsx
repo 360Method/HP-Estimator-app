@@ -37,6 +37,10 @@ type ToolCall = {
   input?: unknown;
   output?: unknown;
   error?: unknown;
+  approvalDecision?: "auto_execute" | "requires_approval" | "blocked";
+  approvalReason?: string;
+  riskCategory?: string;
+  customerFacing?: boolean;
 };
 
 function parseJsonField(value: string | null | undefined): unknown {
@@ -474,7 +478,17 @@ function TaskReviewPanel({
             <div className="mt-2 space-y-3">
               {toolCalls.map((call, index) => (
                 <div key={`${call.key ?? "tool"}-${index}`} className="rounded-md bg-muted p-3">
-                  <div className="text-sm font-medium">{call.key ?? `Tool ${index + 1}`}</div>
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="text-sm font-medium">{call.key ?? `Tool ${index + 1}`}</div>
+                    {call.riskCategory && (
+                      <Badge variant="outline" className="w-fit bg-background">
+                        {call.riskCategory}
+                      </Badge>
+                    )}
+                  </div>
+                  {call.approvalReason && (
+                    <div className="mt-1 text-xs font-medium text-amber-700">{call.approvalReason}</div>
+                  )}
                   <div className="mt-1 text-xs text-muted-foreground">{summarizeToolCall(call)}</div>
                   <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap break-words text-xs">
                     {formatReviewValue(call.input)}

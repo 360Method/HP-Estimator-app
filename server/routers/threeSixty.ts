@@ -592,8 +592,10 @@ const SYSTEM_BASE_RISK: Record<string, number> = {
   electrical: 6,
   hvac: 5,
   exterior_siding: 4,
+  landscaping_drainage: 7,
   interior: 3,
   appliances: 3,
+  safety_security: 8,
 };
 const CONDITION_MULTIPLIER: Record<string, number> = {
   urgent: 2.0,
@@ -942,8 +944,10 @@ const propertySystemsRouter = router({
           "electrical",
           "foundation",
           "exterior_siding",
+          "landscaping_drainage",
           "interior",
           "appliances",
+          "safety_security",
         ]),
         brandModel: z.string().optional(),
         installYear: z.number().optional(),

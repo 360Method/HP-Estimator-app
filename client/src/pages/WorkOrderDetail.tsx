@@ -84,9 +84,9 @@ const BASELINE_CHECKLIST = [
   { id: 'b-gutters',    section: 'Exterior', item: 'Gutters & downspouts',            systemType: 'roof' },
   { id: 'b-siding',     section: 'Exterior', item: 'Siding, trim & paint',            systemType: 'exterior_siding' },
   { id: 'b-foundation', section: 'Exterior', item: 'Foundation & grading',            systemType: 'foundation' },
-  { id: 'b-driveway',   section: 'Exterior', item: 'Driveway & walkways',             systemType: 'exterior_siding' },
+  { id: 'b-driveway',   section: 'Exterior', item: 'Driveway & walkways',             systemType: 'landscaping_drainage' },
   { id: 'b-windows',    section: 'Exterior', item: 'Windows & doors (seals, caulk)',  systemType: 'exterior_siding' },
-  { id: 'b-deck',       section: 'Exterior', item: 'Deck / patio condition',          systemType: 'exterior_siding' },
+  { id: 'b-deck',       section: 'Exterior', item: 'Deck / patio condition',          systemType: 'landscaping_drainage' },
   // Systems
   { id: 'b-hvac',       section: 'Systems',  item: 'HVAC age, filter, operation',     systemType: 'hvac' },
   { id: 'b-plumbing',   section: 'Systems',  item: 'Plumbing — visible leaks, water heater', systemType: 'plumbing' },
@@ -96,8 +96,8 @@ const BASELINE_CHECKLIST = [
   { id: 'b-attic',      section: 'Interior', item: 'Attic insulation & ventilation',  systemType: 'interior' },
   { id: 'b-crawl',      section: 'Interior', item: 'Crawl space / basement moisture', systemType: 'foundation' },
   { id: 'b-interior',   section: 'Interior', item: 'Interior walls, ceilings, floors', systemType: 'interior' },
-  { id: 'b-smoke',      section: 'Safety',   item: 'Smoke & CO detectors',            systemType: 'interior' },
-  { id: 'b-fire',       section: 'Safety',   item: 'Fire extinguisher present',       systemType: 'interior' },
+  { id: 'b-smoke',      section: 'Safety',   item: 'Smoke & CO detectors',            systemType: 'safety_security' },
+  { id: 'b-fire',       section: 'Safety',   item: 'Fire extinguisher present',       systemType: 'safety_security' },
 ];
 
 const SEASONAL_CHECKLISTS: Record<string, typeof BASELINE_CHECKLIST> = {
@@ -108,19 +108,19 @@ const SEASONAL_CHECKLISTS: Record<string, typeof BASELINE_CHECKLIST> = {
     { id: 'sp-windows', section: 'Exterior', item: 'Window & door seals / caulking',    systemType: 'exterior_siding' },
     { id: 'sp-hvac',    section: 'Systems',  item: 'AC tune-up — filter, coils, test',  systemType: 'hvac' },
     { id: 'sp-plumb',   section: 'Systems',  item: 'Check for frost damage to pipes',   systemType: 'plumbing' },
-    { id: 'sp-deck',    section: 'Exterior', item: 'Deck / patio — clean & inspect',    systemType: 'exterior_siding' },
-    { id: 'sp-grading', section: 'Exterior', item: 'Grading & drainage after thaw',     systemType: 'foundation' },
-    { id: 'sp-smoke',   section: 'Safety',   item: 'Test smoke & CO detectors',         systemType: 'interior' },
+    { id: 'sp-deck',    section: 'Exterior', item: 'Deck / patio — clean & inspect',    systemType: 'landscaping_drainage' },
+    { id: 'sp-grading', section: 'Exterior', item: 'Grading & drainage after thaw',     systemType: 'landscaping_drainage' },
+    { id: 'sp-smoke',   section: 'Safety',   item: 'Test smoke & CO detectors',         systemType: 'safety_security' },
   ],
   summer: [
     { id: 'su-hvac',    section: 'Systems',  item: 'AC performance check mid-season',   systemType: 'hvac' },
     { id: 'su-roof',    section: 'Exterior', item: 'Roof — UV & heat damage check',     systemType: 'roof' },
     { id: 'su-ext',     section: 'Exterior', item: 'Exterior paint & caulk condition',  systemType: 'exterior_siding' },
-    { id: 'su-irrig',   section: 'Exterior', item: 'Irrigation / sprinkler system',     systemType: 'exterior_siding' },
-    { id: 'su-pest',    section: 'Exterior', item: 'Pest / insect entry points',        systemType: 'exterior_siding' },
+    { id: 'su-irrig',   section: 'Exterior', item: 'Irrigation / sprinkler system',     systemType: 'landscaping_drainage' },
+    { id: 'su-pest',    section: 'Exterior', item: 'Pest / insect entry points',        systemType: 'safety_security' },
     { id: 'su-attic',   section: 'Interior', item: 'Attic ventilation & insulation',    systemType: 'interior' },
     { id: 'su-plumb',   section: 'Systems',  item: 'Water heater & plumbing check',     systemType: 'plumbing' },
-    { id: 'su-safety',  section: 'Safety',   item: 'Smoke & CO detectors',              systemType: 'interior' },
+    { id: 'su-safety',  section: 'Safety',   item: 'Smoke & CO detectors',              systemType: 'safety_security' },
   ],
   fall: [
     { id: 'fa-hvac',    section: 'Systems',  item: 'Furnace tune-up — filter, igniter, test', systemType: 'hvac' },
@@ -130,8 +130,8 @@ const SEASONAL_CHECKLISTS: Record<string, typeof BASELINE_CHECKLIST> = {
     { id: 'fa-pipes',   section: 'Systems',  item: 'Winterize exterior hose bibs',      systemType: 'plumbing' },
     { id: 'fa-attic',   section: 'Interior', item: 'Attic insulation adequacy',         systemType: 'interior' },
     { id: 'fa-chimney', section: 'Exterior', item: 'Chimney / fireplace inspection',    systemType: 'interior' },
-    { id: 'fa-safety',  section: 'Safety',   item: 'Smoke & CO detectors — battery swap', systemType: 'interior' },
-    { id: 'fa-grading', section: 'Exterior', item: 'Grading & drainage pre-freeze',     systemType: 'foundation' },
+    { id: 'fa-safety',  section: 'Safety',   item: 'Smoke & CO detectors — battery swap', systemType: 'safety_security' },
+    { id: 'fa-grading', section: 'Exterior', item: 'Grading & drainage pre-freeze',     systemType: 'landscaping_drainage' },
   ],
   winter: [
     { id: 'wi-hvac',    section: 'Systems',  item: 'Heating system mid-season check',   systemType: 'hvac' },
@@ -139,8 +139,8 @@ const SEASONAL_CHECKLISTS: Record<string, typeof BASELINE_CHECKLIST> = {
     { id: 'wi-roof',    section: 'Exterior', item: 'Roof — ice dam & snow load check',  systemType: 'roof' },
     { id: 'wi-windows', section: 'Interior', item: 'Window condensation / seal failure', systemType: 'exterior_siding' },
     { id: 'wi-attic',   section: 'Interior', item: 'Attic — ice dam prevention check',  systemType: 'interior' },
-    { id: 'wi-safety',  section: 'Safety',   item: 'Smoke & CO detectors',              systemType: 'interior' },
-    { id: 'wi-ext',     section: 'Exterior', item: 'Exterior — cracks from freeze/thaw', systemType: 'foundation' },
+    { id: 'wi-safety',  section: 'Safety',   item: 'Smoke & CO detectors',              systemType: 'safety_security' },
+    { id: 'wi-ext',     section: 'Exterior', item: 'Exterior — cracks from freeze/thaw', systemType: 'landscaping_drainage' },
   ],
 };
 
