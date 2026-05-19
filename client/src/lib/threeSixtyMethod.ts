@@ -12,7 +12,7 @@ export type ThreeSixtyOperatorRole =
 
 export interface ThreeSixtyMethodStep {
   number: number;
-  key: string;
+  key: ThreeSixtyStepKey;
   phase: ThreeSixtyPhaseId;
   name: string;
   customerLabel: string;
@@ -25,8 +25,8 @@ export interface ThreeSixtyMethodStep {
 export type ThreeSixtyStepKey =
   | 'baseline'
   | 'inspect'
-  | 'track'
   | 'prioritize'
+  | 'scope_price_approve'
   | 'schedule'
   | 'execute'
   | 'preserve'
@@ -65,25 +65,25 @@ export const THREE_SIXTY_METHOD_STEPS: ThreeSixtyMethodStep[] = [
   },
   {
     number: 3,
-    key: 'track',
+    key: 'prioritize',
     phase: 'aware',
-    name: 'Track',
-    customerLabel: 'Home History',
-    operatorOutcome: 'Maintain the service log, receipts, photos, work history, and spend trail.',
-    customerOutcome: 'They have a clean record of what was done, when, and why.',
-    owner: 'Retainment Desk',
-    aiSupport: 'Summarize completed work, produce annual reports, and detect neglected systems.',
+    name: 'Priority Roadmap',
+    customerLabel: 'Priority Roadmap',
+    operatorOutcome: 'Convert the baseline and condition log into NOW, SOON, and WAIT priorities with investment ranges.',
+    customerOutcome: 'They know what matters now, what can wait, and how to make confident decisions.',
+    owner: 'Consultant Desk',
+    aiSupport: 'Rank findings, draft red/yellow/green priorities, and prepare the customer-facing roadmap.',
   },
   {
     number: 4,
-    key: 'prioritize',
+    key: 'scope_price_approve',
     phase: 'act',
-    name: 'Prioritize',
-    customerLabel: 'Priority Plan',
-    operatorOutcome: 'Rank tasks by urgency, safety, cascade risk, cost impact, and customer preference.',
-    customerOutcome: 'They know what matters now, what can wait, and what each decision means.',
+    name: 'Scope, Price, Approve',
+    customerLabel: 'Approved Scope',
+    operatorOutcome: 'Document exact scope, price work correctly, send the proposal, and secure customer approval.',
+    customerOutcome: 'They see clear scope, investment, approval path, and what happens next.',
     owner: 'Consultant Desk',
-    aiSupport: 'Score red/yellow/green items and draft the recommended repair roadmap.',
+    aiSupport: 'Audit scope clarity, pricing risk, missing exclusions, and customer proposal language.',
   },
   {
     number: 5,
@@ -191,7 +191,11 @@ export const THREE_SIXTY_OPERATOR_LADDER = [
 ];
 
 export function getThreeSixtyStepByKey(key?: string | null) {
-  const normalizedKey = key === 'scale' ? 'cfo_intelligence' : key;
+  const normalizedKey =
+    key === 'scale' ? 'cfo_intelligence'
+    : key === 'track' ? 'cfo_intelligence'
+    : key === 'roadmap_execution' ? 'scope_price_approve'
+    : key;
   return THREE_SIXTY_METHOD_STEPS.find(step => step.key === normalizedKey) ?? null;
 }
 
@@ -263,8 +267,8 @@ export function getCustomerFacingStepAction(step: ThreeSixtyMethodStep) {
   const map: Record<string, string> = {
     baseline: 'Review your home baseline and confirm the goals we should keep in mind.',
     inspect: 'Prepare for your walkthrough or review the findings from the visit.',
-    track: 'View your home history so completed work stays easy to understand later.',
-    prioritize: 'Review the priority plan and decide what should happen now, next, or later.',
+    prioritize: 'Review the priority roadmap and decide what should happen now, soon, or later.',
+    scope_price_approve: 'Review the approved scope, proposal, and next step before work is scheduled.',
     schedule: 'Confirm the appointment window or message us if the timing needs to change.',
     execute: 'Follow the work progress and review completion proof when the job is done.',
     preserve: 'Stay current with seasonal maintenance that protects the home.',
@@ -291,7 +295,7 @@ export function inferOpportunityThreeSixtyStep(opportunity: {
 
   if (opportunity.membershipId) {
     if (opportunity.area === 'job') return getThreeSixtyStepByKey('execute')!;
-    if (opportunity.area === 'estimate') return getThreeSixtyStepByKey('prioritize')!;
+    if (opportunity.area === 'estimate') return getThreeSixtyStepByKey('scope_price_approve')!;
     return getThreeSixtyStepByKey('inspect')!;
   }
 
@@ -303,11 +307,11 @@ export function inferOpportunityThreeSixtyStep(opportunity: {
   if (opportunity.area === 'estimate') {
     if (isUpgrade && ['Unscheduled', 'Scheduled', 'In Progress', 'Draft', 'Ready to Send', 'Sent'].includes(String(opportunity.stage))) return getThreeSixtyStepByKey('upgrade')!;
     if (['Scheduled', 'In Progress', 'Completed'].includes(String(opportunity.stage))) return getThreeSixtyStepByKey('baseline')!;
-    if (['Sent', 'Ready to Send', 'Verbal Acceptance', 'Approved'].includes(String(opportunity.stage))) return getThreeSixtyStepByKey('prioritize')!;
-    return getThreeSixtyStepByKey('prioritize')!;
+    if (['Sent', 'Ready to Send', 'Verbal Acceptance', 'Approved'].includes(String(opportunity.stage))) return getThreeSixtyStepByKey('scope_price_approve')!;
+    return getThreeSixtyStepByKey('scope_price_approve')!;
   }
   if (opportunity.area === 'job') {
-    if (['Invoice Sent', 'Invoice Paid'].includes(String(opportunity.stage))) return getThreeSixtyStepByKey('track')!;
+    if (['Invoice Sent', 'Invoice Paid'].includes(String(opportunity.stage))) return getThreeSixtyStepByKey('cfo_intelligence')!;
     if (['Completed', 'Awaiting Sign-Off'].includes(String(opportunity.stage))) return getThreeSixtyStepByKey('execute')!;
     return getThreeSixtyStepByKey('schedule')!;
   }
@@ -406,6 +410,105 @@ export interface ThreeSixtyMembershipEnginePlan {
   flywheel: ThreeSixtyMembershipEngineStep[];
 }
 
+export interface ThreeSixtySopGate {
+  stepKey: ThreeSixtyStepKey;
+  source: string;
+  owner: ThreeSixtyOperatorRole;
+  requiredOutputs: string[];
+  approvalRequiredFor: string[];
+  customerVisibleWhen: string;
+  cannotAdvanceIfMissing: string[];
+}
+
+export const THREE_SIXTY_SOP_GATES: Record<ThreeSixtyStepKey, ThreeSixtySopGate> = {
+  baseline: {
+    stepKey: 'baseline',
+    source: 'Step_01_Baseline_Assessment_SOP',
+    owner: 'Consultant Desk',
+    requiredOutputs: ['10-system baseline', 'photos', 'homeowner goals', 'urgent concerns', 'property notes'],
+    approvalRequiredFor: ['customer-facing baseline summary', 'urgent safety/structural language'],
+    customerVisibleWhen: 'Consultant approves the baseline summary and evidence package.',
+    cannotAdvanceIfMissing: ['system ratings', 'photo evidence', 'consultant notes'],
+  },
+  inspect: {
+    stepKey: 'inspect',
+    source: 'Step_02_Condition_Log_SOP',
+    owner: 'Field Desk',
+    requiredOutputs: ['condition rating', 'system notes', 'priority flags', 'new deficiency log'],
+    approvalRequiredFor: ['new customer-visible findings', 'specialty trade recommendations'],
+    customerVisibleWhen: 'Findings are reviewed and converted into clear customer language.',
+    cannotAdvanceIfMissing: ['condition rating', 'finding note'],
+  },
+  prioritize: {
+    stepKey: 'prioritize',
+    source: 'Step_03_Priority_Roadmap_SOP',
+    owner: 'Consultant Desk',
+    requiredOutputs: ['NOW/SOON/WAIT roadmap', 'investment ranges', 'red/yellow/green priority', 'source findings'],
+    approvalRequiredFor: ['investment ranges', 'roadmap PDF/page', 'customer recommendation'],
+    customerVisibleWhen: 'Consultant approves roadmap language and investment ranges.',
+    cannotAdvanceIfMissing: ['priority bucket', 'investment range', 'approved customer summary'],
+  },
+  scope_price_approve: {
+    stepKey: 'scope_price_approve',
+    source: 'Step_04_Roadmap_Execution_SOP',
+    owner: 'Consultant Desk',
+    requiredOutputs: ['exact scope', 'materials/labor assumptions', 'margin audit', 'proposal', 'customer approval'],
+    approvalRequiredFor: ['scope', 'price', 'deposit', 'schedule promise', 'change in exclusions'],
+    customerVisibleWhen: 'Proposal passes audit and consultant marks it ready for customer.',
+    cannotAdvanceIfMissing: ['scope', 'price', 'approval path'],
+  },
+  schedule: {
+    stepKey: 'schedule',
+    source: 'HP_Job_Dispatch / Step_05_Seasonal_Visit_Protocol',
+    owner: 'PM Desk',
+    requiredOutputs: ['appointment window', 'crew assignment', 'materials status', 'client confirmation', 'pre-job brief'],
+    approvalRequiredFor: ['firm schedule commitment', 'customer-impacting delay', 'material substitution'],
+    customerVisibleWhen: 'PM confirms date, access, materials, and crew readiness.',
+    cannotAdvanceIfMissing: ['client confirmation', 'crew assignment', 'materials status'],
+  },
+  execute: {
+    stepKey: 'execute',
+    source: 'HP_Project_Closeout / Step_04_Roadmap_Execution_SOP',
+    owner: 'Field Desk',
+    requiredOutputs: ['completed work notes', 'before/after photos', 'punch status', 'client walkthrough', 'portal update'],
+    approvalRequiredFor: ['change order', 'incomplete work explanation', 'damage/safety issue'],
+    customerVisibleWhen: 'Proof, notes, and sign-off are complete.',
+    cannotAdvanceIfMissing: ['completion photos', 'field notes', 'portal update'],
+  },
+  preserve: {
+    stepKey: 'preserve',
+    source: 'Step_07_Preservation_Projects_SOP',
+    owner: 'Retainment Desk',
+    requiredOutputs: ['preservation opportunity', 'system age/risk', 'timing window', 'recommended next care'],
+    approvalRequiredFor: ['preservation project proposal', 'membership renewal or save offer'],
+    customerVisibleWhen: 'Retainment approves the next care recommendation.',
+    cannotAdvanceIfMissing: ['system risk', 'recommended timing'],
+  },
+  upgrade: {
+    stepKey: 'upgrade',
+    source: 'Step_08_Strategic_Upgrades_SOP',
+    owner: 'Consultant Desk',
+    requiredOutputs: ['client goal', 'upgrade reason', 'scope option', 'investment range', 'disclaimer-safe value language'],
+    approvalRequiredFor: ['ROI/value language', 'scope', 'price', 'timeline'],
+    customerVisibleWhen: 'Consultant approves customer-facing recommendation and disclaimers.',
+    cannotAdvanceIfMissing: ['client goal', 'scope option', 'approval rule'],
+  },
+  cfo_intelligence: {
+    stepKey: 'cfo_intelligence',
+    source: 'Step_09_Home_Score_SOP',
+    owner: 'CFO Intelligence',
+    requiredOutputs: ['10-category Home Score', 'maintenance investment history', 'condition trend', 'documentation gaps', 'non-advisory disclaimer'],
+    approvalRequiredFor: ['financial, appraisal, tax, legal, insurance, or real-estate-adjacent language'],
+    customerVisibleWhen: 'Record is framed as documentation, not licensed advice.',
+    cannotAdvanceIfMissing: ['score inputs', 'disclaimer', 'source documentation'],
+  },
+};
+
+export function getThreeSixtySopGate(stepKey?: string | null) {
+  const step = getThreeSixtyStepByKey(stepKey);
+  return step ? THREE_SIXTY_SOP_GATES[step.key] : null;
+}
+
 const SEASONS: ThreeSixtySeasonStatus['season'][] = ['spring', 'summer', 'fall', 'winter'];
 
 function normalizeStatus(value: unknown) {
@@ -481,9 +584,10 @@ export function deriveThreeSixtyOperatingStatus(input: {
   const currentStep = (() => {
     if (!hasMembership || baselineStatus === 'needed' || baselineStatus === 'scheduled') return THREE_SIXTY_METHOD_STEPS[0];
     if (openWorkOrders.length > 0) return THREE_SIXTY_METHOD_STEPS[5];
-    if (pendingRepairEstimates.length > 0 || priorityCounts.red > 0) return THREE_SIXTY_METHOD_STEPS[3];
+    if (pendingRepairEstimates.length > 0) return getThreeSixtyStepByKey('scope_price_approve')!;
+    if (priorityCounts.red > 0) return getThreeSixtyStepByKey('prioritize')!;
     if (seasonalVisits.some(visit => visit.status === 'due')) return THREE_SIXTY_METHOD_STEPS[6];
-    return THREE_SIXTY_METHOD_STEPS[2];
+    return getThreeSixtyStepByKey('cfo_intelligence')!;
   })();
 
   const nextInternalAction = (() => {

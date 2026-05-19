@@ -6,6 +6,7 @@
 import { describe, it, expect } from "vitest";
 import { priceRun } from "./pricing";
 import { registerTool, getTool, listToolKeys } from "./tools";
+import { evaluateToolApproval } from "./approvalPolicy";
 
 describe("pricing.priceRun", () => {
   it("prices Haiku 4.5 per 1M tokens", () => {
@@ -73,5 +74,55 @@ describe("safety rails — policy surface", () => {
     // approveTask explicitly dispatches it.
     const t = getTool("test.sendEmail");
     expect(t?.requiresApproval).toBe(true);
+  });
+});
+
+describe("approvalPolicy.evaluateToolApproval", () => {
+  const fakeTool = {
+    key: "comms.draftSms",
+    requiresApproval: true,
+    definition: {
+      name: "draftSms",
+      description: "fake",
+      input_schema: { type: "object", properties: {} },
+    },
+    handler: async () => ({ ok: true }),
+  };
+
+  it("auto-runs low-risk customer follow-ups", () => {
+    const result = evaluateToolApproval("comms.draftSms", fakeTool, {
+      to: "+13605550101",
+      body: "Following up on your voicemail. We can call back when convenient.",
+      reason: "basic follow up",
+    });
+    expect(result.approvalDecision).toBe("auto_execute");
+    expect(result.riskCategory).toBe("customer_follow_up");
+  });
+
+  it("requires approval for any dollar language", () => {
+    const result = evaluateToolApproval("comms.draftSms", fakeTool, {
+      to: "+13605550101",
+      body: "Your deposit is $250.",
+      reason: "estimate follow up",
+    });
+    expect(result.approvalDecision).toBe("requires_approval");
+    expect(result.riskCategory).toBe("money");
+  });
+
+  it("blocks customer messages missing routing context", () => {
+    const result = evaluateToolApproval("comms.draftEmail", fakeTool, {
+      body: "Checking in.",
+      reason: "basic follow up",
+    });
+    expect(result.approvalDecision).toBe("blocked");
+    expect(result.riskCategory).toBe("missing_context");
+  });
+
+  it("blocks unknown tools", () => {
+    const result = evaluateToolApproval("comms.unknownSend", undefined, {
+      to: "customer@example.com",
+    });
+    expect(result.approvalDecision).toBe("blocked");
+    expect(result.riskCategory).toBe("unknown_tool");
   });
 });

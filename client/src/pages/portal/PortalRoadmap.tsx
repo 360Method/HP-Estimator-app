@@ -91,7 +91,7 @@ function RoadmapBuckets({ findings }: { findings?: any[] }) {
         className="text-[11px] tracking-wider font-semibold uppercase mb-3"
         style={{ color: FOREST }}
       >
-        Step 4: Priority Roadmap
+        Step 3: Priority Roadmap
       </p>
       <div className="grid gap-3 sm:grid-cols-3">
         {buckets.map((bucket) => (

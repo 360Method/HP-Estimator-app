@@ -2324,7 +2324,7 @@ export default function CustomerSection() {
                       <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">Roadmap Generator</p>
                       <h5 className="mt-1 text-sm font-semibold text-amber-950">Internal consultant draft</h5>
                       <p className="mt-1 text-xs leading-relaxed text-amber-900">
-                        This is Step 4. Review NOW / SOON / WAIT, investment ranges, and source findings before anything is sent to the portal.
+                        This is Step 3. Review NOW / SOON / WAIT, investment ranges, and source findings before anything is sent to the portal.
                       </p>
                     </div>
                     <Button size="sm" variant="outline" className="bg-white" onClick={() => downloadRoadmapDraft(roadmapItems)}>

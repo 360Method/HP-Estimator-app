@@ -85,7 +85,7 @@ export default function PortalProperty360Plan({
     }
     if (nextAppointment) counts.schedule = (counts.schedule ?? 0) + 1;
     if (activeJobs.length > 0) counts.execute = (counts.execute ?? 0) + activeJobs.length;
-    if (openInvoice) counts.track = (counts.track ?? 0) + 1;
+    if (openInvoice) counts.cfo_intelligence = (counts.cfo_intelligence ?? 0) + 1;
     return counts;
   }, [activeJobs.length, estimates, nextAppointment, openInvoice]);
 

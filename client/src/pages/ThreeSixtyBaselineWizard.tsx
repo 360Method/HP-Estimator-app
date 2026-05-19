@@ -1,6 +1,6 @@
 /**
  * ThreeSixtyBaselineWizard
- * Step-through form for documenting all 8 home systems for a 360° member.
+ * Step-through form for documenting all 10 home systems for a 360° member.
  * Each step covers one system: brand/model, install year, condition, notes,
  * last service date, lifespan estimate, replacement cost, and photos.
  */
@@ -25,29 +25,16 @@ import {
   CheckCircle2,
   Upload,
   X,
-  Thermometer,
-  Home,
-  Droplets,
-  Zap,
-  Building2,
-  PaintBucket,
-  LayoutDashboard,
-  Microwave,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import {
+  normalizeThreeSixtySystemKey,
+  THREE_SIXTY_PROPERTY_SYSTEMS,
+  type ThreeSixtyPropertySystemKey,
+} from '@/lib/threeSixtySystems';
 
-const SYSTEMS = [
-  { key: 'hvac', label: 'HVAC', icon: Thermometer, description: 'Heating, ventilation & air conditioning' },
-  { key: 'roof', label: 'Roof', icon: Home, description: 'Roofing materials, gutters & drainage' },
-  { key: 'plumbing', label: 'Plumbing', icon: Droplets, description: 'Water supply, drains & fixtures' },
-  { key: 'electrical', label: 'Electrical', icon: Zap, description: 'Panel, wiring & outlets' },
-  { key: 'foundation', label: 'Foundation', icon: Building2, description: 'Structural foundation & basement' },
-  { key: 'exterior_siding', label: 'Exterior & Siding', icon: PaintBucket, description: 'Siding, windows, doors & paint' },
-  { key: 'interior', label: 'Interior', icon: LayoutDashboard, description: 'Floors, walls, ceilings & insulation' },
-  { key: 'appliances', label: 'Appliances', icon: Microwave, description: 'Major appliances & water heater' },
-] as const;
-
-type SystemKey = typeof SYSTEMS[number]['key'];
+const SYSTEMS = THREE_SIXTY_PROPERTY_SYSTEMS;
+type SystemKey = ThreeSixtyPropertySystemKey;
 
 interface SystemFormData {
   id?: number;
@@ -104,7 +91,7 @@ export default function ThreeSixtyBaselineWizard({ membershipId, customerId, onB
   if (existing && !prefilled) {
     const updated = { ...forms };
     for (const sys of existing) {
-      const key = sys.systemType as SystemKey;
+      const key = normalizeThreeSixtySystemKey(sys.systemType);
       updated[key] = {
         id: sys.id,
         brandModel: sys.brandModel ?? '',
@@ -220,7 +207,7 @@ export default function ThreeSixtyBaselineWizard({ membershipId, customerId, onB
         <div className="flex-1 min-w-0">
           <div className="text-sm font-semibold truncate">Property Baseline Wizard</div>
           <div className="text-xs text-muted-foreground">
-            Step {step + 1} of {SYSTEMS.length}
+            System {step + 1} of {SYSTEMS.length}
           </div>
         </div>
         <Badge variant="outline" className="text-xs shrink-0">
@@ -293,7 +280,7 @@ export default function ThreeSixtyBaselineWizard({ membershipId, customerId, onB
             {/* Brand / Model */}
             <div className="mb-4">
               <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                Brand / Model
+                Brand / Model / Material
               </label>
               <Input
                 placeholder="e.g. Carrier 2-ton, Owens Corning Duration…"
