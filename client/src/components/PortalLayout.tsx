@@ -5,7 +5,7 @@
  * - Collapsible left sidebar: Appointments, Invoices, Estimates, Gallery | MY ACCOUNT: Wallet, Referral program
  * - Main content area
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -59,10 +59,19 @@ const accountNav: NavItem[] = [
 ];
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { customer } = usePortal();
+  const { customer, loading } = usePortal();
+
+  // Auth guard — redirect unauthenticated visitors to magic-link login,
+  // preserving the intended destination so they land back after auth.
+  useEffect(() => {
+    if (!loading && !customer) {
+      const dest = encodeURIComponent(location);
+      navigate(`/portal/login?redirect=${dest}`, { replace: true });
+    }
+  }, [loading, customer, location, navigate]);
 
   const logoutMutation = trpc.portal.logout.useMutation({
     onSuccess: () => {
