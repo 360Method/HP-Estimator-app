@@ -17,6 +17,7 @@
 
 import express from "express";
 import { nanoid } from "nanoid";
+import { randomBytes } from "crypto";
 import {
   findCustomerByEmail,
   createCustomer,
@@ -24,6 +25,7 @@ import {
   createOnlineRequest,
   isZipCodeAllowed,
 } from "../db";
+import { upsertPortalCustomer, createPortalToken, generateReferralCode } from "../portalDb";
 import { notifyOwner } from "../_core/notification";
 import { onLeadCreated } from "../leadRouting";
 import { runAutomationsForTrigger } from "../automationEngine";
@@ -204,6 +206,39 @@ publicInquiryRouter.post("/inquiry", async (req, res) => {
         `Your inquiry is in our care, ${firstName}. Your Handy Pioneers Concierge will reach out within one business day. (360) 334-4428 if anything is time-sensitive.`
       ).catch((e) => console.error("[publicInquiry] ack sms error:", e));
     }
+
+    // 9. Provision portal account + send magic link to /portal/roadmap (non-blocking)
+    //    Path A inquiry → portal account created → customer can log in and view roadmap.
+    void (async () => {
+      try {
+        const portalCustomer = await upsertPortalCustomer({
+          email: emailNorm,
+          name: displayName,
+          hpCustomerId: customer.id,
+          referralCode: await generateReferralCode(displayName).catch(() => undefined),
+        });
+        if (portalCustomer) {
+          const token = randomBytes(32).toString("hex");
+          const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+          await createPortalToken({ customerId: portalCustomer.id, token, expiresAt });
+          const portalBase = process.env.PORTAL_BASE_URL ?? "https://client.handypioneers.com";
+          const portalLink = `${portalBase}/portal/auth?token=${token}&redirect=/portal/roadmap`;
+          if (isEmailSenderReady()) {
+            await sendEmail({
+              to: emailNorm,
+              subject: `Your Handy Pioneers portal is ready, ${String(firstName).trim()}`,
+              html: `<p>Hi ${String(firstName).trim()},</p>
+<p>Your inquiry is confirmed. While we prepare for our first conversation, you can access your secure Handy Pioneers portal — where you can view your 360° Roadmap, track your project, and message our team.</p>
+<p><a href="${portalLink}" style="display:inline-block;background:#1a2e1a;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-family:sans-serif;">Open My Portal</a></p>
+<p style="font-size:12px;color:#888;">This link is valid for 7 days and works on any device. No password needed.</p>
+<p>— The Handy Pioneers Team</p>`,
+            }).catch((e) => console.error("[publicInquiry] portal magic link email error:", e));
+          }
+        }
+      } catch (e) {
+        console.error("[publicInquiry] portal provisioning error:", e);
+      }
+    })();
 
     res.status(201).json({
       success: true,
