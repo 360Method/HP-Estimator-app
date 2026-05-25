@@ -777,6 +777,8 @@ export async function createOnlineRequest(data: {
   smsConsent: boolean;
   customerId?: string;
   leadId?: string;
+  /** "project" | "360_method" | "baseline_walkthrough" */
+  funnel?: string;
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
