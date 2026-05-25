@@ -66,6 +66,7 @@ publicInquiryRouter.post("/inquiry", async (req, res) => {
       email,
       serviceType = "General Inquiry",
       source = "website",
+      funnel = "project",   // "project" | "360_method" | "baseline_walkthrough"
       // Optional enrichment fields — may be empty from the mini-form
       zip = "",
       street = "",
@@ -108,7 +109,11 @@ publicInquiryRouter.post("/inquiry", async (req, res) => {
         sendMarketingOptIn: Boolean(smsConsent),
         customerType: "homeowner",
         tags: "[]",
-        leadSource: `Website — ${source}`,
+        leadSource: funnel === "360_method"
+          ? "Website — Roadmap Generator"
+          : funnel === "baseline_walkthrough"
+            ? "Website — Baseline Walkthrough"
+            : "Website — Online Request",
       });
     }
 
@@ -153,6 +158,7 @@ publicInquiryRouter.post("/inquiry", async (req, res) => {
       smsConsent: Boolean(smsConsent),
       customerId: customer.id,
       leadId,
+      funnel: String(funnel),
     });
 
     // 4. Notify owner (non-blocking)

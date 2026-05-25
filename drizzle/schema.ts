@@ -535,6 +535,13 @@ export const onlineRequests = mysqlTable("onlineRequests", {
   customerId: varchar("customerId", { length: 64 }),
   /** Linked lead ID (set after submit) */
   leadId: varchar("leadId", { length: 64 }),
+  /**
+   * Which funnel the visitor came through.
+   * "project"              — Path A: Project Inquiry (hero / CTA)
+   * "360_method"           — Path B: 360° Home Assessment / Roadmap Generator
+   * "baseline_walkthrough" — Path B: Baseline Walkthrough booking
+   */
+  funnel: varchar("funnel", { length: 32 }).default("project"),
   /** Set when an admin opens/views this request — used for unread badge */
   readAt: timestamp("readAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
