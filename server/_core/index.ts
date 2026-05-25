@@ -2249,6 +2249,10 @@ async function startServer() {
   app.use(express.json({ limit: "25mb" }));
   app.use(express.urlencoded({ limit: "2mb", extended: true }));
 
+  // ── Public website inquiry endpoint (Path A — ProjectInquiryForm) ─────────
+  const { publicInquiryRouter } = await import("../routers/publicInquiry.js");
+  app.use("/api/public", publicWriteLimiter, publicInquiryRouter);
+
   // ── Staff admin auth: /api/auth/login, /api/auth/logout, /api/auth/me ─────
   app.use("/api/auth/login", authLimiter);
   registerAuthRoutes(app);
