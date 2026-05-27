@@ -409,8 +409,8 @@ export const workOrdersRouter = router({
           healthScore: input.healthScore ?? null,
           reportJson,
           sentAt: now,
-        });
-        portalReportId = (reportResult as any).insertId as number;
+        }).returning({ id: portalReports.id });
+        portalReportId = Number(reportResult?.id ?? 0);
 
         // Link report to work order
         await updateWorkOrder(input.id, { portalReportId });

@@ -124,8 +124,11 @@ async function executeAction(
       if (convRows.length > 0) {
         convId = convRows[0].id;
       } else {
-        const ins = await db.insert(conversations).values({ customerId: String(payload.customerId!), channels: "note" });
-        convId = (ins as any).insertId;
+        const [ins] = await db
+          .insert(conversations)
+          .values({ customerId: String(payload.customerId!), channels: "note" })
+          .returning({ id: conversations.id });
+        convId = ins.id;
       }
       await db.insert(messages).values({
         conversationId: convId,

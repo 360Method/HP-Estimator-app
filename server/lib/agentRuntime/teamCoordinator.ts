@@ -383,14 +383,14 @@ export async function proposeTeamHandoff(args: {
 }): Promise<{ handoffId: number; autoAccepted: boolean; createdTaskId: number | null }> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const inserted = await db.insert(agentTeamHandoffs).values({
+  const [inserted] = await db.insert(agentTeamHandoffs).values({
     fromTeamId: args.fromTeamId,
     toTeamId: args.toTeamId,
     eventType: args.eventType,
     payload: args.payload ? JSON.stringify(args.payload) : null,
     status: "pending",
-  });
-  const handoffId = Number((inserted as { insertId?: number }).insertId ?? 0);
+  }).returning({ id: agentTeamHandoffs.id });
+  const handoffId = Number(inserted?.id ?? 0);
 
   // Auto-accept when the event type is on the registered list. Creates a task
   // on the receiving team so the work is immediately visible in the queue.
@@ -399,7 +399,7 @@ export async function proposeTeamHandoff(args: {
       .update(agentTeamHandoffs)
       .set({ status: "accepted", acceptedAt: new Date() })
       .where(eq(agentTeamHandoffs.id, handoffId));
-    const inserted2 = await db.insert(agentTeamTasks).values({
+    const [inserted2] = await db.insert(agentTeamTasks).values({
       teamId: args.toTeamId,
       title: `Handoff: ${args.eventType}`,
       description: args.payload ? JSON.stringify(args.payload, null, 2) : null,
@@ -408,8 +408,8 @@ export async function proposeTeamHandoff(args: {
       customerId: typeof args.payload?.customerId === "string" ? (args.payload!.customerId as string) : null,
       priority: "normal",
       status: "open",
-    });
-    const createdTaskId = Number((inserted2 as { insertId?: number }).insertId ?? 0);
+    }).returning({ id: agentTeamTasks.id });
+    const createdTaskId = Number(inserted2?.id ?? 0);
     return { handoffId, autoAccepted: true, createdTaskId };
   }
   return { handoffId, autoAccepted: false, createdTaskId: null };

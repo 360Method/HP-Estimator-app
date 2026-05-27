@@ -1,1 +1,0 @@
-ALTER TABLE `portalCustomers` ADD `onboardingCompletedAt` timestamp;

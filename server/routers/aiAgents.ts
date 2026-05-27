@@ -135,7 +135,7 @@ export const aiAgentsRouter = router({
       if (v) {
         throw new TRPCError({ code: "BAD_REQUEST", message: v.message });
       }
-      const res = await d.insert(aiAgents).values({
+      const [res] = await d.insert(aiAgents).values({
         seatName: input.seatName,
         department: input.department,
         role: input.role,
@@ -145,8 +145,8 @@ export const aiAgentsRouter = router({
         isDepartmentHead: input.isDepartmentHead ?? false,
         costCapDailyUsd: (input.costCapDailyUsd ?? 5).toFixed(2),
         runLimitDaily: input.runLimitDaily ?? 200,
-      });
-      return { id: Number((res as { insertId?: number }).insertId ?? 0) };
+      }).returning({ id: aiAgents.id });
+      return { id: Number(res?.id ?? 0) };
     }),
 
   update: adminProcedure

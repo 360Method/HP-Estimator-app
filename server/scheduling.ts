@@ -24,48 +24,8 @@ const PACIFIC_TZ = "America/Los_Angeles";
 // ─── Boot: ensure tables + default availability ─────────────────────────────
 
 export async function ensureSchedulingTables(): Promise<void> {
-  const db = await getDb();
-  if (!db) return;
-  try {
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`scheduling_slots\` (
-      \`id\` int AUTO_INCREMENT NOT NULL,
-      \`startAt\` timestamp NOT NULL,
-      \`endAt\` timestamp NOT NULL,
-      \`capacity\` int NOT NULL DEFAULT 1,
-      \`bookedCount\` int NOT NULL DEFAULT 0,
-      \`blocked\` boolean NOT NULL DEFAULT false,
-      \`notes\` varchar(255),
-      \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      \`updatedAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      CONSTRAINT \`scheduling_slots_id\` PRIMARY KEY(\`id\`)
-    )`);
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`scheduled_bookings\` (
-      \`id\` int AUTO_INCREMENT NOT NULL,
-      \`customerId\` varchar(64) NOT NULL,
-      \`slotId\` int NOT NULL,
-      \`visitType\` enum('consultation','baseline','seasonal','project') NOT NULL DEFAULT 'consultation',
-      \`status\` enum('confirmed','rescheduled','cancelled','completed','no_show') NOT NULL DEFAULT 'confirmed',
-      \`notes\` text,
-      \`bookedBy\` varchar(64) NOT NULL DEFAULT 'customer',
-      \`confirmationCode\` varchar(16),
-      \`cancelledAt\` timestamp NULL,
-      \`cancelReason\` varchar(255),
-      \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      \`updatedAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      CONSTRAINT \`scheduled_bookings_id\` PRIMARY KEY(\`id\`)
-    )`);
-    // Seed default availability if the slot table is empty.
-    const [existing] = await db.select({ id: schedulingSlots.id }).from(schedulingSlots).limit(1);
-    if (!existing) {
-      const seeded = buildDefaultSlots(30);
-      if (seeded.length > 0) {
-        await db.insert(schedulingSlots).values(seeded);
-        console.log(`[Scheduling] Seeded ${seeded.length} default slots (M-F 8a-6p PT × 30 days).`);
-      }
-    }
-  } catch (err) {
-    console.warn("[Scheduling] ensureSchedulingTables failed (non-fatal):", err);
-  }
+  // boot-time MySQL DDL removed; tables now created by drizzle Postgres migrations
+  return;
 }
 
 /** M-F 8am-6pm Pacific, 60-min slots, capacity=1, for the next `days` days. */
@@ -185,7 +145,7 @@ export async function createBooking(input: {
 
   const confirmationCode = makeConfirmationCode();
   const visitType = input.visitType ?? "consultation";
-  const result = (await db.insert(scheduledBookings).values({
+  const [result] = await db.insert(scheduledBookings).values({
     customerId: input.customerId,
     slotId: input.slotId,
     visitType,
@@ -193,14 +153,14 @@ export async function createBooking(input: {
     notes: input.notes,
     bookedBy: input.bookedBy ?? "customer",
     confirmationCode,
-  })) as unknown as { insertId: number | string };
+  }).returning({ id: scheduledBookings.id });
 
   await db
     .update(schedulingSlots)
     .set({ bookedCount: slot.bookedCount + 1 })
     .where(eq(schedulingSlots.id, slot.id));
 
-  const id = Number(result.insertId);
+  const id = Number(result?.id ?? 0);
   const [row] = await db.select().from(scheduledBookings).where(eq(scheduledBookings.id, id)).limit(1);
   return row;
 }

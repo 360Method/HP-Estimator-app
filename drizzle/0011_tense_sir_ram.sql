@@ -1,1 +1,0 @@
-ALTER TABLE `portalInvoices` ADD `stripeCheckoutSessionId` varchar(128);
