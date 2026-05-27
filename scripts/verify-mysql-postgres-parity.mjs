@@ -341,6 +341,29 @@ async function main() {
     prepare: false, // Supabase transaction pooler (port 6543).
     onnotice: () => {},
     transform: { undefined: null },
+    // Override the built-in 'date' parser. The default for `timestamp without
+    // time zone` (PG type 1114) is `new Date(text)`, which interprets text as
+    // the JS process's local TZ. When the operator's machine isn't in UTC,
+    // every timestamp on the PG side ends up off by the local offset — making
+    // it look like the migrated data is shifted, when actually the stored
+    // values are correct and only the read-side parser is lying. Force UTC
+    // interpretation for no-TZ timestamps so the row-by-row comparison is
+    // honest regardless of where verify is run from.
+    types: {
+      date: {
+        to: 1184,
+        from: [1082, 1114, 1184],
+        serialize: (x) => (x instanceof Date ? x : new Date(x)).toISOString(),
+        parse: (x) => {
+          if (typeof x !== 'string') return new Date(x);
+          if (/^\d{4}-\d{2}-\d{2}$/.test(x)) return new Date(x + 'T00:00:00Z');
+          // Already carries an explicit offset (typical for type 1184) — trust it.
+          if (/[+-]\d{2}(:?\d{2})?$|Z$/.test(x)) return new Date(x);
+          // No TZ marker — type 1114. Treat the wall-clock as UTC.
+          return new Date(x.replace(' ', 'T') + 'Z');
+        },
+      },
+    },
   });
 
   const tableList = TABLES.filter((t) => {
