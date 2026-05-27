@@ -75,11 +75,11 @@ export const integratorChatRouter = router({
     .input(z.object({ title: z.string().max(200).optional() }))
     .mutation(async ({ ctx, input }) => {
       const d = await db();
-      const [inserted] = await d.insert(integratorChatConversations).values({
+      const inserted = await d.insert(integratorChatConversations).values({
         userId: ctx.user.id,
         title: input.title ?? null,
-      }).returning({ id: integratorChatConversations.id });
-      const id = Number(inserted?.id ?? 0);
+      });
+      const id = Number((inserted as { insertId?: number }).insertId ?? 0);
       return { id };
     }),
 
@@ -240,14 +240,14 @@ export const integratorChatRouter = router({
 
       // Create a synthetic task row so any tool that requires the agent runtime's
       // task context (e.g. kpis.record uses ctx.taskId) can write through cleanly.
-      const [taskInsert] = await d.insert(aiAgentTasks).values({
+      const taskInsert = await d.insert(aiAgentTasks).values({
         agentId: integrator.id,
         triggerType: "manual",
         triggerPayload: JSON.stringify({ via: "integrator_chat", conversationId: input.conversationId }),
         status: "running",
         startedAt: new Date(),
-      }).returning({ id: aiAgentTasks.id });
-      const taskId = Number(taskInsert?.id ?? 0);
+      });
+      const taskId = Number((taskInsert as { insertId?: number }).insertId ?? 0);
 
       for (const req of toolRequests) {
         const tool = getTool(req.key);
@@ -305,7 +305,7 @@ export const integratorChatRouter = router({
         errorMessage: hasBlocked ? "One or more tool calls were blocked by approval policy." : null,
       });
 
-      const [assistantInsert] = await d.insert(integratorChatMessages).values({
+      const assistantInsert = await d.insert(integratorChatMessages).values({
         conversationId: input.conversationId,
         userId: ctx.user.id,
         role: "assistant",
@@ -314,8 +314,8 @@ export const integratorChatRouter = router({
         inputTokens,
         outputTokens,
         costUsd: costUsd.toFixed(4),
-      }).returning({ id: integratorChatMessages.id });
-      const assistantId = Number(assistantInsert?.id ?? 0);
+      });
+      const assistantId = Number((assistantInsert as { insertId?: number }).insertId ?? 0);
 
       // 9) Update conversation timestamp + auto-title if blank
       const patch: Record<string, unknown> = { lastMessageAt: new Date() };
@@ -355,11 +355,11 @@ export const integratorChatRouter = router({
     .mutation(async ({ ctx, input }) => {
       const d = await db();
       const title = input.sourceTitle ? `From: ${input.sourceTitle}` : `From: ${input.sourcePath}`;
-      const [inserted] = await d.insert(integratorChatConversations).values({
+      const inserted = await d.insert(integratorChatConversations).values({
         userId: ctx.user.id,
         title: title.slice(0, 200),
-      }).returning({ id: integratorChatConversations.id });
-      const conversationId = Number(inserted?.id ?? 0);
+      });
+      const conversationId = Number((inserted as { insertId?: number }).insertId ?? 0);
       const intro = [
         `Context shared from ${input.sourcePath}.`,
         input.sourceTitle ? `Page: ${input.sourceTitle}` : null,

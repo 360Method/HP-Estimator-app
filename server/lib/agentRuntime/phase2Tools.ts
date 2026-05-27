@@ -909,7 +909,7 @@ registerTool({
   handler: async ({ input }) => {
     const d = await db();
     const { agentTeamTasks } = await import("../../../drizzle/schema");
-    const [inserted] = await d.insert(agentTeamTasks).values({
+    const inserted = await d.insert(agentTeamTasks).values({
       teamId: Number(input.teamId),
       title: String(input.title).slice(0, 255),
       description: input.description ? String(input.description) : null,
@@ -917,8 +917,8 @@ registerTool({
       customerId: input.customerId ? String(input.customerId).slice(0, 64) : null,
       sourceEventType: input.sourceEventType ? String(input.sourceEventType).slice(0, 80) : "integrator_chat",
       status: "open",
-    }).returning({ id: agentTeamTasks.id });
-    const id = Number(inserted?.id ?? 0);
+    });
+    const id = Number((inserted as { insertId?: number }).insertId ?? 0);
     return { ok: true, taskId: id };
   },
 });
@@ -942,14 +942,14 @@ registerTool({
   handler: async ({ input, ctx }) => {
     const d = await db();
     const { agentTeamMessages } = await import("../../../drizzle/schema");
-    const [inserted] = await d.insert(agentTeamMessages).values({
+    const inserted = await d.insert(agentTeamMessages).values({
       teamId: Number(input.teamId),
       // The runtime hands us the calling agentId — that's the broadcaster.
       fromSeatId: ctx.agentId,
       toSeatId: null,
       body: String(input.body).slice(0, 20_000),
-    }).returning({ id: agentTeamMessages.id });
-    const id = Number(inserted?.id ?? 0);
+    });
+    const id = Number((inserted as { insertId?: number }).insertId ?? 0);
     return { ok: true, messageId: id };
   },
 });

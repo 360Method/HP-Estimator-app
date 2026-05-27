@@ -58,7 +58,7 @@ export const emailTemplatesRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const [result] = await db
+      const result = await db
         .insert(emailTemplates)
         .values({
           tenantId: TENANT_ID,
@@ -69,9 +69,9 @@ export const emailTemplatesRouter = router({
           html: input.html,
           text: input.text,
           mergeTagSchema: input.mergeTagSchema ? JSON.stringify(input.mergeTagSchema) : null,
-        })
-        .returning({ id: emailTemplates.id });
-      const [row] = await db.select().from(emailTemplates).where(eq(emailTemplates.id, Number(result?.id ?? 0))).limit(1);
+        });
+      const insertId = Number((result as unknown as { insertId: number | string }).insertId);
+      const [row] = await db.select().from(emailTemplates).where(eq(emailTemplates.id, insertId)).limit(1);
       return row;
     }),
 

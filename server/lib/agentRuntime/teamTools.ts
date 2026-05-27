@@ -271,17 +271,17 @@ registerTool({
       );
     }
 
-    const [inserted] = await d.insert(agentTeamMessages).values({
+    const inserted = await d.insert(agentTeamMessages).values({
       teamId: membership.teamId,
       fromSeatId: ctx.agentId,
       toSeatId: recipient.id,
       body,
       // We treat (taskId-prefixed-thread) by stamping body marker not threadId, to
       // avoid coupling; threadId stays null for now.
-    }).returning({ id: agentTeamMessages.id });
+    });
     return {
       ok: true,
-      messageId: Number(inserted?.id ?? 0),
+      messageId: Number((inserted as { insertId?: number }).insertId ?? 0),
       to: toSeatName,
     };
   },

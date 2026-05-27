@@ -1,22 +1,23 @@
 /**
  * drizzle/schema.priorityTranslation.ts
  *
- * Priority Translation + portal schema additions.
- * Kept in its own file so the primary schema.ts stays focused on HP's core domain.
+ * Priority Translation + portal schema additions (MySQL).
+ * Matches drizzle/0058_priority_translations.sql 1:1. Kept in its own file so
+ * the primary schema.ts stays focused on HP's core domain.
  */
 
 import {
   index,
   json,
-  pgTable,
+  mysqlTable,
   text,
   timestamp,
   uniqueIndex,
   varchar,
-} from "drizzle-orm/pg-core";
+} from "drizzle-orm/mysql-core";
 
 // ─── portalAccounts ────────────────────────────────────────────────────────
-export const portalAccounts = pgTable(
+export const portalAccounts = mysqlTable(
   "portalAccounts",
   {
     id: varchar("id", { length: 64 }).primaryKey(),
@@ -38,7 +39,7 @@ export type DbPortalAccount = typeof portalAccounts.$inferSelect;
 export type InsertDbPortalAccount = typeof portalAccounts.$inferInsert;
 
 // ─── portalMagicLinks ──────────────────────────────────────────────────────
-export const portalMagicLinks = pgTable(
+export const portalMagicLinks = mysqlTable(
   "portalMagicLinks",
   {
     // SHA-256 hex of the raw token the homeowner clicked with. We never
@@ -58,7 +59,7 @@ export type DbPortalMagicLink = typeof portalMagicLinks.$inferSelect;
 export type InsertDbPortalMagicLink = typeof portalMagicLinks.$inferInsert;
 
 // ─── portalProperties ──────────────────────────────────────────────────────
-export const portalProperties = pgTable(
+export const portalProperties = mysqlTable(
   "portalProperties",
   {
     id: varchar("id", { length: 64 }).primaryKey(),
@@ -98,7 +99,7 @@ export type HealthRecordFinding = {
   added_at: string;
 };
 
-export const homeHealthRecords = pgTable(
+export const homeHealthRecords = mysqlTable(
   "homeHealthRecords",
   {
     id: varchar("id", { length: 64 }).primaryKey(),
@@ -107,7 +108,7 @@ export const homeHealthRecords = pgTable(
     findings: json("findings").$type<HealthRecordFinding[]>().notNull(),
     summary: text("summary"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
-    updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
   (t) => ({
     propertyIdx: uniqueIndex("homeHealthRecords_property_idx").on(t.propertyId),
@@ -147,7 +148,7 @@ export type ClaudePriorityTranslationResponse = {
   }>;
 };
 
-export const priorityTranslations = pgTable(
+export const priorityTranslations = mysqlTable(
   "priorityTranslations",
   {
     id: varchar("id", { length: 64 }).primaryKey(),
@@ -166,7 +167,7 @@ export const priorityTranslations = pgTable(
     deliveredAt: timestamp("deliveredAt"),
     failureReason: text("failureReason"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
-    updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
   (t) => ({
     accountIdx: index("priorityTranslations_account_idx").on(t.portalAccountId),

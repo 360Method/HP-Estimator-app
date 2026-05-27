@@ -296,17 +296,14 @@ export function registerIntegratorStreamRoutes(app: Express): void {
 
         // Synthetic task row so tool handlers have a ctx.taskId. One per
         // request, shared across all loop iterations.
-        const [taskInsert] = await d
-          .insert(aiAgentTasks)
-          .values({
-            agentId: integrator.id,
-            triggerType: "manual",
-            triggerPayload: JSON.stringify({ via: "visionary_console_stream", conversationId }),
-            status: "running",
-            startedAt: new Date(),
-          })
-          .returning({ id: aiAgentTasks.id });
-        const taskId = Number(taskInsert?.id ?? 0);
+        const taskInsert = await d.insert(aiAgentTasks).values({
+          agentId: integrator.id,
+          triggerType: "manual",
+          triggerPayload: JSON.stringify({ via: "visionary_console_stream", conversationId }),
+          status: "running",
+          startedAt: new Date(),
+        });
+        const taskId = Number((taskInsert as { insertId?: number }).insertId ?? 0);
 
         const allToolCalls: Array<{
           key: string;
@@ -533,20 +530,17 @@ export function registerIntegratorStreamRoutes(app: Express): void {
           errorMessage: null,
         });
 
-        const [assistantInsert] = await d
-          .insert(integratorChatMessages)
-          .values({
-            conversationId,
-            userId: user.id,
-            role: "assistant",
-            content: finalSynthesisText,
-            toolCalls: JSON.stringify(allToolCalls),
-            inputTokens: totalInputTokens,
-            outputTokens: totalOutputTokens,
-            costUsd: costUsd.toFixed(4),
-          })
-          .returning({ id: integratorChatMessages.id });
-        const assistantId = Number(assistantInsert?.id ?? 0);
+        const assistantInsert = await d.insert(integratorChatMessages).values({
+          conversationId,
+          userId: user.id,
+          role: "assistant",
+          content: finalSynthesisText,
+          toolCalls: JSON.stringify(allToolCalls),
+          inputTokens: totalInputTokens,
+          outputTokens: totalOutputTokens,
+          costUsd: costUsd.toFixed(4),
+        });
+        const assistantId = Number((assistantInsert as { insertId?: number }).insertId ?? 0);
 
         // 10) Conversation timestamp + auto-title
         const patch: Record<string, unknown> = { lastMessageAt: new Date() };

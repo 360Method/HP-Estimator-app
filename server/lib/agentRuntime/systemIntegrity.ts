@@ -25,7 +25,6 @@ import {
   aiAgents,
   aiAgentRuns,
   aiAgentTasks,
-  agentOptimizationTasks,
   notifications,
 } from "../../../drizzle/schema";
 
@@ -177,35 +176,20 @@ async function persistFlags(flags: OptimizationFlag[], now: Date): Promise<void>
   const dayKey = now.toISOString().slice(0, 10); // YYYY-MM-DD — de-dupe per day per kind+agent
   for (const f of flags) {
     try {
-      // ON CONFLICT DO NOTHING on UNIQUE (agentId, kind, dayKey) avoids re-flagging
-      // the same anomaly hourly — Marcin only wants to see it once per day.
-      await db
-        .insert(agentOptimizationTasks)
-        .values({
-          agentId: f.agentId,
-          seatName: f.seatName,
-          kind: f.kind,
-          title: f.title,
-          details: f.details,
-          severity: f.severity,
-          dayKey,
-          status: "open",
-        })
-        .onConflictDoNothing({
-          target: [agentOptimizationTasks.agentId, agentOptimizationTasks.kind, agentOptimizationTasks.dayKey],
-        });
-      // Find the row id (works whether insert happened or not)
-      const [row] = await db
-        .select({ id: agentOptimizationTasks.id, status: agentOptimizationTasks.status })
-        .from(agentOptimizationTasks)
-        .where(
-          and(
-            eq(agentOptimizationTasks.agentId, f.agentId),
-            eq(agentOptimizationTasks.kind, f.kind),
-            eq(agentOptimizationTasks.dayKey, dayKey),
-          ),
-        )
-        .limit(1);
+      // INSERT IGNORE on a UNIQUE (agentId, kind, dayKey) constraint avoids
+      // re-flagging the same anomaly hourly — Marcin only wants to see it once
+      // per day until he acts.
+      await db.execute(sql`
+        INSERT IGNORE INTO \`agent_optimization_tasks\`
+          (\`agentId\`, \`seatName\`, \`kind\`, \`title\`, \`details\`, \`severity\`, \`dayKey\`, \`status\`)
+        VALUES (${f.agentId}, ${f.seatName}, ${f.kind}, ${f.title}, ${f.details}, ${f.severity}, ${dayKey}, 'open')
+      `);
+      // Find the row id (works whether INSERT or IGNORE)
+      const [row] = (await db.execute(sql`
+        SELECT \`id\`, \`status\` FROM \`agent_optimization_tasks\`
+        WHERE \`agentId\` = ${f.agentId} AND \`kind\` = ${f.kind} AND \`dayKey\` = ${dayKey}
+        LIMIT 1
+      `)) as unknown as Array<{ id: number; status: string }>;
       if (row && row.status === "open") {
         await db.insert(notifications).values({
           userId: 1,
@@ -229,8 +213,30 @@ async function persistFlags(flags: OptimizationFlag[], now: Date): Promise<void>
  * known migration drift pattern).
  */
 export async function ensureOptimizationTasksTable(): Promise<void> {
-  // Table created by drizzle Postgres migrations; no boot-time DDL needed.
-  return;
+  const db = await getDb();
+  if (!db) return;
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS \`agent_optimization_tasks\` (
+        \`id\` int AUTO_INCREMENT NOT NULL,
+        \`agentId\` int NOT NULL,
+        \`seatName\` varchar(80) NOT NULL,
+        \`kind\` varchar(40) NOT NULL,
+        \`title\` varchar(255) NOT NULL,
+        \`details\` text,
+        \`severity\` enum('info','warn','critical') NOT NULL DEFAULT 'info',
+        \`dayKey\` varchar(10) NOT NULL,
+        \`status\` enum('open','acknowledged','dismissed','applied') NOT NULL DEFAULT 'open',
+        \`reviewedByUserId\` int,
+        \`reviewedAt\` timestamp NULL,
+        \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT \`agent_optimization_tasks_id\` PRIMARY KEY(\`id\`),
+        CONSTRAINT \`agent_optimization_tasks_unique_per_day\` UNIQUE(\`agentId\`, \`kind\`, \`dayKey\`)
+      )
+    `);
+  } catch (err) {
+    console.warn("[systemIntegrity] ensureOptimizationTasksTable failed:", err);
+  }
 }
 
 let interval: NodeJS.Timeout | null = null;
@@ -276,24 +282,25 @@ export async function listOptimizationTasks(args: {
   const db = await getDb();
   if (!db) return [];
   const limit = args.limit ?? 50;
-  const status = args.status ?? "open";
-  const rows = await db
-    .select({
-      id: agentOptimizationTasks.id,
-      agentId: agentOptimizationTasks.agentId,
-      seatName: agentOptimizationTasks.seatName,
-      kind: agentOptimizationTasks.kind,
-      title: agentOptimizationTasks.title,
-      details: agentOptimizationTasks.details,
-      severity: agentOptimizationTasks.severity,
-      status: agentOptimizationTasks.status,
-      createdAt: agentOptimizationTasks.createdAt,
-    })
-    .from(agentOptimizationTasks)
-    .where(eq(agentOptimizationTasks.status, status))
-    .orderBy(desc(agentOptimizationTasks.createdAt))
-    .limit(limit);
-  return rows.map((r) => ({ ...r, details: r.details ?? "" }));
+  const rows = (await db.execute(sql`
+    SELECT \`id\`, \`agentId\`, \`seatName\`, \`kind\`, \`title\`, \`details\`,
+           \`severity\`, \`status\`, \`createdAt\`
+    FROM \`agent_optimization_tasks\`
+    WHERE \`status\` = ${args.status ?? "open"}
+    ORDER BY \`createdAt\` DESC
+    LIMIT ${limit}
+  `)) as unknown as Array<{
+    id: number;
+    agentId: number;
+    seatName: string;
+    kind: string;
+    title: string;
+    details: string;
+    severity: string;
+    status: string;
+    createdAt: Date;
+  }>;
+  return rows;
 }
 
 /** Mark an optimization task acknowledged/dismissed/applied. */
@@ -304,12 +311,11 @@ export async function reviewOptimizationTask(args: {
 }): Promise<void> {
   const db = await getDb();
   if (!db) return;
-  await db
-    .update(agentOptimizationTasks)
-    .set({
-      status: args.status,
-      reviewedByUserId: args.userId,
-      reviewedAt: new Date(),
-    })
-    .where(eq(agentOptimizationTasks.id, args.id));
+  await db.execute(sql`
+    UPDATE \`agent_optimization_tasks\`
+    SET \`status\` = ${args.status},
+        \`reviewedByUserId\` = ${args.userId},
+        \`reviewedAt\` = CURRENT_TIMESTAMP
+    WHERE \`id\` = ${args.id}
+  `);
 }

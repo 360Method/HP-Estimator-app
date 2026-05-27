@@ -56,8 +56,7 @@ export async function getPhoneSettings() {
     businessHoursEnd: "17:00",
     businessDays: "1,2,3,4,5",
   };
-  await db.insert(phoneSettings).values(defaultSettings).onConflictDoUpdate({
-    target: phoneSettings.id,
+  await db.insert(phoneSettings).values(defaultSettings).onDuplicateKeyUpdate({
     set: { updatedAt: new Date() },
   });
   const fresh = await db.select().from(phoneSettings).where(eq(phoneSettings.id, 1)).limit(1);
