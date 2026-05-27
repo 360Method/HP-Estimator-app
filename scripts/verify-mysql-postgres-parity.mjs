@@ -127,14 +127,18 @@ const APP_FKS = [
   { childTable: 'vendor_trades', childCol: 'tradeId', parentTable: 'trades', parentCol: 'id' },
   { childTable: 'vendor_jobs', childCol: 'vendorId', parentTable: 'vendors', parentCol: 'id' },
   { childTable: 'vendor_communications', childCol: 'vendorId', parentTable: 'vendors', parentCol: 'id' },
-  { childTable: 'vendor_communications', childCol: 'vendorJobId', parentTable: 'vendor_jobs', parentCol: 'id' },
+  // (vendor_communications has no vendorJobId column — it relates to vendors and
+  //  to opportunities, but not to a specific vendor_job. Removed bogus entry.)
   { childTable: 'vendor_onboarding_steps', childCol: 'vendorId', parentTable: 'vendors', parentCol: 'id' },
 
   // agent teams
   { childTable: 'agent_team_members', childCol: 'teamId', parentTable: 'agent_teams', parentCol: 'id' },
   { childTable: 'agent_team_tasks', childCol: 'teamId', parentTable: 'agent_teams', parentCol: 'id' },
   { childTable: 'agent_team_messages', childCol: 'teamId', parentTable: 'agent_teams', parentCol: 'id' },
-  { childTable: 'agent_team_handoffs', childCol: 'teamId', parentTable: 'agent_teams', parentCol: 'id' },
+  // agent_team_handoffs uses fromTeamId/toTeamId, not teamId — both edges are
+  // logical FKs to agent_teams.
+  { childTable: 'agent_team_handoffs', childCol: 'fromTeamId', parentTable: 'agent_teams', parentCol: 'id' },
+  { childTable: 'agent_team_handoffs', childCol: 'toTeamId', parentTable: 'agent_teams', parentCol: 'id' },
   { childTable: 'agent_team_artifacts', childCol: 'teamId', parentTable: 'agent_teams', parentCol: 'id' },
   { childTable: 'agent_team_violations', childCol: 'teamId', parentTable: 'agent_teams', parentCol: 'id' },
 ];
