@@ -16,33 +16,13 @@
  * uses to scope idempotency (a date, an ISO week, etc.). UNIQUE(runKey,
  * periodKey) means a second insert in the same period silently no-ops.
  */
-import { sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getDb } from "../../db";
-
-let ensured = false;
+import { cronRuns } from "../../../drizzle/schema";
 
 export async function ensureCronRunsTable(): Promise<void> {
-  if (ensured) return;
-  const db = await getDb();
-  if (!db) return;
-  try {
-    await db.execute(sql`
-      CREATE TABLE IF NOT EXISTS \`cron_runs\` (
-        \`id\` int AUTO_INCREMENT NOT NULL,
-        \`runKey\` varchar(64) NOT NULL,
-        \`periodKey\` varchar(32) NOT NULL,
-        \`status\` enum('claimed','succeeded','failed') NOT NULL DEFAULT 'claimed',
-        \`detail\` text,
-        \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        \`updatedAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        CONSTRAINT \`cron_runs_id\` PRIMARY KEY(\`id\`),
-        CONSTRAINT \`cron_runs_run_period_uniq\` UNIQUE(\`runKey\`, \`periodKey\`)
-      )
-    `);
-    ensured = true;
-  } catch (err) {
-    console.warn("[cronRuns] ensureCronRunsTable failed:", err);
-  }
+  // Table created by drizzle Postgres migrations; no boot-time DDL needed.
+  return;
 }
 
 /**
@@ -52,16 +32,15 @@ export async function ensureCronRunsTable(): Promise<void> {
  * single-claim.
  */
 export async function claimCronRun(runKey: string, periodKey: string): Promise<boolean> {
-  await ensureCronRunsTable();
   const db = await getDb();
   if (!db) return false;
   try {
-    const res = (await db.execute(sql`
-      INSERT IGNORE INTO \`cron_runs\` (\`runKey\`, \`periodKey\`, \`status\`)
-      VALUES (${runKey}, ${periodKey}, 'claimed')
-    `)) as unknown as { affectedRows?: number } | Array<unknown>;
-    const affected = (res as { affectedRows?: number }).affectedRows;
-    return typeof affected === "number" ? affected > 0 : true;
+    const inserted = await db
+      .insert(cronRuns)
+      .values({ runKey, periodKey, status: "claimed" })
+      .onConflictDoNothing({ target: [cronRuns.runKey, cronRuns.periodKey] })
+      .returning({ id: cronRuns.id });
+    return inserted.length > 0;
   } catch (err) {
     console.warn(`[cronRuns] claim failed for ${runKey}@${periodKey}:`, err);
     return false;
@@ -77,11 +56,10 @@ export async function markCronRunResult(
   const db = await getDb();
   if (!db) return;
   try {
-    await db.execute(sql`
-      UPDATE \`cron_runs\`
-      SET \`status\` = ${status}, \`detail\` = ${detail ?? null}
-      WHERE \`runKey\` = ${runKey} AND \`periodKey\` = ${periodKey}
-    `);
+    await db
+      .update(cronRuns)
+      .set({ status, detail: detail ?? null })
+      .where(and(eq(cronRuns.runKey, runKey), eq(cronRuns.periodKey, periodKey)));
   } catch (err) {
     console.warn(`[cronRuns] markCronRunResult failed for ${runKey}@${periodKey}:`, err);
   }

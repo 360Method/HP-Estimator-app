@@ -86,145 +86,13 @@ function verifyTwilioRequest(req: express.Request, routePath: string): boolean {
 }
 
 async function ensurePhoneTables() {
-  try {
-    const { getDb } = await import("../db");
-    const { sql } = await import("drizzle-orm");
-    const db = await getDb();
-    if (!db) return;
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`phoneSettings\` (
-      \`id\` int NOT NULL DEFAULT 1,
-      \`forwardingMode\` enum('forward_to_number','forward_to_ai','voicemail') NOT NULL DEFAULT 'forward_to_number',
-      \`forwardingNumber\` varchar(20) DEFAULT '',
-      \`aiServiceNumber\` varchar(20) DEFAULT '',
-      \`greeting\` varchar(500) DEFAULT '',
-      \`voicemailPrompt\` varchar(600) DEFAULT '',
-      \`callRecording\` boolean NOT NULL DEFAULT false,
-      \`transcribeVoicemail\` boolean NOT NULL DEFAULT true,
-      \`afterHoursEnabled\` boolean NOT NULL DEFAULT false,
-      \`businessHoursStart\` varchar(5) DEFAULT '08:00',
-      \`businessHoursEnd\` varchar(5) DEFAULT '17:00',
-      \`businessDays\` varchar(20) DEFAULT '1,2,3,4,5',
-      \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
-      CONSTRAINT \`phoneSettings_id\` PRIMARY KEY(\`id\`)
-    )`);
-    await db.execute(sql`INSERT IGNORE INTO \`phoneSettings\` (
-      \`id\`, \`forwardingMode\`, \`forwardingNumber\`, \`greeting\`, \`voicemailPrompt\`,
-      \`callRecording\`, \`transcribeVoicemail\`, \`afterHoursEnabled\`,
-      \`businessHoursStart\`, \`businessHoursEnd\`, \`businessDays\`
-    ) VALUES (
-      1, 'forward_to_number', '+13602179444',
-      'Thank you for calling Handy Pioneers. Please hold while we connect you.',
-      'You''ve reached Handy Pioneers. We''re unable to take your call right now. Please leave a message and we''ll return it within one business day.',
-      true, true, true, '08:00', '18:00', '1,2,3,4,5'
-    )`);
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`callLogs\` (
-      \`id\` int AUTO_INCREMENT NOT NULL,
-      \`conversationId\` int NOT NULL,
-      \`messageId\` int,
-      \`twilioCallSid\` varchar(64),
-      \`direction\` enum('inbound','outbound') NOT NULL,
-      \`status\` varchar(32) NOT NULL DEFAULT 'answered',
-      \`durationSecs\` int NOT NULL DEFAULT 0,
-      \`recordingUrl\` text,
-      \`recordingAppUrl\` text,
-      \`voicemailUrl\` text,
-      \`callerPhone\` varchar(32),
-      \`startedAt\` timestamp NOT NULL DEFAULT (now()),
-      \`endedAt\` timestamp,
-      CONSTRAINT \`callLogs_id\` PRIMARY KEY(\`id\`)
-    )`);
-    console.log("[boot] phoneSettings + callLogs ensured");
-  } catch (err) {
-    console.warn("[boot] ensurePhoneTables failed (non-fatal):", err);
-  }
+  // boot-time MySQL DDL removed; tables now created by drizzle Postgres migrations
+  return;
 }
 
 async function ensurePriorityTranslationTables() {
-  // Migration 0058 created these for the Roadmap Generator lead magnet but
-  // the drizzle tracker diverges from prod (see memory note: migration drift
-  // is a known issue), so the tables aren't actually present in production.
-  // Create them at boot if missing — same pattern as ensurePhoneTables().
-  try {
-    const { getDb } = await import("../db");
-    const { sql } = await import("drizzle-orm");
-    const db = await getDb();
-    if (!db) return;
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`portalAccounts\` (
-      \`id\` varchar(64) NOT NULL,
-      \`email\` varchar(320) NOT NULL,
-      \`firstName\` varchar(128) NOT NULL DEFAULT '',
-      \`lastName\` varchar(128) NOT NULL DEFAULT '',
-      \`phone\` varchar(32) NOT NULL DEFAULT '',
-      \`customerId\` varchar(64),
-      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
-      \`lastLoginAt\` timestamp NULL,
-      CONSTRAINT \`portalAccounts_id\` PRIMARY KEY(\`id\`),
-      CONSTRAINT \`portalAccounts_email_unique\` UNIQUE(\`email\`)
-    )`);
-    await db.execute(sql`CREATE INDEX IF NOT EXISTS \`portalAccounts_email_idx\` ON \`portalAccounts\` (\`email\`)`).catch(() => null);
-    await db.execute(sql`CREATE INDEX IF NOT EXISTS \`portalAccounts_customerId_idx\` ON \`portalAccounts\` (\`customerId\`)`).catch(() => null);
-
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`portalMagicLinks\` (
-      \`token\` varchar(128) NOT NULL,
-      \`portalAccountId\` varchar(64) NOT NULL,
-      \`expiresAt\` timestamp NOT NULL,
-      \`consumedAt\` timestamp NULL,
-      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
-      CONSTRAINT \`portalMagicLinks_token\` PRIMARY KEY(\`token\`)
-    )`);
-    await db.execute(sql`CREATE INDEX IF NOT EXISTS \`portalMagicLinks_account_idx\` ON \`portalMagicLinks\` (\`portalAccountId\`)`).catch(() => null);
-
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`portalProperties\` (
-      \`id\` varchar(64) NOT NULL,
-      \`portalAccountId\` varchar(64) NOT NULL,
-      \`street\` varchar(255) NOT NULL DEFAULT '',
-      \`unit\` varchar(64) NOT NULL DEFAULT '',
-      \`city\` varchar(128) NOT NULL DEFAULT '',
-      \`state\` varchar(64) NOT NULL DEFAULT '',
-      \`zip\` varchar(10) NOT NULL DEFAULT '',
-      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
-      CONSTRAINT \`portalProperties_id\` PRIMARY KEY(\`id\`)
-    )`);
-    await db.execute(sql`CREATE INDEX IF NOT EXISTS \`portalProperties_account_idx\` ON \`portalProperties\` (\`portalAccountId\`)`).catch(() => null);
-    await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS \`portalProperties_account_zip_street_idx\` ON \`portalProperties\`(\`portalAccountId\`, \`street\`, \`zip\`)`).catch(() => null);
-
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`homeHealthRecords\` (
-      \`id\` varchar(64) NOT NULL,
-      \`propertyId\` varchar(64) NOT NULL,
-      \`portalAccountId\` varchar(64) NOT NULL,
-      \`findings\` json NOT NULL,
-      \`summary\` text,
-      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
-      \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
-      CONSTRAINT \`homeHealthRecords_id\` PRIMARY KEY(\`id\`)
-    )`);
-    await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS \`homeHealthRecords_property_idx\` ON \`homeHealthRecords\`(\`propertyId\`)`).catch(() => null);
-
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`priorityTranslations\` (
-      \`id\` varchar(64) NOT NULL,
-      \`portalAccountId\` varchar(64) NOT NULL,
-      \`propertyId\` varchar(64) NOT NULL,
-      \`homeHealthRecordId\` varchar(64),
-      \`pdfStoragePath\` text,
-      \`reportUrl\` text,
-      \`notes\` text,
-      \`status\` varchar(32) NOT NULL DEFAULT 'submitted',
-      \`claudeResponse\` json,
-      \`outputPdfPath\` text,
-      \`deliveredAt\` timestamp NULL,
-      \`failureReason\` text,
-      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
-      \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
-      CONSTRAINT \`priorityTranslations_id\` PRIMARY KEY(\`id\`)
-    )`);
-    await db.execute(sql`CREATE INDEX IF NOT EXISTS \`priorityTranslations_account_idx\` ON \`priorityTranslations\` (\`portalAccountId\`)`).catch(() => null);
-    await db.execute(sql`CREATE INDEX IF NOT EXISTS \`priorityTranslations_property_idx\` ON \`priorityTranslations\` (\`propertyId\`)`).catch(() => null);
-    await db.execute(sql`CREATE INDEX IF NOT EXISTS \`priorityTranslations_status_idx\` ON \`priorityTranslations\` (\`status\`)`).catch(() => null);
-
-    console.log("[boot] priorityTranslation tables ensured");
-  } catch (err) {
-    console.warn("[boot] ensurePriorityTranslationTables failed (non-fatal):", err);
-  }
+  // boot-time MySQL DDL removed; tables now created by drizzle Postgres migrations
+  return;
 }
 
 /**
@@ -237,170 +105,23 @@ async function ensurePriorityTranslationTables() {
  * each one defensively at boot. Same pattern as ensurePortalContinuityFlag.
  */
 async function ensurePortalCustomersColumns() {
-  try {
-    const { getDb } = await import("../db");
-    const { sql } = await import("drizzle-orm");
-    const db = await getDb();
-    if (!db) return;
-
-    const required: Array<{ col: string; type: string; extra?: string }> = [
-      { col: "stripeCustomerId", type: "varchar(64)" },
-      { col: "referralCode", type: "varchar(32)", extra: "UNIQUE" },
-      { col: "referredBy", type: "varchar(64)" },
-      { col: "onboardingCompletedAt", type: "timestamp NULL" },
-    ];
-
-    for (const r of required) {
-      const [[row]]: any = await db.execute(sql`
-        SELECT COUNT(*) AS c FROM information_schema.columns
-        WHERE table_schema = DATABASE()
-          AND table_name = 'portalCustomers'
-          AND column_name = ${r.col}
-      `);
-      if (row && Number(row.c) === 0) {
-        const ddl = `ALTER TABLE \`portalCustomers\` ADD COLUMN \`${r.col}\` ${r.type}`;
-        await db.execute(sql.raw(ddl));
-        if (r.extra === "UNIQUE") {
-          await db
-            .execute(sql.raw(`ALTER TABLE \`portalCustomers\` ADD UNIQUE \`portalCustomers_${r.col}_unique\` (\`${r.col}\`)`))
-            .catch(() => null);
-        }
-        console.log(`[boot] portalCustomers.${r.col} column added`);
-      }
-    }
-    console.log("[boot] ensurePortalCustomersColumns OK");
-  } catch (err) {
-    console.warn("[boot] ensurePortalCustomersColumns failed (non-fatal):", err);
-  }
+  // boot-time MySQL DDL removed; tables now created by drizzle Postgres migrations
+  return;
 }
 
 async function ensurePortalContinuityFlag() {
-  try {
-    const { getDb } = await import("../db");
-    const { sql } = await import("drizzle-orm");
-    const db = await getDb();
-    if (!db) return;
-    const [[row]]: any = await db.execute(sql`
-      SELECT COUNT(*) AS c FROM information_schema.columns
-      WHERE table_schema = DATABASE()
-        AND table_name = 'appSettings'
-        AND column_name = 'portalContinuityEnabled'
-    `);
-    if (row && Number(row.c) === 0) {
-      await db.execute(sql`
-        ALTER TABLE \`appSettings\`
-        ADD COLUMN \`portalContinuityEnabled\` boolean NOT NULL DEFAULT 1
-      `);
-      console.log("[boot] portalContinuityEnabled column added");
-    }
-  } catch (err) {
-    console.warn("[boot] ensurePortalContinuityFlag failed (non-fatal):", err);
-  }
+  // boot-time MySQL DDL removed; tables now created by drizzle Postgres migrations
+  return;
 }
 
 async function ensurePortalNativeReplyColumns() {
-  // Defensive boot-time migration for `messages` reply-token columns +
-  // `orphanEmails` table. Mirrors the 0064 pattern — apply the change only
-  // when prod DB is missing it, regardless of what drizzle migration tracker
-  // thinks. See migration 0065_portal_native_replies.sql for the canonical SQL.
-  try {
-    const { getDb } = await import("../db");
-    const { sql } = await import("drizzle-orm");
-    const db = await getDb();
-    if (!db) return;
-    const cols: Array<[string, string]> = [
-      ["replyToken", "varchar(64) NULL"],
-      ["opportunityId", "varchar(64) NULL"],
-      ["isPortalReply", "boolean NOT NULL DEFAULT 0"],
-      ["threadRootId", "int NULL"],
-    ];
-    for (const [name, type] of cols) {
-      const [[row]]: any = await db.execute(sql`
-        SELECT COUNT(*) AS c FROM information_schema.columns
-        WHERE table_schema = DATABASE()
-          AND table_name = 'messages'
-          AND column_name = ${name}
-      `);
-      if (row && Number(row.c) === 0) {
-        await db.execute(sql.raw(
-          `ALTER TABLE \`messages\` ADD COLUMN \`${name}\` ${type}`,
-        ));
-        console.log(`[boot] messages.${name} column added`);
-      }
-    }
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`orphanEmails\` (
-      \`id\` int AUTO_INCREMENT NOT NULL,
-      \`gmailMessageId\` varchar(128) NOT NULL,
-      \`gmailThreadId\` varchar(128),
-      \`fromEmail\` varchar(320) NOT NULL,
-      \`fromName\` varchar(255),
-      \`subject\` varchar(512),
-      \`body\` text,
-      \`resolvedAt\` timestamp NULL,
-      \`resolvedCustomerId\` varchar(64),
-      \`receivedAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      CONSTRAINT \`orphanEmails_id\` PRIMARY KEY(\`id\`),
-      CONSTRAINT \`orphanEmails_gmailMessageId_unique\` UNIQUE(\`gmailMessageId\`)
-    )`);
-  } catch (err) {
-    console.warn("[boot] ensurePortalNativeReplyColumns failed (non-fatal):", err);
-  }
+  // boot-time MySQL DDL removed; tables now created by drizzle Postgres migrations
+  return;
 }
 
 async function ensureReengagementTables() {
-  // The drizzle tracker may diverge from prod; create the re-engagement tables
-  // at boot if missing so /admin/marketing/reengagement-campaign works on first
-  // deploy without a manual migration step. Mirrors ensurePhoneTables.
-  try {
-    const { getDb } = await import("../db");
-    const { sql } = await import("drizzle-orm");
-    const db = await getDb();
-    if (!db) return;
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`reengagementCampaigns\` (
-      \`id\` int AUTO_INCREMENT NOT NULL,
-      \`name\` varchar(160) NOT NULL,
-      \`segment\` enum('hot','warm','cold','custom') NOT NULL DEFAULT 'custom',
-      \`status\` enum('draft','generating','review','sending','sent','cancelled') NOT NULL DEFAULT 'draft',
-      \`description\` text,
-      \`createdBy\` varchar(64),
-      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
-      \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
-      CONSTRAINT \`reengagementCampaigns_id\` PRIMARY KEY(\`id\`)
-    )`);
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`reengagementDrafts\` (
-      \`id\` int AUTO_INCREMENT NOT NULL,
-      \`campaignId\` int NOT NULL,
-      \`customerId\` varchar(64) NOT NULL,
-      \`segment\` enum('hot','warm','cold') NOT NULL,
-      \`channel\` enum('email','sms') NOT NULL,
-      \`subject\` varchar(300),
-      \`body\` text NOT NULL,
-      \`status\` enum('pending','approved','rejected','queued','sent','bounced','replied','failed') NOT NULL DEFAULT 'pending',
-      \`customerHistorySummary\` text,
-      \`qaNotes\` text,
-      \`lastWorkDate\` varchar(32),
-      \`lastWorkSummary\` varchar(500),
-      \`lifetimeValueCents\` int,
-      \`scheduledFor\` timestamp NULL,
-      \`sentAt\` timestamp NULL,
-      \`openedAt\` timestamp NULL,
-      \`clickedAt\` timestamp NULL,
-      \`repliedAt\` timestamp NULL,
-      \`bounceReason\` varchar(300),
-      \`errorMessage\` text,
-      \`providerMessageId\` varchar(120),
-      \`approvedBy\` varchar(64),
-      \`approvedAt\` timestamp NULL,
-      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
-      \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
-      CONSTRAINT \`reengagementDrafts_id\` PRIMARY KEY(\`id\`)
-    )`);
-    await db.execute(sql`CREATE INDEX IF NOT EXISTS \`reengagementDrafts_campaign_idx\` ON \`reengagementDrafts\` (\`campaignId\`)`).catch(() => {});
-    await db.execute(sql`CREATE INDEX IF NOT EXISTS \`reengagementDrafts_status_idx\` ON \`reengagementDrafts\` (\`status\`)`).catch(() => {});
-    console.log("[boot] reengagementCampaigns + reengagementDrafts ensured");
-  } catch (err) {
-    console.warn("[boot] ensureReengagementTables failed (non-fatal):", err);
-  }
+  // boot-time MySQL DDL removed; tables now created by drizzle Postgres migrations
+  return;
 }
 
 /**
@@ -410,42 +131,8 @@ async function ensureReengagementTables() {
  * only add projectEstimates here.
  */
 async function ensureBookConsultationTables() {
-  try {
-    const { getDb } = await import("../db");
-    const { sql } = await import("drizzle-orm");
-    const db = await getDb();
-    if (!db) return;
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`projectEstimates\` (
-      \`id\` varchar(64) NOT NULL,
-      \`opportunityId\` varchar(64) NOT NULL,
-      \`customerId\` varchar(64) NOT NULL,
-      \`onlineRequestId\` int DEFAULT NULL,
-      \`portalAccountId\` varchar(64) DEFAULT NULL,
-      \`status\` varchar(32) NOT NULL DEFAULT 'submitted',
-      \`confidence\` varchar(16) DEFAULT NULL,
-      \`claudeResponse\` json DEFAULT NULL,
-      \`customerRangeLowUsd\` int DEFAULT NULL,
-      \`customerRangeHighUsd\` int DEFAULT NULL,
-      \`scopeSummary\` text,
-      \`inclusionsMd\` text,
-      \`marginAudit\` text,
-      \`deliveredAt\` timestamp NULL DEFAULT NULL,
-      \`viewedAt\` timestamp NULL DEFAULT NULL,
-      \`proceedClickedAt\` timestamp NULL DEFAULT NULL,
-      \`walkthroughRequestedAt\` timestamp NULL DEFAULT NULL,
-      \`declinedAt\` timestamp NULL DEFAULT NULL,
-      \`failureReason\` text,
-      \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      \`updatedAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      PRIMARY KEY (\`id\`),
-      INDEX \`projectEstimates_opportunity_idx\` (\`opportunityId\`),
-      INDEX \`projectEstimates_customer_idx\` (\`customerId\`),
-      INDEX \`projectEstimates_status_idx\` (\`status\`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
-    console.log("[boot] projectEstimates ensured");
-  } catch (err) {
-    console.warn("[boot] ensureBookConsultationTables failed (non-fatal):", err);
-  }
+  // boot-time MySQL DDL removed; tables now created by drizzle Postgres migrations
+  return;
 }
 
 /**
@@ -455,223 +142,27 @@ async function ensureBookConsultationTables() {
  * drizzle tracker self-heal on next deploy. (See memory note on tracker drift.)
  */
 async function ensureLeadNurturerTables() {
-  try {
-    const { getDb } = await import("../db");
-    const { sql } = await import("drizzle-orm");
-    const db = await getDb();
-    if (!db) return;
-
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agentDrafts\` (
-      \`id\` int NOT NULL AUTO_INCREMENT,
-      \`customerId\` varchar(64) NOT NULL,
-      \`opportunityId\` varchar(64),
-      \`playbookKey\` varchar(64) NOT NULL,
-      \`stepKey\` varchar(64) NOT NULL,
-      \`channel\` varchar(16) NOT NULL,
-      \`status\` varchar(16) NOT NULL DEFAULT 'pending',
-      \`draftAutoSend\` boolean NOT NULL DEFAULT 0,
-      \`scheduledFor\` timestamp NOT NULL,
-      \`subject\` varchar(255),
-      \`body\` text,
-      \`recipientEmail\` varchar(320),
-      \`recipientPhone\` varchar(32),
-      \`contextJson\` text,
-      \`assigneeUserId\` int,
-      \`cancelReason\` varchar(64),
-      \`generatedAt\` timestamp NULL,
-      \`sentAt\` timestamp NULL,
-      \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      \`updatedAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      PRIMARY KEY (\`id\`),
-      KEY \`agentDrafts_customer_idx\` (\`customerId\`),
-      KEY \`agentDrafts_status_sched_idx\` (\`status\`, \`scheduledFor\`),
-      KEY \`agentDrafts_playbook_idx\` (\`playbookKey\`)
-    )`);
-
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`nurturerPlaybooks\` (
-      \`id\` int NOT NULL AUTO_INCREMENT,
-      \`key\` varchar(64) NOT NULL,
-      \`displayName\` varchar(255) NOT NULL,
-      \`description\` text,
-      \`enabled\` boolean NOT NULL DEFAULT 1,
-      \`stepsJson\` text NOT NULL,
-      \`voiceRulesJson\` text,
-      \`updatedAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      PRIMARY KEY (\`id\`),
-      UNIQUE KEY \`nurturerPlaybooks_key_uniq\` (\`key\`)
-    )`);
-
-    // bypassAutoNurture column on customers
-    const [[colRow]]: any = await db.execute(sql`
-      SELECT COUNT(*) AS c FROM information_schema.columns
-      WHERE table_schema = DATABASE()
-        AND table_name = 'customers'
-        AND column_name = 'bypassAutoNurture'
-    `);
-    if (colRow && Number(colRow.c) === 0) {
-      await db.execute(sql`
-        ALTER TABLE \`customers\`
-        ADD COLUMN \`bypassAutoNurture\` boolean NOT NULL DEFAULT 0
-      `);
-      console.log("[boot] customers.bypassAutoNurture column added");
-    }
-
-    // Bug 1 fix (2026-04-27): draftAutoSend column on agentDrafts. Routine
-    // drafts (auto-acks, info questions, post-approval range delivery) skip
-    // the operator's approval gate. See drizzle/0074_agent_drafts_auto_send.sql.
-    const [[autoSendRow]]: any = await db.execute(sql`
-      SELECT COUNT(*) AS c FROM information_schema.columns
-      WHERE table_schema = DATABASE()
-        AND table_name = 'agentDrafts'
-        AND column_name = 'draftAutoSend'
-    `);
-    if (autoSendRow && Number(autoSendRow.c) === 0) {
-      await db.execute(sql`
-        ALTER TABLE \`agentDrafts\`
-        ADD COLUMN \`draftAutoSend\` boolean NOT NULL DEFAULT 0
-      `);
-      console.log("[boot] agentDrafts.draftAutoSend column added");
-    }
-
-    // Seed default playbook
-    const { ensureDefaultPlaybooks } = await import("../lib/leadNurturer/playbook");
-    await ensureDefaultPlaybooks();
-
-    // 0078 backfill: orphan drafts (NULL opportunityId) get pinned to the
-    // customer's most-recent open lead. Marcin's customer profile groups
-    // drafts under their source opportunity; an unattached draft can't tell
-    // him which lead it's about. Idempotent — once the orphans are drained,
-    // re-runs are no-ops.
-    await db.execute(sql`
-      UPDATE \`agentDrafts\` d
-      JOIN (
-        SELECT
-          d2.id AS draftId,
-          (
-            SELECT o.id FROM \`opportunities\` o
-            WHERE o.customerId = d2.customerId
-              AND o.area = 'lead'
-              AND o.archived = 0
-            ORDER BY o.createdAt DESC
-            LIMIT 1
-          ) AS pickedOppId
-        FROM \`agentDrafts\` d2
-        WHERE d2.opportunityId IS NULL
-      ) pick ON pick.draftId = d.id
-      SET d.opportunityId = pick.pickedOppId
-      WHERE pick.pickedOppId IS NOT NULL
-    `).catch((err: unknown) => {
-      console.warn("[boot] agentDrafts opportunityId backfill skipped:", err);
-    });
-
-    console.log("[boot] agentDrafts + nurturerPlaybooks ensured");
-  } catch (err) {
-    console.warn("[boot] ensureLeadNurturerTables failed (non-fatal):", err);
-  }
+  // boot-time MySQL DDL removed; tables now created by drizzle Postgres migrations
+  return;
 }
 
 // Annual Home Health Report opt-in toggle on threeSixtyMemberships.
 // Default OFF per Customer Success Charter §5.
 async function ensureAnnualValuationOptInColumn() {
-  try {
-    const { getDb } = await import("../db");
-    const { sql } = await import("drizzle-orm");
-    const db = await getDb();
-    if (!db) return;
-    const [[row]]: any = await db.execute(sql`
-      SELECT COUNT(*) AS c FROM information_schema.columns
-      WHERE table_schema = DATABASE()
-        AND table_name = 'threeSixtyMemberships'
-        AND column_name = 'annualValuationOptIn'
-    `);
-    if (row && Number(row.c) === 0) {
-      await db.execute(sql`
-        ALTER TABLE \`threeSixtyMemberships\`
-        ADD COLUMN \`annualValuationOptIn\` boolean NOT NULL DEFAULT 0
-      `);
-      console.log("[boot] annualValuationOptIn column added");
-    }
-  } catch (err) {
-    console.warn("[boot] ensureAnnualValuationOptInColumn failed (non-fatal):", err);
-  }
+  // boot-time MySQL DDL removed; tables now created by drizzle Postgres migrations
+  return;
 }
 
 async function ensureOAuthIntegrationTables() {
-  try {
-    const { getDb } = await import("../db");
-    const { sql } = await import("drizzle-orm");
-    const db = await getDb();
-    if (!db) return;
-    // Defensive boot-time creates (drizzle tracker may diverge from prod DB)
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`gbpTokens\` (
-      \`id\` int AUTO_INCREMENT NOT NULL,
-      \`accountId\` varchar(128) NOT NULL,
-      \`locationId\` varchar(128),
-      \`accessToken\` text NOT NULL,
-      \`refreshToken\` text NOT NULL,
-      \`expiresAt\` varchar(32) NOT NULL,
-      \`connectedAt\` timestamp NOT NULL DEFAULT (now()),
-      \`connectedByStaffId\` int,
-      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
-      \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
-      CONSTRAINT \`gbpTokens_id\` PRIMARY KEY(\`id\`)
-    )`);
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`metaConnections\` (
-      \`id\` int AUTO_INCREMENT NOT NULL,
-      \`adAccountId\` varchar(64) NOT NULL,
-      \`pageIds\` text,
-      \`tokenStatus\` varchar(32) NOT NULL DEFAULT 'active',
-      \`lastVerifiedAt\` timestamp,
-      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
-      \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
-      CONSTRAINT \`metaConnections_id\` PRIMARY KEY(\`id\`)
-    )`);
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`googleAdsTokens\` (
-      \`id\` int AUTO_INCREMENT NOT NULL,
-      \`customerId\` varchar(64) NOT NULL,
-      \`accessToken\` text NOT NULL,
-      \`refreshToken\` text NOT NULL,
-      \`expiresAt\` varchar(32) NOT NULL,
-      \`connectedAt\` timestamp NOT NULL DEFAULT (now()),
-      \`connectedByStaffId\` int,
-      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
-      \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
-      CONSTRAINT \`googleAdsTokens_id\` PRIMARY KEY(\`id\`)
-    )`);
-    console.log("[boot] OAuth integration tables ensured");
-  } catch (err) {
-    console.warn("[boot] ensureOAuthIntegrationTables failed (non-fatal):", err);
-  }
+  // boot-time MySQL DDL removed; tables now created by drizzle Postgres migrations
+  return;
 }
 
 // Idempotent upgrade: replace `portalMagicLinks.token` with hashed `tokenHash`.
 // Runs on every boot. Drizzle-kit can drift from prod, so we don't rely on it.
 async function ensureMagicLinkTokenHash() {
-  try {
-    const { getDb } = await import("../db");
-    const { sql } = await import("drizzle-orm");
-    const db = await getDb();
-    if (!db) return;
-    const existsRows = await db.execute(sql`
-      SELECT COUNT(*) AS c
-      FROM information_schema.COLUMNS
-      WHERE TABLE_SCHEMA = DATABASE()
-        AND TABLE_NAME = 'portalMagicLinks'
-        AND COLUMN_NAME = 'tokenHash'
-    `);
-    const rows = (existsRows as any)[0] ?? existsRows;
-    const count = Number(rows?.[0]?.c ?? rows?.c ?? 0);
-    if (count > 0) return;
-    console.log("[boot] Upgrading portalMagicLinks -> tokenHash column");
-    await db.execute(sql`DELETE FROM \`portalMagicLinks\``);
-    await db.execute(sql`ALTER TABLE \`portalMagicLinks\` DROP PRIMARY KEY`);
-    await db.execute(sql`ALTER TABLE \`portalMagicLinks\` DROP COLUMN \`token\``);
-    await db.execute(sql`ALTER TABLE \`portalMagicLinks\` ADD COLUMN \`tokenHash\` CHAR(64) NOT NULL`);
-    await db.execute(sql`ALTER TABLE \`portalMagicLinks\` ADD PRIMARY KEY (\`tokenHash\`)`);
-    console.log("[boot] portalMagicLinks upgrade complete");
-  } catch (err) {
-    console.warn("[boot] ensureMagicLinkTokenHash failed (non-fatal):", err);
-  }
+  // boot-time MySQL DDL removed; tables now created by drizzle Postgres migrations
+  return;
 }
 
 async function ensureSchedulingTablesBoot() {
@@ -684,61 +175,8 @@ async function ensureSchedulingTablesBoot() {
 }
 
 async function ensureAgentPhase4Tables() {
-  // Phase 4 (triggers + chat) tables. Drizzle-kit's tracker has drifted from
-  // prod a few times — same boot-time idempotent guard the phone tables use.
-  try {
-    const { getDb } = await import("../db");
-    const { sql } = await import("drizzle-orm");
-    const db = await getDb();
-    if (!db) return;
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`ai_agent_event_subscriptions\` (
-      \`id\` int AUTO_INCREMENT NOT NULL,
-      \`agentId\` int NOT NULL,
-      \`eventName\` varchar(80) NOT NULL,
-      \`filter\` text,
-      \`enabled\` boolean NOT NULL DEFAULT true,
-      \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      CONSTRAINT \`ai_agent_event_subscriptions_id\` PRIMARY KEY(\`id\`)
-    )`);
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`ai_agent_schedules\` (
-      \`id\` int AUTO_INCREMENT NOT NULL,
-      \`agentId\` int NOT NULL,
-      \`cronExpression\` varchar(80) NOT NULL,
-      \`timezone\` varchar(64) NOT NULL DEFAULT 'America/Los_Angeles',
-      \`enabled\` boolean NOT NULL DEFAULT true,
-      \`lastRunAt\` timestamp NULL,
-      \`nextRunAt\` timestamp NULL,
-      \`payload\` text,
-      \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      CONSTRAINT \`ai_agent_schedules_id\` PRIMARY KEY(\`id\`)
-    )`);
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`integrator_chat_conversations\` (
-      \`id\` int AUTO_INCREMENT NOT NULL,
-      \`userId\` int NOT NULL,
-      \`title\` varchar(200),
-      \`lastMessageAt\` timestamp NULL,
-      \`archived\` boolean NOT NULL DEFAULT false,
-      \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      \`updatedAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      CONSTRAINT \`integrator_chat_conversations_id\` PRIMARY KEY(\`id\`)
-    )`);
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`integrator_chat_messages\` (
-      \`id\` int AUTO_INCREMENT NOT NULL,
-      \`conversationId\` int NOT NULL,
-      \`userId\` int NOT NULL,
-      \`role\` enum('user','assistant','tool') NOT NULL,
-      \`content\` text NOT NULL,
-      \`toolCalls\` text,
-      \`inputTokens\` int NOT NULL DEFAULT 0,
-      \`outputTokens\` int NOT NULL DEFAULT 0,
-      \`costUsd\` decimal(10,4) NOT NULL DEFAULT '0.0000',
-      \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      CONSTRAINT \`integrator_chat_messages_id\` PRIMARY KEY(\`id\`)
-    )`);
-    console.log("[boot] agent phase-4 tables ensured");
-  } catch (err) {
-    console.warn("[boot] ensureAgentPhase4Tables failed (non-fatal):", err);
-  }
+  // boot-time MySQL DDL removed; tables now created by drizzle Postgres migrations
+  return;
 }
 
 async function ensureVendorTablesBoot() {
@@ -760,64 +198,8 @@ async function ensurePasswordResetTokensTableBoot() {
 }
 
 async function ensureCharterTables() {
-  try {
-    const { getDb } = await import("../db");
-    const { sql } = await import("drizzle-orm");
-    const db = await getDb();
-    if (!db) return;
-
-    // Add charter columns to ai_agents — each ALTER is wrapped so re-runs skip gracefully
-    await db.execute(sql`ALTER TABLE \`ai_agents\` ADD COLUMN \`charterLoaded\` boolean NOT NULL DEFAULT false`).catch(() => {});
-    await db.execute(sql`ALTER TABLE \`ai_agents\` ADD COLUMN \`kpiCount\` int NOT NULL DEFAULT 0`).catch(() => {});
-    await db.execute(sql`ALTER TABLE \`ai_agents\` ADD COLUMN \`playbookCount\` int NOT NULL DEFAULT 0`).catch(() => {});
-
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agentCharters\` (
-      \`id\` int AUTO_INCREMENT NOT NULL,
-      \`department\` varchar(50) NOT NULL,
-      \`markdownContent\` longtext NOT NULL,
-      \`version\` int NOT NULL DEFAULT 1,
-      \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
-      \`updatedByStaffId\` int,
-      CONSTRAINT \`agentCharters_id\` PRIMARY KEY(\`id\`),
-      CONSTRAINT \`agentCharters_dept_uniq\` UNIQUE(\`department\`)
-    )`);
-
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agentKpis\` (
-      \`id\` int AUTO_INCREMENT NOT NULL,
-      \`scopeType\` enum('seat','department','company') NOT NULL,
-      \`scopeId\` varchar(100) NOT NULL,
-      \`key\` varchar(100) NOT NULL,
-      \`label\` varchar(200) NOT NULL,
-      \`targetMin\` decimal(10,2),
-      \`targetMax\` decimal(10,2),
-      \`unit\` varchar(20) NOT NULL,
-      \`period\` enum('daily','weekly','monthly','quarterly') NOT NULL,
-      \`sourceQuery\` text,
-      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
-      CONSTRAINT \`agentKpis_id\` PRIMARY KEY(\`id\`),
-      CONSTRAINT \`agentKpis_scope_key\` UNIQUE(\`scopeType\`, \`scopeId\`, \`key\`)
-    )`);
-
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agentPlaybooks\` (
-      \`id\` int AUTO_INCREMENT NOT NULL,
-      \`ownerSeatName\` varchar(100) NOT NULL,
-      \`ownerDepartment\` varchar(50) NOT NULL,
-      \`name\` varchar(200) NOT NULL,
-      \`slug\` varchar(200) NOT NULL,
-      \`content\` mediumtext NOT NULL,
-      \`variables\` text,
-      \`category\` varchar(50) NOT NULL,
-      \`version\` int NOT NULL DEFAULT 1,
-      \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
-      \`updatedByStaffId\` int,
-      CONSTRAINT \`agentPlaybooks_id\` PRIMARY KEY(\`id\`),
-      CONSTRAINT \`agentPlaybooks_slug_uniq\` UNIQUE(\`slug\`)
-    )`);
-
-    console.log("[boot] ensureCharterTables OK");
-  } catch (err) {
-    console.warn("[boot] ensureCharterTables failed (non-fatal):", err);
-  }
+  // boot-time MySQL DDL removed; tables now created by drizzle Postgres migrations
+  return;
 }
 
 /**
@@ -826,319 +208,18 @@ async function ensureCharterTables() {
  * department (8 rows). Idempotent — re-runs after the first boot are no-ops.
  */
 async function ensureAgentTeamTables() {
-  try {
-    const { getDb } = await import("../db");
-    const { sql } = await import("drizzle-orm");
-    const db = await getDb();
-    if (!db) return;
-
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agent_teams\` (
-      \`id\` int AUTO_INCREMENT NOT NULL,
-      \`department\` enum('sales','operations','marketing','finance','customer_success','vendor_network','technology','strategy','integrator') NOT NULL,
-      \`name\` varchar(120) NOT NULL,
-      \`teamLeadSeatId\` int,
-      \`purpose\` text,
-      \`status\` enum('active','paused') NOT NULL DEFAULT 'active',
-      \`costCapDailyUsd\` decimal(8,2) NOT NULL DEFAULT 5.00,
-      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
-      \`updatedAt\` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
-      CONSTRAINT \`agent_teams_id\` PRIMARY KEY(\`id\`),
-      CONSTRAINT \`agent_teams_dept_name_uniq\` UNIQUE(\`department\`, \`name\`)
-    )`);
-
-    // Phase 2 in-place migration: drop the old single-team-per-department UNIQUE
-    // and add UNIQUE(department, name) + costCapDailyUsd. Each step swallows the
-    // error if the schema is already at the Phase 2 target shape (idempotent).
-    await db.execute(sql`ALTER TABLE \`agent_teams\` DROP INDEX \`agent_teams_department_uniq\``).catch(() => {});
-    await db.execute(sql`ALTER TABLE \`agent_teams\` ADD CONSTRAINT \`agent_teams_dept_name_uniq\` UNIQUE(\`department\`, \`name\`)`).catch(() => {});
-    await db.execute(sql`ALTER TABLE \`agent_teams\` ADD COLUMN \`costCapDailyUsd\` decimal(8,2) NOT NULL DEFAULT 5.00`).catch(() => {});
-
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agent_team_members\` (
-      \`id\` int AUTO_INCREMENT NOT NULL,
-      \`teamId\` int NOT NULL,
-      \`seatId\` int NOT NULL,
-      \`role\` enum('frontend','backend','qa','lead') NOT NULL DEFAULT 'backend',
-      \`joinedAt\` timestamp NOT NULL DEFAULT (now()),
-      CONSTRAINT \`agent_team_members_id\` PRIMARY KEY(\`id\`),
-      CONSTRAINT \`agent_team_members_team_seat_uniq\` UNIQUE(\`teamId\`, \`seatId\`)
-    )`);
-    await db.execute(sql`CREATE INDEX \`agent_team_members_seat_idx\` ON \`agent_team_members\` (\`seatId\`)`).catch(() => {});
-
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agent_team_tasks\` (
-      \`id\` int AUTO_INCREMENT NOT NULL,
-      \`teamId\` int NOT NULL,
-      \`title\` varchar(255) NOT NULL,
-      \`description\` text,
-      \`status\` enum('open','claimed','in_progress','blocked','done') NOT NULL DEFAULT 'open',
-      \`claimedBySeatId\` int,
-      \`ownerFiles\` text,
-      \`sourceEventType\` varchar(80),
-      \`sourceEventPayload\` text,
-      \`customerId\` varchar(64),
-      \`priority\` enum('low','normal','high') NOT NULL DEFAULT 'normal',
-      \`dueAt\` timestamp NULL,
-      \`completedAt\` timestamp NULL,
-      \`notes\` text,
-      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
-      CONSTRAINT \`agent_team_tasks_id\` PRIMARY KEY(\`id\`)
-    )`);
-    await db.execute(sql`CREATE INDEX \`agent_team_tasks_team_status_idx\` ON \`agent_team_tasks\` (\`teamId\`, \`status\`)`).catch(() => {});
-    await db.execute(sql`CREATE INDEX \`agent_team_tasks_customer_idx\` ON \`agent_team_tasks\` (\`customerId\`)`).catch(() => {});
-    await db.execute(sql`CREATE INDEX \`agent_team_tasks_claimedBy_idx\` ON \`agent_team_tasks\` (\`claimedBySeatId\`)`).catch(() => {});
-
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agent_team_messages\` (
-      \`id\` int AUTO_INCREMENT NOT NULL,
-      \`teamId\` int NOT NULL,
-      \`fromSeatId\` int NOT NULL,
-      \`toSeatId\` int,
-      \`body\` text NOT NULL,
-      \`threadId\` int,
-      \`attachments\` text,
-      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
-      CONSTRAINT \`agent_team_messages_id\` PRIMARY KEY(\`id\`)
-    )`);
-    await db.execute(sql`CREATE INDEX \`agent_team_messages_team_created_idx\` ON \`agent_team_messages\` (\`teamId\`, \`createdAt\`)`).catch(() => {});
-    await db.execute(sql`CREATE INDEX \`agent_team_messages_thread_idx\` ON \`agent_team_messages\` (\`threadId\`)`).catch(() => {});
-
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agent_team_handoffs\` (
-      \`id\` int AUTO_INCREMENT NOT NULL,
-      \`fromTeamId\` int NOT NULL,
-      \`toTeamId\` int NOT NULL,
-      \`eventType\` varchar(80) NOT NULL,
-      \`payload\` text,
-      \`status\` enum('pending','accepted','declined') NOT NULL DEFAULT 'pending',
-      \`declineReason\` text,
-      \`acceptedAt\` timestamp NULL,
-      \`declinedAt\` timestamp NULL,
-      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
-      CONSTRAINT \`agent_team_handoffs_id\` PRIMARY KEY(\`id\`)
-    )`);
-    await db.execute(sql`CREATE INDEX \`agent_team_handoffs_to_status_idx\` ON \`agent_team_handoffs\` (\`toTeamId\`, \`status\`)`).catch(() => {});
-    await db.execute(sql`CREATE INDEX \`agent_team_handoffs_from_status_idx\` ON \`agent_team_handoffs\` (\`fromTeamId\`, \`status\`)`).catch(() => {});
-
-    // Phase 2 — Sub-team artifacts + violations tables.
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agent_team_artifacts\` (
-      \`id\` int AUTO_INCREMENT NOT NULL,
-      \`taskId\` int NOT NULL,
-      \`teamId\` int NOT NULL,
-      \`fromSeatId\` int NOT NULL,
-      \`territory\` enum('drafts','data','audits') NOT NULL,
-      \`key\` varchar(120) NOT NULL,
-      \`contentJson\` text NOT NULL,
-      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
-      CONSTRAINT \`agent_team_artifacts_id\` PRIMARY KEY(\`id\`),
-      CONSTRAINT \`agent_team_artifacts_task_terr_key_uniq\` UNIQUE(\`taskId\`, \`territory\`, \`key\`)
-    )`);
-    await db.execute(sql`CREATE INDEX \`agent_team_artifacts_task_idx\` ON \`agent_team_artifacts\` (\`taskId\`)`).catch(() => {});
-    await db.execute(sql`CREATE INDEX \`agent_team_artifacts_team_idx\` ON \`agent_team_artifacts\` (\`teamId\`)`).catch(() => {});
-
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`agent_team_violations\` (
-      \`id\` int AUTO_INCREMENT NOT NULL,
-      \`taskId\` int,
-      \`teamId\` int NOT NULL,
-      \`seatId\` int NOT NULL,
-      \`attemptedRole\` varchar(40) NOT NULL,
-      \`attemptedTerritory\` varchar(40) NOT NULL,
-      \`attemptedKey\` varchar(255),
-      \`reason\` text,
-      \`createdAt\` timestamp NOT NULL DEFAULT (now()),
-      CONSTRAINT \`agent_team_violations_id\` PRIMARY KEY(\`id\`)
-    )`);
-    await db.execute(sql`CREATE INDEX \`agent_team_violations_team_idx\` ON \`agent_team_violations\` (\`teamId\`, \`createdAt\`)`).catch(() => {});
-
-    // Seed dept-level umbrella teams + Phase 2 sub-teams. Idempotent via
-    // UNIQUE(department, name).
-    const seeds: Array<{ slug: string; name: string; purpose: string; costCap?: number }> = [
-      // ── Department-level umbrella teams (Phase 1 origin) ─────────────────
-      { slug: "sales",            name: "Sales",            purpose: "Umbrella for the three Sales sub-teams: Lead Nurturer, Project Estimator, Membership Success." },
-      { slug: "operations",       name: "Operations",       purpose: "Schedule, dispatch, and steward jobs from booking through sign-off." },
-      { slug: "marketing",        name: "Marketing",        purpose: "Umbrella for the four Marketing sub-teams: Content/SEO, Paid Ads, Brand Guardian, Community/Reviews." },
-      { slug: "finance",          name: "Finance",          purpose: "Cash flow, AR/AP, margin discipline, and P&L visibility." },
-      { slug: "customer_success", name: "Customer Success", purpose: "360° member retention, onboarding, and proactive home stewardship." },
-      { slug: "vendor_network",   name: "Vendor Network",   purpose: "Recruit, vet, and steward the trade-vendor bench." },
-      { slug: "technology",       name: "Technology",       purpose: "System integrity, agent runtime health, and platform improvements." },
-      { slug: "strategy",         name: "Strategy",         purpose: "Market research, expansion planning, and long-arc roadmap." },
-      // ── Phase 2 — Sales sub-teams (3 teammates each: frontend/backend/qa) ─
-      { slug: "sales",     name: "Lead Nurturer",     purpose: "Customer-facing nurture: drafts SMS/email/call scripts, pulls history, audits voice + escalation triggers.", costCap: 5 },
-      { slug: "sales",     name: "Project Estimator", purpose: "Estimate authoring: scope narrative, cost calculation w/ margin floor, and confidence audit.",                  costCap: 5 },
-      { slug: "sales",     name: "Membership Success",purpose: "Path A→B continuity: outreach drafts, upsell-window detection, cadence/voice audit (no hard sell).",            costCap: 5 },
-      // ── Phase 2 — Marketing sub-teams ───────────────────────────────────
-      { slug: "marketing", name: "Content & SEO",      purpose: "Organic content engine: drafts, keyword research, voice/fact/readability audit.",                              costCap: 5 },
-      { slug: "marketing", name: "Paid Ads",           purpose: "Paid search/LSA: creative drafts, performance + segmentation, policy/voice audit.",                            costCap: 5 },
-      { slug: "marketing", name: "Brand Guardian",     purpose: "Brand integrity: corrections to off-brand drafts, scans all outbound, meta-audits Brand Guardian's own calls.", costCap: 5 },
-      { slug: "marketing", name: "Community & Reviews",purpose: "Reviews + sentiment: response drafts, GBP/social monitor, response-tone audit.",                               costCap: 5 },
-      // ── Phase 3 — Operations sub-team ─────────────────────────────────────
-      { slug: "operations",       name: "Dispatch",            purpose: "Daily schedule + crew assignment: customer-facing confirmations, conflict/utilization data, schedule integrity audit.",         costCap: 5 },
-      // ── Phase 3 — Customer Success sub-teams ──────────────────────────────
-      { slug: "customer_success", name: "Onboarding",          purpose: "First 30 days post-signing: welcome cadence drafts, portal-activation/baseline data, voice + completeness audit.",              costCap: 5 },
-      { slug: "customer_success", name: "Annual Valuation",    purpose: "Renewal-window value reports: ROI narrative drafts, value calculation, accuracy + tone audit (no hard sell).",                  costCap: 5 },
-      // ── Phase 3 — Vendor sub-teams ────────────────────────────────────────
-      { slug: "vendor_network",   name: "Vendor Acquisition",  purpose: "Outreach + onboarding combined: drafts to prospects, gap/compliance data, document-completeness audit.",                        costCap: 5 },
-      { slug: "vendor_network",   name: "Vendor Operations",   purpose: "Trade matching + performance combined: vendor-facing comms, ranking/scorecard data, fairness + accuracy audit.",                costCap: 5 },
-      // ── Phase 3 — Finance sub-team ────────────────────────────────────────
-      { slug: "finance",          name: "Bookkeeping",         purpose: "Daily reconciliation: CPA-facing memo drafts, transaction categorization, anomaly + categorization audit.",                     costCap: 3 },
-    ];
-    for (const s of seeds) {
-      const cap = (s.costCap ?? 5).toFixed(2);
-      await db.execute(sql`
-        INSERT INTO \`agent_teams\` (\`department\`, \`name\`, \`purpose\`, \`status\`, \`costCapDailyUsd\`)
-        SELECT ${s.slug}, ${s.name}, ${s.purpose}, 'active', ${cap}
-        FROM DUAL
-        WHERE NOT EXISTS (
-          SELECT 1 FROM \`agent_teams\`
-          WHERE \`department\` = ${s.slug} AND \`name\` = ${s.name}
-        )
-      `);
-    }
-
-    // Authorize the Integrator seat for the 3 new agent-team coordination tools.
-    // INSERT IGNORE on (agentId, toolKey) — first boot adds them, re-runs are no-ops.
-    // We don't have a unique constraint on ai_agent_tools(agentId, toolKey), so guard
-    // with a NOT EXISTS subquery instead.
-    const integratorRows = (await db.execute(
-      sql`SELECT \`id\` FROM \`ai_agents\` WHERE \`department\` = 'integrator' LIMIT 1`
-    )) as unknown as Array<Array<{ id: number }>>;
-    const integratorId = Array.isArray(integratorRows?.[0]) ? integratorRows[0][0]?.id : (integratorRows as unknown as Array<{ id: number }>)[0]?.id;
-    if (integratorId) {
-      const TOOLS = [
-        "agentTeams.list",
-        "agentTeams.assignTask",
-        "agentTeams.broadcast",
-        // Phase 2: cross-team handoff and team execution kickoff.
-        "agentTeams.proposeHandoff",
-        "agentTeams.executeTask",
-      ];
-      for (const tk of TOOLS) {
-        await db.execute(sql`
-          INSERT INTO \`ai_agent_tools\` (\`agentId\`, \`toolKey\`, \`authorized\`)
-          SELECT ${integratorId}, ${tk}, 1
-          FROM DUAL
-          WHERE NOT EXISTS (
-            SELECT 1 FROM \`ai_agent_tools\` WHERE \`agentId\` = ${integratorId} AND \`toolKey\` = ${tk}
-          )
-        `);
-      }
-    }
-
-    console.log("[boot] ensureAgentTeamTables OK");
-  } catch (err) {
-    console.warn("[boot] ensureAgentTeamTables failed (non-fatal):", err);
-  }
+  // boot-time MySQL DDL removed; tables now created by drizzle Postgres migrations
+  return;
 }
 
 async function ensureEmailManagerTables() {
-  try {
-    const { getDb } = await import("../db");
-    const { sql } = await import("drizzle-orm");
-    const db = await getDb();
-    if (!db) return;
-
-    // aiAgents
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`aiAgents\` (
-      \`id\`           int            NOT NULL AUTO_INCREMENT,
-      \`seatName\`     varchar(80)    NOT NULL,
-      \`department\`   varchar(80)    NOT NULL DEFAULT 'integrator_visionary',
-      \`reportsTo\`    varchar(80)    NOT NULL DEFAULT 'Integrator',
-      \`status\`       enum('active','draft_queue','paused') NOT NULL DEFAULT 'draft_queue',
-      \`systemPrompt\` text           NULL,
-      \`createdAt\`    timestamp      NOT NULL DEFAULT (now()),
-      \`updatedAt\`    timestamp      NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
-      CONSTRAINT \`aiAgents_id\` PRIMARY KEY (\`id\`),
-      UNIQUE KEY \`aiAgents_seatName_uidx\` (\`seatName\`)
-    )`);
-
-    // gmailMessageLinks
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`gmailMessageLinks\` (
-      \`id\`                  int            NOT NULL AUTO_INCREMENT,
-      \`gmailMessageId\`      varchar(128)   NOT NULL,
-      \`gmailThreadId\`       varchar(128)   NULL,
-      \`staffGmailEmail\`     varchar(320)   NOT NULL,
-      \`customerId\`          varchar(64)    NULL,
-      \`classification\`      enum('customer','urgent','promo','spam','personal','lead_inquiry','unclassified') NOT NULL DEFAULT 'unclassified',
-      \`classificationScore\` int            NOT NULL DEFAULT 0,
-      \`aiDraftReplyId\`      int            NULL,
-      \`gmailDraftId\`        varchar(128)   NULL,
-      \`fromEmail\`           varchar(320)   NOT NULL DEFAULT '',
-      \`fromName\`            varchar(255)   NOT NULL DEFAULT '',
-      \`subject\`             varchar(512)   NOT NULL DEFAULT '',
-      \`bodyPreview\`         varchar(500)   NOT NULL DEFAULT '',
-      \`archived\`            tinyint(1)     NOT NULL DEFAULT 0,
-      \`processedAt\`         timestamp      NOT NULL DEFAULT (now()),
-      \`createdAt\`           timestamp      NOT NULL DEFAULT (now()),
-      CONSTRAINT \`gmailMessageLinks_id\` PRIMARY KEY (\`id\`),
-      UNIQUE KEY \`gmailMessageLinks_msgId_uidx\` (\`gmailMessageId\`)
-    )`);
-
-    // gmailTokens extra columns (idempotent ALTER)
-    const [[scopeRow]]: any = await db.execute(sql`
-      SELECT COUNT(*) AS c FROM information_schema.columns
-      WHERE table_schema = DATABASE() AND table_name = 'gmailTokens' AND column_name = 'lastSyncedAt'
-    `);
-    if (Number(scopeRow?.c ?? 0) === 0) {
-      await db.execute(sql`ALTER TABLE \`gmailTokens\`
-        ADD COLUMN \`staffUserId\`       int            NULL,
-        ADD COLUMN \`scopesGranted\`     text           NULL,
-        ADD COLUMN \`connectedAt\`       timestamp      NULL,
-        ADD COLUMN \`lastSyncedAt\`      timestamp      NULL,
-        ADD COLUMN \`lastMessageIdSeen\` varchar(128)   NULL`);
-      console.log("[boot] gmailTokens columns added for Email Manager AI");
-    }
-
-    console.log("[boot] Email Manager AI tables ensured");
-  } catch (err) {
-    console.warn("[boot] ensureEmailManagerTables failed (non-fatal):", err);
-  }
+  // boot-time MySQL DDL removed; tables now created by drizzle Postgres migrations
+  return;
 }
 
 async function ensureAppSettings() {
-  try {
-    const { getDb } = await import("../db");
-    const { sql } = await import("drizzle-orm");
-    const db = await getDb();
-    if (!db) return;
-
-    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`appSettings\` (
-      \`id\` int NOT NULL DEFAULT 1,
-      \`companyName\` varchar(120) DEFAULT 'Handy Pioneers',
-      \`logoUrl\` varchar(500) DEFAULT '',
-      \`brandColor\` varchar(20) DEFAULT '#1E3A5F',
-      \`timezone\` varchar(60) DEFAULT 'America/Los_Angeles',
-      \`estimatePrefix\` varchar(10) DEFAULT 'EST',
-      \`invoicePrefix\` varchar(10) DEFAULT 'INV',
-      \`jobPrefix\` varchar(10) DEFAULT 'JOB',
-      \`portalUrl\` varchar(300) DEFAULT 'https://client.handypioneers.com',
-      \`websiteUrl\` varchar(300) DEFAULT 'https://handypioneers.com',
-      \`supportEmail\` varchar(320) DEFAULT '',
-      \`supportPhone\` varchar(30) DEFAULT '',
-      \`addressLine1\` varchar(200) DEFAULT '',
-      \`addressLine2\` varchar(200) DEFAULT '',
-      \`defaultTaxBps\` int DEFAULT 875,
-      \`defaultDepositPct\` int DEFAULT 50,
-      \`documentFooter\` text,
-      \`termsText\` text,
-      \`googleReviewLink\` varchar(500) DEFAULT '',
-      \`internalLaborRateCents\` int DEFAULT 15000,
-      \`defaultMarkupPct\` int DEFAULT 20,
-      \`smsFromName\` varchar(30) DEFAULT 'HandyPioneers',
-      \`emailEstimateApprovedSubject\` varchar(300) DEFAULT 'Your estimate has been approved — Handy Pioneers',
-      \`emailEstimateApprovedBody\` text,
-      \`emailJobSignOffSubject\` varchar(300) DEFAULT 'Job complete — your final invoice is ready',
-      \`emailJobSignOffBody\` text,
-      \`emailChangeOrderApprovedSubject\` varchar(300) DEFAULT 'Change order approved — Handy Pioneers',
-      \`emailChangeOrderApprovedBody\` text,
-      \`emailMagicLinkSubject\` varchar(300) DEFAULT 'Your Handy Pioneers Customer Portal Login',
-      \`emailMagicLinkBody\` text,
-      \`updatedAt\` timestamp DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
-      CONSTRAINT \`appSettings_id\` PRIMARY KEY(\`id\`)
-    )`);
-
-    // Seed the single settings row if absent
-    await db.execute(sql`INSERT IGNORE INTO \`appSettings\` (\`id\`) VALUES (1)`);
-
-    console.log("[boot] ensureAppSettings OK");
-  } catch (err) {
-    console.warn("[boot] ensureAppSettings failed (non-fatal):", err);
-  }
+  // boot-time MySQL DDL removed; tables now created by drizzle Postgres migrations
+  return;
 }
 
 /**

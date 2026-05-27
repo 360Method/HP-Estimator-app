@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, gte, like, lte, or, sql, sum } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 import {
   adminAllowlist,
   callLogs,
@@ -54,14 +55,20 @@ import {
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
+let _client: ReturnType<typeof postgres> | null = null;
 
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
+      _client = postgres(process.env.DATABASE_URL, {
+        // Supabase pooler enforces SNI; keep prepared statements off for pgbouncer compatibility.
+        prepare: false,
+      });
+      _db = drizzle(_client);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
+      _client = null;
     }
   }
   return _db;
@@ -91,7 +98,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     if (user.role !== undefined) { values.role = user.role; updateSet.role = user.role; }
     if (!values.lastSignedIn) values.lastSignedIn = new Date();
     if (Object.keys(updateSet).length === 0) updateSet.lastSignedIn = new Date();
-    await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
+    await db.insert(users).values(values).onConflictDoUpdate({ target: users.openId, set: updateSet });
   } catch (error) {
     console.error("[Database] Failed to upsert user:", error);
     throw error;
@@ -312,7 +319,7 @@ export async function insertOrphanEmail(row: InsertOrphanEmail): Promise<void> {
   // re-poll attempts don't error.
   await db.insert(orphanEmails)
     .values(row)
-    .onDuplicateKeyUpdate({ set: { receivedAt: row.receivedAt ?? new Date() } });
+    .onConflictDoUpdate({ target: orphanEmails.gmailMessageId, set: { receivedAt: row.receivedAt ?? new Date() } });
 }
 
 export async function listOrphanEmails(includeResolved = false, limit = 100): Promise<OrphanEmail[]> {
@@ -360,7 +367,7 @@ export async function upsertGmailToken(
   if (!db) return;
   await db.insert(gmailTokens)
     .values({ email, accessToken, refreshToken: refreshToken ?? undefined, expiresAt, connectedAt: new Date() })
-    .onDuplicateKeyUpdate({ set: { accessToken, refreshToken: refreshToken ?? undefined, expiresAt, connectedAt: new Date() } });
+    .onConflictDoUpdate({ target: gmailTokens.email, set: { accessToken, refreshToken: refreshToken ?? undefined, expiresAt, connectedAt: new Date() } });
 }
 
 export async function updateGmailTokenSyncState(
@@ -396,7 +403,7 @@ export async function insertGmailMessageLink(link: InsertGmailMessageLink): Prom
   if (!db) return;
   await db.insert(gmailMessageLinks)
     .values(link)
-    .onDuplicateKeyUpdate({ set: { classification: link.classification, customerId: link.customerId ?? undefined, aiDraftReplyId: link.aiDraftReplyId ?? undefined, gmailDraftId: link.gmailDraftId ?? undefined } });
+    .onConflictDoUpdate({ target: gmailMessageLinks.gmailMessageId, set: { classification: link.classification, customerId: link.customerId ?? undefined, aiDraftReplyId: link.aiDraftReplyId ?? undefined, gmailDraftId: link.gmailDraftId ?? undefined } });
 }
 
 export async function updateGmailMessageLink(
@@ -444,7 +451,7 @@ export async function upsertAiAgent(agent: InsertAiAgentLegacy): Promise<void> {
   if (!db) return;
   await db.insert(aiAgentsLegacy)
     .values(agent)
-    .onDuplicateKeyUpdate({ set: { department: agent.department, reportsTo: agent.reportsTo, status: agent.status, systemPrompt: agent.systemPrompt ?? undefined } });
+    .onConflictDoUpdate({ target: aiAgentsLegacy.seatName, set: { department: agent.department, reportsTo: agent.reportsTo, status: agent.status, systemPrompt: agent.systemPrompt ?? undefined } });
 }
 
 export async function getAiAgent(seatName: string): Promise<AiAgentLegacy | null> {
@@ -485,7 +492,7 @@ export async function addAdminAllowlistEmail(email: string, addedBy?: string) {
   await db
     .insert(adminAllowlist)
     .values({ email: email.toLowerCase().trim(), addedBy })
-    .onDuplicateKeyUpdate({ set: { addedBy } });
+    .onConflictDoUpdate({ target: adminAllowlist.email, set: { addedBy } });
 }
 
 export async function removeAdminAllowlistEmail(email: string) {
@@ -748,7 +755,7 @@ export async function addServiceZipCode(zip: string) {
   const db = await getDb();
   if (!db) return;
   const { serviceZipCodes } = await import("../drizzle/schema");
-  await db.insert(serviceZipCodes).values({ zip: zip.trim() }).onDuplicateKeyUpdate({ set: { zip: zip.trim() } });
+  await db.insert(serviceZipCodes).values({ zip: zip.trim() }).onConflictDoNothing({ target: serviceZipCodes.zip });
 }
 
 export async function removeServiceZipCode(zip: string) {
@@ -1342,7 +1349,8 @@ export async function getQbToken(userId: number): Promise<DbQbToken | null> {
 export async function upsertQbToken(data: InsertDbQbToken): Promise<void> {
   const db = await getDb();
   if (!db) return;
-  await db.insert(qbTokens).values(data).onDuplicateKeyUpdate({
+  await db.insert(qbTokens).values(data).onConflictDoUpdate({
+    target: qbTokens.userId,
     set: {
       accessToken: data.accessToken,
       refreshToken: data.refreshToken,
@@ -1366,8 +1374,11 @@ export async function createWorkOrder(
 ): Promise<number> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const [result] = await db.insert(threeSixtyWorkOrders).values(data);
-  return (result as any).insertId as number;
+  const [result] = await db
+    .insert(threeSixtyWorkOrders)
+    .values(data)
+    .returning({ id: threeSixtyWorkOrders.id });
+  return result.id;
 }
 
 export async function getWorkOrder(id: number): Promise<DbThreeSixtyWorkOrder | null> {

@@ -401,15 +401,14 @@ async function emitRunCompleted(payload: Record<string, unknown>): Promise<void>
 
 async function ensureTask(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, input: RunAgentInput): Promise<number> {
   if (input.existingTaskId) return input.existingTaskId;
-  const inserted = await db.insert(aiAgentTasks).values({
+  const [inserted] = await db.insert(aiAgentTasks).values({
     agentId: input.agentId,
     triggerType: input.triggerType,
     triggerPayload: JSON.stringify(input.triggerPayload ?? {}),
     status: "running",
     startedAt: new Date(),
-  });
-  // drizzle-orm 0.45+: result is the header object directly, not an array
-  return Number((inserted as { insertId?: number }).insertId ?? 0);
+  }).returning({ id: aiAgentTasks.id });
+  return Number(inserted?.id ?? 0);
 }
 
 type RunInsert = {
@@ -430,7 +429,7 @@ async function insertRun(
   db: NonNullable<Awaited<ReturnType<typeof getDb>>>,
   r: RunInsert
 ): Promise<number> {
-  const inserted = await db.insert(aiAgentRuns).values({
+  const [inserted] = await db.insert(aiAgentRuns).values({
     taskId: r.taskId,
     agentId: r.agentId,
     input: JSON.stringify(r.input ?? null),
@@ -442,8 +441,8 @@ async function insertRun(
     durationMs: r.durationMs,
     status: r.status,
     errorMessage: r.errorMessage,
-  });
-  return Number((inserted as { insertId?: number }).insertId ?? 0);
+  }).returning({ id: aiAgentRuns.id });
+  return Number(inserted?.id ?? 0);
 }
 
 async function notifyAdmins(

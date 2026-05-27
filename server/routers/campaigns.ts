@@ -50,7 +50,7 @@ export const campaignsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const result = await db
+      const [result] = await db
         .insert(campaigns)
         .values({
           name: input.name,
@@ -61,9 +61,9 @@ export const campaignsRouter = router({
           scheduledAt: input.scheduledAt ? new Date(input.scheduledAt) : null,
           createdBy: ctx.user?.email ?? ctx.user?.openId ?? null,
           status: "draft",
-        });
-      const insertId = Number((result as unknown as { insertId: number | string }).insertId);
-      const [row] = await db.select().from(campaigns).where(eq(campaigns.id, insertId)).limit(1);
+        })
+        .returning({ id: campaigns.id });
+      const [row] = await db.select().from(campaigns).where(eq(campaigns.id, Number(result?.id ?? 0))).limit(1);
       return row;
     }),
 

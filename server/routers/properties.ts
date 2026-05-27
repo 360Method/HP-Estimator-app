@@ -432,9 +432,10 @@ export const propertiesRouter = router({
           scheduledCreditAt: scheduledCreditAt ?? undefined,
           scheduledCreditCents,
           notes: input.notes ?? null,
-        });
+        })
+        .returning({ id: threeSixtyMemberships.id });
 
-      const membershipId = Number(result.insertId);
+      const membershipId = Number(result?.id ?? 0);
 
       // Link membership to property
       await db

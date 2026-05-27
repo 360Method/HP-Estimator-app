@@ -132,14 +132,14 @@ export const agentTeamsRouter = router({
     )
     .mutation(async ({ input }) => {
       const d = await db();
-      const inserted = await d.insert(agentTeams).values({
+      const [inserted] = await d.insert(agentTeams).values({
         department: input.department,
         name: input.name,
         purpose: input.purpose ?? null,
         teamLeadSeatId: input.teamLeadSeatId ?? null,
         status: "active",
-      });
-      const id = Number((inserted as { insertId?: number }).insertId ?? 0);
+      }).returning({ id: agentTeams.id });
+      const id = Number(inserted?.id ?? 0);
       return { id };
     }),
 
@@ -249,7 +249,7 @@ export const agentTeamsRouter = router({
     )
     .mutation(async ({ input }) => {
       const d = await db();
-      const inserted = await d.insert(agentTeamTasks).values({
+      const [inserted] = await d.insert(agentTeamTasks).values({
         teamId: input.teamId,
         title: input.title,
         description: input.description ?? null,
@@ -260,8 +260,8 @@ export const agentTeamsRouter = router({
         sourceEventPayload: input.sourceEventPayload ? JSON.stringify(input.sourceEventPayload) : null,
         ownerFiles: input.ownerFiles ? JSON.stringify(input.ownerFiles) : null,
         status: "open",
-      });
-      const id = Number((inserted as { insertId?: number }).insertId ?? 0);
+      }).returning({ id: agentTeamTasks.id });
+      const id = Number(inserted?.id ?? 0);
       return { id };
     }),
 
@@ -331,15 +331,15 @@ export const agentTeamsRouter = router({
     )
     .mutation(async ({ input }) => {
       const d = await db();
-      const inserted = await d.insert(agentTeamMessages).values({
+      const [inserted] = await d.insert(agentTeamMessages).values({
         teamId: input.teamId,
         fromSeatId: input.fromSeatId,
         toSeatId: input.toSeatId ?? null,
         body: input.body,
         threadId: input.threadId ?? null,
         attachments: input.attachments ? JSON.stringify(input.attachments) : null,
-      });
-      const id = Number((inserted as { insertId?: number }).insertId ?? 0);
+      }).returning({ id: agentTeamMessages.id });
+      const id = Number(inserted?.id ?? 0);
       return { id };
     }),
 
@@ -381,14 +381,14 @@ export const agentTeamsRouter = router({
     )
     .mutation(async ({ input }) => {
       const d = await db();
-      const inserted = await d.insert(agentTeamHandoffs).values({
+      const [inserted] = await d.insert(agentTeamHandoffs).values({
         fromTeamId: input.fromTeamId,
         toTeamId: input.toTeamId,
         eventType: input.eventType,
         payload: input.payload ? JSON.stringify(input.payload) : null,
         status: "pending",
-      });
-      const id = Number((inserted as { insertId?: number }).insertId ?? 0);
+      }).returning({ id: agentTeamHandoffs.id });
+      const id = Number(inserted?.id ?? 0);
       return { id };
     }),
 
