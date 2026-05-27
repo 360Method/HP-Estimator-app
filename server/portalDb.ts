@@ -87,8 +87,8 @@ export async function upsertPortalCustomer(data: InsertPortalCustomer) {
     return existing;
   }
   const db = await d();
-  const result = await db.insert(portalCustomers).values(data);
-  const newId = Number((result as any).insertId ?? (result as any)[0]?.insertId);
+  const [result] = await db.insert(portalCustomers).values(data).returning({ id: portalCustomers.id });
+  const newId = Number(result?.id ?? 0);
   const created = await findPortalCustomerById(newId);
   // Phase 5 trigger: customer.portal_account_created — fans out to Onboarding
   // AI (welcome sequence) and Member Concierge. Fire-and-forget; never blocks
@@ -268,7 +268,8 @@ export async function createPortalEstimate(data: InsertPortalEstimate) {
   await db
     .insert(portalEstimates)
     .values(data)
-    .onDuplicateKeyUpdate({
+    .onConflictDoUpdate({
+      target: [portalEstimates.customerId, portalEstimates.estimateNumber],
       set: {
         title: data.title,
         status: data.status ?? 'sent',
@@ -357,8 +358,8 @@ export async function markPortalEstimateViewed(id: number) {
 
 export async function createPortalInvoice(data: InsertPortalInvoice) {
   const db = await d();
-  const result = await db.insert(portalInvoices).values(data);
-  const newId = Number((result as any).insertId ?? (result as any)[0]?.insertId);
+  const [result] = await db.insert(portalInvoices).values(data).returning({ id: portalInvoices.id });
+  const newId = Number(result?.id ?? 0);
   return getPortalInvoiceById(newId);
 }
 
@@ -423,8 +424,8 @@ export async function markPortalInvoiceViewed(id: number) {
 
 export async function createPortalAppointment(data: InsertPortalAppointment) {
   const db = await d();
-  const result = await db.insert(portalAppointments).values(data);
-  const newId = Number((result as any).insertId ?? (result as any)[0]?.insertId);
+  const [result] = await db.insert(portalAppointments).values(data).returning({ id: portalAppointments.id });
+  const newId = Number(result?.id ?? 0);
   const rows = await db
     .select()
     .from(portalAppointments)
@@ -530,8 +531,8 @@ import {
 
 export async function createPortalServiceRequest(data: InsertPortalServiceRequest) {
   const db = await d();
-  const result = await db.insert(portalServiceRequests).values(data);
-  const newId = Number((result as any).insertId ?? (result as any)[0]?.insertId);
+  const [result] = await db.insert(portalServiceRequests).values(data).returning({ id: portalServiceRequests.id });
+  const newId = Number(result?.id ?? 0);
   const rows = await db.select().from(portalServiceRequests).where(eq(portalServiceRequests.id, newId)).limit(1);
   return rows[0] ?? null;
 }
@@ -763,8 +764,8 @@ export async function upsertMilestone(data: InsertPortalJobMilestone & { id?: nu
     scheduledDate: data.scheduledDate ?? null,
     completedAt: data.status === "complete" ? new Date() : null,
     sortOrder: data.sortOrder ?? 0,
-  });
-  return (result as any).insertId as number;
+  }).returning({ id: portalJobMilestones.id });
+  return Number(result?.id ?? 0);
 }
 
 export async function deleteMilestone(id: number) {
@@ -793,8 +794,8 @@ export async function createJobUpdate(data: InsertPortalJobUpdate) {
     message: data.message,
     photoUrl: data.photoUrl ?? null,
     postedBy: data.postedBy ?? null,
-  });
-  return (result as any).insertId as number;
+  }).returning({ id: portalJobUpdates.id });
+  return Number(result?.id ?? 0);
 }
 
 export async function deleteJobUpdate(id: number) {
@@ -821,7 +822,8 @@ export async function createJobSignOff(data: InsertPortalJobSignOff) {
   await db
     .insert(portalJobSignOffs)
     .values(data)
-    .onDuplicateKeyUpdate({
+    .onConflictDoUpdate({
+      target: portalJobSignOffs.hpOpportunityId,
       set: {
         signatureDataUrl: data.signatureDataUrl,
         signerName: data.signerName,
@@ -860,9 +862,8 @@ export async function getPortalChangeOrdersByCustomer(customerId: number) {
 
 export async function createPortalChangeOrder(data: InsertPortalChangeOrder) {
   const db = await d();
-  const result = await db.insert(portalChangeOrders).values(data);
-  const insertId = (result as unknown as { insertId: number }).insertId;
-  return getPortalChangeOrderById(insertId);
+  const [result] = await db.insert(portalChangeOrders).values(data).returning({ id: portalChangeOrders.id });
+  return getPortalChangeOrderById(Number(result?.id ?? 0));
 }
 
 export async function updatePortalChangeOrderStatus(
@@ -1015,8 +1016,8 @@ export async function addPortalDocument(data: {
   jobId?: string;
 }) {
   const db = await d();
-  const result = await db.insert(portalDocuments).values(data);
-  const newId = Number((result as any).insertId ?? (result as any)[0]?.insertId);
+  const [result] = await db.insert(portalDocuments).values(data).returning({ id: portalDocuments.id });
+  const newId = Number(result?.id ?? 0);
   const rows = await db
     .select()
     .from(portalDocuments)

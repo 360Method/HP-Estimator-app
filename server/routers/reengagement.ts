@@ -64,14 +64,14 @@ export const reengagementRouter = router({
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
-      const result = await db.insert(reengagementCampaigns).values({
+      const [result] = await db.insert(reengagementCampaigns).values({
         name: input.name,
         segment: input.segment,
         description: input.description,
         createdBy: ctx.user?.email ?? ctx.user?.openId ?? null,
         status: "draft",
-      });
-      const insertId = Number((result as unknown as { insertId: number | string }).insertId);
+      }).returning({ id: reengagementCampaigns.id });
+      const insertId = Number(result?.id ?? 0);
       const [row] = await db
         .select()
         .from(reengagementCampaigns)

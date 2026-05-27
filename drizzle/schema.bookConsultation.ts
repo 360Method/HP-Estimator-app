@@ -1,25 +1,23 @@
 /**
  * drizzle/schema.bookConsultation.ts
  *
- * Project Estimator schema (MySQL). The Lead Nurturer's `agentDrafts` and
+ * Project Estimator schema. The Lead Nurturer's `agentDrafts` and
  * `nurturerPlaybooks` tables (shipped in PR #44) are reused for cadence and
  * draft delivery — see drizzle/schema.ts.
  *
  * The single new table here is `projectEstimates`, which captures the AI
- * estimator's orchestrator state. Boot-time `ensureBookConsultationTables()`
- * in server/_core/index.ts creates it if drizzle-kit's tracker has drifted
- * from prod.
+ * estimator's orchestrator state.
  */
 
 import {
   index,
-  int,
+  integer,
   json,
-  mysqlTable,
+  pgTable,
   text,
   timestamp,
   varchar,
-} from "drizzle-orm/mysql-core";
+} from "drizzle-orm/pg-core";
 
 // ─── projectEstimates ───────────────────────────────────────────────────────
 export type ProjectEstimateStatus =
@@ -69,7 +67,7 @@ export type EstimatorClaudeResponse = {
   voice_audit_passed: boolean;       // self-check the prompt does
 };
 
-export const projectEstimates = mysqlTable(
+export const projectEstimates = pgTable(
   "projectEstimates",
   {
     id: varchar("id", { length: 64 }).primaryKey(),
@@ -78,7 +76,7 @@ export const projectEstimates = mysqlTable(
     /** FK → customers.id. */
     customerId: varchar("customerId", { length: 64 }).notNull(),
     /** FK → onlineRequests.id (the raw form submission). */
-    onlineRequestId: int("onlineRequestId"),
+    onlineRequestId: integer("onlineRequestId"),
     /** Optional FK → portalAccounts.id (auto-provisioned on submit). */
     portalAccountId: varchar("portalAccountId", { length: 64 }),
     status: varchar("status", { length: 32 })
@@ -89,8 +87,8 @@ export const projectEstimates = mysqlTable(
     /** Full Claude JSON response for audit + admin review. */
     claudeResponse: json("claudeResponse").$type<EstimatorClaudeResponse>(),
     /** Customer-facing range, denormalized for fast portal queries. */
-    customerRangeLowUsd: int("customerRangeLowUsd"),
-    customerRangeHighUsd: int("customerRangeHighUsd"),
+    customerRangeLowUsd: integer("customerRangeLowUsd"),
+    customerRangeHighUsd: integer("customerRangeHighUsd"),
     /** 1-paragraph scope summary surfaced on the portal page. */
     scopeSummary: text("scopeSummary"),
     /** Markdown of "what's included" (for the portal + future PDF). */
@@ -107,7 +105,7 @@ export const projectEstimates = mysqlTable(
     /** Failure mode on processing errors. */
     failureReason: text("failureReason"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
-    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
   },
   (t) => ({
     opportunityIdx: index("projectEstimates_opportunity_idx").on(t.opportunityId),

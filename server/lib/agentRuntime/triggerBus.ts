@@ -105,13 +105,13 @@ export async function triggerAgentsFor(
   const queuedTaskIds: number[] = [];
   for (const sub of matched) {
     try {
-      const inserted = await db.insert(aiAgentTasks).values({
+      const [inserted] = await db.insert(aiAgentTasks).values({
         agentId: sub.agentId,
         triggerType: "event",
         triggerPayload: JSON.stringify({ event: eventName, ...payload }),
         status: "queued",
-      });
-      const id = Number((inserted as { insertId?: number }).insertId ?? 0);
+      }).returning({ id: aiAgentTasks.id });
+      const id = Number(inserted?.id ?? 0);
       if (id) queuedTaskIds.push(id);
     } catch (err) {
       console.warn(`[triggerBus] queue failed for agent #${sub.agentId} on '${eventName}':`, err);
