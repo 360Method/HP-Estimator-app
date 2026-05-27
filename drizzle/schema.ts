@@ -1606,7 +1606,7 @@ export const pipelineEvents = pgTable("pipelineEvents", {
   toRole: varchar("toRole", { length: 32 }),
   fromUserId: integer("fromUserId"),
   toUserId: integer("toUserId"),
-  triggeredBy: integer("triggeredBy"),
+  triggeredBy: varchar("triggeredBy", { length: 64 }),
   payloadJson: text("payloadJson"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
