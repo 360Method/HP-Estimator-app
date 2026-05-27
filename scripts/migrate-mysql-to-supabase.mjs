@@ -591,6 +591,7 @@ async function main() {
 
   const sql = postgres(pgUrl, {
     max: 4,
+    prepare: false, // Supabase transaction pooler (port 6543) — disable prepared statement cache.
     onnotice: () => {}, // suppress NOTICE chatter
     transform: { undefined: null },
   });
