@@ -586,6 +586,9 @@ async function main() {
     dateStrings: false,
     supportBigNumbers: true,
     bigNumberStrings: true,
+    timezone: 'Z', // Force UTC interpretation of MySQL TIMESTAMP/DATETIME. Without
+    // this, mysql2 falls back to the client process's local TZ, which shifts
+    // every timestamp by the host's UTC offset during load.
     // Read-only sentinel: we never run INSERT/UPDATE/DELETE via this conn.
   });
 
