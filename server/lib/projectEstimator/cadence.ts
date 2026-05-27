@@ -28,7 +28,7 @@
  */
 
 import { and, eq, inArray } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import type { MySql2Database } from "drizzle-orm/mysql2";
 import { agentDrafts } from "../../../drizzle/schema";
 import {
   BOOK_CONSULTATION_PLAYBOOK_KEY,
@@ -41,7 +41,7 @@ import {
   buildMembershipIntroDraft,
 } from "./messaging";
 
-type DbLike = PostgresJsDatabase<any>;
+type DbLike = MySql2Database<any>;
 
 const PORTAL_BASE = process.env.PORTAL_BASE_URL || "https://client.handypioneers.com";
 

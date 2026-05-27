@@ -142,7 +142,7 @@ export async function generateDraftsForCampaign(opts: GenerateOptions): Promise<
 
       // Insert email draft if email exists
       if (h.email) {
-        const [ins] = await db.insert(reengagementDrafts).values({
+        const ins = await db.insert(reengagementDrafts).values({
           campaignId: opts.campaignId,
           customerId: h.customerId,
           segment: h.segment as Segment,
@@ -155,14 +155,15 @@ export async function generateDraftsForCampaign(opts: GenerateOptions): Promise<
           lastWorkDate: h.lastWorkDate,
           lastWorkSummary: h.lastWorkSummary.slice(0, 500),
           lifetimeValueCents: h.lifetimeValueCents,
-        }).returning({ id: reengagementDrafts.id });
-        if (ins?.id) result.draftIds.push(Number(ins.id));
+        });
+        const insertId = Number((ins as unknown as { insertId: number | string }).insertId);
+        result.draftIds.push(insertId);
         result.generated++;
       }
 
       // Insert sms draft if mobilePhone exists
       if (h.mobilePhone) {
-        const [ins] = await db.insert(reengagementDrafts).values({
+        const ins = await db.insert(reengagementDrafts).values({
           campaignId: opts.campaignId,
           customerId: h.customerId,
           segment: h.segment as Segment,
@@ -175,8 +176,9 @@ export async function generateDraftsForCampaign(opts: GenerateOptions): Promise<
           lastWorkDate: h.lastWorkDate,
           lastWorkSummary: h.lastWorkSummary.slice(0, 500),
           lifetimeValueCents: h.lifetimeValueCents,
-        }).returning({ id: reengagementDrafts.id });
-        if (ins?.id) result.draftIds.push(Number(ins.id));
+        });
+        const insertId = Number((ins as unknown as { insertId: number | string }).insertId);
+        result.draftIds.push(insertId);
         result.generated++;
       }
 

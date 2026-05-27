@@ -1,0 +1,1 @@
+ALTER TABLE `phoneSettings` ADD `voicemailPrompt` varchar(600) DEFAULT '';

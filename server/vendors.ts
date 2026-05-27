@@ -54,8 +54,107 @@ const TRADE_SEED: { slug: string; name: string; category: string; description: s
 // ─── Boot: ensure tables + seed trades ───────────────────────────────────────
 
 export async function ensureVendorTables(): Promise<void> {
-  // boot-time MySQL DDL removed; tables now created by drizzle Postgres migrations
-  return;
+  const db = await getDb();
+  if (!db) return;
+  try {
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`vendors\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`name\` varchar(255) NOT NULL,
+      \`companyName\` varchar(255),
+      \`contactName\` varchar(255),
+      \`email\` varchar(255),
+      \`phone\` varchar(32),
+      \`addressLine1\` varchar(255),
+      \`city\` varchar(120),
+      \`state\` varchar(40),
+      \`zip\` varchar(20),
+      \`serviceArea\` varchar(255),
+      \`licenseNumber\` varchar(120),
+      \`insuranceExpiry\` date,
+      \`bondingExpiry\` date,
+      \`w9OnFile\` boolean NOT NULL DEFAULT false,
+      \`coiOnFile\` boolean NOT NULL DEFAULT false,
+      \`status\` enum('prospect','onboarding','active','paused','retired') NOT NULL DEFAULT 'prospect',
+      \`tier\` enum('preferred','approved','trial','probation') NOT NULL DEFAULT 'trial',
+      \`rating\` decimal(3,2),
+      \`jobsCompleted\` int NOT NULL DEFAULT 0,
+      \`lastJobAt\` timestamp NULL,
+      \`notes\` text,
+      \`tagsJson\` text,
+      \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      \`updatedAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT \`vendors_id\` PRIMARY KEY(\`id\`)
+    )`);
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`trades\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`slug\` varchar(80) NOT NULL,
+      \`name\` varchar(120) NOT NULL,
+      \`category\` varchar(80),
+      \`description\` text,
+      \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT \`trades_id\` PRIMARY KEY(\`id\`),
+      CONSTRAINT \`trades_slug_unique\` UNIQUE(\`slug\`)
+    )`);
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`vendor_trades\` (
+      \`vendorId\` int NOT NULL,
+      \`tradeId\` int NOT NULL,
+      \`proficiency\` enum('primary','secondary','occasional') NOT NULL DEFAULT 'primary',
+      \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT \`vendor_trades_pk\` PRIMARY KEY(\`vendorId\`,\`tradeId\`)
+    )`);
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`vendor_jobs\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`vendorId\` int NOT NULL,
+      \`opportunityId\` varchar(64),
+      \`customerId\` varchar(64),
+      \`status\` enum('proposed','accepted','in_progress','completed','cancelled') NOT NULL DEFAULT 'proposed',
+      \`agreedAmountCents\` int,
+      \`paidAmountCents\` int NOT NULL DEFAULT 0,
+      \`scheduledFor\` timestamp NULL,
+      \`completedAt\` timestamp NULL,
+      \`qualityRating\` int,
+      \`qualityNotes\` text,
+      \`notes\` text,
+      \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      \`updatedAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT \`vendor_jobs_id\` PRIMARY KEY(\`id\`)
+    )`);
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`vendor_communications\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`vendorId\` int NOT NULL,
+      \`channel\` enum('call','email','sms','meeting','note','quote','order','followup') NOT NULL,
+      \`direction\` enum('inbound','outbound','internal') NOT NULL DEFAULT 'outbound',
+      \`subject\` varchar(255),
+      \`body\` text,
+      \`opportunityId\` varchar(64),
+      \`loggedByUserId\` int,
+      \`loggedByAgent\` varchar(80),
+      \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT \`vendor_communications_id\` PRIMARY KEY(\`id\`)
+    )`);
+    await db.execute(sql`CREATE TABLE IF NOT EXISTS \`vendor_onboarding_steps\` (
+      \`id\` int AUTO_INCREMENT NOT NULL,
+      \`vendorId\` int NOT NULL,
+      \`stepKey\` varchar(80) NOT NULL,
+      \`label\` varchar(255) NOT NULL,
+      \`status\` enum('pending','in_progress','complete','skipped','blocked') NOT NULL DEFAULT 'pending',
+      \`dueAt\` timestamp NULL,
+      \`completedAt\` timestamp NULL,
+      \`notes\` text,
+      \`assignedToUserId\` int,
+      \`createdAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      \`updatedAt\` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT \`vendor_onboarding_steps_id\` PRIMARY KEY(\`id\`)
+    )`);
+
+    const [existing] = await db.select({ id: trades.id }).from(trades).limit(1);
+    if (!existing) {
+      await db.insert(trades).values(TRADE_SEED);
+      console.log(`[Vendors] Seeded ${TRADE_SEED.length} trades.`);
+    }
+  } catch (err) {
+    console.warn("[Vendors] ensureVendorTables failed (non-fatal):", err);
+  }
 }
 
 // ─── Trades ──────────────────────────────────────────────────────────────────
@@ -147,8 +246,8 @@ export async function createVendor(input: InsertDbVendor & { tradeSlugs?: string
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   const { tradeSlugs, ...payload } = input;
-  const [result] = await db.insert(vendors).values(payload).returning({ id: vendors.id });
-  const id = Number(result?.id ?? 0);
+  const result = (await db.insert(vendors).values(payload)) as unknown as { insertId: number | string };
+  const id = Number(result.insertId);
   if (tradeSlugs && tradeSlugs.length > 0) {
     await setVendorTrades(id, tradeSlugs);
   }
@@ -181,8 +280,10 @@ export async function setVendorTrades(vendorId: number, tradeSlugs: string[]) {
 export async function logCommunication(input: InsertDbVendorCommunication) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
-  const [result] = await db.insert(vendorCommunications).values(input).returning({ id: vendorCommunications.id });
-  const id = Number(result?.id ?? 0);
+  const result = (await db.insert(vendorCommunications).values(input)) as unknown as {
+    insertId: number | string;
+  };
+  const id = Number(result.insertId);
   const [row] = await db
     .select()
     .from(vendorCommunications)
@@ -207,8 +308,10 @@ export async function listVendorCommunications(vendorId: number, limit = 100) {
 export async function createOnboardingStep(input: InsertDbVendorOnboardingStep) {
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
-  const [result] = await db.insert(vendorOnboardingSteps).values(input).returning({ id: vendorOnboardingSteps.id });
-  const id = Number(result?.id ?? 0);
+  const result = (await db.insert(vendorOnboardingSteps).values(input)) as unknown as {
+    insertId: number | string;
+  };
+  const id = Number(result.insertId);
   const [row] = await db
     .select()
     .from(vendorOnboardingSteps)

@@ -66,8 +66,7 @@ async function getOrCreateAppSettings() {
     return row;
   }
 
-  await db.insert(appSettings).values(DEFAULT_SETTINGS).onConflictDoUpdate({
-    target: appSettings.id,
+  await db.insert(appSettings).values(DEFAULT_SETTINGS).onDuplicateKeyUpdate({
     set: { updatedAt: new Date() },
   });
   const fresh = await db

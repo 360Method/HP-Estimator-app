@@ -25,8 +25,26 @@ const TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 const TOKEN_BYTES = 32; // 256 bits → 64-char hex
 
 export async function ensurePasswordResetTokensTable(): Promise<void> {
-  // boot-time MySQL DDL removed; tables now created by drizzle Postgres migrations
-  return;
+  const db = await getDb();
+  if (!db) return;
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS \`password_reset_tokens\` (
+        \`id\` int AUTO_INCREMENT NOT NULL,
+        \`staffUserId\` int NOT NULL,
+        \`tokenHash\` varchar(255) NOT NULL,
+        \`expiresAt\` timestamp NOT NULL,
+        \`usedAt\` timestamp NULL,
+        \`requestIp\` varchar(64),
+        \`createdAt\` timestamp DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        PRIMARY KEY (\`id\`),
+        INDEX \`prt_staff_user_idx\` (\`staffUserId\`),
+        INDEX \`prt_expires_idx\` (\`expiresAt\`)
+      )
+    `);
+  } catch (err) {
+    console.warn("[passwordReset] ensurePasswordResetTokensTable failed", err);
+  }
 }
 
 function generateRawToken(): string {

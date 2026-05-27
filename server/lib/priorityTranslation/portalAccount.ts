@@ -4,11 +4,13 @@
  * Auto-provisions a portal account for a Priority Translation submission,
  * issues a passwordless magic-link token (7-day expiry, single-use), and
  * builds the URL the homeowner will click.
+ *
+ * MySQL port: insert-then-select pattern (no pg .returning()).
  */
 
 import { createHash, randomBytes, randomUUID } from "crypto";
 import { and, eq } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import type { MySql2Database } from "drizzle-orm/mysql2";
 import {
   portalAccounts,
   portalMagicLinks,
@@ -21,7 +23,7 @@ import {
 
 const MAGIC_LINK_TTL_DAYS = 7;
 
-export type DbLike = PostgresJsDatabase<any>;
+export type DbLike = MySql2Database<any>;
 
 export async function findOrCreatePortalAccount(
   db: DbLike,

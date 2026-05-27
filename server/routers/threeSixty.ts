@@ -155,10 +155,9 @@ const membershipRouter = router({
           renewalDate,
           laborBankBalance: tierDef.laborBankCreditCents,
           notes: input.notes,
-        })
-        .returning({ id: threeSixtyMemberships.id });
+        });
 
-      const membershipId = Number(result?.id ?? 0);
+      const membershipId = (result as any).insertId as number;
 
       // Credit the initial labor bank if applicable
       if (tierDef.laborBankCreditCents > 0) {
@@ -277,8 +276,8 @@ const visitsRouter = router({
         scheduledDate: input.scheduledDate,
         visitYear: input.visitYear,
         status: "scheduled",
-      }).returning({ id: threeSixtyVisits.id });
-      return { id: Number(result?.id ?? 0) };
+      });
+      return { id: (result as any).insertId as number };
     }),
 
     complete: protectedProcedure
@@ -730,8 +729,8 @@ const scansRouter = router({
       const [result] = await db.insert(threeSixtyScans).values({
         ...input,
         status: "draft",
-      }).returning({ id: threeSixtyScans.id });
-      return { id: Number(result?.id ?? 0) };
+      });
+      return { id: (result as any).insertId as number };
     }),
 
   update: protectedProcedure
@@ -907,14 +906,14 @@ const scansRouter = router({
         reportJson,
         pdfUrl: scan.pdfUrl ?? undefined,
         sentAt: now,
-      }).returning({ id: portalReports.id });
+      });
 
       await db
         .update(threeSixtyScans)
         .set({ sentToPortalAt: now, status: "delivered" })
         .where(eq(threeSixtyScans.id, input.scanId));
 
-      return { portalReportId: Number(result?.id ?? 0) };
+      return { portalReportId: (result as any).insertId as number };
     }),
 });
 
@@ -976,8 +975,8 @@ const propertySystemsRouter = router({
           .where(eq(threeSixtyPropertySystems.id, id));
         return { id };
       } else {
-        const [result] = await db.insert(threeSixtyPropertySystems).values(payload as any).returning({ id: threeSixtyPropertySystems.id });
-        return { id: Number(result?.id ?? 0) };
+        const [result] = await db.insert(threeSixtyPropertySystems).values(payload as any);
+        return { id: (result as any).insertId as number };
       }
     }),
 

@@ -77,7 +77,7 @@ export const automationRulesRouter = router({
     .mutation(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
-      const [result] = await db.insert(automationRules).values({
+      const result = await db.insert(automationRules).values({
         name: input.name,
         trigger: input.trigger,
         conditions: JSON.stringify(input.conditions),
@@ -89,8 +89,9 @@ export const automationRulesRouter = router({
         category: input.category,
         emailTemplateId: input.emailTemplateId ?? null,
         stage: input.stage ?? "lead",
-      }).returning({ id: automationRules.id });
-      return { id: Number(result?.id ?? 0) };
+      });
+      const insertId = Number((result as unknown as { insertId: number | string }).insertId);
+      return { id: insertId };
     }),
 
   update: protectedProcedure

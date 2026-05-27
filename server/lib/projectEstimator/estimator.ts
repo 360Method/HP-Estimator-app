@@ -19,7 +19,7 @@
  */
 
 import { eq } from "drizzle-orm";
-import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import type { MySql2Database } from "drizzle-orm/mysql2";
 import {
   projectEstimates,
   type DbProjectEstimate,
@@ -38,7 +38,7 @@ import {
 } from "./messaging";
 import { scheduleProjectCadence } from "./cadence";
 
-type DbLike = PostgresJsDatabase<any>;
+type DbLike = MySql2Database<any>;
 
 export type SubmitInput = {
   customerId: string;
@@ -333,7 +333,7 @@ async function queueEstimateReadyDraft(
   // the range-delivery email auto-sends without requiring Marcin's tap. The
   // approval gate moves to the medium-confidence branch (notifyOwnerForReview)
   // where Marcin reviews the estimate itself before it reaches the customer.
-  const [inserted] = await db.insert(agentDrafts).values({
+  const inserted = await db.insert(agentDrafts).values({
     customerId: input.customerId,
     opportunityId: input.opportunityId,
     playbookKey: BOOK_CONSULTATION_PLAYBOOK_KEY,
@@ -348,8 +348,8 @@ async function queueEstimateReadyDraft(
     recipientPhone: null,
     contextJson: JSON.stringify({ projectEstimateId: id }),
     generatedAt: new Date(),
-  }).returning({ id: agentDrafts.id });
-  await dispatchAutoSendDraft(inserted?.id ?? null);
+  });
+  await dispatchAutoSendDraft(extractInsertId(inserted));
 }
 
 async function queueMissingInfoDraft(
@@ -369,7 +369,7 @@ async function queueMissingInfoDraft(
   // Info-gathering questions have no price/range exposure and reflect what the
   // AI asked about — auto-send so the customer hears back within seconds
   // instead of waiting on operator approval.
-  const [inserted] = await db.insert(agentDrafts).values({
+  const inserted = await db.insert(agentDrafts).values({
     customerId: input.customerId,
     opportunityId: input.opportunityId,
     playbookKey: BOOK_CONSULTATION_PLAYBOOK_KEY,
@@ -387,8 +387,17 @@ async function queueMissingInfoDraft(
       questions: safeQuestions,
     }),
     generatedAt: new Date(),
-  }).returning({ id: agentDrafts.id });
-  await dispatchAutoSendDraft(inserted?.id ?? null);
+  });
+  await dispatchAutoSendDraft(extractInsertId(inserted));
+}
+
+/**
+ * mysql2 returns [{ insertId }, _] on insert. Drizzle's mysql adapter
+ * surfaces this as the resolved value's first element.
+ */
+function extractInsertId(result: any): number | null {
+  const id = result?.[0]?.insertId ?? result?.insertId ?? null;
+  return typeof id === "number" && id > 0 ? id : null;
 }
 
 /**

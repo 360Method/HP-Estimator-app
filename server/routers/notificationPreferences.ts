@@ -101,10 +101,7 @@ export const notificationPreferencesRouter = router({
           channel: input.channel,
           enabled: input.enabled,
         })
-        .onConflictDoUpdate({
-          target: [notificationPreferences.eventKey, notificationPreferences.channel],
-          set: { enabled: input.enabled },
-        });
+        .onDuplicateKeyUpdate({ set: { enabled: input.enabled } });
       return { ok: true };
     }),
 });
