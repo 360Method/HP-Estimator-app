@@ -380,7 +380,7 @@ export async function onAppointmentBooked(params: {
       toRole: "consultant",
       fromUserId: current?.assignedUserId ?? null,
       toUserId: consultantId ?? null,
-      triggeredBy: params.triggeredByUserId ?? null,
+      triggeredBy: params.triggeredByUserId != null ? String(params.triggeredByUserId) : null,
       payloadJson: JSON.stringify({ when: params.when, appointmentType: params.appointmentType }),
     });
 
@@ -576,7 +576,7 @@ export async function onSaleSigned(params: {
       toRole: "project_manager",
       fromUserId: current?.assignedUserId ?? null,
       toUserId: pmId ?? null,
-      triggeredBy: params.triggeredByUserId ?? null,
+      triggeredBy: params.triggeredByUserId != null ? String(params.triggeredByUserId) : null,
       payloadJson: JSON.stringify({ value: params.value }),
     });
 
@@ -627,7 +627,7 @@ export async function onReassign(params: {
       toRole: params.toRole,
       fromUserId: current?.assignedUserId ?? null,
       toUserId: params.toUserId,
-      triggeredBy: params.triggeredByUserId ?? null,
+      triggeredBy: params.triggeredByUserId != null ? String(params.triggeredByUserId) : null,
     });
 
     const customerName = await resolveCustomerName(current?.customerId ?? null);

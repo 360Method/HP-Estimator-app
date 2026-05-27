@@ -53,7 +53,8 @@ export function registerAuthRoutes(app: Express) {
           loginMethod: "email",
           role: staffUser.role === "admin" ? "admin" : "user",
         })
-        .onDuplicateKeyUpdate({
+        .onConflictDoUpdate({
+          target: users.openId,
           set: {
             name: staffUser.name ?? staffUser.email,
             lastSignedIn: new Date(),

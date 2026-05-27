@@ -116,7 +116,7 @@ export const techRouter = router({
       const db = await getDb();
       if (!db) throw new Error('Database unavailable');
 
-      const inserted = await db.insert(timeLogs).values({
+      const [inserted] = await db.insert(timeLogs).values({
         techName: input.techName,
         workOrderId: input.workOrderId ?? null,
         scheduleEventId: input.scheduleEventId ?? null,
@@ -124,8 +124,8 @@ export const techRouter = router({
         customerId: input.customerId ?? null,
         jobTitle: input.jobTitle ?? null,
         clockIn: new Date(),
-      });
-      const timeLogId = Number((inserted as unknown as { insertId?: number | string }).insertId ?? 0);
+      }).returning({ id: timeLogs.id });
+      const timeLogId = Number(inserted?.id ?? 0);
 
       // Mark work order as in_progress
       if (input.workOrderId) {
