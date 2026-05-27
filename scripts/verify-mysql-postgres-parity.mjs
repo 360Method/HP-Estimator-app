@@ -93,8 +93,12 @@ const APP_FKS = [
 
   // properties as parent
   { childTable: 'opportunities', childCol: 'propertyId', parentTable: 'properties', parentCol: 'id' },
-  { childTable: 'threeSixtyPropertySystems', childCol: 'propertyId', parentTable: 'properties', parentCol: 'id' },
-  { childTable: 'threeSixtyScans', childCol: 'propertyId', parentTable: 'properties', parentCol: 'id' },
+
+  // threeSixtyMemberships as parent
+  // (threeSixtyPropertySystems and threeSixtyScans have no propertyId column —
+  //  they relate to a membership, not a property, via membershipId.)
+  { childTable: 'threeSixtyPropertySystems', childCol: 'membershipId', parentTable: 'threeSixtyMemberships', parentCol: 'id' },
+  { childTable: 'threeSixtyScans', childCol: 'membershipId', parentTable: 'threeSixtyMemberships', parentCol: 'id' },
 
   // conversations / messages
   { childTable: 'messages', childCol: 'conversationId', parentTable: 'conversations', parentCol: 'id' },
@@ -325,9 +329,12 @@ async function main() {
     dateStrings: false,
     supportBigNumbers: true,
     bigNumberStrings: true,
+    timezone: 'Z', // Match the loader — both sides must read MySQL TIMESTAMPs as UTC
+    // for the comparison to be meaningful.
   });
   const sql = postgres(pgUrl, {
     max: 4,
+    prepare: false, // Supabase transaction pooler (port 6543).
     onnotice: () => {},
     transform: { undefined: null },
   });
