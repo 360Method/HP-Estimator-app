@@ -4,9 +4,14 @@
  * triggers (starting with the Rec 1 margin-floor breach) or are entered
  * manually, and are worked at the weekly L10.
  */
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNotNull, notInArray } from "drizzle-orm";
 import { getDb } from "../db";
-import { idsIssues, type DbIdsIssue, type InsertDbIdsIssue } from "../../drizzle/schema";
+import {
+  idsIssues,
+  threeSixtyWorkOrders,
+  type DbIdsIssue,
+  type InsertDbIdsIssue,
+} from "../../drizzle/schema";
 
 /** The 8 BOS issue categories. */
 export const IDS_CATEGORIES = {
@@ -43,6 +48,41 @@ export function marginFloorDedupeKey(opportunityId: string): string {
 /** Stable dedupe key for the estimate-variance issue tied to one opportunity. */
 export function estimateVarianceDedupeKey(opportunityId: string): string {
   return `estimate_variance:${opportunityId}`;
+}
+
+/** A seasonal visit more than this long past its scheduled date is "slipped". */
+export const VISIT_SLIP_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Pure: is a 360 work order slipped (scheduled, non-terminal, >1 week overdue)? */
+export function isVisitSlipped(
+  scheduledDateMs: number | null | undefined,
+  status: string,
+  nowMs: number,
+): boolean {
+  if (!scheduledDateMs) return false;
+  if (status === "completed" || status === "skipped") return false;
+  return nowMs - scheduledDateMs > VISIT_SLIP_GRACE_MS;
+}
+
+export function visitSlipDedupeKey(workOrderId: number): string {
+  return `visit_slip:wo:${workOrderId}`;
+}
+
+/** Build the CAT-2 issue for a seasonal visit that has slipped >1 week. */
+export function buildVisitSlipIssue(args: {
+  workOrderId: number;
+  type: string;
+  scheduledDateMs: number;
+  nowMs: number;
+}): BuiltIssue {
+  const daysLate = Math.floor((args.nowMs - args.scheduledDateMs) / (24 * 60 * 60 * 1000));
+  return {
+    category: "CAT-2",
+    title: `360 ${args.type} visit (work order ${args.workOrderId}) is ${daysLate} days past its scheduled date.`,
+    source: "visit_slip",
+    priority: "high",
+    dedupeKey: visitSlipDedupeKey(args.workOrderId),
+  };
 }
 
 /** Build the CAT-4 issue for an opportunity whose actual cost overran the estimate. */
@@ -223,4 +263,72 @@ export async function syncEstimateVarianceIssue(args: {
   } else if (existing && existing.status !== "solved" && existing.status !== "dropped") {
     await updateIdsIssue(existing.id, { status: "solved", resolvedAt: nowIso });
   }
+}
+
+/**
+ * Daily scan: open a CAT-2 IDS issue for every 360 work order that has slipped
+ * more than a week past its scheduled date, and auto-resolve previously-opened
+ * visit-slip issues whose work order is no longer slipped (completed/skipped/
+ * rescheduled). Idempotent — safe to run on an interval.
+ */
+export async function scanAndSyncVisitSlips(
+  nowMs: number = Date.now(),
+): Promise<{ opened: number; resolved: number }> {
+  const db = await getDb();
+  if (!db) return { opened: 0, resolved: 0 };
+  const wos = await db
+    .select()
+    .from(threeSixtyWorkOrders)
+    .where(
+      and(
+        notInArray(threeSixtyWorkOrders.status, ["completed", "skipped"]),
+        isNotNull(threeSixtyWorkOrders.scheduledDate),
+      ),
+    );
+  const slipped = new Set<number>();
+  let opened = 0;
+  for (const wo of wos) {
+    if (!isVisitSlipped(wo.scheduledDate, wo.status, nowMs)) continue;
+    slipped.add(wo.id);
+    const built = buildVisitSlipIssue({
+      workOrderId: wo.id,
+      type: wo.type,
+      scheduledDateMs: wo.scheduledDate as number,
+      nowMs,
+    });
+    const existing = await getIdsIssueByDedupeKey(built.dedupeKey);
+    if (existing) {
+      const reopen = existing.status === "solved" || existing.status === "dropped";
+      await updateIdsIssue(existing.id, {
+        title: built.title,
+        ...(reopen ? { status: "open", resolvedAt: null } : {}),
+      });
+    } else {
+      const { nanoid } = await import("nanoid");
+      await createIdsIssue({
+        id: nanoid(),
+        category: built.category,
+        title: built.title,
+        status: "open",
+        priority: built.priority,
+        source: built.source,
+        dedupeKey: built.dedupeKey,
+        customerId: wo.customerId,
+      });
+    }
+    opened++;
+  }
+  // Auto-resolve open visit-slip issues whose work order is no longer slipped.
+  const nowIso = new Date(nowMs).toISOString();
+  const open = await listIdsIssues({ status: "open", limit: 1000 });
+  let resolved = 0;
+  for (const iss of open) {
+    if (iss.source !== "visit_slip") continue;
+    const woId = Number(iss.dedupeKey?.split(":").pop());
+    if (woId && !slipped.has(woId)) {
+      await updateIdsIssue(iss.id, { status: "solved", resolvedAt: nowIso });
+      resolved++;
+    }
+  }
+  return { opened, resolved };
 }

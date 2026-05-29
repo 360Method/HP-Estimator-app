@@ -1488,6 +1488,22 @@ async function startServer() {
   setInterval(runReviewRequests, 60 * 60 * 1000);
   console.log('[Review] Review request scheduler started (runs every hour)');
 
+  // ── IDS visit-slip scan (audit Rec 2): flag 360 visits >1 week overdue ──────
+  const runVisitSlipScan = async () => {
+    try {
+      const { scanAndSyncVisitSlips } = await import("../lib/idsIssues");
+      const { opened, resolved } = await scanAndSyncVisitSlips();
+      if (opened || resolved) {
+        console.log(`[IDS] Visit-slip scan: ${opened} open/refreshed, ${resolved} resolved`);
+      }
+    } catch (err) {
+      console.error('[IDS] Visit-slip scan error:', err);
+    }
+  };
+  runVisitSlipScan().catch(console.error);
+  setInterval(runVisitSlipScan, 24 * 60 * 60 * 1000);
+  console.log('[IDS] Visit-slip scan scheduler started (runs daily)');
+
   // ── 360° Cart Abandonment Drip Emails (runs every hour) ────────────────────────────────────────────────────
   const FUNNEL_URL = process.env.FUNNEL_ORIGIN ?? "https://360.handypioneers.com";
   const run360DripEmails = async () => {
