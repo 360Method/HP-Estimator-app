@@ -729,6 +729,42 @@ export const opportunities = pgTable("opportunities", {
   updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
 });
 export type DbOpportunity = typeof opportunities.$inferSelect;
+
+/**
+ * IDS Issues Log (audit Rec 2) — the BOS "Identify / Discuss / Solve" list.
+ * Issues are auto-created from operational triggers (margin-floor breach,
+ * estimate variance, visit slip, red scorecard row) or entered manually, then
+ * worked at the weekly L10. `dedupeKey` makes auto-creation idempotent.
+ */
+export const idsIssues = pgTable("idsIssues", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  /** CAT-1 .. CAT-8 (see IDS_CATEGORIES in server/lib/idsIssues.ts). */
+  category: varchar("category", { length: 8 }).notNull(),
+  /** One-sentence root-cause statement. */
+  title: text("title").notNull(),
+  detail: text("detail"),
+  /** open | discussing | solved | dropped */
+  status: varchar("status", { length: 16 }).notNull().default("open"),
+  /** low | normal | high */
+  priority: varchar("priority", { length: 8 }).notNull().default("normal"),
+  /** manual | margin_floor | estimate_variance | visit_slip | scorecard_red */
+  source: varchar("source", { length: 32 }).notNull().default("manual"),
+  /** Idempotency key for auto-created issues (null for manual entries). */
+  dedupeKey: varchar("dedupeKey", { length: 160 }),
+  ownerUserId: integer("ownerUserId"),
+  /** The agreed solve action (one owner, one action, one due date). */
+  action: text("action"),
+  dueDate: varchar("dueDate", { length: 32 }),
+  opportunityId: varchar("opportunityId", { length: 64 }),
+  customerId: varchar("customerId", { length: 64 }),
+  resolvedAt: varchar("resolvedAt", { length: 32 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
+}, (t) => ({
+  uniqDedupe: uniqueIndex("idsIssues_dedupeKey_uidx").on(t.dedupeKey),
+}));
+export type DbIdsIssue = typeof idsIssues.$inferSelect;
+export type InsertDbIdsIssue = typeof idsIssues.$inferInsert;
 export type InsertDbOpportunity = typeof opportunities.$inferInsert;
 
 // ─── PORTAL: SERVICE REQUESTS ─────────────────────────────────────────────────
