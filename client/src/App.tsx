@@ -100,6 +100,8 @@ const AdminVendorNew = lazy(() => import("./pages/admin/AdminVendorNew"));
 const AgentsControl = lazy(() => import("./pages/admin/AgentsControl"));
 const AgentsRuns = lazy(() => import("./pages/admin/AgentsRuns"));
 const OrgChart = lazy(() => import("./pages/admin/OrgChart"));
+const IdsIssuesPage = lazy(() => import("./pages/admin/IdsIssuesPage"));
+const ScorecardPage = lazy(() => import("./pages/admin/ScorecardPage"));
 
 // Self-serve password reset (public)
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
@@ -218,6 +220,8 @@ function Router() {
       <Route path="/admin/vendors/new" component={staffOnly(AdminVendorNew)} />
       <Route path="/admin/vendors/:id" component={staffOnly(AdminVendorDetail)} />
       <Route path="/admin/vendors" component={staffOnly(AdminVendorsList)} />
+      <Route path="/admin/ids" component={staffOnly(IdsIssuesPage)} />
+      <Route path="/admin/scorecard" component={staffOnly(ScorecardPage)} />
 
       {/* Lead Nurturer admin — drafts inbox + playbook editor */}
       <Route path="/admin/agents/drafts" component={AgentDraftsPage} />
