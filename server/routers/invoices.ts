@@ -17,6 +17,7 @@ import {
   addInvoicePayment,
   deleteInvoicePayment,
 } from "../db";
+import { mirrorProInvoiceToPortal } from "../lib/invoiceMirror";
 
 const LineItemInput = z.object({
   id: z.string(),
@@ -107,6 +108,11 @@ export const invoicesRouter = router({
       const { lineItems, payments, ...invoiceData } = input;
       await createInvoice(invoiceData);
       await replaceInvoiceLineItems(input.id, lineItems);
+      // Mirror final/balance invoices to the customer portal (audit Rec 4).
+      if (invoiceData.type === "final") {
+        mirrorProInvoiceToPortal(input.id).catch(e =>
+          console.error("[invoiceMirror] create mirror error:", e));
+      }
       // Payments are added separately via addPayment
       return getInvoiceById(input.id);
     }),
@@ -156,6 +162,9 @@ export const invoicesRouter = router({
         status,
         paidAt: balance <= 0 ? new Date().toISOString() : undefined,
       });
+      // Keep the portal mirror's paid status in sync (audit Rec 4; no-op unless final + mirrored).
+      mirrorProInvoiceToPortal(input.invoiceId).catch(e =>
+        console.error("[invoiceMirror] payment mirror error:", e));
       return getInvoiceById(input.invoiceId);
     }),
 

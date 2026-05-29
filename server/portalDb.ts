@@ -363,6 +363,24 @@ export async function createPortalInvoice(data: InsertPortalInvoice) {
   return getPortalInvoiceById(newId);
 }
 
+/** Find a portal invoice mirroring a given pro-side invoice (audit Rec 4). */
+export async function getPortalInvoiceByHpInvoiceId(hpInvoiceId: string) {
+  const db = await d();
+  const rows = await db
+    .select()
+    .from(portalInvoices)
+    .where(eq(portalInvoices.hpInvoiceId, hpInvoiceId))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/** Patch a portal invoice by id (audit Rec 4 — keep mirror in sync). */
+export async function updatePortalInvoiceById(id: number, patch: Partial<InsertPortalInvoice>) {
+  const db = await d();
+  await db.update(portalInvoices).set(patch).where(eq(portalInvoices.id, id));
+  return getPortalInvoiceById(id);
+}
+
 export async function getPortalInvoicesByCustomer(customerId: number) {
   const db = await d();
   return db

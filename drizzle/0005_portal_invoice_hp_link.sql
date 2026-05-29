@@ -1,0 +1,1 @@
+ALTER TABLE "portalInvoices" ADD COLUMN "hpInvoiceId" varchar(64);
