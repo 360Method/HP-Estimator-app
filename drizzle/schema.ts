@@ -709,6 +709,22 @@ export const opportunities = pgTable("opportunities", {
   assignedRole: varchar("assignedRole", { length: 32 }),
   /** ISO timestamp when the current assignment was made */
   assignedAt: varchar("assignedAt", { length: 32 }),
+  // ── Margin audit (Rec 1 — server-side floor enforcement) ──
+  // Persisted from the estimateSnapshot whenever it is saved, so the 30%/40%
+  // gross-margin floors are recorded authoritatively (not just enforced in the
+  // client calculator) and can be consumed by IDS auto-flagging and the scorecard.
+  /** Total hard cost in cents (derived from snapshot price + GM). */
+  hardCostCents: integer("hardCostCents"),
+  /** Computed gross margin in basis points (e.g. 3000 = 30%). */
+  grossMarginBps: integer("grossMarginBps"),
+  /** Applicable floor in basis points (3000 standard / 4000 small job). */
+  minGmBps: integer("minGmBps"),
+  /** True when hard cost is below the $2,000 small-job threshold. */
+  isSmallJob: boolean("isSmallJob"),
+  /** True when computed GM is below the applicable floor (the IDS trigger). */
+  belowFloor: boolean("belowFloor").default(false).notNull(),
+  /** ISO timestamp of the last margin audit. */
+  marginAuditedAt: varchar("marginAuditedAt", { length: 32 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
 });

@@ -4,6 +4,13 @@
 
 import { LineItem, PhaseGroup, GlobalSettings, Tier, CustomLineItem, PricingMode, ProductionRateAudit } from './types';
 import { auditLineItemProduction, calcProductionHours, getProductionAudit } from './productionRateAudit';
+import {
+  minGmFor,
+  MIN_GM_STANDARD,
+  MIN_GM_SMALL_JOB,
+  LOW_MARGIN_WARN_GM,
+  SMALL_JOB_HARD_COST_THRESHOLD,
+} from '@shared/marginFloor';
 
 // ─── MARKUP / GM MATH ─────────────────────────────────────────
 // Markup % is applied as: price = hardCost / (1 - GM)
@@ -21,7 +28,7 @@ export function applyMarkup(hardCost: number, markupPct: number): {
   if (hardCost === 0) return { price: 0, gm: 0, gmPrelim: 0, minGM: 0, flagged: false };
 
   // markupPct is stored as the desired GM (e.g. 0.40 = 40% GM)
-  const minGM = hardCost < 2000 ? 0.40 : 0.30;
+  const minGM = minGmFor(hardCost);
   const effectiveGM = Math.max(markupPct, minGM);
   const flagged = markupPct < minGM;
 
@@ -312,19 +319,19 @@ export function calcTotals(phases: PhaseResult[], customItems: CustomItemResult[
 // ─── GM FLAGS ─────────────────────────────────────────────────
 export function getMarginFlag(gm: number, hardCost: number): 'ok' | 'warn' | 'bad' | 'empty' {
   if (hardCost === 0) return 'empty';
-  const minGM = hardCost < 2000 ? 0.40 : 0.30;
+  const minGM = minGmFor(hardCost);
   if (gm < minGM - 0.001) return 'bad';
-  if (gm < 0.35 && minGM < 0.35) return 'warn';
+  if (gm < LOW_MARGIN_WARN_GM && minGM < LOW_MARGIN_WARN_GM) return 'warn';
   return 'ok';
 }
 
 export function getMarginLabel(gm: number, hardCost: number, price: number): string {
   if (hardCost === 0) return 'Enter quantities to calculate';
-  const minGM = hardCost < 2000 ? 0.40 : 0.30;
+  const minGM = minGmFor(hardCost);
   const pct = Math.round(gm * 100);
   const gp = fmtDollar(price - hardCost);
   if (gm < minGM - 0.001) return `Below ${Math.round(minGM * 100)}% GM floor — do not send`;
-  if (gm < 0.35 && minGM < 0.35) return `Low margin — ${pct}% GM · consider raising markup`;
+  if (gm < LOW_MARGIN_WARN_GM && minGM < LOW_MARGIN_WARN_GM) return `Low margin — ${pct}% GM · consider raising markup`;
   return `${pct}% GM · ${gp} gross profit — ready to send`;
 }
 
@@ -406,9 +413,9 @@ export function generateMarginAudit(
   totals: TotalsResult,
 ): string {
   const flags: string[] = [];
-  if (totals.totalGM < 0.30) flags.push('CRITICAL: flag_margin_below_30 — do not send estimate');
-  else if (totals.totalGM < 0.35) flags.push('WARNING: warn_margin_low — GM < 35%, consider raising markup');
-  if (totals.totalHard < 2000 && totals.totalGM < 0.40) flags.push('WARNING: warn_small_job_margin_low — hard cost < $2,000, 40% floor applies');
+  if (totals.totalGM < MIN_GM_STANDARD) flags.push('CRITICAL: flag_margin_below_30 — do not send estimate');
+  else if (totals.totalGM < LOW_MARGIN_WARN_GM) flags.push('WARNING: warn_margin_low — GM < 35%, consider raising markup');
+  if (totals.totalHard < SMALL_JOB_HARD_COST_THRESHOLD && totals.totalGM < MIN_GM_SMALL_JOB) flags.push('WARNING: warn_small_job_margin_low — hard cost < $2,000, 40% floor applies');
 
   const phaseAudit = phases.filter(p => p.hasData).map(p => ({
     phase: p.phaseName,
