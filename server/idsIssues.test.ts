@@ -6,6 +6,10 @@ import {
   buildMarginFloorIssue,
   estimateVarianceDedupeKey,
   buildEstimateVarianceIssue,
+  isVisitSlipped,
+  buildVisitSlipIssue,
+  visitSlipDedupeKey,
+  VISIT_SLIP_GRACE_MS,
 } from "./lib/idsIssues";
 
 describe("IDS categories", () => {
@@ -70,5 +74,38 @@ describe("buildEstimateVarianceIssue", () => {
   });
   it("variance dedupe key is opportunity-scoped", () => {
     expect(estimateVarianceDedupeKey("opp-1")).toBe("estimate_variance:opp-1");
+  });
+});
+
+describe("isVisitSlipped", () => {
+  const NOW = 1_000 * VISIT_SLIP_GRACE_MS; // arbitrary large now
+  it("is slipped when non-terminal and >1 week past schedule", () => {
+    expect(isVisitSlipped(NOW - VISIT_SLIP_GRACE_MS - 1, "scheduled", NOW)).toBe(true);
+    expect(isVisitSlipped(NOW - VISIT_SLIP_GRACE_MS - 1, "open", NOW)).toBe(true);
+    expect(isVisitSlipped(NOW - VISIT_SLIP_GRACE_MS - 1, "in_progress", NOW)).toBe(true);
+  });
+  it("is not slipped within the grace window", () => {
+    expect(isVisitSlipped(NOW - VISIT_SLIP_GRACE_MS + 1000, "scheduled", NOW)).toBe(false);
+  });
+  it("is never slipped when completed or skipped", () => {
+    expect(isVisitSlipped(NOW - 10 * VISIT_SLIP_GRACE_MS, "completed", NOW)).toBe(false);
+    expect(isVisitSlipped(NOW - 10 * VISIT_SLIP_GRACE_MS, "skipped", NOW)).toBe(false);
+  });
+  it("is not slipped without a scheduled date", () => {
+    expect(isVisitSlipped(null, "scheduled", NOW)).toBe(false);
+    expect(isVisitSlipped(undefined, "open", NOW)).toBe(false);
+  });
+});
+
+describe("buildVisitSlipIssue", () => {
+  it("creates a CAT-2 visit_slip issue keyed by work order", () => {
+    const now = 30 * 24 * 60 * 60 * 1000;
+    const issue = buildVisitSlipIssue({ workOrderId: 42, type: "spring", scheduledDateMs: now - 14 * 24 * 60 * 60 * 1000, nowMs: now });
+    expect(issue.category).toBe("CAT-2");
+    expect(issue.source).toBe("visit_slip");
+    expect(issue.dedupeKey).toBe("visit_slip:wo:42");
+    expect(visitSlipDedupeKey(42)).toBe("visit_slip:wo:42");
+    expect(issue.title).toContain("14 days");
+    expect(issue.title).toContain("spring");
   });
 });
