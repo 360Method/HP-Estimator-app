@@ -323,6 +323,8 @@ export const portalInvoices = pgTable("portalInvoices", {
   customerId: integer("customerId").notNull(),
   /** References portal_estimates.id if this invoice came from an estimate */
   estimateId: integer("estimateId"),
+  /** Pro-side invoices.id this row mirrors (audit Rec 4). Null for portal-native rows. */
+  hpInvoiceId: varchar("hpInvoiceId", { length: 64 }),
   /** e.g. "INV-2026-001" */
   invoiceNumber: varchar("invoiceNumber", { length: 64 }).notNull(),
   /** deposit | final | balance */
