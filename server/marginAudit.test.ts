@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractTotals, marginFieldsFromSnapshot } from "./lib/marginAudit";
+import { extractTotals, marginFieldsFromSnapshot, computeEstimateVariance } from "./lib/marginAudit";
 
 const NOW = "2026-05-29T00:00:00.000Z";
 
@@ -50,5 +50,27 @@ describe("marginFieldsFromSnapshot", () => {
   });
   it("returns null when not derivable", () => {
     expect(marginFieldsFromSnapshot(null, NOW)).toBeNull();
+  });
+});
+
+describe("computeEstimateVariance", () => {
+  it("breaches when actual exceeds estimate by >15%", () => {
+    const v = computeEstimateVariance(100000, 120000)!; // 20% over
+    expect(v.overBudget).toBe(true);
+    expect(v.breached).toBe(true);
+    expect(v.variance).toBeCloseTo(0.2, 5);
+  });
+  it("does not breach at or under 15% over", () => {
+    expect(computeEstimateVariance(100000, 115000)!.breached).toBe(false); // exactly 15%
+    expect(computeEstimateVariance(100000, 110000)!.breached).toBe(false);
+  });
+  it("under budget is never a breach", () => {
+    const v = computeEstimateVariance(100000, 80000)!;
+    expect(v.overBudget).toBe(false);
+    expect(v.breached).toBe(false);
+  });
+  it("returns null without a usable estimate", () => {
+    expect(computeEstimateVariance(0, 5000)).toBeNull();
+    expect(computeEstimateVariance(null, 5000)).toBeNull();
   });
 });

@@ -8,11 +8,34 @@ import {
   createExpense,
   deleteExpense,
   getExpenseById,
+  getOpportunityById,
   listExpenses,
   sumExpenses,
   updateExpense,
 } from "../db";
 import { nanoid } from "nanoid";
+import { computeEstimateVariance } from "../lib/marginAudit";
+import { syncEstimateVarianceIssue } from "../lib/idsIssues";
+
+/**
+ * After actuals change on an opportunity, compare summed expenses against the
+ * estimated hard cost and open/clear the estimate-variance IDS issue (Rec 2).
+ * Non-blocking; safe no-op when there's no estimate or no DB.
+ */
+async function checkEstimateVariance(userId: number, opportunityId: string): Promise<void> {
+  const opp = await getOpportunityById(opportunityId);
+  if (!opp?.hardCostCents) return;
+  const actualCents = await sumExpenses({ userId, opportunityId });
+  const v = computeEstimateVariance(opp.hardCostCents, actualCents);
+  if (!v) return;
+  await syncEstimateVarianceIssue({
+    opportunityId,
+    customerId: opp.customerId,
+    title: opp.title,
+    breached: v.breached,
+    variance: v.variance,
+  });
+}
 
 const EXPENSE_CATEGORIES = [
   "materials",
@@ -83,7 +106,7 @@ export const expensesRouter = router({
     .input(expenseInput)
     .mutation(async ({ ctx, input }) => {
       const id = nanoid();
-      return createExpense({
+      const result = await createExpense({
         id,
         userId: ctx.user.id,
         opportunityId: input.opportunityId ?? null,
@@ -95,6 +118,11 @@ export const expensesRouter = router({
         receiptUrl: input.receiptUrl ?? null,
         date: input.date,
       });
+      if (input.opportunityId) {
+        checkEstimateVariance(ctx.user.id, input.opportunityId).catch(e =>
+          console.error('[ids] checkEstimateVariance error:', e));
+      }
+      return result;
     }),
 
   update: protectedProcedure

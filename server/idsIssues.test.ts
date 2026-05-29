@@ -4,6 +4,8 @@ import {
   isValidCategory,
   marginFloorDedupeKey,
   buildMarginFloorIssue,
+  estimateVarianceDedupeKey,
+  buildEstimateVarianceIssue,
 } from "./lib/idsIssues";
 
 describe("IDS categories", () => {
@@ -54,5 +56,19 @@ describe("buildMarginFloorIssue", () => {
     const issue = buildMarginFloorIssue({ opportunityId: "opp-x" });
     expect(issue.title).toContain("opp-x");
     expect(issue.dedupeKey).toBe("margin_floor:opp-x");
+  });
+});
+
+describe("buildEstimateVarianceIssue", () => {
+  it("creates a CAT-4 issue keyed separately from the margin-floor issue", () => {
+    const issue = buildEstimateVarianceIssue({ opportunityId: "opp-9", title: "Smith remodel", variance: 0.22 });
+    expect(issue.category).toBe("CAT-4");
+    expect(issue.source).toBe("estimate_variance");
+    expect(issue.dedupeKey).toBe("estimate_variance:opp-9");
+    expect(issue.dedupeKey).not.toBe(marginFloorDedupeKey("opp-9"));
+    expect(issue.title).toContain("22% over");
+  });
+  it("variance dedupe key is opportunity-scoped", () => {
+    expect(estimateVarianceDedupeKey("opp-1")).toBe("estimate_variance:opp-1");
   });
 });

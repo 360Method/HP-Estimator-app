@@ -40,6 +40,28 @@ export function marginFloorDedupeKey(opportunityId: string): string {
   return `margin_floor:${opportunityId}`;
 }
 
+/** Stable dedupe key for the estimate-variance issue tied to one opportunity. */
+export function estimateVarianceDedupeKey(opportunityId: string): string {
+  return `estimate_variance:${opportunityId}`;
+}
+
+/** Build the CAT-4 issue for an opportunity whose actual cost overran the estimate. */
+export function buildEstimateVarianceIssue(args: {
+  opportunityId: string;
+  title?: string | null;
+  variance: number;
+}): BuiltIssue {
+  const pct = (args.variance * 100).toFixed(0);
+  const label = args.title?.trim() || `Opportunity ${args.opportunityId}`;
+  return {
+    category: "CAT-4",
+    title: `${label} is ${pct}% over its estimated cost (>15% variance).`,
+    source: "estimate_variance",
+    priority: "high",
+    dedupeKey: estimateVarianceDedupeKey(args.opportunityId),
+  };
+}
+
 export interface BuiltIssue {
   category: IdsCategory;
   title: string;
@@ -153,6 +175,52 @@ export async function syncMarginFloorIssue(args: {
     }
   } else if (existing && existing.status !== "solved" && existing.status !== "dropped") {
     // Breach cleared — auto-resolve the open margin issue.
+    await updateIdsIssue(existing.id, { status: "solved", resolvedAt: nowIso });
+  }
+}
+
+/**
+ * Idempotently keep the estimate-variance IDS issue in sync. Opens a CAT-4
+ * issue when actual cost overruns the estimate by >15%; closes it if it later
+ * comes back within tolerance. Safe to call whenever actuals change.
+ */
+export async function syncEstimateVarianceIssue(args: {
+  opportunityId: string;
+  customerId?: string | null;
+  title?: string | null;
+  breached: boolean;
+  variance: number;
+  nowIso?: string;
+}): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  const nowIso = args.nowIso ?? new Date().toISOString();
+  const dedupeKey = estimateVarianceDedupeKey(args.opportunityId);
+  const existing = await getIdsIssueByDedupeKey(dedupeKey);
+
+  if (args.breached) {
+    const built = buildEstimateVarianceIssue(args);
+    if (existing) {
+      await updateIdsIssue(existing.id, {
+        title: built.title,
+        status: existing.status === "solved" || existing.status === "dropped" ? "open" : existing.status,
+        resolvedAt: null,
+      });
+    } else {
+      const { nanoid } = await import("nanoid");
+      await createIdsIssue({
+        id: nanoid(),
+        category: built.category,
+        title: built.title,
+        status: "open",
+        priority: built.priority,
+        source: built.source,
+        dedupeKey,
+        opportunityId: args.opportunityId,
+        customerId: args.customerId ?? undefined,
+      });
+    }
+  } else if (existing && existing.status !== "solved" && existing.status !== "dropped") {
     await updateIdsIssue(existing.id, { status: "solved", resolvedAt: nowIso });
   }
 }
