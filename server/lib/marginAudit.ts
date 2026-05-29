@@ -15,6 +15,35 @@ export interface OpportunityMarginFields {
   marginAuditedAt: string;
 }
 
+/** BOS IDS trigger: an estimate-to-actual variance beyond this is flagged. */
+export const ESTIMATE_VARIANCE_THRESHOLD = 0.15;
+
+export interface EstimateVariance {
+  estimatedCents: number;
+  actualCents: number;
+  /** Signed ratio: positive = actual exceeds estimate (over budget). */
+  variance: number;
+  overBudget: boolean;
+  /** True when actual exceeds estimate by more than the 15% threshold. */
+  breached: boolean;
+}
+
+/**
+ * Compare actual recorded cost against the estimated hard cost. Returns null
+ * when there's no usable estimate to compare against.
+ */
+export function computeEstimateVariance(
+  estimatedCents: number | null | undefined,
+  actualCents: number | null | undefined,
+): EstimateVariance | null {
+  if (!estimatedCents || estimatedCents <= 0) return null;
+  const actual = actualCents ?? 0;
+  const variance = (actual - estimatedCents) / estimatedCents;
+  const overBudget = variance > 0;
+  const breached = variance > ESTIMATE_VARIANCE_THRESHOLD;
+  return { estimatedCents, actualCents: actual, variance, overBudget, breached };
+}
+
 function num(v: unknown): number | null {
   return typeof v === "number" && isFinite(v) ? v : null;
 }
