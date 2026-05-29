@@ -22,6 +22,13 @@
       "when": 1780074322383,
       "tag": "0002_ids_issues",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1780074723194,
+      "tag": "0003_vendor_hourly_cost",
+      "breakpoints": true
     }
   ]
 }

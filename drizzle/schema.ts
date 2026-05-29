@@ -2013,6 +2013,8 @@ export const vendors = pgTable("vendors", {
   licenseNumber: varchar("licenseNumber", { length: 120 }),
   insuranceExpiry: date("insuranceExpiry"),
   bondingExpiry: date("bondingExpiry"),
+  /** Fully-burdened sub cost rate in cents/hr (audit Rec 7 — sub eligibility). */
+  hourlyCostCents: integer("hourlyCostCents"),
   w9OnFile: boolean("w9OnFile").default(false).notNull(),
   coiOnFile: boolean("coiOnFile").default(false).notNull(),
   status: text("status").$type<"prospect" | "onboarding" | "active" | "paused" | "retired">()

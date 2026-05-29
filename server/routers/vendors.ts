@@ -5,6 +5,8 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure, router } from "../_core/trpc";
+import { isSubEligibleForJob } from "@shared/subEligibility";
+import { getOpportunityById } from "../db";
 import {
   createOnboardingStep,
   createVendor,
@@ -64,6 +66,7 @@ export const vendorsRouter = router({
         status: VendorStatus.optional(),
         tier: VendorTier.optional(),
         notes: z.string().optional(),
+        hourlyCostCents: z.number().int().nonnegative().optional(),
         tradeSlugs: z.array(z.string()).optional(),
       }),
     )
@@ -97,6 +100,7 @@ export const vendorsRouter = router({
           notes: z.string().optional(),
           w9OnFile: z.boolean().optional(),
           coiOnFile: z.boolean().optional(),
+          hourlyCostCents: z.number().int().nonnegative().optional(),
         }),
       }),
     )
@@ -167,6 +171,34 @@ export const vendorsRouter = router({
         .optional(),
     )
     .query(async ({ input }) => listVendorJobs(input ?? {})),
+
+  /**
+   * Sub-eligibility check (audit Rec 7). Joins the vendor's hourly cost rate
+   * with the opportunity's persisted hard cost (Rec 1) and applies the BOS
+   * small-job floor rule. Returns eligible=true (fails open) when the vendor
+   * has no cost rate on file or the job's hard cost is unknown.
+   */
+  eligibilityForJob: protectedProcedure
+    .input(z.object({ vendorId: z.number().int().positive(), opportunityId: z.string() }))
+    .query(async ({ input }) => {
+      const result = await getVendor(input.vendorId);
+      if (!result?.vendor) throw new TRPCError({ code: "NOT_FOUND", message: "Vendor not found" });
+      const opp = await getOpportunityById(input.opportunityId);
+      if (!opp) throw new TRPCError({ code: "NOT_FOUND", message: "Opportunity not found" });
+      if (result.vendor.hourlyCostCents == null) {
+        return {
+          eligible: true,
+          subGm: 0,
+          floor: 0,
+          isSmallJob: false,
+          reason: "No hourly cost rate on file for this vendor — eligibility not gated.",
+        };
+      }
+      return isSubEligibleForJob({
+        subHourlyCostCents: result.vendor.hourlyCostCents,
+        jobHardCostCents: opp.hardCostCents,
+      });
+    }),
 
   rankForOpportunity: protectedProcedure
     .input(
