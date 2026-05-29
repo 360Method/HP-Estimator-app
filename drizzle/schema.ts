@@ -765,6 +765,30 @@ export const idsIssues = pgTable("idsIssues", {
 }));
 export type DbIdsIssue = typeof idsIssues.$inferSelect;
 export type InsertDbIdsIssue = typeof idsIssues.$inferInsert;
+
+/**
+ * Weekly Scorecard snapshots (audit Rec 3) — one row per (week, metric) holding
+ * the value, target, and G/Y/R status reviewed at the L10. Metric definitions
+ * live in shared/scorecard.ts; rows are upserted by the rollup or entered
+ * manually. Unique on (weekStart, metricKey).
+ */
+export const scorecardMetrics = pgTable("scorecardMetrics", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  /** ISO date of the L10 week (Monday), YYYY-MM-DD. */
+  weekStart: varchar("weekStart", { length: 16 }).notNull(),
+  metricKey: varchar("metricKey", { length: 64 }).notNull(),
+  value: doublePrecision("value"),
+  target: doublePrecision("target"),
+  /** green | yellow | red | unknown */
+  status: varchar("status", { length: 16 }),
+  ownerRole: varchar("ownerRole", { length: 32 }),
+  notes: text("notes"),
+  computedAt: timestamp("computedAt").defaultNow().notNull(),
+}, (t) => ({
+  uniqWeekKey: uniqueIndex("scorecardMetrics_week_key_uidx").on(t.weekStart, t.metricKey),
+}));
+export type DbScorecardMetric = typeof scorecardMetrics.$inferSelect;
+export type InsertDbScorecardMetric = typeof scorecardMetrics.$inferInsert;
 export type InsertDbOpportunity = typeof opportunities.$inferInsert;
 
 // ─── PORTAL: SERVICE REQUESTS ─────────────────────────────────────────────────
