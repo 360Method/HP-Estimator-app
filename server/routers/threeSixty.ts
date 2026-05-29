@@ -29,6 +29,13 @@ import {
   type MemberTier,
   type BillingCadence,
 } from "../../shared/threeSixtyTiers";
+import {
+  HOMEOWNER_TIERS,
+  PORTFOLIO_TIERS,
+  BILLING_CADENCES,
+  homeownerPriceEnvKey,
+  type HomeownerTier,
+} from "../../shared/threeSixtyContract";
 import Stripe from "stripe";
 import { nanoid } from "nanoid";
 import { findCustomerByEmail, createCustomer, createOpportunity } from "../db";
@@ -1068,7 +1075,7 @@ const scansLatestRouter = router({
  * These are set via environment variables after creating products in Stripe dashboard.
  */
 function getStripePriceId(tier: MemberTier, cadence: BillingCadence): string {
-  const key = `STRIPE_PRICE_${tier.toUpperCase()}_${cadence.toUpperCase()}`;
+  const key = homeownerPriceEnvKey(tier as HomeownerTier, cadence);
   const priceId = process.env[key];
   if (!priceId) {
     throw new TRPCError({
@@ -1088,8 +1095,8 @@ const checkoutRouter = router({
   createSession: publicProcedure
     .input(
       z.object({
-        tier: z.enum(["bronze", "silver", "gold"]),
-        cadence: z.enum(["monthly", "quarterly", "annual"]),
+        tier: z.enum(HOMEOWNER_TIERS),
+        cadence: z.enum(BILLING_CADENCES),
         /** Customer name for prefill */
         customerName: z.string().optional(),
         /** Customer email for prefill */
@@ -1255,7 +1262,7 @@ const PORTFOLIO_INTERIOR_ADDON_PRICE_ID = process.env.STRIPE_PRICE_INTERIOR_ADDO
 
 const portfolioPropertySchema = z.object({
   id: z.string(),
-  tier: z.enum(["exterior_shield", "full_coverage", "max"]),
+  tier: z.enum(PORTFOLIO_TIERS),
   label: z.string().optional(),
   address: z.string().optional(),
   interiorAddon: z.boolean().default(false),
@@ -1268,7 +1275,7 @@ const portfolioCheckoutRouter = router({
   createSession: publicProcedure
     .input(
       z.object({
-        cadence: z.enum(["monthly", "quarterly", "annual"]),
+        cadence: z.enum(BILLING_CADENCES),
         properties: z.array(portfolioPropertySchema).min(1).max(20),
         customerName: z.string().min(1),
         customerEmail: z.string().email(),

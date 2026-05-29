@@ -18,6 +18,8 @@ import {
 import { sendSms, isTwilioConfigured } from "../twilio";
 import { nanoid } from "nanoid";
 import { runAutomationsForTrigger } from "../automationEngine";
+import { marginFieldsFromSnapshot } from "../lib/marginAudit";
+import { syncMarginFloorIssue } from "../lib/idsIssues";
 import {
   onLeadCreated,
   onAppointmentBooked,
@@ -93,7 +95,20 @@ export const opportunitiesRouter = router({
     .input(OpportunityInput)
     .mutation(async ({ input }) => {
       const id = nanoid();
-      const result = await createOpportunity({ id, ...input });
+      // Record the authoritative margin audit from the estimate snapshot (Rec 1).
+      const margin = marginFieldsFromSnapshot(input.estimateSnapshot);
+      const result = await createOpportunity({ id, ...input, ...(margin ?? {}) });
+      // Auto-flag/clear the IDS margin-floor issue (Rec 2).
+      if (margin) {
+        syncMarginFloorIssue({
+          opportunityId: id,
+          customerId: input.customerId,
+          title: input.title,
+          belowFloor: margin.belowFloor,
+          grossMarginBps: margin.grossMarginBps,
+          minGmBps: margin.minGmBps,
+        }).catch(e => console.error('[ids] syncMarginFloorIssue (create) error:', e));
+      }
       // Fire lead_created automation (non-blocking)
       const triggerName = input.area === 'job' ? 'job_created' : input.area === 'estimate' ? 'estimate_sent' : 'lead_created';
       runAutomationsForTrigger(triggerName as any, {
@@ -119,7 +134,22 @@ export const opportunitiesRouter = router({
       const { id, ...rest } = input;
       const existing = await getOpportunityById(id);
       if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Opportunity not found" });
-      await updateOpportunity(id, rest);
+      // Re-audit the margin whenever the estimate snapshot is (re)saved (Rec 1).
+      const margin = rest.estimateSnapshot !== undefined
+        ? marginFieldsFromSnapshot(rest.estimateSnapshot)
+        : null;
+      await updateOpportunity(id, { ...rest, ...(margin ?? {}) });
+      // Auto-flag/clear the IDS margin-floor issue (Rec 2).
+      if (margin) {
+        syncMarginFloorIssue({
+          opportunityId: id,
+          customerId: existing.customerId,
+          title: rest.title ?? existing.title,
+          belowFloor: margin.belowFloor,
+          grossMarginBps: margin.grossMarginBps,
+          minGmBps: margin.minGmBps,
+        }).catch(e => console.error('[ids] syncMarginFloorIssue (update) error:', e));
+      }
       return getOpportunityById(id);
     }),
 

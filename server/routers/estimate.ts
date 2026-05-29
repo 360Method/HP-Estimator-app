@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { randomBytes } from "crypto";
 import { publicProcedure, protectedProcedure, router } from "../_core/trpc";
 import { invokeLLM } from "../_core/llm";
@@ -369,6 +370,8 @@ export const estimateRouter = router({
         hpCustomerId: z.string().optional(),
         /** Pro-side opportunity ID — stored so approval can mark it won */
         hpOpportunityId: z.string().optional(),
+        /** Explicit override to send an estimate flagged below the GM floor (Rec 1). */
+        overrideMarginFloor: z.boolean().optional(),
         origin: z.string().optional(),
         /** Tax settings snapshot */
         taxEnabled: z.boolean().optional(),
@@ -378,6 +381,22 @@ export const estimateRouter = router({
       })
     )
     .mutation(async ({ input }) => {
+      // ── Margin floor backstop (Rec 1) ──────────────────────────────────────
+      // Block sending when the linked opportunity was authoritatively flagged
+      // below the 30%/40% GM floor at save time. Fails open for un-audited
+      // opportunities (belowFloor defaults false); only a known breach blocks.
+      if (input.hpOpportunityId && !input.overrideMarginFloor) {
+        const { getOpportunityById } = await import("../db");
+        const opp = await getOpportunityById(input.hpOpportunityId).catch(() => null);
+        if (opp?.belowFloor) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message:
+              "This estimate's gross margin is below the floor (30% standard / 40% small job). Raise the price or send with an explicit override.",
+          });
+        }
+      }
+
       const results: { email?: string; sms?: string; errors: string[] } = { errors: [] };
 
       // ── Portal: upsert customer + create estimate record + magic link ──────

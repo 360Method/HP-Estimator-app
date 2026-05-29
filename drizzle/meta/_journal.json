@@ -8,6 +8,34 @@
       "when": 1779841205548,
       "tag": "0000_fair_ken_ellis",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1780073953650,
+      "tag": "0001_margin_floor_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1780074322383,
+      "tag": "0002_ids_issues",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1780074723194,
+      "tag": "0003_vendor_hourly_cost",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1780075041979,
+      "tag": "0004_scorecard_metrics",
+      "breakpoints": true
     }
   ]
 }

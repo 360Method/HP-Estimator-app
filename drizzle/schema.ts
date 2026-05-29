@@ -709,10 +709,86 @@ export const opportunities = pgTable("opportunities", {
   assignedRole: varchar("assignedRole", { length: 32 }),
   /** ISO timestamp when the current assignment was made */
   assignedAt: varchar("assignedAt", { length: 32 }),
+  // ── Margin audit (Rec 1 — server-side floor enforcement) ──
+  // Persisted from the estimateSnapshot whenever it is saved, so the 30%/40%
+  // gross-margin floors are recorded authoritatively (not just enforced in the
+  // client calculator) and can be consumed by IDS auto-flagging and the scorecard.
+  /** Total hard cost in cents (derived from snapshot price + GM). */
+  hardCostCents: integer("hardCostCents"),
+  /** Computed gross margin in basis points (e.g. 3000 = 30%). */
+  grossMarginBps: integer("grossMarginBps"),
+  /** Applicable floor in basis points (3000 standard / 4000 small job). */
+  minGmBps: integer("minGmBps"),
+  /** True when hard cost is below the $2,000 small-job threshold. */
+  isSmallJob: boolean("isSmallJob"),
+  /** True when computed GM is below the applicable floor (the IDS trigger). */
+  belowFloor: boolean("belowFloor").default(false).notNull(),
+  /** ISO timestamp of the last margin audit. */
+  marginAuditedAt: varchar("marginAuditedAt", { length: 32 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
 });
 export type DbOpportunity = typeof opportunities.$inferSelect;
+
+/**
+ * IDS Issues Log (audit Rec 2) — the BOS "Identify / Discuss / Solve" list.
+ * Issues are auto-created from operational triggers (margin-floor breach,
+ * estimate variance, visit slip, red scorecard row) or entered manually, then
+ * worked at the weekly L10. `dedupeKey` makes auto-creation idempotent.
+ */
+export const idsIssues = pgTable("idsIssues", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  /** CAT-1 .. CAT-8 (see IDS_CATEGORIES in server/lib/idsIssues.ts). */
+  category: varchar("category", { length: 8 }).notNull(),
+  /** One-sentence root-cause statement. */
+  title: text("title").notNull(),
+  detail: text("detail"),
+  /** open | discussing | solved | dropped */
+  status: varchar("status", { length: 16 }).notNull().default("open"),
+  /** low | normal | high */
+  priority: varchar("priority", { length: 8 }).notNull().default("normal"),
+  /** manual | margin_floor | estimate_variance | visit_slip | scorecard_red */
+  source: varchar("source", { length: 32 }).notNull().default("manual"),
+  /** Idempotency key for auto-created issues (null for manual entries). */
+  dedupeKey: varchar("dedupeKey", { length: 160 }),
+  ownerUserId: integer("ownerUserId"),
+  /** The agreed solve action (one owner, one action, one due date). */
+  action: text("action"),
+  dueDate: varchar("dueDate", { length: 32 }),
+  opportunityId: varchar("opportunityId", { length: 64 }),
+  customerId: varchar("customerId", { length: 64 }),
+  resolvedAt: varchar("resolvedAt", { length: 32 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
+}, (t) => ({
+  uniqDedupe: uniqueIndex("idsIssues_dedupeKey_uidx").on(t.dedupeKey),
+}));
+export type DbIdsIssue = typeof idsIssues.$inferSelect;
+export type InsertDbIdsIssue = typeof idsIssues.$inferInsert;
+
+/**
+ * Weekly Scorecard snapshots (audit Rec 3) — one row per (week, metric) holding
+ * the value, target, and G/Y/R status reviewed at the L10. Metric definitions
+ * live in shared/scorecard.ts; rows are upserted by the rollup or entered
+ * manually. Unique on (weekStart, metricKey).
+ */
+export const scorecardMetrics = pgTable("scorecardMetrics", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  /** ISO date of the L10 week (Monday), YYYY-MM-DD. */
+  weekStart: varchar("weekStart", { length: 16 }).notNull(),
+  metricKey: varchar("metricKey", { length: 64 }).notNull(),
+  value: doublePrecision("value"),
+  target: doublePrecision("target"),
+  /** green | yellow | red | unknown */
+  status: varchar("status", { length: 16 }),
+  ownerRole: varchar("ownerRole", { length: 32 }),
+  notes: text("notes"),
+  computedAt: timestamp("computedAt").defaultNow().notNull(),
+}, (t) => ({
+  uniqWeekKey: uniqueIndex("scorecardMetrics_week_key_uidx").on(t.weekStart, t.metricKey),
+}));
+export type DbScorecardMetric = typeof scorecardMetrics.$inferSelect;
+export type InsertDbScorecardMetric = typeof scorecardMetrics.$inferInsert;
 export type InsertDbOpportunity = typeof opportunities.$inferInsert;
 
 // ─── PORTAL: SERVICE REQUESTS ─────────────────────────────────────────────────
@@ -1961,6 +2037,8 @@ export const vendors = pgTable("vendors", {
   licenseNumber: varchar("licenseNumber", { length: 120 }),
   insuranceExpiry: date("insuranceExpiry"),
   bondingExpiry: date("bondingExpiry"),
+  /** Fully-burdened sub cost rate in cents/hr (audit Rec 7 — sub eligibility). */
+  hourlyCostCents: integer("hourlyCostCents"),
   w9OnFile: boolean("w9OnFile").default(false).notNull(),
   coiOnFile: boolean("coiOnFile").default(false).notNull(),
   status: text("status").$type<"prospect" | "onboarding" | "active" | "paused" | "retired">()

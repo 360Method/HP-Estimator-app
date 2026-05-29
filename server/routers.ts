@@ -53,6 +53,8 @@ import { leadsRouter }         from "./routers/leads";
 import { projectEstimatorRouter } from "./routers/projectEstimator";
 import { techRouter } from "./routers/tech";
 import { aiBrainRouter } from "./routers/aiBrain";
+import { idsRouter } from "./routers/ids";
+import { scorecardRouter } from "./routers/scorecard";
 import { requestPasswordReset, consumePasswordReset } from "./passwordReset";
 import {
   getAdminAllowlist,
@@ -116,6 +118,8 @@ export const appRouter = router({
   projectEstimator: projectEstimatorRouter,
   tech: techRouter,
   aiBrain: aiBrainRouter,
+  ids: idsRouter,
+  scorecard: scorecardRouter,
 
   auth: router({
     /**
