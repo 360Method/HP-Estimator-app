@@ -241,7 +241,8 @@ async function ensureAppSettings() {
 async function ensureDepartmentHeadFlags() {
   try {
     const { getDb } = await import("../db");
-    const { sql } = await import("drizzle-orm");
+    const { aiAgents } = await import("../../drizzle/schema");
+    const { and, eq, ne, inArray, notInArray } = await import("drizzle-orm");
     const db = await getDb();
     if (!db) return;
 
@@ -257,13 +258,22 @@ async function ensureDepartmentHeadFlags() {
     ];
 
     // Lift the 8 designated seats to head, demote any others that drifted to head
-    // so the chart stays single-head-per-department.
-    await db.execute(
-      sql`UPDATE \`ai_agents\` SET \`isDepartmentHead\` = 1 WHERE \`seatName\` IN (${sql.join(heads.map((h) => sql`${h}`), sql`, `)})`
-    );
-    await db.execute(
-      sql`UPDATE \`ai_agents\` SET \`isDepartmentHead\` = 0 WHERE \`seatName\` NOT IN (${sql.join(heads.map((h) => sql`${h}`), sql`, `)}) AND \`department\` <> 'integrator' AND \`isDepartmentHead\` = 1`
-    );
+    // so the chart stays single-head-per-department. (Drizzle builder → portable
+    // SQL; the old raw query used MySQL backtick identifiers that fail on Postgres.)
+    await db
+      .update(aiAgents)
+      .set({ isDepartmentHead: true })
+      .where(inArray(aiAgents.seatName, heads));
+    await db
+      .update(aiAgents)
+      .set({ isDepartmentHead: false })
+      .where(
+        and(
+          notInArray(aiAgents.seatName, heads),
+          ne(aiAgents.department, "integrator"),
+          eq(aiAgents.isDepartmentHead, true),
+        ),
+      );
 
     console.log("[boot] ensureDepartmentHeadFlags OK");
   } catch (err) {
