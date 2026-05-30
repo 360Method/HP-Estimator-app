@@ -21,7 +21,7 @@ import {
   opportunities,
 } from "../../drizzle/schema";
 import { storagePut } from "../storage";
-import { eq, and, desc, asc, inArray } from "drizzle-orm";
+import { eq, and, desc, asc, inArray, sql } from "drizzle-orm";
 import {
   calcMemberDiscount,
   effectiveDiscountRate,
@@ -429,11 +429,12 @@ const visitsRouter = router({
           .from(threeSixtyVisits)
           .where(eq(threeSixtyVisits.id, id));
         if (visit) {
-          await db.execute(
-            `UPDATE threeSixtyMemberships 
-             SET laborBankBalance = GREATEST(0, laborBankBalance - ${laborBankUsed})
-             WHERE id = ${visit.membershipId}`
-          );
+          await db
+            .update(threeSixtyMemberships)
+            .set({
+              laborBankBalance: sql`GREATEST(0, ${threeSixtyMemberships.laborBankBalance} - ${laborBankUsed})`,
+            })
+            .where(eq(threeSixtyMemberships.id, visit.membershipId));
           await db.insert(threeSixtyLaborBankTransactions).values({
             membershipId: visit.membershipId,
             type: "debit",
@@ -581,12 +582,13 @@ const laborBankRouter = router({
       });
 
       // Update balance
-      const direction = type === "credit" ? "+" : "-";
-      await db.execute(
-        `UPDATE threeSixtyMemberships 
-         SET laborBankBalance = GREATEST(0, laborBankBalance ${direction} ${amountCents})
-         WHERE id = ${membershipId}`
-      );
+      const delta = type === "credit" ? amountCents : -amountCents;
+      await db
+        .update(threeSixtyMemberships)
+        .set({
+          laborBankBalance: sql`GREATEST(0, ${threeSixtyMemberships.laborBankBalance} + ${delta})`,
+        })
+        .where(eq(threeSixtyMemberships.id, membershipId));
 
       return { success: true };
     }),
