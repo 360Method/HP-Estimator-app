@@ -435,14 +435,18 @@ async function migrateTable(sql, mysqlConn, tableName, options) {
       // Coerce values per PG column type. Drop columns that exist in MySQL
       // but not in PG (additive-MySQL drift); keep nullables for PG-only cols.
       const pgColNames = Object.keys(pgCols);
+      // Only insert PG columns that actually exist in the MySQL source. PG-only
+      // columns (additive PG drift — e.g. a new NOT NULL column WITH a default)
+      // are omitted so their column DEFAULT applies, instead of forcing NULL
+      // (which violates NOT NULL on defaulted columns like opportunities.belowFloor).
+      const sampleRow = pageRows[0];
+      const insertCols = pgColNames.filter((col) =>
+        Object.prototype.hasOwnProperty.call(sampleRow, col),
+      );
       const transformed = pageRows.map((row) => {
         const out = {};
-        for (const col of pgColNames) {
-          if (Object.prototype.hasOwnProperty.call(row, col)) {
-            out[col] = coerceValueForPg(row[col], pgCols[col]);
-          } else {
-            out[col] = null;
-          }
+        for (const col of insertCols) {
+          out[col] = coerceValueForPg(row[col], pgCols[col]);
         }
         return out;
       });
@@ -450,12 +454,12 @@ async function migrateTable(sql, mysqlConn, tableName, options) {
       // Insert in sub-batches sized for postgres-js (default param limit is
       // 65535; rows * cols must stay under that).
       const PARAM_CAP = 60_000;
-      const colsPerRow = pgColNames.length;
+      const colsPerRow = insertCols.length;
       const subBatch = Math.max(1, Math.floor(PARAM_CAP / colsPerRow));
       for (let i = 0; i < transformed.length; i += subBatch) {
         const slice = transformed.slice(i, i + subBatch);
         await tx`
-          INSERT INTO ${tx(tableName)} ${tx(slice, ...pgColNames)}
+          INSERT INTO ${tx(tableName)} ${tx(slice, ...insertCols)}
           ON CONFLICT DO NOTHING
         `;
         written += slice.length;
