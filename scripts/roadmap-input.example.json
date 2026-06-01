@@ -1,0 +1,43 @@
+{
+  "firstName": "Sample",
+  "propertyAddress": "1234 NW Example Street, Vancouver, WA 98685",
+  "editionDate": "2026-06-01",
+  "claudeResponse": {
+    "executive_summary": "Sample, your home reads as a well-kept property that has been quietly accumulating the kind of envelope and drainage attention that Pacific Northwest homes always do over time. The walkthrough was thorough and, in our reading, fair — there is no single finding that should give you pause, but there is a coherent story we'd like to walk you through.\n\nTwo findings rise to the top. The water heater is at the end of its service life and presenting early markers we'd address before it fails on its own schedule. The exterior trim on the south and west elevations is showing the moisture cycle PNW paint windows always show, and we'd plan that into a single restoration visit next spring.\n\nEverything else organizes calmly into the next 6 to 18 months or onto a 3 to 5 year monitoring rhythm. Your portal is the living health record for this property — every finding here, every return visit, every written scope of work lives there, in one place. We've built this roadmap to be a calm reference, not a bid.",
+    "property_character": "A Pacific Northwest home in Clark County sits in a wet micro-climate where gutter discipline and envelope care matter more than they would further south. Homes of this configuration tend to age first at the south and west elevations, then at the roof penetrations, then at the original mechanicals as they cross 12 to 15 years. The standard of care we're proposing reflects that rhythm.",
+    "summary_1_paragraph": "Sample, your home reads as a well-kept property that has been quietly accumulating the kind of envelope and drainage attention that Pacific Northwest homes always do over time. The walkthrough was thorough and, in our reading, fair — there is no single finding that should give you pause, but there is a coherent story we'd like to walk you through.",
+    "closing": "This roadmap is the starting standard of care for your property — a calm reference, not a bid. When you're ready, the natural next step is to keep the home on a steady rhythm so nothing here has to become an emergency. We're glad you've trusted us with the read.",
+    "findings": [
+      {
+        "category": "Plumbing — water heater replacement (50 gal gas)",
+        "finding": "The original 50-gallon natural gas water heater shows minor corrosion at the cold-water inlet and a faint mineral trail on the south side of the tank.",
+        "interpretation": "At end of its rated life in PNW water chemistry, this is squarely in the window where we see the silent slow leak that ruins a finished space on a Tuesday morning. The mineral trail is the early signal, not yet a failure. Addressing this on a planned visit rather than as an emergency is the meaningful difference between a calm Saturday and a remediation project.",
+        "recommended_approach": "This is end-of-life replacement. We'd schedule a single morning visit, drain and remove the existing unit, install a same-footprint high-efficiency replacement with a new expansion tank and seismic strapping, and haul the old unit.",
+        "urgency": "NOW",
+        "investment_range_low_usd": 2400,
+        "investment_range_high_usd": 4200,
+        "reasoning": "Lifecycle exceeded with early leak markers; range matches the anchor for 50-gal gas replacement, same-footprint swap."
+      },
+      {
+        "category": "Exterior trim — restoration on south and west elevations",
+        "finding": "Paint film failure and early wood-fiber lift on rake boards, fascia returns, and two window casings on the south and west elevations.",
+        "interpretation": "This is exactly when the south and west elevations start showing the cycle — the paint window is closing. Addressing trim restoration before re-paint extends the next paint cycle by three to five years and prevents the wood-rot conversation this otherwise becomes.",
+        "recommended_approach": "A single restoration visit. Selective wood replacement at the worst lift points, prime and feather, and finish the affected elevations. We'd plan this for late spring when moisture content is right.",
+        "urgency": "SOON",
+        "investment_range_low_usd": 1200,
+        "investment_range_high_usd": 5500,
+        "reasoning": "Anchor: exterior trim restoration and paint; range reflects which elevations are scoped."
+      },
+      {
+        "category": "Foundation — minor crack monitoring",
+        "finding": "Two hairline cracks (under 1/16 inch) in the north foundation wall, neither displaced nor stepped.",
+        "interpretation": "Cracks of this character are almost always thermal-cycling settlement, not structural movement. The right call is to monitor. We'd document baseline measurements in the portal and revisit at every assessment.",
+        "recommended_approach": "No immediate work. We'd photograph and tag both cracks with a reference scale on the next walkthrough, log them in the portal, and re-measure at the 12-month return.",
+        "urgency": "WAIT",
+        "investment_range_low_usd": 0,
+        "investment_range_high_usd": 0,
+        "reasoning": "Monitoring item — no investment range applicable; documented for tracking only."
+      }
+    ]
+  }
+}
