@@ -30,11 +30,17 @@ export const COST_RANGES: readonly CostRange[] = [
   { category: "Roof — full composition replacement", typical_low_usd: 14000, typical_high_usd: 32000, notes: "3,000 sq ft home, 30-year architectural" },
 
   // ─── Exterior envelope ──────────────────────────────────────────────────
-  { category: "Exterior siding — wood rot restoration", typical_low_usd: 850, typical_high_usd: 4800 },
-  { category: "Exterior trim — restoration and paint", typical_low_usd: 1200, typical_high_usd: 5500 },
+  { category: "Exterior siding — localized wood-rot restoration (spot repair)", typical_low_usd: 850, typical_high_usd: 4800, notes: "spot/section repair only — NOT a full re-side" },
+  { category: "Exterior — full re-side / re-clad (whole home)", typical_low_usd: 18000, typical_high_usd: 60000, notes: "SCALE by wall area (≈ living sqft × 1.6–2.2 for 1–2 story) and material at ~$9–$18/sqft of wall: vinyl/LP lower end, cedar/fiber-cement upper end" },
+  { category: "Exterior trim — restoration and paint (spot)", typical_low_usd: 1200, typical_high_usd: 5500 },
+  { category: "Exterior — full repaint, body + trim (whole home)", typical_low_usd: 4500, typical_high_usd: 14000, notes: "SCALE by wall area + stories, ~$2–$4.50/sqft of wall" },
   { category: "Gutter — cleaning and re-pitch", typical_low_usd: 425, typical_high_usd: 950 },
-  { category: "Gutter — replacement (aluminum, 180 LF)", typical_low_usd: 2800, typical_high_usd: 5400 },
+  { category: "Gutter — replacement (aluminum)", typical_low_usd: 2800, typical_high_usd: 5400, notes: "~$15–$30/LF; ~180 LF on a typical single-story footprint — SCALE by roof perimeter" },
   { category: "Chimney — crown and flashing restoration", typical_low_usd: 1400, typical_high_usd: 3600 },
+
+  // ─── Interior finishes ───────────────────────────────────────────────────
+  { category: "Interior — whole-home repaint, walls/trim/doors", typical_low_usd: 4500, typical_high_usd: 14000, notes: "SCALE ~$2.50–$5.00/living sqft including trim and doors" },
+  { category: "Flooring — replacement (per room / per sqft)", typical_low_usd: 1800, typical_high_usd: 9500, notes: "SCALE by area, ~$6–$16/sqft installed by material" },
 
   // ─── Plumbing ────────────────────────────────────────────────────────────
   { category: "Plumbing — single fixture replacement", typical_low_usd: 425, typical_high_usd: 1200 },
@@ -61,6 +67,7 @@ export const COST_RANGES: readonly CostRange[] = [
   // ─── Windows / doors ─────────────────────────────────────────────────────
   { category: "Window — weatherstrip and glazing restoration", typical_low_usd: 285, typical_high_usd: 750 },
   { category: "Window — single replacement (vinyl, standard size)", typical_low_usd: 950, typical_high_usd: 2200 },
+  { category: "Windows — full-home replacement (all units)", typical_low_usd: 9500, typical_high_usd: 30000, notes: "SCALE by window count (~1 window per 100–120 living sqft) × $950–$2,200 each" },
   { category: "Exterior door — weatherization", typical_low_usd: 285, typical_high_usd: 850 },
   { category: "Exterior door — full replacement", typical_low_usd: 1800, typical_high_usd: 4800 },
 

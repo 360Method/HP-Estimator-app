@@ -54,6 +54,14 @@ Anchor table (typical_low, typical_high in USD):
 
 ${COST_RANGES.map((r) => `- ${r.category}: $${r.typical_low_usd.toLocaleString()}–$${r.typical_high_usd.toLocaleString()}${r.notes ? ` (${r.notes})` : ""}`).join("\n")}
 
+## Property profile & scaling (when provided)
+
+The user message may include a PROPERTY PROFILE (square footage, beds/baths, units, stories, exterior cladding material, foundation type, lot size, year built). When it is present, you MUST scale every area- and count-driven range to THIS home rather than emitting the flat anchor:
+- A "full re-side", "re-clad", or whole-envelope finding uses the full re-side anchor scaled by wall area (≈ living sqft × 1.6–2.2 for 1–2 story) and material (vinyl/LP lower, cedar/fiber-cement higher) — NOT the localized spot-repair anchor.
+- Whole-home interior or exterior repaint scales by area per the per-sqft notes; windows scale by count (~1 per 100–120 sqft); gutters, drainage, grading, and driveway scale by footprint, stories, and lot size.
+- Multiply anything done per-unit by the number of units (duplex/multi).
+- Older homes (per year built) trend toward the upper half for original systems. State the scaling assumption you used in the finding's reasoning (e.g. "scaled to ~2,400 sqft, 2-story, cedar"). Never emit a flat anchor for a clearly whole-home-scope finding.
+
 ## Output shape — JSON only, no preamble, no fences
 
 Respond with **only** valid JSON. No backticks, no commentary, no trailing prose.
@@ -75,7 +83,7 @@ Respond with **only** valid JSON. No backticks, no commentary, no trailing prose
       "reasoning": "1 sentence: why this urgency, why this range, and which anchor was used (if any). State assumptions explicitly."
     }
   ],
-  "closing": "1 paragraph (60–100 words). Invite the homeowner to the portal as the property's living health record. Frame the document as a starting standard of care, not a bid. Offer a complimentary baseline walkthrough as the natural next step. End with a short, calm sign-off line — no signature."
+  "closing": "1 paragraph (60–100 words). Invite the homeowner to the portal as the property's living health record. Frame the document as a starting standard of care, not a bid. Add a gentle, low-pressure invitation to join the Proactive Path at handypioneers.com/membership — note that joining applies member rates to the projects they choose from this roadmap and puts their labor credit to work on the NOW list right away. End with a short, calm sign-off line — no signature."
 }
 \`\`\`
 

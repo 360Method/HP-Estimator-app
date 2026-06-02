@@ -120,3 +120,6 @@ client/public/__build__/version.json
 
 # Test fixtures containing real customer PDFs — never commit
 scripts/fixtures/
+
+# Generated customer roadmap artifacts (PII)
+outputs/

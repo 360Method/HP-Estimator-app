@@ -22,7 +22,7 @@
  * TODO: move to CMS (nucleus) — header copy, color tokens, disclaimer copy.
  */
 
-import { PDFDocument, StandardFonts, rgb, type PDFPage, type PDFFont, type RGB } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb, type PDFPage, type PDFFont, type RGB, type PDFImage } from "pdf-lib";
 import type { ClaudePriorityTranslationResponse } from "../../../drizzle/schema.priorityTranslation";
 
 // ─── Brand tokens (mirror HP site OKLCH → RGB) ──────────────────────────────
@@ -89,6 +89,8 @@ export type RenderInput = {
   claudeResponse: ClaudePriorityTranslationResponse;
   /** Override edition date (defaults to today). Used by the sample generator. */
   editionDate?: Date;
+  /** Optional one-line property profile (e.g. "2,418 sq ft · 4 bd / 2 ba · 2 stories · wood · built 1974"). Shown on the cover. */
+  propertyProfile?: string;
 };
 
 type Fonts = {
@@ -121,11 +123,28 @@ export async function renderPriorityTranslationPdf(input: RenderInput): Promise<
   };
   for (const f of input.claudeResponse.findings) byUrgency[f.urgency]?.push(f);
 
+  // Pre-embed walkthrough photos (optional). Findings may carry an "_images" array
+  // of base64 JPEGs (injected by the Notion bridge). embedJpg is async, so we embed
+  // up front into a map keyed by the finding object and draw them synchronously below.
+  // Callers without photos (e.g. the app's inspection path) simply have no _images.
+  const findingImages = new Map<object, PDFImage[]>();
+  for (const f of input.claudeResponse.findings) {
+    const imgs = (f as unknown as { _images?: string[] })._images;
+    if (!Array.isArray(imgs) || imgs.length === 0) continue;
+    const embedded: PDFImage[] = [];
+    for (const b64 of imgs.slice(0, 2)) {
+      try { embedded.push(await doc.embedJpg(Uint8Array.from(Buffer.from(b64, "base64")))); }
+      catch (e) { /* skip an image that fails to embed */ }
+    }
+    if (embedded.length) findingImages.set(f, embedded);
+  }
+
   // ─── Page 1: Cover ────────────────────────────────────────────────────────
   drawCoverPage(doc, fonts, {
     firstName: input.firstName || "the homeowner",
     propertyAddress: input.propertyAddress,
     editionLabel,
+    propertyProfile: input.propertyProfile,
   });
 
   // ─── Page 2: Standard of Care letter ──────────────────────────────────────
@@ -166,6 +185,7 @@ export async function renderPriorityTranslationPdf(input: RenderInput): Promise<
         finding: f,
         propertyAddress: input.propertyAddress,
         editionLabel,
+        images: findingImages.get(f),
       });
     }
   }
@@ -185,7 +205,7 @@ export async function renderPriorityTranslationPdf(input: RenderInput): Promise<
 function drawCoverPage(
   doc: PDFDocument,
   fonts: Fonts,
-  args: { firstName: string; propertyAddress: string; editionLabel: string },
+  args: { firstName: string; propertyAddress: string; editionLabel: string; propertyProfile?: string },
 ): PDFPage {
   const page = doc.addPage([PAGE_W, PAGE_H]);
 
@@ -248,6 +268,17 @@ function drawCoverPage(
   page.drawText(args.editionLabel, {
     x: PAGE_W - MARGIN - 140, y: blockTop - 98, size: 12, font: fonts.serif, color: BRAND.cream,
   });
+
+  // Property-at-a-glance line (optional)
+  if (args.propertyProfile) {
+    drawTracked(page, fonts.sansBold, "PROPERTY AT A GLANCE", {
+      x: MARGIN, y: blockTop - 128, size: 8, tracking: 2.4, color: BRAND.amberLight,
+    });
+    drawWrappedText(page, args.propertyProfile, {
+      x: MARGIN, y: blockTop - 146, size: 11, font: fonts.serif, color: BRAND.cream,
+      lineHeight: 15, maxWidth: CONTENT_W,
+    });
+  }
 
   // Bottom amber hairline + footer
   page.drawRectangle({ x: 0, y: 4, width: PAGE_W, height: 2, color: BRAND.amber });
@@ -580,6 +611,7 @@ function drawFinding(
     finding: ClaudePriorityTranslationResponse["findings"][number];
     propertyAddress: string;
     editionLabel: string;
+    images?: PDFImage[];
   },
 ): void {
   const accent = URGENCY_ACCENT[args.urgency];
@@ -596,13 +628,15 @@ function drawFinding(
     ? measureWrappedText(f.recommended_approach, fonts.serif, 10.5, CONTENT_W - 8)
     : 0;
 
-  const headerH = 14;
+  const headerH = 24; // clearance so the 16pt category headline's ascenders don't punch into the eyebrow row above
   const categoryH = categoryLines * 20 + 10;
   const findingH = 12 + findingLines * 14 + 8;
   const interpH = interpLines > 0 ? 14 + interpLines * 15 + 10 : 0;
   const approachH = approachLines > 0 ? 12 + approachLines * 14 + 8 : 0;
   const ribbonH = 42;
-  const cardH = headerH + categoryH + findingH + interpH + approachH + ribbonH + 10;
+  const THUMB_H = 110;
+  const imagesH = args.images && args.images.length ? 12 + THUMB_H + 12 : 0;
+  const cardH = headerH + categoryH + findingH + interpH + approachH + ribbonH + imagesH + 10;
 
   if (!ctx.page || ctx.y - cardH < PAGE_BOTTOM_RESERVE) {
     newFlowPage(doc, fonts, ctx, footerLeft);
@@ -693,6 +727,23 @@ function drawFinding(
   });
 
   ctx.y = ribbonY - 14;
+
+  // Walkthrough photos (optional) — a row of thumbnails beneath the ribbon.
+  if (args.images && args.images.length) {
+    let iy = ctx.y;
+    drawTracked(page, fonts.sansBold, "FROM THE WALKTHROUGH", {
+      x: MARGIN, y: iy, size: 7, tracking: 1.8, color: BRAND.muted,
+    });
+    iy -= 12;
+    let ix = MARGIN;
+    for (const img of args.images) {
+      const w = (img.width / img.height) * THUMB_H;
+      if (ix + w > MARGIN + CONTENT_W) break; // keep the row within the content column
+      page.drawImage(img, { x: ix, y: iy - THUMB_H, width: w, height: THUMB_H });
+      ix += w + 10;
+    }
+    ctx.y = iy - THUMB_H - 12;
+  }
 }
 
 // ─── Closing page ───────────────────────────────────────────────────────────
@@ -800,22 +851,40 @@ function drawPaperPage(doc: PDFDocument): PDFPage {
   return page;
 }
 
+// Width of text as drawn by drawTracked() — it advances (charWidth + tracking) per
+// character, so the rendered width is the natural width plus tracking × charCount.
+function trackedWidth(font: PDFFont, text: string, size: number, tracking: number): number {
+  return font.widthOfTextAtSize(text, size) + tracking * text.length;
+}
+
 function drawPaperFooter(
   page: PDFPage,
   fonts: Fonts,
   args: { left: string; right: string },
 ): void {
+  const FY = 22;        // shared footer baseline
+  const GAP = 16;       // minimum clear space between footer pieces
   page.drawRectangle({ x: MARGIN, y: 36, width: CONTENT_W, height: 0.5, color: BRAND.mutedSoft });
-  drawTracked(page, fonts.sans, args.left.toUpperCase(), {
-    x: MARGIN, y: 22, size: 7, tracking: 1.6, color: BRAND.muted,
-  });
-  drawTracked(page, fonts.sansBold, "360°  METHOD  ROADMAP", {
-    x: PAGE_W / 2 - 56, y: 22, size: 7, tracking: 1.8, color: BRAND.amber,
-  });
-  const rightW = fonts.sans.widthOfTextAtSize(args.right, 8);
-  page.drawText(args.right, {
-    x: PAGE_W - MARGIN - rightW, y: 22, size: 8, font: fonts.serif, color: BRAND.muted,
-  });
+
+  // Left: address · edition, anchored at the margin.
+  const leftText = args.left.toUpperCase();
+  drawTracked(page, fonts.sans, leftText, { x: MARGIN, y: FY, size: 7, tracking: 1.6, color: BRAND.muted });
+  const leftEnd = MARGIN + trackedWidth(fonts.sans, leftText, 7, 1.6);
+
+  // Right: page number, right-aligned to the margin.
+  const rightW = fonts.serif.widthOfTextAtSize(args.right, 8);
+  const rightX = PAGE_W - MARGIN - rightW;
+  page.drawText(args.right, { x: rightX, y: FY, size: 8, font: fonts.serif, color: BRAND.muted });
+
+  // Center wordmark: centered when room allows, nudged right of the left label if
+  // needed, and OMITTED entirely if it can't sit clear of both sides — never overlap.
+  const centerText = "360°  METHOD  ROADMAP";
+  const centerW = trackedWidth(fonts.sansBold, centerText, 7, 1.8);
+  let centerX = PAGE_W / 2 - centerW / 2;
+  if (centerX < leftEnd + GAP) centerX = leftEnd + GAP;
+  if (centerX + centerW <= rightX - GAP) {
+    drawTracked(page, fonts.sansBold, centerText, { x: centerX, y: FY, size: 7, tracking: 1.8, color: BRAND.amber });
+  }
 }
 
 // ─── Text primitives ────────────────────────────────────────────────────────
@@ -888,7 +957,16 @@ function sanitize(input: string): string {
     .replace(/\u2013/g, "-")  // en-dash
     .replace(/\u2014/g, "—")  // em-dash → keep (WinAnsi)
     .replace(/\u2026/g, "...")  // ellipsis
-    .replace(/\u00A0/g, " ");   // nbsp
+    .replace(/\u00A0/g, " ")   // nbsp
+    // Math / symbol characters LLMs emit that WinAnsi can't encode (would throw at draw):
+    .replace(/\u2248/g, "~")          // approximately
+    .replace(/\u2264/g, "<=")         // <=
+    .replace(/\u2265/g, ">=")         // >=
+    .replace(/\u00D7/g, "x")          // multiplication sign
+    .replace(/\u00F7/g, "/")          // division sign
+    .replace(/[\u2190-\u21FF]/g, "-") // arrows
+    .replace(/[\u2200-\u22FF]/g, "")  // remaining math operators
+    .replace(/\u2022/g, "-");         // bullet
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
