@@ -233,6 +233,8 @@ export async function create360MembershipFromWebhook(
       to: customerEmail,
       subject: `Welcome to the 360° Method — ${tierDef.label} Membership Confirmed`,
       html: welcomeHtml,
+      // Transactional welcome email — keep the subject clean (no [#reply-token]).
+      skipReplyToken: true,
     }).catch((err) => console.error("[360 Webhook] Welcome email failed:", err));
   }
 

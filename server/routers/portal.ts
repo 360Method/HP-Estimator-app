@@ -199,6 +199,8 @@ export const portalRouter = router({
         to: customer.email,
         subject: emailSubject,
         html: emailHtml,
+        // Transactional login email — keep the subject clean (no [#reply-token]).
+        skipReplyToken: true,
       }).catch(() => null);
 
       return { sent: true };
