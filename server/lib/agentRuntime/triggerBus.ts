@@ -63,6 +63,14 @@ export async function emitAgentEvent(
   payload: Record<string, unknown> = {},
   opts: EmitOptions = {}
 ): Promise<{ queuedTaskIds: number[]; matchedAgents: number }> {
+  // ── Master kill-switch for the in-app AI-agent engine ──
+  // OFF unless AGENTS_ENABLED=true. Disabled 2026-06-02: member fulfillment is now
+  // deterministic (Stripe webhook + direct transactional emails); the agent
+  // draft-and-approve layer was parking onboarding emails idle, awaiting approval.
+  // Code is kept dormant pending the "workflows-in-Git" revamp. Re-enable with the env var.
+  if (process.env.AGENTS_ENABLED !== "true") {
+    return { queuedTaskIds: [], matchedAgents: 0 };
+  }
   try {
     return await triggerAgentsFor(eventName, payload, opts);
   } catch (err) {

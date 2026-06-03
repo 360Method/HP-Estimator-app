@@ -1607,9 +1607,14 @@ async function startServer() {
       console.error("[LeadNurturer] worker error:", err);
     }
   };
-  runLeadNurturerWorker().catch(console.error);
-  setInterval(runLeadNurturerWorker, 5 * 60 * 1000);
-  console.log("[LeadNurturer] Draft worker started (runs every 5 minutes)");
+  // Part of the AI-agent draft/approve layer — gated by the AGENTS_ENABLED kill-switch.
+  if (process.env.AGENTS_ENABLED === "true") {
+    runLeadNurturerWorker().catch(console.error);
+    setInterval(runLeadNurturerWorker, 5 * 60 * 1000);
+    console.log("[LeadNurturer] Draft worker started (runs every 5 minutes)");
+  } else {
+    console.log("[LeadNurturer] Draft worker OFF (AGENTS_ENABLED!=true)");
+  }
 
   // ── Auto-archive Lost leads after 90 days (runs daily at 3 AM) ─────────────
   const LOST_ARCHIVE_DAYS = 90;
@@ -1926,8 +1931,8 @@ async function startServer() {
   // Scheduler polls for queued tasks assigned to autonomous agents.
   // KPI cron aggregates seat → department daily and department → company weekly.
   // Hierarchy audit logs any Integrator/Head/sub-agent parentage violations.
-  if (backgroundJobsDisabled) {
-    console.log("[boot] Agent runtime disabled by DISABLE_BACKGROUND_JOBS=true");
+  if (backgroundJobsDisabled || process.env.AGENTS_ENABLED !== "true") {
+    console.log("[boot] Agent runtime OFF (AGENTS_ENABLED!=true or DISABLE_BACKGROUND_JOBS=true)");
   } else try {
     const { startScheduler } = await import("../lib/agentRuntime/scheduler");
     const { startKpiCron } = await import("../lib/agentRuntime/kpiRollup");
