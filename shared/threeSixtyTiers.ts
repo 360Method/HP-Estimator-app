@@ -106,10 +106,10 @@ function buildPricing(
 // ─── TIER DEFINITIONS ────────────────────────────────────────────────────────
 
 export const TIER_DEFINITIONS: Record<MemberTier, TierDefinition> = {
-  // DB key: "bronze" → display: "Bronze"
+  // DB key: "bronze" → customer-facing name: "Essential"
   bronze: {
     id: "bronze",
-    label: "Bronze",
+    label: "Essential",
     tagline: "Protect the basics. Catch problems early.",
     pricing: buildPricing(
       59,   // $59/mo
@@ -140,10 +140,10 @@ export const TIER_DEFINITIONS: Record<MemberTier, TierDefinition> = {
     },
   },
 
-  // DB key: "silver" → display: "Silver"
+  // DB key: "silver" → customer-facing name: "Full Coverage"
   silver: {
     id: "silver",
-    label: "Silver",
+    label: "Full Coverage",
     tagline: "Four seasons of protection + pre-paid labor.",
     pricing: buildPricing(
       99,   // $99/mo
@@ -156,7 +156,7 @@ export const TIER_DEFINITIONS: Record<MemberTier, TierDefinition> = {
     laborBankCreditCents: 30000, // $300
     priorityScheduling: false,
     features: [
-      "Everything in Bronze, plus:",
+      "Everything in Essential, plus:",
       "4 seasonal visits — all 4 seasons",
       "$300 labor bank credit (use on any handyman task)",
       "Summer visit — dry-season exterior + HVAC prep",
@@ -175,10 +175,10 @@ export const TIER_DEFINITIONS: Record<MemberTier, TierDefinition> = {
     },
   },
 
-  // DB key: "gold" → display: "Gold"
+  // DB key: "gold" → customer-facing name: "Maximum Protection"
   gold: {
     id: "gold",
-    label: "Gold",
+    label: "Maximum Protection",
     tagline: "The full system. Priority access. Maximum savings.",
     pricing: buildPricing(
       149,  // $149/mo
@@ -191,7 +191,7 @@ export const TIER_DEFINITIONS: Record<MemberTier, TierDefinition> = {
     laborBankCreditCents: 60000, // $600
     priorityScheduling: true,
     features: [
-      "Everything in Silver, plus:",
+      "Everything in Full Coverage, plus:",
       "4 seasonal visits — all 4 seasons + priority",
       "$600 labor bank credit — you're ahead after month 5",
       "Priority scheduling — your calls go first",

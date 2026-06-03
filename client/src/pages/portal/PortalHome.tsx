@@ -7,6 +7,7 @@ import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { deriveThreeSixtyOperatingStatus } from "@/lib/threeSixtyMethod";
+import { TIER_DEFINITIONS, type MemberTier } from "@shared/threeSixtyTiers";
 import PortalLayout from "@/components/PortalLayout";
 import OnboardingModal from "@/components/OnboardingModal";
 import { Button } from "@/components/ui/button";
@@ -431,7 +432,7 @@ export default function PortalHome() {
                 </div>
                 <div>
                   <p className="text-xs text-emerald-700 font-semibold uppercase tracking-wide">360° Home Membership</p>
-                  <p className="text-base font-bold text-gray-900 capitalize">{membershipData.membership.tier} Plan</p>
+                  <p className="text-base font-bold text-gray-900">{TIER_DEFINITIONS[membershipData.membership.tier as MemberTier]?.label ?? membershipData.membership.tier} Plan</p>
                   {(membershipData as any).totalMemberSavingsCents > 0 && (
                     <p className="text-[10px] text-emerald-700 font-semibold mt-0.5">
                       You've saved ${Math.round((membershipData as any).totalMemberSavingsCents / 100)} with your membership

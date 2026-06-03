@@ -231,7 +231,7 @@ export async function create360MembershipFromWebhook(
 
     await sendEmail({
       to: customerEmail,
-      subject: `Welcome to the 360° Method — ${tier.charAt(0).toUpperCase() + tier.slice(1)} Membership Confirmed`,
+      subject: `Welcome to the 360° Method — ${tierDef.label} Membership Confirmed`,
       html: welcomeHtml,
     }).catch((err) => console.error("[360 Webhook] Welcome email failed:", err));
   }
