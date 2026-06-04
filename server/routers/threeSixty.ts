@@ -1076,13 +1076,15 @@ const scansLatestRouter = router({
  * Map of tier+cadence to Stripe Price IDs.
  * These are set via environment variables after creating products in Stripe dashboard.
  */
-function getStripePriceId(tier: MemberTier, cadence: BillingCadence): string {
-  const key = homeownerPriceEnvKey(tier as HomeownerTier, cadence);
+function getStripePriceId(tier: MemberTier, cadence: BillingCadence, offer?: string): string {
+  const baseKey = homeownerPriceEnvKey(tier as HomeownerTier, cadence);
+  // The "buynow" upsell uses a discounted annual price (30% off month-to-month).
+  const key = offer === "buynow" && cadence === "annual" ? `${baseKey}_BUYNOW` : baseKey;
   const priceId = process.env[key];
   if (!priceId) {
     throw new TRPCError({
       code: "INTERNAL_SERVER_ERROR",
-      message: `Stripe price ID not configured for ${tier} ${cadence}. Set env var ${key}.`,
+      message: `Stripe price ID not configured for ${tier} ${cadence}${offer ? ` (${offer})` : ""}. Set env var ${key}.`,
     });
   }
   return priceId;
@@ -1099,6 +1101,8 @@ const checkoutRouter = router({
       z.object({
         tier: z.enum(HOMEOWNER_TIERS),
         cadence: z.enum(BILLING_CADENCES),
+        /** Promo offer selector — "buynow" uses the discounted annual price */
+        offer: z.enum(["buynow"]).optional(),
         /** Customer name for prefill */
         customerName: z.string().optional(),
         /** Customer email for prefill */
@@ -1123,7 +1127,7 @@ const checkoutRouter = router({
         apiVersion: "2025-03-31.basil",
       });
 
-      const priceId = getStripePriceId(input.tier, input.cadence);
+      const priceId = getStripePriceId(input.tier, input.cadence, input.offer);
 
       const session = await stripe.checkout.sessions.create({
         mode: "subscription",

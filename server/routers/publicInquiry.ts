@@ -24,6 +24,9 @@ import {
   createOpportunity,
   createOnlineRequest,
   isZipCodeAllowed,
+  updateCustomer,
+  updateOpportunity,
+  getOpportunityById,
 } from "../db";
 import { upsertPortalCustomer, createPortalToken, generateReferralCode } from "../portalDb";
 import { notifyOwner } from "../_core/notification";
@@ -38,6 +41,9 @@ export const publicInquiryRouter = express.Router();
 const ALLOWED_ORIGINS = [
   "https://www.handypioneers.com",
   "https://handypioneers.com",
+  // Staging website (custom domain + Railway service URL)
+  "https://staging.handypioneers.com",
+  "https://www-staging-production.up.railway.app",
   // Allow localhost in development
   "http://localhost:5173",
   "http://localhost:3000",
@@ -254,6 +260,69 @@ publicInquiryRouter.post("/inquiry", async (req, res) => {
     });
   } catch (err: any) {
     console.error("[publicInquiry] error:", err);
+    res.status(500).json({ error: "An unexpected error occurred. Please try again." });
+  }
+});
+
+/**
+ * Enrich an existing baseline-walkthrough lead with home details.
+ * Step 2 of the baseline funnel: Step 1 created the customer + lead (basics), this
+ * adds the address + home details to the SAME records. Idempotent enough to re-call.
+ */
+publicInquiryRouter.post("/inquiry/details", async (req, res) => {
+  try {
+    const {
+      customerId,
+      leadId,
+      street = "",
+      city = "",
+      state = "WA",
+      zip = "",
+      sqft = "",
+      yearBuilt = "",
+      notes = "",
+    } = req.body ?? {};
+
+    if (!customerId || !leadId) {
+      res.status(400).json({ error: "customerId and leadId are required." });
+      return;
+    }
+
+    // 1. Enrich the customer record with their address.
+    await updateCustomer(String(customerId), {
+      street: String(street).trim(),
+      city: String(city).trim(),
+      state: String(state).trim(),
+      zip: String(zip).trim(),
+    });
+
+    // 2. Append the home details to the existing lead's notes (preserve step-1 notes).
+    const detailBlock = [
+      "— Home details (baseline walkthrough) —",
+      street ? `Address: ${street}, ${city}, ${state} ${zip}` : "",
+      sqft ? `Approx. sq ft: ${sqft}` : "",
+      yearBuilt ? `Year built: ${yearBuilt}` : "",
+      notes ? `Notes: ${notes}` : "",
+    ].filter(Boolean).join("\n");
+
+    const existing = await getOpportunityById(String(leadId));
+    const mergedNotes = existing?.notes
+      ? `${existing.notes}\n\n${detailBlock}`
+      : detailBlock;
+
+    const patch: { notes: string; title?: string } = { notes: mergedNotes };
+    if (city) patch.title = `Baseline Walkthrough — ${String(city).trim()}, ${String(state).trim()}`;
+    await updateOpportunity(String(leadId), patch);
+
+    // 3. Notify owner the details arrived (non-blocking).
+    notifyOwner({
+      title: `Baseline details received — ${city ? `${city}, ${state}` : "lead"} (${leadId})`,
+      content: detailBlock,
+    }).catch((e) => console.error("[publicInquiry/details] notifyOwner error:", e));
+
+    res.status(200).json({ success: true });
+  } catch (err: any) {
+    console.error("[publicInquiry/details] error:", err);
     res.status(500).json({ error: "An unexpected error occurred. Please try again." });
   }
 });
