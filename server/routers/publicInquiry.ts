@@ -27,7 +27,10 @@ import {
   updateCustomer,
   updateOpportunity,
   getOpportunityById,
+  getDb,
 } from "../db";
+import { properties } from "../../drizzle/schema";
+import { eq } from "drizzle-orm";
 import { upsertPortalCustomer, createPortalToken, generateReferralCode } from "../portalDb";
 import { notifyOwner } from "../_core/notification";
 import { onLeadCreated } from "../leadRouting";
@@ -295,6 +298,51 @@ publicInquiryRouter.post("/inquiry/details", async (req, res) => {
       state: String(state).trim(),
       zip: String(zip).trim(),
     });
+
+    // 1b. Capture the home as a STRUCTURED property record now, straight from this
+    // form. This is the authoritative source of sqft/yearBuilt — it does not depend
+    // on the value surviving the funnel's sessionStorage relay into checkout. On
+    // purchase, the 360 webhook links this row to the membership by address match,
+    // so the portal reflects the home the member described.
+    try {
+      const cleanStreet = String(street).trim();
+      if (cleanStreet) {
+        const db = await getDb();
+        if (db) {
+          const sqftNum = parseInt(String(sqft).replace(/[^0-9]/g, ""), 10);
+          const yearNum = parseInt(String(yearBuilt).replace(/[^0-9]/g, ""), 10);
+          const homeFields = {
+            street: cleanStreet,
+            city: String(city).trim(),
+            state: String(state).trim(),
+            zip: String(zip).trim(),
+            ...(Number.isFinite(sqftNum) && sqftNum > 0 ? { sqft: sqftNum } : {}),
+            ...(Number.isFinite(yearNum) && yearNum > 0 ? { yearBuilt: yearNum } : {}),
+          };
+          const existingProps = await db
+            .select()
+            .from(properties)
+            .where(eq(properties.customerId, String(customerId)));
+          const match = existingProps.find(
+            (p) => (p.street ?? "").toLowerCase().trim() === cleanStreet.toLowerCase()
+          );
+          if (match) {
+            await db.update(properties).set(homeFields).where(eq(properties.id, match.id));
+          } else {
+            await db.insert(properties).values({
+              id: nanoid(),
+              customerId: String(customerId),
+              label: "Home",
+              isPrimary: existingProps.length === 0,
+              source: "360-funnel",
+              ...homeFields,
+            });
+          }
+        }
+      }
+    } catch (propErr) {
+      console.error("[publicInquiry/details] structured property upsert failed:", propErr);
+    }
 
     // 2. Append the home details to the existing lead's notes (preserve step-1 notes).
     const detailBlock = [
