@@ -6,7 +6,7 @@ const PORTAL_URL = "https://client.handypioneers.com/portal/login";
 
 const TIER_DETAILS: Record<string, { label: string; tagline: string; color: string; perks: string[] }> = {
   bronze: {
-    label: "Bronze",
+    label: "Essential",
     tagline: "Essential protection for the proactive homeowner",
     color: "#cd7f32",
     perks: [
@@ -16,24 +16,24 @@ const TIER_DETAILS: Record<string, { label: string; tagline: string; color: stri
     ],
   },
   silver: {
-    label: "Silver",
+    label: "Full Coverage",
     tagline: "Full-season coverage with a labor credit cushion",
     color: "#aaa9ad",
     perks: [
       "Annual 360° Home Scan",
       "4 seasonal visits — all seasons",
-      "$200 labor bank credit",
+      "$300 labor bank credit",
       "Higher member discounts",
     ],
   },
   gold: {
-    label: "Gold",
+    label: "Maximum",
     tagline: "Maximum coverage, priority service, and the biggest savings",
     color: "#c8922a",
     perks: [
       "Annual 360° Home Scan",
       "4 seasonal visits — all seasons",
-      "$500 labor bank credit",
+      "$600 labor bank credit",
       "Priority scheduling",
       "Highest member discounts",
     ],

@@ -37,10 +37,11 @@ function fmtDate(ts: number | Date | null | undefined) {
   return new Date(ts).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
+// Customer-facing tier names only. Never expose the internal bronze/silver/gold codes.
 const TIER_LABELS: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  bronze: { label: "Bronze", color: "text-amber-700", bg: "bg-amber-50", border: "border-amber-200" },
-  silver: { label: "Silver", color: "text-slate-600", bg: "bg-slate-50", border: "border-slate-200" },
-  gold:   { label: "Gold",   color: "text-yellow-700", bg: "bg-yellow-50", border: "border-yellow-200" },
+  bronze: { label: "Essential",     color: "text-amber-700", bg: "bg-amber-50", border: "border-amber-200" },
+  silver: { label: "Full Coverage", color: "text-slate-600", bg: "bg-slate-50", border: "border-slate-200" },
+  gold:   { label: "Maximum",       color: "text-yellow-700", bg: "bg-yellow-50", border: "border-yellow-200" },
 };
 
 const WO_TYPE_META: Record<string, { label: string; icon: React.ReactNode; color: string; season: string }> = {
@@ -383,7 +384,7 @@ const TIER_TASKS: Record<string, { category: string; tasks: string[] }[]> = {
 const TIERS = [
   {
     key: "bronze",
-    label: "Bronze",
+    label: "Essential",
     tagline: "Protect the basics. Catch problems early.",
     visits: 2,
     seasons: ["Spring", "Fall"],
@@ -402,7 +403,7 @@ const TIERS = [
   },
   {
     key: "silver",
-    label: "Silver",
+    label: "Full Coverage",
     tagline: "Four seasons of protection + pre-paid labor.",
     visits: 4,
     seasons: ["Spring", "Summer", "Fall", "Winter"],
@@ -410,7 +411,7 @@ const TIERS = [
     discount: "8%",
     popular: true,
     features: [
-      "Everything in Bronze, plus:",
+      "Everything in Essential, plus:",
       "4 seasonal visits — all 4 seasons",
       "$300 labor bank credit (use on any handyman task)",
       "8% off jobs under $1,000 · 5% off $1k–$5k · 2.5% off $5k+",
@@ -422,14 +423,14 @@ const TIERS = [
   },
   {
     key: "gold",
-    label: "Gold",
+    label: "Maximum",
     tagline: "The full system. Priority access. Maximum savings.",
     visits: 4,
     seasons: ["Spring", "Summer", "Fall", "Winter"],
     laborBank: 600,
     discount: "12%",
     features: [
-      "Everything in Silver, plus:",
+      "Everything in Full Coverage, plus:",
       "4 seasonal visits — all 4 seasons + priority",
       "$600 labor bank credit — you're ahead after month 5",
       "12% off jobs under $1,000 · 8% off $1k–$5k · 4% off $5k+",
@@ -445,7 +446,7 @@ const TIERS = [
 const FAQ_ITEMS = [
   {
     q: "How does the labor bank work?",
-    a: "The labor bank is a pre-loaded credit that covers labor on any handyman task. Silver members get $300 and Gold members get $600. On Monthly billing, the credit becomes available after your first 90 days. Switch to Quarterly or Annual to unlock the full credit on day one. It renews each membership year.",
+    a: "The labor bank is a pre-loaded credit that covers labor on any handyman task. Full Coverage members get $300 and Maximum members get $600. On Monthly billing, the credit becomes available after your first 90 days. Switch to Quarterly or Annual to unlock the full credit on day one. It renews each membership year.",
   },
   {
     q: "What happens during a seasonal visit?",
@@ -461,7 +462,7 @@ const FAQ_ITEMS = [
   },
   {
     q: "How does the member discount work on repairs?",
-    a: "Your discount applies automatically to all jobs booked through your portal. Bronze members save 5% on jobs under $1,000, 3% on $1k–$5k, and 1.5% above $5k. Silver saves 8% / 5% / 2.5%. Gold saves 12% / 8% / 4%. Larger jobs already include negotiated sub-contractor pricing — your total cost is lower either way. Discounts stack with labor bank credits.",
+    a: "Your discount applies automatically to all jobs booked through your portal. Essential members save 5% on jobs under $1,000, 3% on $1k–$5k, and 1.5% above $5k. Full Coverage saves 8% / 5% / 2.5%. Maximum saves 12% / 8% / 4%. Larger jobs already include negotiated pricing — your total cost is lower either way. Discounts stack with labor bank credits.",
   },
 ];
 
@@ -947,13 +948,18 @@ export default function Portal360Membership() {
     return { season, wo };
   });
 
-  // Upgrade nudge
+  // Upgrade nudge — numbers + names derived from the canonical tier definitions
+  // so they can never drift from reality (and never leak internal codenames).
   const canUpgrade = membership.tier === "bronze" || membership.tier === "silver";
-  const upgradeTier = membership.tier === "bronze" ? "silver" : "gold";
-  const upgradeLabel = upgradeTier.charAt(0).toUpperCase() + upgradeTier.slice(1);
-  const upgradeBenefit = upgradeTier === "silver"
-    ? "Unlock $250 labor bank + 3 seasonal visits"
-    : "Unlock $500 labor bank + priority scheduling + all 4 seasons";
+  const upgradeTier = (membership.tier === "bronze" ? "silver" : "gold") as keyof typeof TIER_DEFINITIONS;
+  const upgradeDef = TIER_DEFINITIONS[upgradeTier];
+  const curDef = TIER_DEFINITIONS[(membership.tier ?? "bronze") as keyof typeof TIER_DEFINITIONS];
+  const upgradeLabel = upgradeDef?.label ?? "";
+  const upgradeBank = Math.round((upgradeDef?.laborBankCreditCents ?? 0) / 100);
+  const extraVisits = (upgradeDef?.seasonalVisits ?? 0) - (curDef?.seasonalVisits ?? 0);
+  const upgradeBenefit = upgradeTier === "gold"
+    ? `Unlock $${upgradeBank} labor bank + priority scheduling`
+    : `Unlock $${upgradeBank} labor bank${extraVisits > 0 ? ` + ${extraVisits} more seasonal visits` : ""}`;
 
   return (
     <PortalLayout>

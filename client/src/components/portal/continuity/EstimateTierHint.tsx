@@ -21,18 +21,18 @@ interface EstimateTierHintProps {
 type Tier = "bronze" | "silver" | "gold";
 const TIER_COPY: Record<Tier, { label: string; line: string; accent: string }> = {
   bronze: {
-    label: "Bronze",
-    line: "A Bronze steward would fold this into their standard of care.",
+    label: "Essential",
+    line: "An Essential steward would fold this into their standard of care.",
     accent: "#a87528",
   },
   silver: {
-    label: "Silver",
-    line: "This scope is included in the Silver standard of care.",
+    label: "Full Coverage",
+    line: "This scope is included in the Full Coverage standard of care.",
     accent: "#9ca3af",
   },
   gold: {
-    label: "Gold",
-    line: "Gold members execute this in their next seasonal visit.",
+    label: "Maximum",
+    line: "Maximum members execute this in their next seasonal visit.",
     accent: "#c8922a",
   },
 };

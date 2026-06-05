@@ -63,20 +63,20 @@ const TIER_CONFIG: Record<
   { homeLabel: string; portfolioLabel: string; className: string; laborBank: number }
 > = {
   bronze: {
-    homeLabel: "Bronze",
-    portfolioLabel: "Bronze",
+    homeLabel: "Essential",
+    portfolioLabel: "Essential",
     className: "bg-amber-700 text-white",
     laborBank: 0,
   },
   silver: {
-    homeLabel: "Silver",
-    portfolioLabel: "Silver",
+    homeLabel: "Full Coverage",
+    portfolioLabel: "Full Coverage",
     className: "bg-slate-500 text-white",
     laborBank: 300,
   },
   gold: {
-    homeLabel: "Gold",
-    portfolioLabel: "Gold",
+    homeLabel: "Maximum",
+    portfolioLabel: "Maximum",
     className: "bg-yellow-500 text-white",
     laborBank: 600,
   },
