@@ -112,7 +112,7 @@ const TIERS: TierDef[] = [
       "$600 labor bank credit — you're ahead after month 5",
       "Priority scheduling — your calls go first",
       "Dedicated HP account manager",
-      "Pre-negotiated sub-contractor rates on major work",
+      "Pre-negotiated rates with vetted trade partners on major work",
       "Home equity maintenance log for refinancing or sale",
     ],
     discounts: [

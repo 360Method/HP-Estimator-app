@@ -820,6 +820,10 @@ export const portalServiceRequests = pgTable("portalServiceRequests", {
   photoUrls: text("photoUrls"),
   /** Set when HP staff views/reads this request */
   readAt: timestamp("readAt"),
+  /** portalReports.id this request came from (recommended-work requests only) */
+  reportId: integer("reportId"),
+  /** Index into the report's recommendations array (recommended-work requests only) */
+  recommendationIndex: integer("recommendationIndex"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type PortalServiceRequest = typeof portalServiceRequests.$inferSelect;

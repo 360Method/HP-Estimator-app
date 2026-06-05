@@ -535,6 +535,60 @@ export default function PortalHome() {
           </div>
         )}
 
+        {/* Recommended work from the latest 360° report — the portal's standing
+            "here's what your home needs next" surface. Members request items
+            with one tap on the report page. */}
+        {membershipData && (() => {
+          const latest = membershipData.reports?.[0] as any;
+          const recs: { priority?: string; item?: string; section?: string }[] =
+            latest?.reportData?.recommendations ?? [];
+          if (!latest || recs.length === 0) return null;
+          const critical = recs.filter((r) => r.priority === "Critical").length;
+          const high = recs.filter((r) => r.priority === "High").length;
+          const top =
+            recs.find((r) => r.priority === "Critical") ??
+            recs.find((r) => r.priority === "High") ??
+            recs[0];
+          return (
+            <div className="bg-white rounded-xl border border-amber-200 p-5">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-lg bg-amber-50 flex items-center justify-center shrink-0">
+                  <Wrench className="w-5 h-5 text-[#c8922a]" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-[#c8922a] font-bold uppercase tracking-wide mb-0.5">
+                    Recommended for your home
+                  </p>
+                  <p className="text-sm font-bold text-[#1a2e1a] leading-snug">
+                    {recs.length === 1
+                      ? "1 item from your latest 360° scan"
+                      : `${recs.length} items from your latest 360° scan`}
+                    {critical + high > 0 && (
+                      <span className="font-semibold text-gray-600">
+                        {" "}— {[
+                          critical > 0 ? `${critical} critical` : null,
+                          high > 0 ? `${high} high priority` : null,
+                        ].filter(Boolean).join(", ")}
+                      </span>
+                    )}
+                  </p>
+                  {top?.item && (
+                    <p className="text-xs text-gray-500 mt-1 truncate">
+                      Top item: {top.item}{top.section ? ` (${top.section})` : ""}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => navigate(`/portal/reports/${latest.id}`)}
+                className="mt-3 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-[#1a2e1a] text-white text-xs font-bold hover:bg-[#2d4a2d] transition-colors"
+              >
+                Review &amp; request work →
+              </button>
+            </div>
+          );
+        })()}
+
         {/* Quick stats row */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[

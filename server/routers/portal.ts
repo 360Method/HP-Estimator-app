@@ -105,6 +105,124 @@ function interpolatePortalTemplate(
   return template.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? `{{${key}}}`);
 }
 
+// ─── PORTAL → CRM LEAD BRIDGE ────────────────────────────────────────────────
+/**
+ * Bridges a portal customer to a real CRM customer row (find-or-create by
+ * email) and creates a lead opportunity from a portal request, then routes it
+ * through the standard pipeline (Nurturer assignment + lead_created
+ * automations). Shared by submitServiceRequest and requestRecommendedWork.
+ * Best-effort: returns undefined leadId on failure rather than throwing.
+ */
+async function createCrmLeadFromPortalRequest(opts: {
+  portalCustomer: {
+    id: number;
+    hpCustomerId: string | null;
+    email: string | null;
+    name: string | null;
+    phone: string | null;
+  };
+  /** Opportunity title, e.g. "Service Request — Jane Doe" */
+  title: string;
+  /** Opportunity notes body */
+  notes: string;
+  /** portalServiceRequests.id to link back to the new lead */
+  serviceRequestId?: number;
+  /** customers.leadSource when a CRM row must be created */
+  leadSource: string;
+  /** Title used for the lead-routing notification */
+  routingTitle: string;
+  priority?: "high" | "normal";
+  /** Description passed to the lead_created automation */
+  automationDescription: string;
+  /** Estimated value in cents (informational, from scan cost ranges) */
+  valueCents?: number;
+  /** 360° membership / property to link the lead to, when known */
+  membershipId?: number;
+  propertyId?: string;
+}): Promise<{ leadId?: string; hpCustomerId?: string }> {
+  const { portalCustomer } = opts;
+  let newLeadId: string | undefined;
+  let hpCustomerIdForLead: string | undefined;
+  try {
+    const { createOpportunity, findCustomerByEmail, createCustomer } = await import("../db");
+    newLeadId = randomBytes(8).toString("hex");
+
+    // Bridge portal-only customers to a real CRM customer row so lead routing
+    // (and every downstream "open the customer profile" link) has something
+    // to resolve. If a portal customer has no hpCustomerId, find or create
+    // one by email.
+    let hpCustomerId = portalCustomer.hpCustomerId ?? null;
+    if (!hpCustomerId && portalCustomer.email) {
+      const existing = await findCustomerByEmail(portalCustomer.email);
+      if (existing) {
+        hpCustomerId = existing.id;
+      } else {
+        const newId = randomBytes(8).toString("hex");
+        const [first, ...rest] = (portalCustomer.name ?? "").trim().split(/\s+/);
+        const created = await createCustomer({
+          id: newId,
+          firstName: first ?? "",
+          lastName: rest.join(" "),
+          displayName: portalCustomer.name ?? portalCustomer.email ?? "",
+          email: portalCustomer.email.toLowerCase().trim(),
+          mobilePhone: portalCustomer.phone ?? "",
+          sendNotifications: true,
+          customerType: "homeowner",
+          tags: "[]",
+          leadSource: opts.leadSource,
+        });
+        hpCustomerId = created.id;
+      }
+    }
+    if (!hpCustomerId) hpCustomerId = `portal-${portalCustomer.id}`;
+    hpCustomerIdForLead = hpCustomerId;
+
+    await createOpportunity({
+      id: newLeadId,
+      customerId: hpCustomerId,
+      area: "lead",
+      stage: "New Lead",
+      title: opts.title,
+      notes: opts.notes,
+      onlineRequestId: opts.serviceRequestId,
+      value: opts.valueCents ?? 0,
+      membershipId: opts.membershipId,
+      propertyId: opts.propertyId,
+    });
+    // Link the service request to the new lead
+    if (opts.serviceRequestId) {
+      await updatePortalServiceRequestStatus(opts.serviceRequestId, "pending", newLeadId);
+    }
+  } catch (e) {
+    console.error("[Portal] Failed to create CRM lead from portal request:", e);
+  }
+
+  // Route the lead through the standard pipeline so the Nurturer is
+  // assigned + notified, and any user-configured `lead_created`
+  // automations (auto-ack SMS, drip sequences, etc.) fire.
+  if (newLeadId && hpCustomerIdForLead) {
+    const { onLeadCreated } = await import("../leadRouting");
+    onLeadCreated({
+      opportunityId: newLeadId,
+      customerId: hpCustomerIdForLead,
+      title: opts.routingTitle,
+      source: "book_consultation",
+      priority: opts.priority ?? "normal",
+    }).catch((e) => console.error("[leadRouting] onLeadCreated error:", e));
+
+    runAutomationsForTrigger("lead_created", {
+      customerName: portalCustomer.name ?? "",
+      customerFirstName: (portalCustomer.name ?? "").split(" ")[0] ?? "",
+      phone: portalCustomer.phone ?? "",
+      email: portalCustomer.email ?? "",
+      description: opts.automationDescription,
+      referenceNumber: newLeadId,
+    }).catch((e) => console.error("[automation] lead_created error:", e));
+  }
+
+  return { leadId: newLeadId, hpCustomerId: hpCustomerIdForLead };
+}
+
 // ─── SIGNATURE STORAGE HELPER ───────────────────────────────────────────────
 /**
  * Converts a base64 PNG data URL to a Buffer and uploads it to S3.
@@ -1229,85 +1347,18 @@ export const portalRouter = router({
         photoUrls: input.photoUrls?.length ? JSON.stringify(input.photoUrls) : undefined,
       });
 
-      // Auto-create CRM lead opportunity
-      let newLeadId: string | undefined;
-      let hpCustomerIdForLead: string | undefined;
-      try {
-        const { createOpportunity, findCustomerByEmail, createCustomer } = await import('../db');
-        const { randomBytes } = await import('crypto');
-        newLeadId = randomBytes(8).toString('hex');
-
-        // Bridge portal-only customers to a real CRM customer row so lead routing
-        // (and every downstream "open the customer profile" link) has something
-        // to resolve. If a portal customer has no hpCustomerId, find or create
-        // one by email.
-        let hpCustomerId = ctx.portalCustomer.hpCustomerId ?? null;
-        if (!hpCustomerId && ctx.portalCustomer.email) {
-          const existing = await findCustomerByEmail(ctx.portalCustomer.email);
-          if (existing) {
-            hpCustomerId = existing.id;
-          } else {
-            const newId = randomBytes(8).toString('hex');
-            const [first, ...rest] = (ctx.portalCustomer.name ?? '').trim().split(/\s+/);
-            const created = await createCustomer({
-              id: newId,
-              firstName: first ?? '',
-              lastName: rest.join(' '),
-              displayName: ctx.portalCustomer.name ?? ctx.portalCustomer.email,
-              email: ctx.portalCustomer.email.toLowerCase().trim(),
-              mobilePhone: ctx.portalCustomer.phone ?? '',
-              sendNotifications: true,
-              customerType: 'homeowner',
-              tags: '[]',
-              leadSource: 'Portal Service Request',
-            });
-            hpCustomerId = created.id;
-          }
-        }
-        if (!hpCustomerId) hpCustomerId = `portal-${ctx.portalCustomer.id}`;
-        hpCustomerIdForLead = hpCustomerId;
-
-        const timelineLabel = input.timeline === 'asap' ? 'ASAP' : input.timeline === 'within_week' ? 'Within a week' : 'Flexible';
-        await createOpportunity({
-          id: newLeadId,
-          customerId: hpCustomerId,
-          area: 'lead',
-          stage: 'New Lead',
-          title: `Service Request — ${ctx.portalCustomer.name}`,
-          notes: `From portal service request #${req?.id ?? '?'}\n\n${input.description}\n\nTimeline: ${timelineLabel}${input.address ? `\nAddress: ${input.address}` : ''}`,
-          onlineRequestId: req?.id ?? undefined,
-          value: 0,
-        });
-        // Link the service request to the new lead
-        if (req?.id) {
-          await updatePortalServiceRequestStatus(req.id, 'pending', newLeadId);
-        }
-      } catch (e) {
-        console.error('[Portal] Failed to create CRM lead from service request:', e);
-      }
-
-      // Route the lead through the standard pipeline so the Nurturer is
-      // assigned + notified, and any user-configured `lead_created`
-      // automations (auto-ack SMS, drip sequences, etc.) fire.
-      if (newLeadId && hpCustomerIdForLead) {
-        const { onLeadCreated } = await import('../leadRouting');
-        onLeadCreated({
-          opportunityId: newLeadId,
-          customerId: hpCustomerIdForLead,
-          title: `Portal service request — ${ctx.portalCustomer.name}`,
-          source: 'book_consultation',
-          priority: input.timeline === 'asap' ? 'high' : 'normal',
-        }).catch((e) => console.error('[leadRouting] onLeadCreated error:', e));
-
-        runAutomationsForTrigger('lead_created', {
-          customerName: ctx.portalCustomer.name,
-          customerFirstName: (ctx.portalCustomer.name ?? '').split(' ')[0] ?? '',
-          phone: ctx.portalCustomer.phone ?? '',
-          email: ctx.portalCustomer.email ?? '',
-          description: input.description,
-          referenceNumber: newLeadId,
-        }).catch((e) => console.error('[automation] lead_created error:', e));
-      }
+      // Auto-create CRM lead opportunity + route it through the pipeline
+      const timelineLabel = input.timeline === 'asap' ? 'ASAP' : input.timeline === 'within_week' ? 'Within a week' : 'Flexible';
+      const { leadId: newLeadId } = await createCrmLeadFromPortalRequest({
+        portalCustomer: ctx.portalCustomer,
+        title: `Service Request — ${ctx.portalCustomer.name}`,
+        notes: `From portal service request #${req?.id ?? '?'}\n\n${input.description}\n\nTimeline: ${timelineLabel}${input.address ? `\nAddress: ${input.address}` : ''}`,
+        serviceRequestId: req?.id,
+        leadSource: 'Portal Service Request',
+        routingTitle: `Portal service request — ${ctx.portalCustomer.name}`,
+        priority: input.timeline === 'asap' ? 'high' : 'normal',
+        automationDescription: input.description,
+      });
 
       // Notify HP team (in-app + SMS)
       const baseUrl = process.env.PORTAL_BASE_URL ?? 'https://pro.handypioneers.com';
@@ -1988,6 +2039,150 @@ export const portalRouter = router({
         ...report,
         reportData: report.reportJson ? JSON.parse(report.reportJson) : null,
       };
+    }),
+
+  /** Which recommendations from a report this customer has already requested */
+  getRequestedRecommendations: portalProcedure
+    .input(z.object({ reportId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      const { getDb } = await import('../db');
+      const { portalServiceRequests } = await import('../../drizzle/schema');
+      const { and, eq, isNotNull } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) return [];
+      return db
+        .select({
+          recommendationIndex: portalServiceRequests.recommendationIndex,
+          status: portalServiceRequests.status,
+          createdAt: portalServiceRequests.createdAt,
+        })
+        .from(portalServiceRequests)
+        .where(
+          and(
+            eq(portalServiceRequests.customerId, ctx.portalCustomer.id),
+            eq(portalServiceRequests.reportId, input.reportId),
+            isNotNull(portalServiceRequests.recommendationIndex)
+          )
+        );
+    }),
+
+  /**
+   * One-tap request for a specific recommendation from a delivered 360°
+   * report. Creates a service request linked to the report + recommendation,
+   * then a CRM lead pre-filled with the finding so the team can estimate it
+   * (member pricing is applied at estimate time, never auto-priced here).
+   * Idempotent per (customer, report, recommendation).
+   */
+  requestRecommendedWork: portalProcedure
+    .input(z.object({ reportId: z.number(), recommendationIndex: z.number().int().min(0) }))
+    .mutation(async ({ ctx, input }) => {
+      const { getDb } = await import('../db');
+      const { portalReports, portalServiceRequests, properties } = await import('../../drizzle/schema');
+      const { and, eq } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
+
+      // Load the report, scoped to this customer
+      const [report] = await db
+        .select()
+        .from(portalReports)
+        .where(
+          and(
+            eq(portalReports.id, input.reportId),
+            eq(portalReports.portalCustomerId, ctx.portalCustomer.id)
+          )
+        );
+      if (!report) throw new TRPCError({ code: 'NOT_FOUND', message: 'Report not found' });
+
+      let rec: {
+        priority?: string; section?: string; item?: string;
+        estimatedCostLow?: number; estimatedCostHigh?: number; notes?: string;
+      } | undefined;
+      try {
+        rec = (JSON.parse(report.reportJson)?.recommendations ?? [])[input.recommendationIndex];
+      } catch { /* malformed reportJson — treated as missing below */ }
+      if (!rec) throw new TRPCError({ code: 'NOT_FOUND', message: 'Recommendation not found' });
+
+      // Idempotency: one request per (customer, report, recommendation)
+      const [existing] = await db
+        .select({ id: portalServiceRequests.id, leadId: portalServiceRequests.leadId })
+        .from(portalServiceRequests)
+        .where(
+          and(
+            eq(portalServiceRequests.customerId, ctx.portalCustomer.id),
+            eq(portalServiceRequests.reportId, input.reportId),
+            eq(portalServiceRequests.recommendationIndex, input.recommendationIndex)
+          )
+        );
+      if (existing) return { ok: true, id: existing.id, leadId: existing.leadId ?? undefined, alreadyRequested: true };
+
+      const priority = rec.priority ?? 'Medium';
+      const timeline = priority === 'Critical' ? 'asap' : priority === 'High' ? 'within_week' : 'flexible';
+      const costRange = (rec.estimatedCostLow || rec.estimatedCostHigh)
+        ? `\nScan-time range: $${rec.estimatedCostLow ?? '?'} – $${rec.estimatedCostHigh ?? '?'}`
+        : '';
+      const description = [
+        `Recommended work from 360° report #${report.id}`,
+        '',
+        `${rec.item ?? 'Recommended repair'} (${rec.section ?? 'General'})`,
+        `Priority: ${priority}${costRange}`,
+        rec.notes ? `\nTechnician notes: ${rec.notes}` : '',
+      ].join('\n');
+
+      const req = await createPortalServiceRequest({
+        customerId: ctx.portalCustomer.id,
+        description,
+        timeline,
+        address: ctx.portalCustomer.address ?? undefined,
+        reportId: input.reportId,
+        recommendationIndex: input.recommendationIndex,
+      });
+
+      // Link the lead to the member's property when one exists
+      const [home] = await db
+        .select({ id: properties.id })
+        .from(properties)
+        .where(eq(properties.membershipId, report.membershipId))
+        .limit(1);
+
+      // Informational pipeline value from the scan-time range midpoint (cents)
+      const lo = rec.estimatedCostLow ?? rec.estimatedCostHigh ?? 0;
+      const hi = rec.estimatedCostHigh ?? rec.estimatedCostLow ?? 0;
+      const valueCents = lo || hi ? Math.round(((lo + hi) / 2) * 100) : 0;
+
+      const { leadId } = await createCrmLeadFromPortalRequest({
+        portalCustomer: ctx.portalCustomer,
+        title: `360° Recommended Work — ${rec.item ?? 'Repair'}`,
+        notes: description,
+        serviceRequestId: req?.id,
+        leadSource: '360 Report Recommendation',
+        routingTitle: `Member requested recommended work — ${ctx.portalCustomer.name}`,
+        priority: priority === 'Critical' ? 'high' : 'normal',
+        automationDescription: description,
+        valueCents,
+        membershipId: report.membershipId,
+        propertyId: home?.id,
+      });
+
+      // Notify HP team (in-app + best-effort SMS)
+      await notifyOwner({
+        title: `Member requested recommended work: ${rec.item ?? 'Repair'}`,
+        content: `${ctx.portalCustomer.name} (${ctx.portalCustomer.email}) requested "${rec.item ?? 'a recommended repair'}" from 360° report #${report.id}.\nPriority: ${priority} — timeline ${timeline}.`,
+      });
+      try {
+        const { sendSms } = await import('../twilio');
+        const { ENV: env } = await import('../_core/env');
+        if (env.ownerPhone) {
+          await sendSms(
+            env.ownerPhone,
+            `[HP] ${ctx.portalCustomer.name} requested recommended work: "${(rec.item ?? 'repair').slice(0, 60)}" (${priority})`,
+          );
+        }
+      } catch (e) {
+        console.error('[Portal] SMS alert failed:', e);
+      }
+
+      return { ok: true, id: req?.id, leadId, alreadyRequested: false };
     }),
 
   /**

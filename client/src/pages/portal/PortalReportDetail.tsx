@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { useLocation, useParams } from 'wouter';
+import { TIER_DEFINITIONS, headlineDiscountPct, type MemberTier } from '@shared/threeSixtyTiers';
 
 interface Recommendation {
   priority: 'Critical' | 'High' | 'Medium' | 'Low';
@@ -76,10 +77,23 @@ export default function PortalReportDetail() {
   const [, navigate] = useLocation();
   const [expandedRec, setExpandedRec] = useState<number | null>(null);
 
+  const reportId = parseInt(params.id ?? '0');
+  const utils = trpc.useUtils();
   const { data: report, isLoading } = trpc.portal.getReport.useQuery(
-    { id: parseInt(params.id ?? '0') },
+    { id: reportId },
     { enabled: !!params.id }
   );
+  const { data: membership360 } = trpc.portal.getMembership360.useQuery();
+  const { data: requestedRecs } = trpc.portal.getRequestedRecommendations.useQuery(
+    { reportId },
+    { enabled: !!params.id }
+  );
+  const requestWork = trpc.portal.requestRecommendedWork.useMutation({
+    onSuccess: () => utils.portal.getRequestedRecommendations.invalidate({ reportId }),
+  });
+  const tierKey = (membership360?.membership?.tier ?? null) as MemberTier | null;
+  const tierDef = tierKey ? TIER_DEFINITIONS[tierKey] : null;
+  const requestedIndexes = new Set((requestedRecs ?? []).map(r => r.recommendationIndex));
 
   if (isLoading || !report) {
     return (
@@ -204,6 +218,32 @@ export default function PortalReportDetail() {
                         <p className="text-xs text-muted-foreground">{rec.notes}</p>
                       </div>
                     )}
+                    <div className="mt-2 pt-2 border-t border-border/50 flex items-center justify-between gap-2 flex-wrap">
+                      {tierDef && tierKey ? (
+                        <span className="text-[11px] font-medium text-emerald-700">
+                          {tierDef.label} member pricing applies — up to {headlineDiscountPct(tierKey)}% off
+                        </span>
+                      ) : <span />}
+                      {requestedIndexes.has(i) ? (
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700">
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Requested
+                        </span>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs border-[#c8922a]/40 text-[#1a2e1a] hover:bg-amber-50 shrink-0"
+                          disabled={requestWork.isPending}
+                          onClick={() => requestWork.mutate({ reportId, recommendationIndex: i })}
+                        >
+                          {requestWork.isPending && requestWork.variables?.recommendationIndex === i ? (
+                            <><Loader2 className="w-3 h-3 animate-spin mr-1" /> Sending…</>
+                          ) : (
+                            'Request this work'
+                          )}
+                        </Button>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
               );
