@@ -1114,6 +1114,9 @@ const checkoutRouter = router({
         serviceCity: z.string().optional(),
         serviceState: z.string().optional(),
         serviceZip: z.string().optional(),
+        /** Home details (homeowner-reported, from the funnel) — structured, surfaced in the portal */
+        sqft: z.number().int().positive().optional(),
+        yearBuilt: z.number().int().positive().optional(),
         /** Internal HP customer ID to link after payment */
         hpCustomerId: z.string().optional(),
         /** Property address ID to associate with membership */
@@ -1127,7 +1130,11 @@ const checkoutRouter = router({
         apiVersion: "2025-03-31.basil",
       });
 
-      const priceId = getStripePriceId(input.tier, input.cadence, input.offer);
+      // The buy-now offer is always the discounted ANNUAL price. Force the cadence
+      // to "annual" so the webhook can never record a mismatched billing cadence /
+      // renewal date from a stale client value.
+      const cadence = input.offer === "buynow" ? "annual" : input.cadence;
+      const priceId = getStripePriceId(input.tier, cadence, input.offer);
 
       const session = await stripe.checkout.sessions.create({
         mode: "subscription",
@@ -1135,10 +1142,10 @@ const checkoutRouter = router({
         customer_email: input.customerEmail ?? (ctx as any).user?.email ?? undefined,
         allow_promotion_codes: true,
         success_url: `${input.origin}/360/confirmation?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${input.origin}/360/checkout?tier=${input.tier}&cadence=${input.cadence}&cancelled=1`,
+        cancel_url: `${input.origin}/360/checkout?tier=${input.tier}&cadence=${cadence}&cancelled=1`,
         metadata: {
           tier: input.tier,
-          cadence: input.cadence,
+          cadence,
           hpCustomerId: input.hpCustomerId ?? "",
           propertyAddressId: input.propertyAddressId?.toString() ?? "",
           enrolledByUserId: (ctx as any).user?.id?.toString() ?? "",
@@ -1149,11 +1156,13 @@ const checkoutRouter = router({
           serviceCity: input.serviceCity ?? "",
           serviceState: input.serviceState ?? "",
           serviceZip: input.serviceZip ?? "",
+          sqft: input.sqft?.toString() ?? "",
+          yearBuilt: input.yearBuilt?.toString() ?? "",
         },
         subscription_data: {
           metadata: {
             tier: input.tier,
-            cadence: input.cadence,
+            cadence,
             hpCustomerId: input.hpCustomerId ?? "",
           },
         },

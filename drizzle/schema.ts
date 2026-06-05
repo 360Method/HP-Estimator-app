@@ -615,6 +615,10 @@ export const properties = pgTable("properties", {
   zip: varchar("zip", { length: 10 }).notNull().default(""),
   isPrimary: boolean("isPrimary").default(false).notNull(),
   isBilling: boolean("isBilling").default(false).notNull(),
+  /** Approximate finished square footage (homeowner-reported, from the 360 funnel) */
+  sqft: integer("sqft"),
+  /** Year the home was built (homeowner-reported, from the 360 funnel) */
+  yearBuilt: integer("yearBuilt"),
   propertyNotes: text("propertyNotes"),
   addressNotes: text("addressNotes"),
   lat: text("lat"),

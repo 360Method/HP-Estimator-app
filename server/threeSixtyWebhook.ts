@@ -20,6 +20,7 @@ import {
   threeSixtyWorkOrders,
   portalCustomers,
   portalTokens,
+  properties,
 } from "../drizzle/schema";
 import { randomBytes } from "crypto";
 import { eq, isNotNull, lte, gt, and } from "drizzle-orm";
@@ -88,6 +89,8 @@ export async function create360MembershipFromWebhook(
   const serviceCity = meta.serviceCity || "";
   const serviceState = meta.serviceState || "";
   const serviceZip = meta.serviceZip || "";
+  const sqft = meta.sqft ? parseInt(meta.sqft) || null : null;
+  const yearBuilt = meta.yearBuilt ? parseInt(meta.yearBuilt) || null : null;
 
   const tierDef = TIER_DEFINITIONS[tier];
   const now = Date.now();
@@ -302,6 +305,50 @@ export async function create360MembershipFromWebhook(
           .update(threeSixtyMemberships)
           .set({ hpCustomerId: crmCustomerId.toString() })
           .where(eq(threeSixtyMemberships.id, membershipId));
+      }
+      // Create/link the member's structured home record so the portal can reflect
+      // back the address + sq ft + year built they entered in the funnel.
+      if (crmCustomerId && serviceAddress) {
+        try {
+          const existingProps = await db
+            .select()
+            .from(properties)
+            .where(eq(properties.customerId, crmCustomerId));
+          const match = existingProps.find(
+            (p) => (p.street ?? "").toLowerCase().trim() === serviceAddress.toLowerCase().trim()
+          );
+          if (match) {
+            await db
+              .update(properties)
+              .set({
+                membershipId,
+                ...(sqft ? { sqft } : {}),
+                ...(yearBuilt ? { yearBuilt } : {}),
+                ...(serviceCity && !match.city ? { city: serviceCity } : {}),
+                ...(serviceState && !match.state ? { state: serviceState } : {}),
+                ...(serviceZip && !match.zip ? { zip: serviceZip } : {}),
+              })
+              .where(eq(properties.id, match.id));
+          } else {
+            await db.insert(properties).values({
+              id: nanoid(),
+              customerId: crmCustomerId,
+              label: "Home",
+              street: serviceAddress,
+              city: serviceCity,
+              state: serviceState,
+              zip: serviceZip,
+              isPrimary: existingProps.length === 0,
+              sqft: sqft ?? undefined,
+              yearBuilt: yearBuilt ?? undefined,
+              membershipId,
+              source: "360-funnel",
+            });
+          }
+          console.log(`[360 Webhook] Linked home property for membership ${membershipId}`);
+        } catch (propErr) {
+          console.error("[360 Webhook] Failed to create/link property record:", propErr);
+        }
       }
       // Archive any open "Cart Abandoned" leads for this customer
       if (crmCustomerId) {

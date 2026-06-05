@@ -2072,6 +2072,7 @@ export const portalRouter = router({
       threeSixtyWorkOrders,
       portalReports,
       portalEstimates,
+      properties,
     } = await import('../../drizzle/schema');
     const { eq, desc, and } = await import('drizzle-orm');
     const db = await getDb();
@@ -2099,7 +2100,13 @@ export const portalRouter = router({
         .from(threeSixtyWorkOrders)
         .where(eq(threeSixtyWorkOrders.membershipId, membership.id))
         .orderBy(desc(threeSixtyWorkOrders.createdAt));
-      return { membership, laborBankBalance: membership.laborBankBalance ?? 0, ledger, workOrders };
+      // The member's structured home (address + sq ft + year built), linked at enrollment.
+      const [home] = await db
+        .select()
+        .from(properties)
+        .where(eq(properties.membershipId, membership.id))
+        .limit(1);
+      return { membership, laborBankBalance: membership.laborBankBalance ?? 0, ledger, workOrders, home: home ?? null };
     }));
     // Fetch reports (last 5) — shared across all memberships for this customer
     const reports = await db
@@ -2122,6 +2129,10 @@ export const portalRouter = router({
       laborBankBalance: primary.laborBankBalance,
       ledger: primary.ledger,
       workOrders: primary.workOrders,
+      home: primary.home,
+      // Fallback address string captured on the portal customer (older members
+      // without a structured property row still get an address to display).
+      customerAddress: ctx.portalCustomer.address ?? null,
       reports: reports.map(r => ({
         ...r,
         reportData: r.reportJson ? JSON.parse(r.reportJson) : null,

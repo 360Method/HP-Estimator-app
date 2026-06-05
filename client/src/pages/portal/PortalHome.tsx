@@ -447,13 +447,29 @@ export default function PortalHome() {
                 View details →
               </button>
             </div>
-            {/* Property address row */}
-            {membershipData.membership.propertyAddressId && (
-              <div className="mt-3 flex items-center gap-1.5 text-xs text-emerald-800">
-                <MapPin className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate">{customer?.address ?? 'Property on file'}</span>
-              </div>
-            )}
+            {/* Home row — the address + sq ft + year built the member entered in the funnel */}
+            {(() => {
+              const h = (membershipData as any).home as
+                | { street?: string | null; city?: string | null; state?: string | null; zip?: string | null; sqft?: number | null; yearBuilt?: number | null }
+                | null | undefined;
+              const fallback = (membershipData as any).customerAddress as string | null | undefined;
+              const street = h?.street || (fallback ? fallback.split(',')[0].trim() : '');
+              const cityLine = h
+                ? [[h.city, h.state].filter(Boolean).join(', '), h.zip].filter(Boolean).join(' ').trim()
+                : (fallback ? fallback.split(',').slice(1).join(',').trim() : '');
+              if (!street && !cityLine) return null;
+              const detail = [h?.sqft ? `${h.sqft.toLocaleString()} sq ft` : null, h?.yearBuilt ? `built ${h.yearBuilt}` : null]
+                .filter(Boolean).join(' · ');
+              return (
+                <div className="mt-3 flex items-start gap-1.5 text-xs text-emerald-800">
+                  <MapPin className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <span>{[street, cityLine].filter(Boolean).join(' · ')}</span>
+                    {detail && <span className="text-emerald-700/70"> · {detail}</span>}
+                  </div>
+                </div>
+              );
+            })()}
             <div className="mt-4 rounded-xl border border-emerald-100 bg-white p-3">
               <div className="flex items-start justify-between gap-3">
                 <div>

@@ -899,12 +899,24 @@ export default function Portal360Membership() {
   // ── Member data ──────────────────────────────────────────────────────────
   const allMemberships = data.allMemberships ?? [{
     membership: data.membership, laborBankBalance: data.laborBankBalance,
-    ledger: data.ledger, workOrders: data.workOrders,
+    ledger: data.ledger, workOrders: data.workOrders, home: data.home,
   }];
   const safeIdx = Math.min(selectedIdx, allMemberships.length - 1);
   const active = allMemberships[safeIdx];
   const { membership, laborBankBalance, ledger, workOrders } = active;
   const { reports, linkedEstimates } = data;
+  // The member's home, as they described it in the funnel. Falls back to the
+  // address string on the portal customer for members enrolled before the
+  // structured property record existed.
+  const home = (active as any).home as
+    | { street?: string | null; city?: string | null; state?: string | null; zip?: string | null; sqft?: number | null; yearBuilt?: number | null }
+    | null
+    | undefined;
+  const fallbackAddress = (data as any).customerAddress as string | null | undefined;
+  const homeStreet = home?.street || (fallbackAddress ? fallbackAddress.split(",")[0].trim() : "");
+  const homeCityLine = home
+    ? [[home.city, home.state].filter(Boolean).join(", "), home.zip].filter(Boolean).join(" ").trim()
+    : (fallbackAddress ? fallbackAddress.split(",").slice(1).join(",").trim() : "");
   const tier = TIER_LABELS[membership.tier ?? "bronze"] ?? TIER_LABELS.bronze;
   const tierDef = membership.tier ? TIER_DEFINITIONS[membership.tier as keyof typeof TIER_DEFINITIONS] : null;
   const maxLaborBank = tierDef?.laborBankCreditCents ?? Math.max(laborBankBalance, 1);
@@ -959,6 +971,33 @@ export default function Portal360Membership() {
             {tier.label} Member
           </span>
         </div>
+
+        {/* Your home + plan confirmation — reflects back what the member entered & bought */}
+        {(homeStreet || homeCityLine) && (
+          <div className="bg-white border rounded-xl p-4 mb-5">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-[#1a2e1a]/5 flex items-center justify-center shrink-0">
+                <Home className="w-4 h-4 text-[#1a2e1a]" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground mb-0.5">Your home</p>
+                {homeStreet && <p className="text-sm font-semibold text-[#1a2e1a] leading-tight">{homeStreet}</p>}
+                {homeCityLine && <p className="text-sm text-muted-foreground leading-tight">{homeCityLine}</p>}
+                {(home?.sqft || home?.yearBuilt) && (
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-muted-foreground">
+                    {home?.sqft ? <span><span className="font-semibold text-[#1a2e1a]">{home.sqft.toLocaleString()}</span> sq ft</span> : null}
+                    {home?.yearBuilt ? <span>Built <span className="font-semibold text-[#1a2e1a]">{home.yearBuilt}</span></span> : null}
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground mt-2 pt-2 border-t">
+                  Enrolled in the <span className="font-semibold text-[#1a2e1a]">{tierDef?.label ?? tier.label}</span> plan
+                  {membership.billingCadence ? <> · billed {membership.billingCadence}</> : null}
+                  {membership.renewalDate ? <> · renews {fmtDate(membership.renewalDate)}</> : null}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Savings counter banner */}
         {totalSavedCents > 0 && (
