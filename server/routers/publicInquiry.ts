@@ -222,8 +222,14 @@ publicInquiryRouter.post("/inquiry", async (req, res) => {
       priority: timeline === "ASAP" ? "high" : "normal",
     }).catch((e) => console.error("[publicInquiry] leadRouting error:", e));
 
+    // Quiet capture (give-first funnel): the email-blur background lead from
+    // the details form. The visitor is still ON the form, so the instant
+    // "finish your roadmap" ack would be noise — the 45-min drip step covers
+    // true dropouts. Skip the immediate ack email + SMS for these.
+    const isQuietCapture = isRoadmapFunnel && String(source).includes("quiet-capture");
+
     // 7. Send customer acknowledgment email (non-blocking)
-    if (isEmailSenderReady()) {
+    if (isEmailSenderReady() && !isQuietCapture) {
       const ackHtml = isRoadmapFunnel
         ? `<p>Hi ${greetName},</p>
 <p>You're one step from your complimentary 360° Roadmap. Finish by adding your home's details and your inspection report — it takes about two minutes.</p>
@@ -246,7 +252,7 @@ publicInquiryRouter.post("/inquiry", async (req, res) => {
     }
 
     // 8. Send customer acknowledgment SMS if consented (non-blocking)
-    if (smsConsent && phoneSafe && isTwilioConfigured()) {
+    if (smsConsent && phoneSafe && isTwilioConfigured() && !isQuietCapture) {
       sendSms(
         phoneSafe,
         isRoadmapFunnel
