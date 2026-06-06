@@ -31,6 +31,7 @@ import {
   priorityTranslations,
   homeHealthRecords,
   portalAccounts,
+  portalProperties,
 } from "../../../drizzle/schema.priorityTranslation";
 import { properties } from "../../../drizzle/schema";
 import {
@@ -417,6 +418,73 @@ export async function submitRoadmap(
   return { id, portalAccountId: account.id, status: "processing" };
 }
 
+/**
+ * Re-run processing for an existing roadmap row (manual retry after a HOLD or
+ * failure — e.g. an oversized PDF before the text-extraction fallback landed).
+ * Rebuilds ProcessArgs from the stored row: the uploaded PDF is reloaded from
+ * the volume (pdfStoragePath), the address from the portal property.
+ */
+export async function reprocessRoadmap(id: string): Promise<void> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const rows = await db
+    .select()
+    .from(priorityTranslations)
+    .where(eq(priorityTranslations.id, id))
+    .limit(1);
+  const row = rows[0];
+  if (!row) throw new Error(`No priorityTranslations row for ${id}`);
+
+  const accounts = await db
+    .select()
+    .from(portalAccounts)
+    .where(eq(portalAccounts.id, row.portalAccountId))
+    .limit(1);
+  const account = accounts[0];
+  if (!account) throw new Error(`No portal account ${row.portalAccountId} for ${id}`);
+
+  const props = await db
+    .select()
+    .from(portalProperties)
+    .where(eq(portalProperties.id, row.propertyId))
+    .limit(1);
+  const prop = props[0];
+  const propertyAddress = prop
+    ? [prop.street, [prop.city, prop.state].filter(Boolean).join(", "), prop.zip]
+        .filter(Boolean)
+        .join(", ")
+    : "the property";
+
+  let pdfBuffer: Buffer | undefined;
+  if (row.pdfStoragePath && fs.existsSync(row.pdfStoragePath)) {
+    pdfBuffer = fs.readFileSync(row.pdfStoragePath);
+  }
+  if (!pdfBuffer && !row.reportUrl) {
+    throw new Error(`${id} has neither a stored PDF nor a reportUrl to retry from`);
+  }
+
+  await db
+    .update(priorityTranslations)
+    .set({ status: "processing", failureReason: null, updatedAt: new Date() })
+    .where(eq(priorityTranslations.id, id));
+
+  console.log(`[roadmap-generator] reprocessing ${id} (${pdfBuffer ? "stored PDF" : "reportUrl"})`);
+  await processRoadmap({
+    id,
+    portalAccountId: account.id,
+    propertyId: row.propertyId,
+    homeHealthRecordId: row.homeHealthRecordId ?? "",
+    firstName: account.firstName ?? "",
+    email: account.email,
+    propertyAddress,
+    pdfBuffer,
+    reportUrl: row.reportUrl ?? undefined,
+    customerId: account.customerId ?? null,
+    opportunityId: null,
+  });
+}
+
 type ProcessArgs = {
   id: string;
   portalAccountId: string;
@@ -471,6 +539,59 @@ async function processRoadmap(args: ProcessArgs): Promise<void> {
         ).catch(() => null);
         console.warn(`[roadmap-generator] ${args.id} held for manual review (URL not extractable)`);
         return;
+      }
+    }
+
+    // 0b. Oversized PDFs: the Claude API caps requests at 32 MB and document
+    // blocks at 100 pages — large Spectora exports (50–80 MB of photos) 413.
+    // Extract the text server-side and translate from that instead; if the
+    // PDF has no extractable text (pure scan), HOLD for manual review.
+    if (reportPdfBuffer) {
+      const API_PDF_BYTE_LIMIT = 18 * 1024 * 1024; // base64 inflates ~1.37x; stay clear of the 32 MB cap
+      const API_PDF_PAGE_LIMIT = 95;
+      let pageCount = 0;
+      try {
+        const { getDocumentProxy } = await import("unpdf");
+        const proxy = await getDocumentProxy(new Uint8Array(reportPdfBuffer));
+        pageCount = proxy.numPages;
+      } catch {
+        /* page count is advisory; the byte limit still guards */
+      }
+      if (reportPdfBuffer.length > API_PDF_BYTE_LIMIT || pageCount > API_PDF_PAGE_LIMIT) {
+        console.log(
+          `[roadmap-generator] ${args.id} PDF too large for API ` +
+            `(${(reportPdfBuffer.length / 1024 / 1024).toFixed(1)} MB, ${pageCount} pages) — extracting text`,
+        );
+        let extracted = "";
+        try {
+          const { extractText, getDocumentProxy } = await import("unpdf");
+          const proxy = await getDocumentProxy(new Uint8Array(reportPdfBuffer));
+          const res = await extractText(proxy, { mergePages: true });
+          extracted = String(res.text ?? "").replace(/\s+/g, " ").trim();
+        } catch (err) {
+          console.warn(`[roadmap-generator] ${args.id} text extraction failed:`, err);
+        }
+        if (extracted.length >= 1500) {
+          reportText = extracted.slice(0, 400_000);
+          reportPdfBuffer = undefined;
+        } else {
+          await db
+            .update(priorityTranslations)
+            .set({
+              status: "submitted", // parked, not failed — homeowner sees "report received"
+              failureReason: "PDF_TOO_LARGE_NEEDS_MANUAL_REVIEW",
+              updatedAt: new Date(),
+            })
+            .where(eq(priorityTranslations.id, args.id));
+          await notifyOwnerOfFailure(
+            args,
+            `PDF is too large for automated processing and has no extractable text ` +
+              `(likely a scanned report). Compress or split the PDF and re-run processing. ` +
+              `No roadmap was generated and the customer was NOT emailed.`,
+          ).catch(() => null);
+          console.warn(`[roadmap-generator] ${args.id} held for manual review (PDF too large, no text)`);
+          return;
+        }
       }
     }
 

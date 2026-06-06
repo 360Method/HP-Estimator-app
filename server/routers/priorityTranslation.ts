@@ -429,10 +429,22 @@ export const priorityTranslationRouter = router({
    * Useful for a queue runner or manual retry from an admin panel.
    */
   process: publicProcedure
-    .input(z.object({ id: z.string(), workerKey: z.string() }))
+    .input(z.object({
+      id: z.string(),
+      workerKey: z.string(),
+      /** "roadmap" retries through the Stewardship orchestrator (the funnel
+       *  pipeline); default "legacy" keeps the old behavior for the worker. */
+      pipeline: z.enum(["legacy", "roadmap"]).default("legacy"),
+    }))
     .mutation(async ({ input }) => {
       if (input.workerKey !== process.env.INTERNAL_WORKER_KEY) {
         throw new TRPCError({ code: "UNAUTHORIZED" });
+      }
+
+      if (input.pipeline === "roadmap") {
+        const { reprocessRoadmap } = await import("../lib/priorityTranslation/orchestrator");
+        await reprocessRoadmap(input.id);
+        return { ok: true };
       }
 
       const db = await getDb();
