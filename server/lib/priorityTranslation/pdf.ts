@@ -596,7 +596,7 @@ function drawFinding(
     ? measureWrappedText(f.recommended_approach, fonts.serif, 10.5, CONTENT_W - 8)
     : 0;
 
-  const headerH = 14;
+  const headerH = 24; // kicker line + clearance above the 16pt title ascenders
   const categoryH = categoryLines * 20 + 10;
   const findingH = 12 + findingLines * 14 + 8;
   const interpH = interpLines > 0 ? 14 + interpLines * 15 + 10 : 0;
@@ -806,11 +806,17 @@ function drawPaperFooter(
   args: { left: string; right: string },
 ): void {
   page.drawRectangle({ x: MARGIN, y: 36, width: CONTENT_W, height: 0.5, color: BRAND.mutedSoft });
-  drawTracked(page, fonts.sans, args.left.toUpperCase(), {
+  const leftText = args.left.toUpperCase();
+  drawTracked(page, fonts.sans, leftText, {
     x: MARGIN, y: 22, size: 7, tracking: 1.6, color: BRAND.muted,
   });
+  // Long addresses can run past the centered label's fixed start — push the
+  // center label right of the left text when they'd collide.
+  const leftW =
+    fonts.sans.widthOfTextAtSize(leftText, 7) + (leftText.length - 1) * 1.6;
+  const centerX = Math.max(PAGE_W / 2 - 56, MARGIN + leftW + 14);
   drawTracked(page, fonts.sansBold, "360°  METHOD  ROADMAP", {
-    x: PAGE_W / 2 - 56, y: 22, size: 7, tracking: 1.8, color: BRAND.amber,
+    x: centerX, y: 22, size: 7, tracking: 1.8, color: BRAND.amber,
   });
   const rightW = fonts.sans.widthOfTextAtSize(args.right, 8);
   page.drawText(args.right, {

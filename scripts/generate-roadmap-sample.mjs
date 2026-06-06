@@ -144,7 +144,7 @@ async function main() {
     firstName: "Margaret",
     propertyAddress: "4218 NW Riverstone Court, Vancouver, WA 98685",
     claudeResponse: MOCK_RESPONSE,
-    editionDate: new Date("2026-04-26T00:00:00Z"),
+    editionDate: new Date(),
   });
 
   const today = new Date().toISOString().slice(0, 10);
