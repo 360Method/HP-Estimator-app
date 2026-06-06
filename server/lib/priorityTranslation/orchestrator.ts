@@ -61,10 +61,12 @@ function ensureUploadDir() {
 }
 
 export type RoadmapSubmissionInput = {
-  firstName: string;
-  lastName: string;
+  /** Optional since the give-first funnel (2026-06-06) — default "" */
+  firstName?: string;
+  lastName?: string;
   email: string;
-  phone: string;
+  /** Optional since the give-first funnel (2026-06-06) — default "" */
+  phone?: string;
   propertyAddress: string;
   notes?: string;
   pdfBuffer?: Buffer;
@@ -111,9 +113,9 @@ export async function submitRoadmap(
 
   const account = await findOrCreatePortalAccount(db, {
     email: input.email,
-    firstName: input.firstName,
-    lastName: input.lastName,
-    phone: input.phone,
+    firstName: input.firstName ?? "",
+    lastName: input.lastName ?? "",
+    phone: input.phone ?? "",
   });
 
   // Per-email cap: at most 2 roadmap runs per account per 24 h. Each run costs
@@ -204,6 +206,10 @@ export async function submitRoadmap(
   let opportunityId: string | null = null;
   /** True when this submission completes a step-1 funnel lead (update, don't create). */
   let linkedToFunnelLead = false;
+  /** Lead titles fall back to the email when the give-first funnel sent no name. */
+  const displayNameOrEmail =
+    `${input.firstName ?? ""} ${input.lastName ?? ""}`.trim() ||
+    input.email.trim().toLowerCase();
   try {
     const emailNorm = input.email.trim().toLowerCase();
     // Funnel linkage first: step 1 of the roadmap funnel already created the
@@ -218,11 +224,11 @@ export async function submitRoadmap(
       const newCustomerId = randomBytes(8).toString("hex");
       const created = await createCustomer({
         id: newCustomerId,
-        firstName: input.firstName,
-        lastName: input.lastName,
-        displayName: `${input.firstName} ${input.lastName}`.trim() || emailNorm,
+        firstName: input.firstName ?? "",
+        lastName: input.lastName ?? "",
+        displayName: `${input.firstName ?? ""} ${input.lastName ?? ""}`.trim() || emailNorm,
         email: emailNorm,
-        mobilePhone: input.phone,
+        mobilePhone: input.phone ?? "",
         homePhone: "",
         workPhone: "",
         company: "",
@@ -262,8 +268,8 @@ export async function submitRoadmap(
         : "single-family rental"
       : null;
     const title = isInvestment
-      ? `Roadmap Generator (Investment — ${unitLabel}) — ${input.firstName} ${input.lastName}`.trim()
-      : `Roadmap Generator — ${input.firstName} ${input.lastName}`.trim();
+      ? `Roadmap Generator (Investment — ${unitLabel}) — ${displayNameOrEmail}`
+      : `Roadmap Generator — ${displayNameOrEmail}`;
     const submissionBlock =
       `Inspection-report submission via Roadmap Generator.\n\n` +
       `Property: ${propertyAddressFull}\n` +
@@ -369,7 +375,7 @@ export async function submitRoadmap(
       import("../../_core/notification")
         .then(({ notifyOwner }) =>
           notifyOwner({
-            title: `Roadmap report received — ${input.firstName} ${input.lastName}`.trim(),
+            title: `Roadmap report received — ${displayNameOrEmail}`,
             content: `The step-1 lead completed their upload. Property: ${propertyAddressFull}. Translation ${id} is processing.`,
           }),
         )
@@ -378,7 +384,7 @@ export async function submitRoadmap(
       onLeadCreated({
         opportunityId,
         customerId,
-        title: `Roadmap Generator submission — ${input.firstName} ${input.lastName}`.trim(),
+        title: `Roadmap Generator submission — ${displayNameOrEmail}`,
         source: "roadmap_generator",
         priority: "high",
       }).catch((err) =>

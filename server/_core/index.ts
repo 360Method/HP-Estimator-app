@@ -1801,12 +1801,18 @@ async function startServer() {
       const fields = (req.body ?? {}) as Record<string, string>;
       const file = (req as any).file as Express.Multer.File | undefined;
 
-      const required = ["firstName", "lastName", "email", "phone", "propertyAddress"] as const;
+      // Give-first funnel (2026-06-06): the visitor uploads before the contact
+      // ask, so only email + address are hard requirements. Name/phone are
+      // optional personalization, defaulted to "" downstream.
+      const required = ["email", "propertyAddress"] as const;
       for (const k of required) {
         if (!fields[k] || fields[k].trim().length === 0) {
           res.status(400).json({ error: `Missing required field: ${k}` });
           return;
         }
+      }
+      for (const k of ["firstName", "lastName", "phone"] as const) {
+        fields[k] = (fields[k] ?? "").trim();
       }
       if (!file && !fields.reportUrl) {
         res.status(400).json({ error: "Provide a PDF upload or reportUrl" });

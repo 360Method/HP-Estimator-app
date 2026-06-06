@@ -230,7 +230,7 @@ function drawCoverPage(
   drawTracked(page, fonts.sansBold, "PREPARED FOR", {
     x: MARGIN, y: blockTop - 22, size: 8, tracking: 2.4, color: BRAND.amberLight,
   });
-  page.drawText(args.firstName, {
+  page.drawText(args.firstName || "The Homeowner", {
     x: MARGIN, y: blockTop - 42, size: 16, font: fonts.serif, color: BRAND.cream,
   });
 

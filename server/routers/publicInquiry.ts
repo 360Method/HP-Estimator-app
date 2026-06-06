@@ -89,17 +89,26 @@ publicInquiryRouter.post("/inquiry", async (req, res) => {
       partnerRef = "",
     } = req.body ?? {};
 
-    // Basic validation
-    if (!firstName || !phone || !email) {
-      res.status(400).json({ error: "firstName, phone, and email are required." });
+    // Roadmap funnel (give-first, 2026-06-06): the visitor uploads before any
+    // contact ask, so quiet capture fires on email entry alone — name and phone
+    // may not exist yet. The lead is still the dropout-drip anchor.
+    const isRoadmapFunnel = funnel === "roadmap_generator";
+
+    // Basic validation — roadmap funnel needs only an email.
+    if (isRoadmapFunnel ? !email : (!firstName || !phone || !email)) {
+      res.status(400).json({
+        error: isRoadmapFunnel
+          ? "email is required."
+          : "firstName, phone, and email are required.",
+      });
       return;
     }
 
     const emailNorm = String(email).toLowerCase().trim();
-    const displayName = `${firstName} ${lastName}`.trim();
-    // Roadmap funnel (step 1 of 3): the lead is the dropout-drip anchor — the
-    // report upload happens at step 2 and may never come.
-    const isRoadmapFunnel = funnel === "roadmap_generator";
+    const firstSafe = String(firstName ?? "").trim();
+    const phoneSafe = String(phone ?? "").trim();
+    const greetName = firstSafe || "there";
+    const displayName = `${firstSafe} ${lastName}`.trim() || emailNorm;
     // Partner attribution — sanitized slug, capped length (lands in leadSource).
     const partner = String(partnerRef ?? "").trim().replace(/[^\w\s\-\.]/g, "").slice(0, 64);
 
@@ -112,11 +121,11 @@ publicInquiryRouter.post("/inquiry", async (req, res) => {
       const id = nanoid();
       customer = await createCustomer({
         id,
-        firstName: String(firstName).trim(),
-        lastName: String(lastName).trim(),
+        firstName: String(firstName ?? "").trim(),
+        lastName: String(lastName ?? "").trim(),
         displayName,
         email: emailNorm,
-        mobilePhone: String(phone).trim(),
+        mobilePhone: String(phone ?? "").trim(),
         street: String(street).trim(),
         city: String(city).trim(),
         state: String(state).trim(),
@@ -168,9 +177,9 @@ publicInquiryRouter.post("/inquiry", async (req, res) => {
       description: String(description),
       timeline: timeline as "ASAP" | "Within a week" | "Flexible",
       photoUrls: photoUrls as string[],
-      firstName: String(firstName).trim(),
+      firstName: firstSafe,
       lastName: String(lastName).trim(),
-      phone: String(phone).trim(),
+      phone: phoneSafe,
       email: emailNorm,
       street: String(street).trim(),
       unit: "",
@@ -186,7 +195,7 @@ publicInquiryRouter.post("/inquiry", async (req, res) => {
     notifyOwner({
       title: `New Website Inquiry — ${displayName}`,
       content: [
-        `From: ${displayName} (${emailNorm}) — ${phone}`,
+        `From: ${displayName} (${emailNorm})${phoneSafe ? ` — ${phoneSafe}` : ""}`,
         city ? `Location: ${city}, ${state} ${zip}` : "",
         `Service: ${serviceType}`,
         `Source: ${source}`,
@@ -197,8 +206,8 @@ publicInquiryRouter.post("/inquiry", async (req, res) => {
     // 5. Fire automation trigger (non-blocking)
     runAutomationsForTrigger("new_booking", {
       customerName: displayName,
-      customerFirstName: String(firstName).trim(),
-      phone: String(phone).trim(),
+      customerFirstName: firstSafe,
+      phone: phoneSafe,
       email: emailNorm,
       description: String(serviceType),
       referenceNumber: leadId,
@@ -216,13 +225,13 @@ publicInquiryRouter.post("/inquiry", async (req, res) => {
     // 7. Send customer acknowledgment email (non-blocking)
     if (isEmailSenderReady()) {
       const ackHtml = isRoadmapFunnel
-        ? `<p>Hi ${firstName},</p>
+        ? `<p>Hi ${greetName},</p>
 <p>You're one step from your complimentary 360° Roadmap. Finish by adding your home's details and your inspection report — it takes about two minutes.</p>
 <p><a href="https://handypioneers.com/roadmap-generator" style="display:inline-block;background:#1a2e1a;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-family:sans-serif;">Finish My Roadmap</a></p>
 <p>Once your report is in, we'll sort every item into NOW, SOON, and WAIT with investment ranges, and deliver your roadmap by email.</p>
 <p>Questions? Call or text us at <a href="tel:+13603344428">(360) 334-4428</a>.</p>
 <p>— The Handy Pioneers Team</p>`
-        : `<p>Hi ${firstName},</p>
+        : `<p>Hi ${greetName},</p>
 <p>We've received your inquiry and are getting ready for a thoughtful first conversation.</p>
 <p>Our Concierge will reach out within one business day to learn more about your home and what you have in mind. There's no pressure — the first conversation is simply exploratory.</p>
 <p>In the meantime, feel free to call or text us at <a href="tel:+13603344428">(360) 334-4428</a>.</p>
@@ -230,19 +239,19 @@ publicInquiryRouter.post("/inquiry", async (req, res) => {
       sendEmail({
         to: emailNorm,
         subject: isRoadmapFunnel
-          ? `Your 360° Roadmap is one step away, ${firstName}`
-          : `Your inquiry is in our care, ${firstName} — Handy Pioneers`,
+          ? `Your 360° Roadmap is one step away${firstSafe ? `, ${firstSafe}` : ""}`
+          : `Your inquiry is in our care${firstSafe ? `, ${firstSafe}` : ""} — Handy Pioneers`,
         html: ackHtml,
       }).catch((e) => console.error("[publicInquiry] ack email error:", e));
     }
 
     // 8. Send customer acknowledgment SMS if consented (non-blocking)
-    if (smsConsent && isTwilioConfigured()) {
+    if (smsConsent && phoneSafe && isTwilioConfigured()) {
       sendSms(
-        String(phone).trim(),
+        phoneSafe,
         isRoadmapFunnel
-          ? `Hi ${firstName}, it's Handy Pioneers. Your 360° Roadmap is started — just add your home details and inspection report to finish: handypioneers.com/roadmap-generator`
-          : `Your inquiry is in our care, ${firstName}. Your Handy Pioneers Concierge will reach out within one business day. (360) 334-4428 if anything is time-sensitive.`
+          ? `Hi ${greetName}, it's Handy Pioneers. Your 360° Roadmap is started — just add your home details and inspection report to finish: handypioneers.com/roadmap-generator`
+          : `Your inquiry is in our care, ${greetName}. Your Handy Pioneers Concierge will reach out within one business day. (360) 334-4428 if anything is time-sensitive.`
       ).catch((e) => console.error("[publicInquiry] ack sms error:", e));
     }
 
@@ -267,8 +276,8 @@ publicInquiryRouter.post("/inquiry", async (req, res) => {
           if (isEmailSenderReady()) {
             await sendEmail({
               to: emailNorm,
-              subject: `Your Handy Pioneers portal is ready, ${String(firstName).trim()}`,
-              html: `<p>Hi ${String(firstName).trim()},</p>
+              subject: `Your Handy Pioneers portal is ready${firstSafe ? `, ${firstSafe}` : ""}`,
+              html: `<p>Hi ${greetName},</p>
 <p>Your inquiry is confirmed. While we prepare for our first conversation, you can access your secure Handy Pioneers portal — where you can view your 360° Roadmap, track your project, and message our team.</p>
 <p><a href="${portalLink}" style="display:inline-block;background:#1a2e1a;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-family:sans-serif;">Open My Portal</a></p>
 <p style="font-size:12px;color:#888;">This link is valid for 7 days and works on any device. No password needed.</p>
@@ -295,7 +304,7 @@ publicInquiryRouter.post("/inquiry", async (req, res) => {
             opportunityId: leadId,
             playbookKey: ROADMAP_DROPOUT_KEY,
             recipientEmail: emailNorm,
-            recipientPhone: smsConsent ? String(phone).trim() : null,
+            recipientPhone: smsConsent && phoneSafe ? phoneSafe : null,
           });
           console.log(`[publicInquiry] roadmap_dropout drip: scheduled=${result.scheduled} skipped=${result.skipped ?? "no"}`);
         } catch (e) {
