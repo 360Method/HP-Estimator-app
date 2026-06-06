@@ -85,6 +85,8 @@ export type RoadmapSubmissionInput = {
   propertyKind?: string;
   /** Unit count for investment properties (1 = SFR, 2 = duplex, …) */
   unitCount?: number;
+  /** Realtor/inspector partner attribution (?ref= on the roadmap page) */
+  partnerRef?: string;
 };
 
 export type RoadmapSubmissionResult = {
@@ -113,6 +115,29 @@ export async function submitRoadmap(
     lastName: input.lastName,
     phone: input.phone,
   });
+
+  // Per-email cap: at most 2 roadmap runs per account per 24 h. Each run costs
+  // a full Claude pass + an email — a polite ceiling, not a punishment.
+  {
+    const { gte, and: andOp, eq: eqOp } = await import("drizzle-orm");
+    const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const recent = await db
+      .select({ id: priorityTranslations.id })
+      .from(priorityTranslations)
+      .where(
+        andOp(
+          eqOp(priorityTranslations.portalAccountId, account.id),
+          gte(priorityTranslations.createdAt, dayAgo),
+        ),
+      );
+    if (recent.length >= 2) {
+      const err = new Error(
+        "Your roadmap is already being prepared — please check your email. If something looks off, reach us at help@handypioneers.com.",
+      ) as Error & { code?: string };
+      err.code = "RATE_LIMITED";
+      throw err;
+    }
+  }
 
   // Structured address fields from the funnel's step-2 form win over
   // parseAddress guessing on the free-text line (legacy posts keep the parse).
@@ -245,6 +270,7 @@ export async function submitRoadmap(
       (isInvestment ? `INVESTMENT PROPERTY — ${unitLabel}\n` : "") +
       (input.sqft ? `Approx. sq ft: ${input.sqft}\n` : "") +
       (input.yearBuilt ? `Year built: ${input.yearBuilt}\n` : "") +
+      (input.partnerRef ? `Partner ref: ${input.partnerRef}\n` : "") +
       `Translation id: ${id}\n` +
       (input.notes ? `\nHomeowner notes:\n${input.notes}` : "");
 

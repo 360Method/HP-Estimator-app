@@ -85,6 +85,8 @@ publicInquiryRouter.post("/inquiry", async (req, res) => {
       timeline = "Flexible",
       photoUrls = [],
       smsConsent = false,
+      /** Realtor/inspector partner attribution (?ref= on the roadmap page) */
+      partnerRef = "",
     } = req.body ?? {};
 
     // Basic validation
@@ -98,6 +100,8 @@ publicInquiryRouter.post("/inquiry", async (req, res) => {
     // Roadmap funnel (step 1 of 3): the lead is the dropout-drip anchor — the
     // report upload happens at step 2 and may never come.
     const isRoadmapFunnel = funnel === "roadmap_generator";
+    // Partner attribution — sanitized slug, capped length (lands in leadSource).
+    const partner = String(partnerRef ?? "").trim().replace(/[^\w\s\-\.]/g, "").slice(0, 64);
 
     // 1. Find or create customer
     let customer = await findCustomerByEmail(emailNorm);
@@ -121,11 +125,13 @@ publicInquiryRouter.post("/inquiry", async (req, res) => {
         sendMarketingOptIn: Boolean(smsConsent),
         customerType: "homeowner",
         tags: "[]",
-        leadSource: funnel === "360_method" || isRoadmapFunnel
-          ? "Website — Roadmap Generator"
-          : funnel === "baseline_walkthrough"
-            ? "Website — Baseline Walkthrough"
-            : "Website — Online Request",
+        leadSource: partner && isRoadmapFunnel
+          ? `Partner — ${partner} (Roadmap)`
+          : funnel === "360_method" || isRoadmapFunnel
+            ? "Website — Roadmap Generator"
+            : funnel === "baseline_walkthrough"
+              ? "Website — Baseline Walkthrough"
+              : "Website — Online Request",
       });
     }
 
@@ -145,6 +151,7 @@ publicInquiryRouter.post("/inquiry", async (req, res) => {
       title,
       notes: [
         `Source: ${source}`,
+        partner ? `Partner ref: ${partner}` : "",
         description ? `Description: ${description}` : "",
         `Timeline: ${timeline}`,
         street ? `Address: ${street}, ${city}, ${state} ${zip}` : "",

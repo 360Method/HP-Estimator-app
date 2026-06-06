@@ -1811,6 +1811,52 @@ async function startServer() {
         return;
       }
 
+      // Honeypot — real visitors never see the hidden "website" field. A bot
+      // filling it gets a quiet success and zero processing.
+      if (fields.website && fields.website.trim().length > 0) {
+        res.status(202).json({ ok: true, id: "received", status: "processing" });
+        return;
+      }
+
+      // Server-side service-area gate. The client gates the UI, but a direct
+      // POST used to burn a full Claude run for any address on earth. Out of
+      // area → record the waitlist outcome on the step-1 lead (when linked),
+      // drain the dropout drip, and stop — no roadmap is generated.
+      {
+        const { isRoadmapZipServed, normalizeZip } = await import("../lib/priorityTranslation/serviceArea");
+        const zipResolved =
+          normalizeZip(fields.zip) ??
+          normalizeZip(fields.property_zip) ??
+          normalizeZip(fields.propertyAddress);
+        if (!(await isRoadmapZipServed(zipResolved))) {
+          console.log(`[Roadmap Generator] out-of-area submission gated (zip=${zipResolved ?? "none"}) — waitlisted, no processing`);
+          try {
+            if (fields.hpLeadId) {
+              const { getOpportunityById, updateOpportunity } = await import("../db");
+              const lead = await getOpportunityById(fields.hpLeadId).catch(() => null);
+              if (lead) {
+                const note = `OUT OF AREA — waitlist (ZIP ${zipResolved ?? "unknown"}, gated server-side). Report upload NOT processed.`;
+                await updateOpportunity(lead.id, {
+                  title: `Roadmap Waitlist — ZIP ${zipResolved ?? "unknown"}`,
+                  notes: lead.notes ? `${lead.notes}\n\n${note}` : note,
+                });
+              }
+            }
+            if (fields.hpCustomerId) {
+              const { cancelPendingFollowupsForCustomer } = await import("../lib/leadNurturer/roadmapFollowup");
+              const { ROADMAP_DROPOUT_KEY } = await import("../lib/leadNurturer/playbook");
+              await cancelPendingFollowupsForCustomer(fields.hpCustomerId, "manual", {
+                playbookKey: ROADMAP_DROPOUT_KEY,
+              });
+            }
+          } catch (gateErr) {
+            console.error("[Roadmap Generator] waitlist bookkeeping failed:", gateErr);
+          }
+          res.status(202).json({ ok: true, waitlisted: true });
+          return;
+        }
+      }
+
       // Optional numeric fields — tolerate "2,600"-style formatting.
       const num = (v: string | undefined): number | undefined => {
         if (!v) return undefined;
@@ -1841,6 +1887,9 @@ async function startServer() {
           ? fields.propertyKind
           : undefined,
         unitCount: num(fields.unitCount),
+        partnerRef: fields.partnerRef
+          ? String(fields.partnerRef).trim().replace(/[^\w\s\-\.]/g, "").slice(0, 64) || undefined
+          : undefined,
       });
 
       // Phase 4 agent trigger: a Roadmap Generator submission is a hot inbound
@@ -1879,15 +1928,21 @@ async function startServer() {
         res.status(413).json({ error: "File too large — max 100MB" });
         return;
       }
+      if (err?.code === "RATE_LIMITED") {
+        res.status(429).json({ error: err?.message ?? "Please try again later." });
+        return;
+      }
       console.error("[Roadmap Generator] submit error:", err?.message ?? err);
       const status = err?.code === "BAD_REQUEST" ? 400 : err?.code === "FORBIDDEN" ? 403 : 500;
       res.status(status).json({ error: err?.message ?? "Submit failed" });
     }
   }
 
-  app.post("/api/roadmap-generator/submit", roadmapUpload.single("report_pdf"), handleRoadmapSubmit);
+  // publicWriteLimiter (20 req / 15 min / IP) — each submission can cost a
+  // full Claude run, so the loose global limiter alone is not enough here.
+  app.post("/api/roadmap-generator/submit", publicWriteLimiter, roadmapUpload.single("report_pdf"), handleRoadmapSubmit);
   // Alias for the earlier endpoint name used by the marketing frontend.
-  app.post("/api/priority-translation/submit", roadmapUpload.single("report_pdf"), handleRoadmapSubmit);
+  app.post("/api/priority-translation/submit", publicWriteLimiter, roadmapUpload.single("report_pdf"), handleRoadmapSubmit);
 
   // ── Internal diagnostic + one-shot CRM backfill for Roadmap Generator ──
   // Read-only snapshot + idempotent backfill for portalAccounts that landed
