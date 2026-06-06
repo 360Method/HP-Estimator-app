@@ -75,7 +75,7 @@ publicInquiryRouter.post("/inquiry", async (req, res) => {
       email,
       serviceType = "General Inquiry",
       source = "website",
-      funnel = "project",   // "project" | "360_method" | "baseline_walkthrough"
+      funnel = "project",   // "project" | "360_method" | "baseline_walkthrough" | "roadmap_generator"
       // Optional enrichment fields — may be empty from the mini-form
       zip = "",
       street = "",
@@ -95,6 +95,9 @@ publicInquiryRouter.post("/inquiry", async (req, res) => {
 
     const emailNorm = String(email).toLowerCase().trim();
     const displayName = `${firstName} ${lastName}`.trim();
+    // Roadmap funnel (step 1 of 3): the lead is the dropout-drip anchor — the
+    // report upload happens at step 2 and may never come.
+    const isRoadmapFunnel = funnel === "roadmap_generator";
 
     // 1. Find or create customer
     let customer = await findCustomerByEmail(emailNorm);
@@ -118,7 +121,7 @@ publicInquiryRouter.post("/inquiry", async (req, res) => {
         sendMarketingOptIn: Boolean(smsConsent),
         customerType: "homeowner",
         tags: "[]",
-        leadSource: funnel === "360_method"
+        leadSource: funnel === "360_method" || isRoadmapFunnel
           ? "Website — Roadmap Generator"
           : funnel === "baseline_walkthrough"
             ? "Website — Baseline Walkthrough"
@@ -128,9 +131,11 @@ publicInquiryRouter.post("/inquiry", async (req, res) => {
 
     // 2. Create lead opportunity
     const leadId = nanoid();
-    const title = city
-      ? `${serviceType} — ${city}, ${state}`
-      : `${serviceType} — Website Inquiry`;
+    const title = isRoadmapFunnel
+      ? `Roadmap Generator — ${displayName}`
+      : city
+        ? `${serviceType} — ${city}, ${state}`
+        : `${serviceType} — Website Inquiry`;
 
     await createOpportunity({
       id: leadId,
@@ -203,14 +208,24 @@ publicInquiryRouter.post("/inquiry", async (req, res) => {
 
     // 7. Send customer acknowledgment email (non-blocking)
     if (isEmailSenderReady()) {
-      sendEmail({
-        to: emailNorm,
-        subject: `Your inquiry is in our care, ${firstName} — Handy Pioneers`,
-        html: `<p>Hi ${firstName},</p>
+      const ackHtml = isRoadmapFunnel
+        ? `<p>Hi ${firstName},</p>
+<p>You're one step from your complimentary 360° Roadmap. Finish by adding your home's details and your inspection report — it takes about two minutes.</p>
+<p><a href="https://handypioneers.com/roadmap-generator" style="display:inline-block;background:#1a2e1a;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-family:sans-serif;">Finish My Roadmap</a></p>
+<p>Once your report is in, we'll sort every item into NOW, SOON, and WAIT with investment ranges, and deliver your roadmap by email.</p>
+<p>Questions? Call or text us at <a href="tel:+13603344428">(360) 334-4428</a>.</p>
+<p>— The Handy Pioneers Team</p>`
+        : `<p>Hi ${firstName},</p>
 <p>We've received your inquiry and are getting ready for a thoughtful first conversation.</p>
 <p>Our Concierge will reach out within one business day to learn more about your home and what you have in mind. There's no pressure — the first conversation is simply exploratory.</p>
 <p>In the meantime, feel free to call or text us at <a href="tel:+13603344428">(360) 334-4428</a>.</p>
-<p>— The Handy Pioneers Team</p>`,
+<p>— The Handy Pioneers Team</p>`;
+      sendEmail({
+        to: emailNorm,
+        subject: isRoadmapFunnel
+          ? `Your 360° Roadmap is one step away, ${firstName}`
+          : `Your inquiry is in our care, ${firstName} — Handy Pioneers`,
+        html: ackHtml,
       }).catch((e) => console.error("[publicInquiry] ack email error:", e));
     }
 
@@ -218,12 +233,16 @@ publicInquiryRouter.post("/inquiry", async (req, res) => {
     if (smsConsent && isTwilioConfigured()) {
       sendSms(
         String(phone).trim(),
-        `Your inquiry is in our care, ${firstName}. Your Handy Pioneers Concierge will reach out within one business day. (360) 334-4428 if anything is time-sensitive.`
+        isRoadmapFunnel
+          ? `Hi ${firstName}, it's Handy Pioneers. Your 360° Roadmap is started — just add your home details and inspection report to finish: handypioneers.com/roadmap-generator`
+          : `Your inquiry is in our care, ${firstName}. Your Handy Pioneers Concierge will reach out within one business day. (360) 334-4428 if anything is time-sensitive.`
       ).catch((e) => console.error("[publicInquiry] ack sms error:", e));
     }
 
     // 9. Provision portal account + send magic link to /portal/roadmap (non-blocking)
     //    Path A inquiry → portal account created → customer can log in and view roadmap.
+    //    Roadmap funnel: provision the account but SKIP the magic-link email — it's
+    //    premature at step 1 (the roadmap delivery email carries its own link).
     void (async () => {
       try {
         const portalCustomer = await upsertPortalCustomer({
@@ -232,7 +251,7 @@ publicInquiryRouter.post("/inquiry", async (req, res) => {
           hpCustomerId: customer.id,
           referralCode: await generateReferralCode(displayName).catch(() => undefined),
         });
-        if (portalCustomer) {
+        if (portalCustomer && !isRoadmapFunnel) {
           const token = randomBytes(32).toString("hex");
           const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
           await createPortalToken({ customerId: portalCustomer.id, token, expiresAt });
@@ -254,6 +273,29 @@ publicInquiryRouter.post("/inquiry", async (req, res) => {
         console.error("[publicInquiry] portal provisioning error:", e);
       }
     })();
+
+    // 10. Roadmap funnel: schedule the dropout-recovery drip (non-blocking).
+    //     Cancelled automatically when the report lands (submitRoadmap), a
+    //     membership is purchased (webhook), an appointment is booked, or the
+    //     lead replies. All drafts are approval-gated in the admin inbox.
+    if (isRoadmapFunnel) {
+      void (async () => {
+        try {
+          const { scheduleRoadmapFollowup } = await import("../lib/leadNurturer/roadmapFollowup");
+          const { ROADMAP_DROPOUT_KEY } = await import("../lib/leadNurturer/playbook");
+          const result = await scheduleRoadmapFollowup({
+            customerId: customer.id,
+            opportunityId: leadId,
+            playbookKey: ROADMAP_DROPOUT_KEY,
+            recipientEmail: emailNorm,
+            recipientPhone: smsConsent ? String(phone).trim() : null,
+          });
+          console.log(`[publicInquiry] roadmap_dropout drip: scheduled=${result.scheduled} skipped=${result.skipped ?? "no"}`);
+        } catch (e) {
+          console.error("[publicInquiry] roadmap_dropout scheduling error:", e);
+        }
+      })();
+    }
 
     res.status(201).json({
       success: true,
@@ -284,12 +326,16 @@ publicInquiryRouter.post("/inquiry/details", async (req, res) => {
       sqft = "",
       yearBuilt = "",
       notes = "",
+      funnel = "",
+      /** Roadmap funnel: ZIP outside the service area — waitlist branch */
+      outOfArea = false,
     } = req.body ?? {};
 
     if (!customerId || !leadId) {
       res.status(400).json({ error: "customerId and leadId are required." });
       return;
     }
+    const isRoadmapFunnel = funnel === "roadmap_generator";
 
     // 1. Enrich the customer record with their address.
     await updateCustomer(String(customerId), {
@@ -346,7 +392,8 @@ publicInquiryRouter.post("/inquiry/details", async (req, res) => {
 
     // 2. Append the home details to the existing lead's notes (preserve step-1 notes).
     const detailBlock = [
-      "— Home details (baseline walkthrough) —",
+      isRoadmapFunnel ? "— Home details (roadmap generator) —" : "— Home details (baseline walkthrough) —",
+      outOfArea ? "OUT OF AREA — waitlist (ZIP outside the current service area)" : "",
       street ? `Address: ${street}, ${city}, ${state} ${zip}` : "",
       sqft ? `Approx. sq ft: ${sqft}` : "",
       yearBuilt ? `Year built: ${yearBuilt}` : "",
@@ -359,12 +406,32 @@ publicInquiryRouter.post("/inquiry/details", async (req, res) => {
       : detailBlock;
 
     const patch: { notes: string; title?: string } = { notes: mergedNotes };
-    if (city) patch.title = `Baseline Walkthrough — ${String(city).trim()}, ${String(state).trim()}`;
+    if (isRoadmapFunnel && outOfArea) {
+      patch.title = `Roadmap Waitlist — ${city ? `${String(city).trim()}, ${String(state).trim()}` : `ZIP ${String(zip).trim()}`}`;
+    } else if (city && !isRoadmapFunnel) {
+      patch.title = `Baseline Walkthrough — ${String(city).trim()}, ${String(state).trim()}`;
+    }
     await updateOpportunity(String(leadId), patch);
+
+    // 2b. Out-of-area roadmap lead: the funnel ends here (no report upload) —
+    // drain the dropout drip so the waitlisted lead isn't nudged to finish.
+    if (isRoadmapFunnel && outOfArea) {
+      try {
+        const { cancelPendingFollowupsForCustomer } = await import("../lib/leadNurturer/roadmapFollowup");
+        const { ROADMAP_DROPOUT_KEY } = await import("../lib/leadNurturer/playbook");
+        await cancelPendingFollowupsForCustomer(String(customerId), "manual", {
+          playbookKey: ROADMAP_DROPOUT_KEY,
+        });
+      } catch (e) {
+        console.error("[publicInquiry/details] dropout drip cancel error:", e);
+      }
+    }
 
     // 3. Notify owner the details arrived (non-blocking).
     notifyOwner({
-      title: `Baseline details received — ${city ? `${city}, ${state}` : "lead"} (${leadId})`,
+      title: isRoadmapFunnel && outOfArea
+        ? `Roadmap waitlist signup — ${city ? `${city}, ${state}` : `ZIP ${zip}`} (${leadId})`
+        : `Baseline details received — ${city ? `${city}, ${state}` : "lead"} (${leadId})`,
       content: detailBlock,
     }).catch((e) => console.error("[publicInquiry/details] notifyOwner error:", e));
 

@@ -14,6 +14,7 @@ import { getDb } from "../../db";
 import { nurturerPlaybooks, type PlaybookStep } from "../../../drizzle/schema";
 
 export const ROADMAP_FOLLOWUP_KEY = "roadmap_followup";
+export const ROADMAP_DROPOUT_KEY = "roadmap_dropout";
 
 /**
  * Default roadmap follow-up cadence. Marcin's directive of 2026-04-27.
@@ -82,6 +83,62 @@ export const DEFAULT_ROADMAP_FOLLOWUP_STEPS: PlaybookStep[] = [
   },
 ];
 
+/**
+ * Roadmap-funnel dropout cadence (2026-06-05). Anchored at step 1 of the
+ * funnel (popup submit): the lead gave name + contact but never uploaded an
+ * inspection report. Cancelled the moment the report lands (or on purchase /
+ * appointment / reply). All steps approval-gated, like roadmap_followup.
+ */
+export const DEFAULT_ROADMAP_DROPOUT_STEPS: PlaybookStep[] = [
+  {
+    key: "t_plus_45m_email",
+    channel: "email",
+    delayMinutes: 45,
+    label: "Your roadmap is one step away — finish the upload",
+    voicePrompt:
+      "First-name basis. They started their complimentary 360° Roadmap but " +
+      "haven't sent their inspection report yet — the only missing piece. One " +
+      "warm sentence on what the roadmap gives them (a clear NOW / SOON / WAIT " +
+      "picture of their home), then the link to finish: " +
+      "https://handypioneers.com/roadmap-generator. No pressure, no countdowns. " +
+      "90–130 words.",
+  },
+  {
+    key: "t_plus_24h_sms",
+    channel: "sms",
+    delayMinutes: 24 * 60,
+    label: "Concierge SMS — offer to take the report by reply",
+    voicePrompt:
+      "Identify yourself as the Concierge from Handy Pioneers. They started " +
+      "their complimentary roadmap; offer to take the inspection report by " +
+      "reply or email if that's easier than the upload. Under 300 characters. " +
+      "Warm, zero pressure.",
+  },
+  {
+    key: "t_plus_3d_email",
+    channel: "email",
+    delayMinutes: 3 * 24 * 60,
+    label: "Value email — what NOW / SOON / WAIT does for a homeowner",
+    voicePrompt:
+      "Affluent voice. Explain briefly what the three-tier roadmap does: most " +
+      "inspection reports list everything and rank nothing — the roadmap sorts " +
+      "their items into NOW (address this season), SOON (plan within the year), " +
+      "and WAIT (monitor, don't spend yet), each with an investment range. Close " +
+      "with 'send it over whenever convenient' and the link. 150–200 words.",
+  },
+  {
+    key: "t_plus_7d_email",
+    channel: "email",
+    delayMinutes: 7 * 24 * 60,
+    label: "Graceful close — door stays open",
+    voicePrompt:
+      "Last note of the cadence. Acknowledge the report may have fallen down " +
+      "the list — happens to everyone. The roadmap offer stands whenever " +
+      "they're ready; no expiry. Sign off warmly. 80–120 words. No ask beyond " +
+      "the standing offer.",
+  },
+];
+
 export const DEFAULT_VOICE_RULES = {
   bannedWords: [
     "estimate",
@@ -114,51 +171,73 @@ export interface ResolvedPlaybook {
 }
 
 /**
- * Load a playbook from the DB. Falls back to the in-memory default for
- * `roadmap_followup` so that smoke tests + cold starts never crash if the
+ * Load a playbook from the DB. Falls back to the in-memory default for the
+ * seeded playbooks so that smoke tests + cold starts never crash if the
  * boot-time seed hasn't run yet.
  */
 export async function loadPlaybook(key: string): Promise<ResolvedPlaybook | null> {
   const db = await getDb();
   if (!db) {
-    return key === ROADMAP_FOLLOWUP_KEY ? defaultRoadmapFollowupPlaybook() : null;
+    return defaultPlaybookFor(key);
   }
 
   try {
     const rows = await db.select().from(nurturerPlaybooks).where(eq(nurturerPlaybooks.key, key)).limit(1);
     const row = rows[0];
     if (!row) {
-      return key === ROADMAP_FOLLOWUP_KEY ? defaultRoadmapFollowupPlaybook() : null;
+      return defaultPlaybookFor(key);
     }
     return {
       key: row.key,
       displayName: row.displayName,
       description: row.description,
       enabled: row.enabled,
-      steps: parseSteps(row.stepsJson),
+      steps: parseSteps(row.stepsJson, defaultStepsFor(row.key)),
       voiceRules: parseVoiceRules(row.voiceRulesJson),
     };
   } catch (err) {
     console.warn("[leadNurturer.playbook] loadPlaybook fallback:", err);
-    return key === ROADMAP_FOLLOWUP_KEY ? defaultRoadmapFollowupPlaybook() : null;
+    return defaultPlaybookFor(key);
   }
 }
 
-function defaultRoadmapFollowupPlaybook(): ResolvedPlaybook {
-  return {
-    key: ROADMAP_FOLLOWUP_KEY,
-    displayName: "Post-Roadmap Follow-Up",
-    description:
-      "Five-stage cadence that converts every Roadmap delivery into a booked " +
-      "Baseline Walkthrough, a 360° Method enrollment, or a graceful long-term " +
-      "nurture handoff. Drafts are approval-gated.",
-    enabled: true,
-    steps: DEFAULT_ROADMAP_FOLLOWUP_STEPS,
-    voiceRules: DEFAULT_VOICE_RULES,
-  };
+function defaultStepsFor(key: string): PlaybookStep[] {
+  if (key === ROADMAP_DROPOUT_KEY) return DEFAULT_ROADMAP_DROPOUT_STEPS;
+  return DEFAULT_ROADMAP_FOLLOWUP_STEPS;
 }
 
-function parseSteps(json: string): PlaybookStep[] {
+function defaultPlaybookFor(key: string): ResolvedPlaybook | null {
+  if (key === ROADMAP_FOLLOWUP_KEY) {
+    return {
+      key: ROADMAP_FOLLOWUP_KEY,
+      displayName: "Post-Roadmap Follow-Up",
+      description:
+        "Five-stage cadence that converts every Roadmap delivery into a booked " +
+        "Baseline Walkthrough, a 360° Method enrollment, or a graceful long-term " +
+        "nurture handoff. Drafts are approval-gated.",
+      enabled: true,
+      steps: DEFAULT_ROADMAP_FOLLOWUP_STEPS,
+      voiceRules: DEFAULT_VOICE_RULES,
+    };
+  }
+  if (key === ROADMAP_DROPOUT_KEY) {
+    return {
+      key: ROADMAP_DROPOUT_KEY,
+      displayName: "Roadmap Funnel — Dropout Recovery",
+      description:
+        "Four-step cadence for leads who gave contact info in the roadmap funnel " +
+        "but never uploaded an inspection report. Cancelled automatically when the " +
+        "report lands, a membership is purchased, an appointment is booked, or the " +
+        "lead replies. Drafts are approval-gated.",
+      enabled: true,
+      steps: DEFAULT_ROADMAP_DROPOUT_STEPS,
+      voiceRules: DEFAULT_VOICE_RULES,
+    };
+  }
+  return null;
+}
+
+function parseSteps(json: string, fallback: PlaybookStep[]): PlaybookStep[] {
   try {
     const parsed = JSON.parse(json);
     if (Array.isArray(parsed)) {
@@ -175,7 +254,7 @@ function parseSteps(json: string): PlaybookStep[] {
   } catch (err) {
     console.warn("[leadNurturer.playbook] stepsJson parse failed:", err);
   }
-  return DEFAULT_ROADMAP_FOLLOWUP_STEPS;
+  return fallback;
 }
 
 function parseVoiceRules(json: string | null): typeof DEFAULT_VOICE_RULES {
@@ -189,30 +268,49 @@ function parseVoiceRules(json: string | null): typeof DEFAULT_VOICE_RULES {
 }
 
 /**
- * Boot-time seed. Inserts the default roadmap_followup playbook if it doesn't
- * already exist. Idempotent.
+ * Boot-time seed. Inserts the default playbooks that don't already exist.
+ * Idempotent; never overwrites operator edits.
  */
 export async function ensureDefaultPlaybooks(): Promise<void> {
   const db = await getDb();
   if (!db) return;
-  const existing = await db
-    .select()
-    .from(nurturerPlaybooks)
-    .where(eq(nurturerPlaybooks.key, ROADMAP_FOLLOWUP_KEY))
-    .limit(1);
-  if (existing[0]) return;
-  await db.insert(nurturerPlaybooks).values({
-    key: ROADMAP_FOLLOWUP_KEY,
-    displayName: "Post-Roadmap Follow-Up",
-    description:
-      "Five-stage cadence that converts every Roadmap delivery into a booked " +
-      "Baseline Walkthrough, a 360° Method enrollment, or a graceful long-term " +
-      "nurture handoff.",
-    enabled: true,
-    stepsJson: JSON.stringify(DEFAULT_ROADMAP_FOLLOWUP_STEPS),
-    voiceRulesJson: JSON.stringify(DEFAULT_VOICE_RULES),
-  });
-  console.log("[leadNurturer] seeded default roadmap_followup playbook");
+  const seeds = [
+    {
+      key: ROADMAP_FOLLOWUP_KEY,
+      displayName: "Post-Roadmap Follow-Up",
+      description:
+        "Five-stage cadence that converts every Roadmap delivery into a booked " +
+        "Baseline Walkthrough, a 360° Method enrollment, or a graceful long-term " +
+        "nurture handoff.",
+      steps: DEFAULT_ROADMAP_FOLLOWUP_STEPS,
+    },
+    {
+      key: ROADMAP_DROPOUT_KEY,
+      displayName: "Roadmap Funnel — Dropout Recovery",
+      description:
+        "Four-step cadence for leads who gave contact info in the roadmap funnel " +
+        "but never uploaded an inspection report. Cancelled automatically on report " +
+        "submit, purchase, appointment, or reply.",
+      steps: DEFAULT_ROADMAP_DROPOUT_STEPS,
+    },
+  ];
+  for (const seed of seeds) {
+    const existing = await db
+      .select()
+      .from(nurturerPlaybooks)
+      .where(eq(nurturerPlaybooks.key, seed.key))
+      .limit(1);
+    if (existing[0]) continue;
+    await db.insert(nurturerPlaybooks).values({
+      key: seed.key,
+      displayName: seed.displayName,
+      description: seed.description,
+      enabled: true,
+      stepsJson: JSON.stringify(seed.steps),
+      voiceRulesJson: JSON.stringify(DEFAULT_VOICE_RULES),
+    });
+    console.log(`[leadNurturer] seeded default ${seed.key} playbook`);
+  }
 }
 
 /**

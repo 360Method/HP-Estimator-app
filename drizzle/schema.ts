@@ -619,6 +619,10 @@ export const properties = pgTable("properties", {
   sqft: integer("sqft"),
   /** Year the home was built (homeowner-reported, from the 360 funnel) */
   yearBuilt: integer("yearBuilt"),
+  /** personal | investment — set by the roadmap funnel's property-type toggle */
+  propertyKind: varchar("propertyKind", { length: 16 }),
+  /** Unit count for investment properties (1 = single-family rental, 2 = duplex, …) */
+  unitCount: integer("unitCount"),
   propertyNotes: text("propertyNotes"),
   addressNotes: text("addressNotes"),
   lat: text("lat"),

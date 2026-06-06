@@ -52,6 +52,11 @@ export interface ScheduleRoadmapFollowupArgs {
   customerId: string;
   opportunityId?: string | null;
   /**
+   * Which cadence to schedule. Defaults to roadmap_followup (post-delivery);
+   * the roadmap funnel's step-1 dropout drip passes ROADMAP_DROPOUT_KEY.
+   */
+  playbookKey?: string;
+  /**
    * Optional context — if the caller has it pre-loaded (e.g. the
    * priorityTranslation worker), passing it skips a DB hop.
    */
@@ -89,7 +94,8 @@ export async function scheduleRoadmapFollowup(
     return { scheduled: 0, skipped: "bypass_auto_nurture", draftIds: [] };
   }
 
-  const playbook = await loadPlaybook(ROADMAP_FOLLOWUP_KEY);
+  const playbookKey = args.playbookKey ?? ROADMAP_FOLLOWUP_KEY;
+  const playbook = await loadPlaybook(playbookKey);
   if (!playbook || !playbook.enabled) {
     return { scheduled: 0, skipped: "playbook_disabled", draftIds: [] };
   }
@@ -104,7 +110,7 @@ export async function scheduleRoadmapFollowup(
     .where(
       and(
         eq(agentDrafts.customerId, args.customerId),
-        eq(agentDrafts.playbookKey, ROADMAP_FOLLOWUP_KEY),
+        eq(agentDrafts.playbookKey, playbookKey),
         eq(agentDrafts.status, "pending"),
       ),
     );
@@ -128,7 +134,7 @@ export async function scheduleRoadmapFollowup(
   const inserts: InsertDbAgentDraft[] = planned.map((step) => ({
     customerId: args.customerId,
     opportunityId: args.opportunityId ?? null,
-    playbookKey: ROADMAP_FOLLOWUP_KEY,
+    playbookKey,
     stepKey: step.key,
     channel: step.channel,
     status: "pending",
@@ -152,7 +158,7 @@ export async function scheduleRoadmapFollowup(
     .where(
       and(
         eq(agentDrafts.customerId, args.customerId),
-        eq(agentDrafts.playbookKey, ROADMAP_FOLLOWUP_KEY),
+        eq(agentDrafts.playbookKey, playbookKey),
         eq(agentDrafts.status, "pending"),
       ),
     );
@@ -171,6 +177,7 @@ export type EngagementCancelReason =
   | "subscription_created"
   | "customer_declined"
   | "customer_replied"
+  | "report_submitted"
   | "manual";
 
 /**
@@ -178,32 +185,33 @@ export type EngagementCancelReason =
  * inbound SMS handler, etc. Drains every `pending` draft for this customer.
  * Already-`ready` drafts are kept — the operator may still want to send them
  * even if the customer also replied.
+ *
+ * Pass `opts.playbookKey` to drain only one cadence (e.g. the roadmap-funnel
+ * dropout drip when the report lands, without touching other playbooks).
  */
 export async function cancelPendingFollowupsForCustomer(
   customerId: string,
   reason: EngagementCancelReason,
+  opts: { playbookKey?: string } = {},
 ): Promise<{ cancelled: number }> {
   const db = await getDb();
   if (!db) return { cancelled: 0 };
-  const before = await db
-    .select()
-    .from(agentDrafts)
-    .where(
-      and(
+  const scope = opts.playbookKey
+    ? and(
+        eq(agentDrafts.customerId, customerId),
+        eq(agentDrafts.playbookKey, opts.playbookKey),
+        eq(agentDrafts.status, "pending"),
+      )
+    : and(
         eq(agentDrafts.customerId, customerId),
         eq(agentDrafts.status, "pending"),
-      ),
-    );
+      );
+  const before = await db.select().from(agentDrafts).where(scope);
   if (before.length === 0) return { cancelled: 0 };
   await db
     .update(agentDrafts)
     .set({ status: "cancelled", cancelReason: reason })
-    .where(
-      and(
-        eq(agentDrafts.customerId, customerId),
-        eq(agentDrafts.status, "pending"),
-      ),
-    );
+    .where(scope);
   return { cancelled: before.length };
 }
 
@@ -258,12 +266,28 @@ export async function runDueDrafts(args: { limit?: number; now?: Date } = {}): P
   }
   if (actionable.length === 0) return { picked: due.length, generated: 0, failed: 0 };
 
-  const playbook = await loadPlaybook(ROADMAP_FOLLOWUP_KEY);
-  if (!playbook) return { picked: due.length, generated: 0, failed: actionable.length };
+  // Load each distinct playbook once per tick — drafts from different
+  // cadences (roadmap_followup, roadmap_dropout, …) generate side by side.
+  const playbookKeys = Array.from(new Set(actionable.map((d) => d.playbookKey)));
+  const playbooks = new Map<string, ResolvedPlaybook>();
+  for (const key of playbookKeys) {
+    const pb = await loadPlaybook(key);
+    if (pb) playbooks.set(key, pb);
+  }
 
   let generated = 0;
   let failed = 0;
   for (const draft of actionable) {
+    const playbook = playbooks.get(draft.playbookKey);
+    if (!playbook) {
+      console.warn(`[leadNurturer] draft ${draft.id}: unknown playbook ${draft.playbookKey}`);
+      await db
+        .update(agentDrafts)
+        .set({ status: "failed", cancelReason: "playbook_missing" })
+        .where(eq(agentDrafts.id, draft.id));
+      failed++;
+      continue;
+    }
     try {
       await generateAndStore(draft, playbook);
       generated++;

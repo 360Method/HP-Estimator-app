@@ -1571,6 +1571,17 @@ async function startServer() {
   setInterval(run360DripEmails, 60 * 60 * 1000);
   console.log("[360 Drip] Cart abandonment drip scheduler started (runs every hour)");
 
+  // ── Baseline funnel Step-1 drop-off drip (runs every hour) ──────────────────
+  // Follows up with membership-funnel leads who completed the Step 1 popup but
+  // never finished enrollment. Stops on stage change, archive, purchase, or if
+  // the cart-abandonment drip already owns the conversation. See baselineDrip.ts.
+  const { runBaselineDripEmails } = await import("../baselineDrip");
+  runBaselineDripEmails().catch(console.error);
+  setInterval(() => {
+    runBaselineDripEmails().catch(console.error);
+  }, 60 * 60 * 1000);
+  console.log("[Baseline Drip] Step-1 drop-off drip scheduler started (runs every hour)");
+
   // ── 360° Deferred Labor Bank Credit Release (runs every 6 hours) ─────────────────
   const runDeferredCreditRelease = async () => {
     try {
@@ -1609,6 +1620,11 @@ async function startServer() {
   };
   // Part of the AI-agent draft/approve layer — gated by the AGENTS_ENABLED kill-switch.
   if (process.env.AGENTS_ENABLED === "true") {
+    // Seed the default playbooks (roadmap_followup, roadmap_dropout) so the
+    // operator can edit them at /admin/agents/playbooks. Idempotent.
+    import("../lib/leadNurturer/playbook")
+      .then(({ ensureDefaultPlaybooks }) => ensureDefaultPlaybooks())
+      .catch((err) => console.warn("[LeadNurturer] playbook seed failed (non-fatal):", err));
     runLeadNurturerWorker().catch(console.error);
     setInterval(runLeadNurturerWorker, 5 * 60 * 1000);
     console.log("[LeadNurturer] Draft worker started (runs every 5 minutes)");
@@ -1795,6 +1811,13 @@ async function startServer() {
         return;
       }
 
+      // Optional numeric fields — tolerate "2,600"-style formatting.
+      const num = (v: string | undefined): number | undefined => {
+        if (!v) return undefined;
+        const n = parseInt(String(v).replace(/[^0-9]/g, ""), 10);
+        return Number.isFinite(n) && n > 0 ? n : undefined;
+      };
+
       const result = await submitRoadmap({
         firstName: fields.firstName,
         lastName: fields.lastName,
@@ -1805,6 +1828,19 @@ async function startServer() {
         pdfBuffer: file?.buffer,
         pdfOriginalName: file?.originalname,
         reportUrl: fields.reportUrl,
+        // Funnel linkage + structured home fields (step-1 popup / step-2 form).
+        // Absent on legacy posts — behavior unchanged.
+        hpCustomerId: fields.hpCustomerId || undefined,
+        hpLeadId: fields.hpLeadId || undefined,
+        city: fields.city || undefined,
+        state: fields.state || undefined,
+        zip: fields.zip || undefined,
+        sqft: num(fields.sqft),
+        yearBuilt: num(fields.yearBuilt),
+        propertyKind: fields.propertyKind === "investment" || fields.propertyKind === "personal"
+          ? fields.propertyKind
+          : undefined,
+        unitCount: num(fields.unitCount),
       });
 
       // Phase 4 agent trigger: a Roadmap Generator submission is a hot inbound

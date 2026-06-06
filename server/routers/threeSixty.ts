@@ -34,7 +34,10 @@ import {
   PORTFOLIO_TIERS,
   BILLING_CADENCES,
   homeownerPriceEnvKey,
+  bandForSqft,
+  sizedBuynowPriceEnvKey,
   type HomeownerTier,
+  type HomeSizeBand,
 } from "../../shared/threeSixtyContract";
 import Stripe from "stripe";
 import { nanoid } from "nanoid";
@@ -1090,6 +1093,46 @@ function getStripePriceId(tier: MemberTier, cadence: BillingCadence, offer?: str
   return priceId;
 }
 
+/**
+ * Size-banded Maximum-tier annual buy-now price (the roadmap-funnel OTO).
+ * Falls back to the flat gold buy-now price when the banded env var is missing
+ * — a purchase must never be blocked by a configuration gap.
+ */
+function getSizedBuynowPriceId(band: HomeSizeBand): string {
+  const key = sizedBuynowPriceEnvKey(band);
+  const priceId = process.env[key];
+  if (priceId) return priceId;
+  console.error(
+    `[360 checkout] MISSING env var ${key} for buynow_sized (band ${band}) — falling back to flat gold annual buy-now price`,
+  );
+  return getStripePriceId("gold", "annual", "buynow");
+}
+
+/**
+ * Resolve the home's sqft for band pricing, server-side and tamper-resistant:
+ * the structured CRM properties row for the customer wins over the
+ * client-passed value; no data at all lands in the standard (floor) band.
+ */
+async function resolveSqftForBand(hpCustomerId: string | undefined, inputSqft: number | undefined): Promise<number | null> {
+  if (hpCustomerId) {
+    try {
+      const db = await getDb();
+      if (db) {
+        const rows = await db
+          .select({ sqft: properties.sqft })
+          .from(properties)
+          .where(eq(properties.customerId, hpCustomerId))
+          .orderBy(desc(properties.createdAt))
+          .limit(1);
+        if (rows[0]?.sqft) return rows[0].sqft;
+      }
+    } catch (e) {
+      console.error("[360 checkout] properties lookup for band failed:", e);
+    }
+  }
+  return inputSqft ?? null;
+}
+
 const checkoutRouter = router({
   /**
    * Creates a Stripe Checkout Session for a 360 membership subscription.
@@ -1101,8 +1144,14 @@ const checkoutRouter = router({
       z.object({
         tier: z.enum(HOMEOWNER_TIERS),
         cadence: z.enum(BILLING_CADENCES),
-        /** Promo offer selector — "buynow" uses the discounted annual price */
-        offer: z.enum(["buynow"]).optional(),
+        /**
+         * Promo offer selector — "buynow" uses the flat discounted annual price;
+         * "buynow_sized" (roadmap-funnel OTO) uses the size-banded Maximum
+         * annual price resolved server-side from the home's sqft.
+         */
+        offer: z.enum(["buynow", "buynow_sized"]).optional(),
+        /** priorityTranslations.id when arriving from the roadmap funnel (metadata only) */
+        translationId: z.string().optional(),
         /** Customer name for prefill */
         customerName: z.string().optional(),
         /** Customer email for prefill */
@@ -1130,11 +1179,24 @@ const checkoutRouter = router({
         apiVersion: "2025-03-31.basil",
       });
 
-      // The buy-now offer is always the discounted ANNUAL price. Force the cadence
-      // to "annual" so the webhook can never record a mismatched billing cadence /
-      // renewal date from a stale client value.
-      const cadence = input.offer === "buynow" ? "annual" : input.cadence;
-      const priceId = getStripePriceId(input.tier, cadence, input.offer);
+      // Both buy-now offers are always the discounted ANNUAL price. Force the
+      // cadence to "annual" so the webhook can never record a mismatched billing
+      // cadence / renewal date from a stale client value.
+      const isBuynow = input.offer === "buynow" || input.offer === "buynow_sized";
+      const cadence = isBuynow ? "annual" : input.cadence;
+
+      // Size-banded OTO (roadmap funnel): band resolved server-side — the CRM
+      // properties row wins over the client-passed sqft (tamper-resistant).
+      // The band itself is internal; only the resulting price is visible.
+      let sizeBand: HomeSizeBand | "" = "";
+      let priceId: string;
+      if (input.offer === "buynow_sized") {
+        const sqft = await resolveSqftForBand(input.hpCustomerId, input.sqft);
+        sizeBand = bandForSqft(sqft);
+        priceId = getSizedBuynowPriceId(sizeBand);
+      } else {
+        priceId = getStripePriceId(input.tier, cadence, input.offer);
+      }
 
       const session = await stripe.checkout.sessions.create({
         mode: "subscription",
@@ -1158,6 +1220,9 @@ const checkoutRouter = router({
           serviceZip: input.serviceZip ?? "",
           sqft: input.sqft?.toString() ?? "",
           yearBuilt: input.yearBuilt?.toString() ?? "",
+          // Internal audit fields (roadmap-funnel OTO) — never customer-visible
+          sizeBand,
+          translationId: input.translationId ?? "",
         },
         subscription_data: {
           metadata: {

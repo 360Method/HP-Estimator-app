@@ -51,6 +51,36 @@ export function portfolioPriceEnvKey(tier: PortfolioTier, cadence: Cadence): str
 
 export const INTERIOR_ADDON_PRICE_ENV_KEY = "STRIPE_PRICE_INTERIOR_ADDON_ANNUAL_PER_DOOR";
 
+// ─── Home size bands (INTERNAL — never shown to customers) ────────────────────
+// Mirror of the marketing site's bandForSqft (handy-pioneers-manus
+// client/src/lib/tiers.ts). The roadmap-funnel OTO resolves the band
+// SERVER-SIDE from the CRM properties row (tamper-resistant), so the band
+// logic must live in this shared contract, not only in the frontend.
+
+export const HOME_SIZE_BANDS = ["standard", "large", "estate", "grand"] as const;
+export type HomeSizeBand = (typeof HOME_SIZE_BANDS)[number];
+
+/** <2,000 → standard · 2,000–3,500 → large · 3,500–5,000 → estate · 5,000+ → grand */
+export function bandForSqft(sqft: number | null | undefined): HomeSizeBand {
+  if (!sqft || sqft <= 0) return "standard";
+  if (sqft < 2000) return "standard";
+  if (sqft < 3500) return "large";
+  if (sqft < 5000) return "estate";
+  return "grand";
+}
+
+/**
+ * Size-banded Maximum-tier annual buy-now prices (the roadmap-funnel OTO).
+ * New artifacts use the customer-facing tier vocabulary (MAX, not GOLD):
+ * STRIPE_PRICE_MAX_ANNUAL_BUYNOW_{STANDARD|LARGE|ESTATE|GRAND}.
+ * Amounts (cents): 124900 / 166900 / 200900 / 242900 — derived from the
+ * published monthly grid × 12 × 0.70, rounded to the $9-ending convention.
+ * Keep in sync with GOLD_BUYNOW_ANNUAL in handy-pioneers-manus tiers.ts.
+ */
+export function sizedBuynowPriceEnvKey(band: HomeSizeBand): string {
+  return `STRIPE_PRICE_MAX_ANNUAL_BUYNOW_${band.toUpperCase()}`;
+}
+
 /**
  * The 19 membership-checkout Stripe price env keys the backend must have set:
  * 9 homeowner (3 tiers × 3 cadences) + 9 portfolio + 1 interior add-on.

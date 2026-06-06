@@ -37,6 +37,7 @@ import {
   listOpportunities,
   updateOpportunity,
 } from "./db";
+import { BASELINE_SOURCE_MARKER } from "./baselineDrip";
 import { nanoid } from "nanoid";
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
@@ -350,13 +351,18 @@ export async function create360MembershipFromWebhook(
           console.error("[360 Webhook] Failed to create/link property record:", propErr);
         }
       }
-      // Archive any open "Cart Abandoned" leads for this customer
+      // Archive any open "Cart Abandoned" leads + open baseline-funnel Step-1
+      // leads for this customer — the purchase closes both conversations (and
+      // stops their drips).
       if (crmCustomerId) {
         try {
-          const abandoned = await listOpportunities("lead", String(crmCustomerId), false);
-          const cartAbandoned = abandoned.filter(o => o.stage === "Cart Abandoned");
+          const openLeads = await listOpportunities("lead", String(crmCustomerId), false);
+          const toArchive = openLeads.filter(o =>
+            o.stage === "Cart Abandoned" ||
+            (o.stage === "New Lead" && (o.notes ?? "").includes(BASELINE_SOURCE_MARKER))
+          );
           await Promise.all(
-            cartAbandoned.map(o =>
+            toArchive.map(o =>
               updateOpportunity(o.id, {
                 archived: true,
                 notes: (o.notes ? o.notes + "\n" : "") +
@@ -364,11 +370,11 @@ export async function create360MembershipFromWebhook(
               })
             )
           );
-          if (cartAbandoned.length > 0) {
-            console.log(`[360 Webhook] Archived ${cartAbandoned.length} Cart Abandoned lead(s) for customer ${crmCustomerId}`);
+          if (toArchive.length > 0) {
+            console.log(`[360 Webhook] Archived ${toArchive.length} open funnel lead(s) for customer ${crmCustomerId}`);
           }
         } catch (err) {
-          console.error("[360 Webhook] Failed to archive Cart Abandoned leads:", err);
+          console.error("[360 Webhook] Failed to archive open funnel leads:", err);
         }
       }
       // Create a scheduled job for the Annual 360° Home Scan
@@ -533,11 +539,14 @@ export async function create360PortfolioMembershipsFromWebhook(
       }
       if (crmCustomerId) {
         await db.update(threeSixtyMemberships).set({ hpCustomerId: crmCustomerId.toString() }).where(eq(threeSixtyMemberships.id, membershipId));
-        // Archive any cart abandoned leads
+        // Archive any cart abandoned leads + open baseline-funnel Step-1 leads
         const abandoned = await listOpportunities("lead", String(crmCustomerId), false);
         await Promise.all(
           abandoned
-            .filter(o => o.stage === "Cart Abandoned")
+            .filter(o =>
+              o.stage === "Cart Abandoned" ||
+              (o.stage === "New Lead" && (o.notes ?? "").includes(BASELINE_SOURCE_MARKER))
+            )
             .map(o => updateOpportunity(o.id, {
               archived: true,
               notes: (o.notes ? o.notes + "\n" : "") + `[Auto-archived] Portfolio checkout completed. Membership ID: ${membershipId}.`,

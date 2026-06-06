@@ -22,12 +22,17 @@ import {
   findCustomerByEmail,
   createCustomer,
   createOpportunity,
+  getCustomerById,
+  getOpportunityById,
+  updateOpportunity,
 } from "../../db";
+import { nanoid } from "nanoid";
 import {
   priorityTranslations,
   homeHealthRecords,
   portalAccounts,
 } from "../../../drizzle/schema.priorityTranslation";
+import { properties } from "../../../drizzle/schema";
 import {
   parseAddress,
   callClaudeForTranslation,
@@ -65,6 +70,21 @@ export type RoadmapSubmissionInput = {
   pdfBuffer?: Buffer;
   pdfOriginalName?: string;
   reportUrl?: string;
+  // ── Funnel linkage (step 1 of the 3-step roadmap funnel created these) ──
+  /** CRM customers.id from the step-1 popup — reuse instead of email-dedupe */
+  hpCustomerId?: string;
+  /** Step-1 lead opportunity id — update it instead of creating a duplicate */
+  hpLeadId?: string;
+  // ── Structured home fields (step 2 form) — skip parseAddress guessing ──
+  city?: string;
+  state?: string;
+  zip?: string;
+  sqft?: number;
+  yearBuilt?: number;
+  /** personal | investment — the step-2 property-type toggle */
+  propertyKind?: string;
+  /** Unit count for investment properties (1 = SFR, 2 = duplex, …) */
+  unitCount?: number;
 };
 
 export type RoadmapSubmissionResult = {
@@ -94,7 +114,15 @@ export async function submitRoadmap(
     phone: input.phone,
   });
 
-  const parsed = parseAddress(input.propertyAddress);
+  // Structured address fields from the funnel's step-2 form win over
+  // parseAddress guessing on the free-text line (legacy posts keep the parse).
+  const parsedGuess = parseAddress(input.propertyAddress);
+  const parsed = {
+    street: parsedGuess.street || input.propertyAddress.trim(),
+    city: input.city?.trim() || parsedGuess.city,
+    state: input.state?.trim() || parsedGuess.state,
+    zip: input.zip?.trim() || parsedGuess.zip,
+  };
   const property = await findOrCreatePortalProperty(db, {
     portalAccountId: account.id,
     street: parsed.street,
@@ -149,9 +177,16 @@ export async function submitRoadmap(
   // the same customer.
   let customerId: string | null = null;
   let opportunityId: string | null = null;
+  /** True when this submission completes a step-1 funnel lead (update, don't create). */
+  let linkedToFunnelLead = false;
   try {
     const emailNorm = input.email.trim().toLowerCase();
-    const existing = await findCustomerByEmail(emailNorm);
+    // Funnel linkage first: step 1 of the roadmap funnel already created the
+    // customer — reuse it so one funnel walk never makes two CRM records.
+    const linked = input.hpCustomerId
+      ? await getCustomerById(input.hpCustomerId).catch(() => null)
+      : null;
+    const existing = linked ?? (await findCustomerByEmail(emailNorm));
     if (existing) {
       customerId = existing.id;
     } else {
@@ -195,20 +230,103 @@ export async function submitRoadmap(
         .where(eq(portalAccounts.id, account.id));
     }
 
-    opportunityId = randomBytes(8).toString("hex");
-    await createOpportunity({
-      id: opportunityId,
-      customerId: customerId,
-      area: "lead",
-      stage: "New Lead",
-      title: `Roadmap Generator — ${input.firstName} ${input.lastName}`.trim(),
-      notes:
-        `Inspection-report submission via Roadmap Generator.\n\n` +
-        `Property: ${propertyAddressFull}\n` +
-        `Translation id: ${id}\n` +
-        (input.notes ? `\nHomeowner notes:\n${input.notes}` : ""),
-      value: 0,
-    });
+    const isInvestment = input.propertyKind === "investment";
+    const unitLabel = isInvestment
+      ? input.unitCount && input.unitCount >= 2
+        ? `${input.unitCount} units`
+        : "single-family rental"
+      : null;
+    const title = isInvestment
+      ? `Roadmap Generator (Investment — ${unitLabel}) — ${input.firstName} ${input.lastName}`.trim()
+      : `Roadmap Generator — ${input.firstName} ${input.lastName}`.trim();
+    const submissionBlock =
+      `Inspection-report submission via Roadmap Generator.\n\n` +
+      `Property: ${propertyAddressFull}\n` +
+      (isInvestment ? `INVESTMENT PROPERTY — ${unitLabel}\n` : "") +
+      (input.sqft ? `Approx. sq ft: ${input.sqft}\n` : "") +
+      (input.yearBuilt ? `Year built: ${input.yearBuilt}\n` : "") +
+      `Translation id: ${id}\n` +
+      (input.notes ? `\nHomeowner notes:\n${input.notes}` : "");
+
+    // Step-1 funnel lead present → UPDATE it (retitle + append) instead of
+    // creating a duplicate opportunity for the same walk-through.
+    const funnelLead = input.hpLeadId
+      ? await getOpportunityById(input.hpLeadId).catch(() => null)
+      : null;
+    if (funnelLead && funnelLead.customerId === customerId) {
+      opportunityId = funnelLead.id;
+      linkedToFunnelLead = true;
+      await updateOpportunity(funnelLead.id, {
+        title,
+        notes: funnelLead.notes ? `${funnelLead.notes}\n\n${submissionBlock}` : submissionBlock,
+      });
+    } else {
+      opportunityId = randomBytes(8).toString("hex");
+      await createOpportunity({
+        id: opportunityId,
+        customerId: customerId,
+        area: "lead",
+        stage: "New Lead",
+        title,
+        notes: submissionBlock,
+        value: 0,
+      });
+    }
+
+    // Structured CRM property upsert (sqft/yearBuilt/kind/units) — the
+    // authoritative server-side home record. The OTO checkout resolves its
+    // size band from this row, so it never depends on the browser's
+    // sessionStorage surviving the funnel (the membership funnel's lesson).
+    try {
+      const cleanStreet = parsed.street.trim();
+      if (cleanStreet && customerId) {
+        const homeFields = {
+          street: cleanStreet,
+          city: parsed.city,
+          state: parsed.state,
+          zip: parsed.zip,
+          ...(input.sqft && input.sqft > 0 ? { sqft: input.sqft } : {}),
+          ...(input.yearBuilt && input.yearBuilt > 0 ? { yearBuilt: input.yearBuilt } : {}),
+          ...(input.propertyKind ? { propertyKind: input.propertyKind } : {}),
+          ...(input.unitCount && input.unitCount > 0 ? { unitCount: input.unitCount } : {}),
+        };
+        const existingProps = await db
+          .select()
+          .from(properties)
+          .where(eq(properties.customerId, customerId));
+        const match = existingProps.find(
+          (p) => (p.street ?? "").toLowerCase().trim() === cleanStreet.toLowerCase(),
+        );
+        if (match) {
+          await db.update(properties).set(homeFields).where(eq(properties.id, match.id));
+        } else {
+          await db.insert(properties).values({
+            id: nanoid(),
+            customerId,
+            label: "Home",
+            isPrimary: existingProps.length === 0,
+            source: "roadmap-funnel",
+            ...homeFields,
+          });
+        }
+      }
+    } catch (propErr) {
+      console.error("[roadmap-generator] structured property upsert failed for", id, propErr);
+    }
+
+    // The report landed — drain the step-1 dropout drip (scoped; other
+    // cadences untouched).
+    if (customerId) {
+      try {
+        const { cancelPendingFollowupsForCustomer } = await import("../leadNurturer/roadmapFollowup");
+        const { ROADMAP_DROPOUT_KEY } = await import("../leadNurturer/playbook");
+        await cancelPendingFollowupsForCustomer(customerId, "report_submitted", {
+          playbookKey: ROADMAP_DROPOUT_KEY,
+        });
+      } catch (dripErr) {
+        console.error("[roadmap-generator] dropout drip cancel failed for", id, dripErr);
+      }
+    }
   } catch (err) {
     console.error("[roadmap-generator] CRM bridge failed for", id, err);
     // Don't block the homeowner's email — the priorityTranslations row is
@@ -218,16 +336,29 @@ export async function submitRoadmap(
 
   // ── Lead routing: assign Nurturer, drop pipeline_event, send notification.
   // Best-effort — already-committed DB state is the source of truth.
+  // A step-1 funnel lead was already routed at the popup; don't route twice —
+  // just tell the owner the report arrived.
   if (opportunityId && customerId) {
-    onLeadCreated({
-      opportunityId,
-      customerId,
-      title: `Roadmap Generator submission — ${input.firstName} ${input.lastName}`.trim(),
-      source: "roadmap_generator",
-      priority: "high",
-    }).catch((err) =>
-      console.error("[roadmap-generator] onLeadCreated error for", id, err),
-    );
+    if (linkedToFunnelLead) {
+      import("../../_core/notification")
+        .then(({ notifyOwner }) =>
+          notifyOwner({
+            title: `Roadmap report received — ${input.firstName} ${input.lastName}`.trim(),
+            content: `The step-1 lead completed their upload. Property: ${propertyAddressFull}. Translation ${id} is processing.`,
+          }),
+        )
+        .catch((err) => console.error("[roadmap-generator] notifyOwner error for", id, err));
+    } else {
+      onLeadCreated({
+        opportunityId,
+        customerId,
+        title: `Roadmap Generator submission — ${input.firstName} ${input.lastName}`.trim(),
+        source: "roadmap_generator",
+        priority: "high",
+      }).catch((err) =>
+        console.error("[roadmap-generator] onLeadCreated error for", id, err),
+      );
+    }
   }
 
   // Kick off async processing. Errors are caught and surfaced via the row's
@@ -243,6 +374,9 @@ export async function submitRoadmap(
       propertyAddress: propertyAddressFull,
       pdfBuffer: input.pdfBuffer,
       reportUrl: input.reportUrl,
+      customerId,
+      opportunityId,
+      phone: input.phone,
     }).catch((err) => {
       console.error(`[roadmap-generator] async processing failed for ${id}`, err);
     });
@@ -261,6 +395,10 @@ type ProcessArgs = {
   propertyAddress: string;
   pdfBuffer?: Buffer;
   reportUrl?: string;
+  /** CRM linkage for the post-delivery nurture cadence */
+  customerId?: string | null;
+  opportunityId?: string | null;
+  phone?: string | null;
 };
 
 async function processRoadmap(args: ProcessArgs): Promise<void> {
@@ -350,6 +488,28 @@ async function processRoadmap(args: ProcessArgs): Promise<void> {
     console.log(
       `[roadmap-generator] delivered ${args.id} to ${args.email} (${claudeResponse.findings.length} findings)`,
     );
+
+    // 6. Schedule the post-delivery nurture cadence (roadmap_followup). The
+    // legacy tRPC path always did this; the Express path previously never did
+    // — marketing-site submissions got no follow-up. Best-effort.
+    if (args.customerId) {
+      try {
+        const { scheduleRoadmapFollowup } = await import("../leadNurturer/roadmapFollowup");
+        const result = await scheduleRoadmapFollowup({
+          customerId: args.customerId,
+          opportunityId: args.opportunityId ?? null,
+          portalAccountId: args.portalAccountId,
+          homeHealthRecordId: args.homeHealthRecordId,
+          recipientEmail: args.email,
+          recipientPhone: args.phone ?? null,
+        });
+        console.log(
+          `[roadmap-generator] roadmap_followup for ${args.id}: scheduled=${result.scheduled} skipped=${result.skipped ?? "no"}`,
+        );
+      } catch (nurtureErr) {
+        console.error(`[roadmap-generator] followup scheduling failed for ${args.id}`, nurtureErr);
+      }
+    }
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     await db
