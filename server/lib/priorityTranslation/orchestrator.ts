@@ -435,11 +435,44 @@ async function processRoadmap(args: ProcessArgs): Promise<void> {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set");
 
+    // 0. URL-only submissions: Claude cannot fetch URLs, so passing the bare
+    // link used to generate a roadmap from nothing. Fetch the URL ourselves —
+    // a direct PDF link becomes a real PDF buffer; an HTML report becomes
+    // extracted text. If neither yields real content, HOLD for manual review
+    // instead of shipping a hallucinated roadmap.
+    let reportPdfBuffer = args.pdfBuffer;
+    let reportText: string | undefined;
+    if (!reportPdfBuffer && args.reportUrl) {
+      const fetched = await fetchReportFromUrl(args.reportUrl);
+      if (fetched?.kind === "pdf") {
+        reportPdfBuffer = fetched.buffer;
+      } else if (fetched?.kind === "text") {
+        reportText = fetched.text;
+      } else {
+        await db
+          .update(priorityTranslations)
+          .set({
+            status: "submitted", // parked, not failed — homeowner sees "report received"
+            failureReason: "URL_NEEDS_MANUAL_REVIEW",
+            updatedAt: new Date(),
+          })
+          .where(eq(priorityTranslations.id, args.id));
+        await notifyOwnerOfFailure(
+          args,
+          `URL-only submission could not be fetched/extracted (${args.reportUrl}). ` +
+            `Open the link manually, save the report as PDF, and re-run processing. ` +
+            `No roadmap was generated and the customer was NOT emailed.`,
+        ).catch(() => null);
+        console.warn(`[roadmap-generator] ${args.id} held for manual review (URL not extractable)`);
+        return;
+      }
+    }
+
     // 1. Claude — pass PDF directly as document block (handles scans via OCR).
     const claudeResponse = await callClaudeForTranslation({
       propertyAddress: args.propertyAddress,
-      pdfBuffer: args.pdfBuffer,
-      reportText: args.reportUrl ? `Inspection report URL: ${args.reportUrl}` : undefined,
+      pdfBuffer: reportPdfBuffer,
+      reportText,
       apiKey,
     });
 
@@ -551,6 +584,54 @@ async function processRoadmap(args: ProcessArgs): Promise<void> {
     // Owner notification — don't await on the import so this stays fire-and-forget.
     notifyOwnerOfFailure(args, reason).catch(() => null);
     throw err;
+  }
+}
+
+/**
+ * Fetch a web-hosted inspection report. Direct PDF links (common for
+ * HomeGauge/Dropbox-style shares) come back as a buffer; HTML pages come back
+ * as stripped text when there's enough of it to be a real report. JS-rendered
+ * SPAs (some Spectora links) yield a thin shell — those return null and the
+ * submission is held for manual review.
+ */
+async function fetchReportFromUrl(
+  url: string,
+): Promise<{ kind: "pdf"; buffer: Buffer } | { kind: "text"; text: string } | null> {
+  const MAX_BYTES = 25 * 1024 * 1024;
+  const MIN_TEXT_CHARS = 1500;
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30_000);
+    const res = await fetch(url, {
+      signal: controller.signal,
+      redirect: "follow",
+      headers: { "User-Agent": "HandyPioneers-RoadmapGenerator/1.0" },
+    });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const contentType = res.headers.get("content-type") ?? "";
+    const raw = Buffer.from(await res.arrayBuffer());
+    if (raw.length > MAX_BYTES) return null;
+    if (contentType.includes("application/pdf") || raw.subarray(0, 5).toString() === "%PDF-") {
+      return { kind: "pdf", buffer: raw };
+    }
+    if (contentType.includes("text/html") || contentType.includes("text/plain")) {
+      const text = raw
+        .toString("utf8")
+        .replace(/<script[\s\S]*?<\/script>/gi, " ")
+        .replace(/<style[\s\S]*?<\/style>/gi, " ")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/&[a-z#0-9]+;/gi, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (text.length >= MIN_TEXT_CHARS) {
+        return { kind: "text", text: text.slice(0, 400_000) };
+      }
+    }
+    return null;
+  } catch (err) {
+    console.warn(`[roadmap-generator] report URL fetch failed (${url}):`, err);
+    return null;
   }
 }
 
