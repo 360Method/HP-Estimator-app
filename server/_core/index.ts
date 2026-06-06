@@ -1515,7 +1515,9 @@ async function startServer() {
   console.log('[IDS] Visit-slip scan scheduler started (runs daily)');
 
   // ── 360° Cart Abandonment Drip Emails (runs every hour) ────────────────────────────────────────────────────
-  const FUNNEL_URL = process.env.FUNNEL_ORIGIN ?? "https://360.handypioneers.com";
+  // Drip CTAs finish enrollment at the live membership checkout. The old
+  // 360.handypioneers.com funnel is discontinued (301 → /roadmap-generator).
+  const FUNNEL_URL = process.env.FUNNEL_ORIGIN ?? "https://handypioneers.com/membership";
   const run360DripEmails = async () => {
     try {
       const abandoned = await listOpportunities("lead", undefined, false, 500);
