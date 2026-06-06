@@ -120,7 +120,10 @@ export async function callClaudeForTranslation(args: {
 
   const response = await client.messages.create({
     model: PRIORITY_TRANSLATION_MODEL,
-    max_tokens: 4096,
+    // Real reports run 60+ pages and 20+ findings, each with four prose
+    // fields — 4096 used to truncate the JSON mid-array. Give the full
+    // roadmap room to land.
+    max_tokens: 32000,
     system: [
       {
         type: "text",
@@ -130,6 +133,14 @@ export async function callClaudeForTranslation(args: {
     ],
     messages: [{ role: "user", content: userContent }],
   });
+
+  if (response.stop_reason === "max_tokens") {
+    // Truncated JSON parses into garbage or throws confusingly — fail loud
+    // with the real cause instead.
+    throw new Error(
+      "Claude response hit max_tokens — roadmap JSON truncated. The report may need to be split.",
+    );
+  }
 
   const textBlock = response.content.find((b) => b.type === "text");
   if (!textBlock || textBlock.type !== "text") {
