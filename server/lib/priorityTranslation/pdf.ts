@@ -22,7 +22,7 @@
  * TODO: move to CMS (nucleus) — header copy, color tokens, disclaimer copy.
  */
 
-import { PDFDocument, StandardFonts, rgb, type PDFPage, type PDFFont, type RGB } from "pdf-lib";
+import { PDFDocument, StandardFonts, rgb, type PDFPage, type PDFFont, type PDFImage, type RGB } from "pdf-lib";
 import type { ClaudePriorityTranslationResponse } from "../../../drizzle/schema.priorityTranslation";
 
 // ─── Brand tokens (mirror HP site OKLCH → RGB) ──────────────────────────────
@@ -89,7 +89,40 @@ export type RenderInput = {
   claudeResponse: ClaudePriorityTranslationResponse;
   /** Override edition date (defaults to today). Used by the sample generator. */
   editionDate?: Date;
+  /**
+   * Optional photos per finding, keyed by the finding's index in
+   * claudeResponse.findings. JPG or PNG bytes; up to 3 are drawn per item.
+   * The funnel path sends none today — used by the sample generator and by
+   * walkthrough-sourced roadmaps.
+   */
+  photosByFinding?: Record<number, Uint8Array[]>;
+  /** Label above the photo row. Default "FROM THE WALKTHROUGH". */
+  photosLabel?: string;
 };
+
+/**
+ * Provisional Home Score (v1) — the incentive number on the roadmap.
+ *
+ * Starts from 100 and deducts by horizon: each NOW item −7, each SOON −3,
+ * each actionable WAIT item −1 (monitor-only items with no investment range
+ * deduct nothing). Clamped to 40–95: no home scores a perfect 100 from an
+ * inspection report, and no home is hopeless. The framing is "baseline,
+ * provisional — improves with each completed item and each verified visit",
+ * which is what ties the score to the baseline walkthrough and the
+ * membership rhythm.
+ */
+export function computeProvisionalHomeScore(
+  findings: ClaudePriorityTranslationResponse["findings"],
+): number {
+  let deductions = 0;
+  for (const f of findings) {
+    const actionable = (f.investment_range_high_usd ?? 0) > 0;
+    if (f.urgency === "NOW") deductions += 7;
+    else if (f.urgency === "SOON") deductions += 3;
+    else if (actionable) deductions += 1;
+  }
+  return Math.max(40, Math.min(95, Math.round(100 - deductions)));
+}
 
 type Fonts = {
   serif: PDFFont;
@@ -121,6 +154,31 @@ export async function renderPriorityTranslationPdf(input: RenderInput): Promise<
   };
   for (const f of input.claudeResponse.findings) byUrgency[f.urgency]?.push(f);
 
+  // Pre-embed any per-finding photos (keyed by object identity so the
+  // urgency re-bucketing above doesn't lose the association).
+  const photoMap = new Map<object, PDFImage[]>();
+  if (input.photosByFinding) {
+    for (const [idxStr, photos] of Object.entries(input.photosByFinding)) {
+      const f = input.claudeResponse.findings[Number(idxStr)];
+      if (!f || !photos?.length) continue;
+      const embedded: PDFImage[] = [];
+      for (const bytes of photos.slice(0, 3)) {
+        try {
+          embedded.push(await doc.embedJpg(bytes));
+        } catch {
+          try {
+            embedded.push(await doc.embedPng(bytes));
+          } catch {
+            console.warn("[roadmap-pdf] skipping photo: not a valid JPG/PNG");
+          }
+        }
+      }
+      if (embedded.length) photoMap.set(f, embedded);
+    }
+  }
+  const photosLabel = input.photosLabel ?? "FROM THE WALKTHROUGH";
+  const homeScore = computeProvisionalHomeScore(input.claudeResponse.findings);
+
   // ─── Page 1: Cover ────────────────────────────────────────────────────────
   drawCoverPage(doc, fonts, {
     firstName: input.firstName || "the homeowner",
@@ -138,6 +196,7 @@ export async function renderPriorityTranslationPdf(input: RenderInput): Promise<
     byUrgency,
     propertyAddress: input.propertyAddress,
     editionLabel,
+    homeScore,
   });
 
   // ─── Findings — packed 1–2 per page with a small in-line section banner
@@ -166,6 +225,8 @@ export async function renderPriorityTranslationPdf(input: RenderInput): Promise<
         finding: f,
         propertyAddress: input.propertyAddress,
         editionLabel,
+        photos: photoMap.get(f),
+        photosLabel,
       });
     }
   }
@@ -322,6 +383,7 @@ function drawExecutiveSummary(
     byUrgency: Record<Urgency, ClaudePriorityTranslationResponse["findings"]>;
     propertyAddress: string;
     editionLabel: string;
+    homeScore: number;
   },
 ): PDFPage {
   const page = drawPaperPage(doc);
@@ -358,9 +420,10 @@ function drawExecutiveSummary(
   }
   y -= 8;
 
-  // At-a-Glance ledger — full-width horizontal strip, three cells side by side.
+  // At-a-Glance ledger — full-width strip: Home Score + the three horizons.
   y = drawAtAGlanceStrip(page, fonts, {
     x: MARGIN, y, width: CONTENT_W, byUrgency: args.byUrgency,
+    homeScore: args.homeScore,
   });
   y -= 18;
 
@@ -400,6 +463,7 @@ function drawAtAGlanceStrip(
     y: number;
     width: number;
     byUrgency: Record<Urgency, ClaudePriorityTranslationResponse["findings"]>;
+    homeScore: number;
   },
 ): number {
   // Header label
@@ -409,15 +473,37 @@ function drawAtAGlanceStrip(
   page.drawRectangle({ x: args.x, y: args.y - 10, width: 30, height: 1, color: BRAND.amber });
 
   const stripTop = args.y - 22;
-  const cellGap = 12;
-  const cellW = (args.width - cellGap * 2) / 3;
+  const cellGap = 10;
+  const cellW = (args.width - cellGap * 3) / 4;
   const cellH = 76;
+
+  // Cell 0 — Home Score: the incentive number. Dark card so it leads the row.
+  {
+    const cellY = stripTop - cellH;
+    page.drawRectangle({ x: args.x, y: cellY, width: cellW, height: cellH, color: BRAND.forest });
+    page.drawRectangle({ x: args.x, y: cellY, width: 3, height: cellH, color: BRAND.amber });
+    drawTracked(page, fonts.sansBold, "HOME SCORE", {
+      x: args.x + 12, y: cellY + cellH - 16, size: 7, tracking: 1.8, color: BRAND.amberLight,
+    });
+    const scoreText = String(args.homeScore);
+    page.drawText(scoreText, {
+      x: args.x + 12, y: cellY + cellH - 48, size: 28, font: fonts.serifBold, color: BRAND.cream,
+    });
+    const scoreW = fonts.serifBold.widthOfTextAtSize(scoreText, 28);
+    page.drawText("/100", {
+      x: args.x + 12 + scoreW + 3, y: cellY + cellH - 48, size: 10, font: fonts.serif, color: BRAND.amberLight,
+    });
+    drawWrappedText(page, "Baseline — improves with each completed item and visit", {
+      x: args.x + 12, y: cellY + 22, size: 6.5, font: fonts.sansItalic, color: BRAND.amberLight,
+      lineHeight: 8.5, maxWidth: cellW - 20,
+    });
+  }
 
   URGENCY_ORDER.forEach((urg, i) => {
     const items = args.byUrgency[urg];
     const totals = sumRanges(items);
     const accent = URGENCY_ACCENT[urg];
-    const cellX = args.x + i * (cellW + cellGap);
+    const cellX = args.x + (i + 1) * (cellW + cellGap);
     const cellY = stripTop - cellH;
 
     // Cell card
@@ -580,11 +666,14 @@ function drawFinding(
     finding: ClaudePriorityTranslationResponse["findings"][number];
     propertyAddress: string;
     editionLabel: string;
+    photos?: PDFImage[];
+    photosLabel?: string;
   },
 ): void {
   const accent = URGENCY_ACCENT[args.urgency];
   const footerLeft = `${shortAddress(args.propertyAddress)}  ·  ${args.editionLabel}`;
   const f = args.finding;
+  const photos = args.photos ?? [];
 
   // Pre-compute card height so we can decide whether to page-break.
   const categoryLines = measureWrappedText(f.category, fonts.serifBold, 16, CONTENT_W);
@@ -602,7 +691,9 @@ function drawFinding(
   const interpH = interpLines > 0 ? 14 + interpLines * 15 + 10 : 0;
   const approachH = approachLines > 0 ? 12 + approachLines * 14 + 8 : 0;
   const ribbonH = 42;
-  const cardH = headerH + categoryH + findingH + interpH + approachH + ribbonH + 10;
+  const PHOTO_H = 96;
+  const photosH = photos.length > 0 ? 16 + PHOTO_H + 10 : 0;
+  const cardH = headerH + categoryH + findingH + interpH + approachH + ribbonH + photosH + 10;
 
   if (!ctx.page || ctx.y - cardH < PAGE_BOTTOM_RESERVE) {
     newFlowPage(doc, fonts, ctx, footerLeft);
@@ -692,7 +783,28 @@ function drawFinding(
     maxWidth: CONTENT_W * 0.51,
   });
 
-  ctx.y = ribbonY - 14;
+  let bottomY = ribbonY;
+
+  // Photo row — up to 3 images, fixed height, proportional widths.
+  if (photos.length > 0) {
+    const PHOTO_H = 96;
+    const labelY = ribbonY - 16;
+    drawTracked(page, fonts.sansBold, (args.photosLabel ?? "FROM THE WALKTHROUGH").toUpperCase(), {
+      x: MARGIN, y: labelY, size: 7, tracking: 1.8, color: BRAND.muted,
+    });
+    let px = MARGIN;
+    const rowY = labelY - 8 - PHOTO_H;
+    for (const img of photos.slice(0, 3)) {
+      const scale = PHOTO_H / img.height;
+      const w = Math.min(img.width * scale, 170);
+      if (px + w > MARGIN + CONTENT_W) break;
+      page.drawImage(img, { x: px, y: rowY, width: w, height: PHOTO_H });
+      px += w + 10;
+    }
+    bottomY = rowY;
+  }
+
+  ctx.y = bottomY - 14;
 }
 
 // ─── Closing page ───────────────────────────────────────────────────────────

@@ -18,6 +18,7 @@
 import { writeFileSync, mkdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs";
 import { renderPriorityTranslationPdf } from "../server/lib/priorityTranslation/pdf.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -140,11 +141,24 @@ const MOCK_RESPONSE = {
 
 async function main() {
   console.log("[sample] rendering 360° Priority Roadmap PDF...");
+  // Example photos: real HP project shots from the public website gallery —
+  // labeled as examples, never implied to be from the (fictional) walkthrough.
+  const GALLERY = resolve(REPO_ROOT, "..", "handy-pioneers-manus", "client", "public", "images", "hero-gallery");
+  const photo = (f) => new Uint8Array(readFileSync(resolve(GALLERY, f)));
+  const photosByFinding = {
+    0: [photo("UCqTnokKBAzttFFs.jpg")],   // water heater — utility/mechanical area
+    3: [photo("yzuTNmsrwjoSvvTt.jpg")], // gutters — gutter installation before/after
+    4: [photo("SJzOyycrDNaWEYHN.jpg")],   // exterior trim — exterior elevation
+    6: [photo("wjLagUVyHJnefJeB.jpg")],   // crawlspace/vapor — open framing & rough-in
+  };
+
   const pdfBuffer = await renderPriorityTranslationPdf({
     firstName: "Margaret",
     propertyAddress: "4218 NW Riverstone Court, Vancouver, WA 98685",
     claudeResponse: MOCK_RESPONSE,
     editionDate: new Date(),
+    photosByFinding,
+    photosLabel: "Example — similar work from our projects",
   });
 
   const today = new Date().toISOString().slice(0, 10);
