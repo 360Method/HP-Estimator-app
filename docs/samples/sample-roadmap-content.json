@@ -1,0 +1,128 @@
+{
+  "executive_summary": "Daniel, this is a 1966 split-level home that has lived a full life and now asks for a steady, knowledgeable hand. The inspector was candid: the structure shows high levels of wear, the garage has been converted, interior walls have been removed, and several systems are at or past the end of their service horizons. I want to be equally candid with you, but in a way that gives you a path rather than a list. The lens I am applying is triage by consequence. A home of this era in our climate fails quietly at the edges first (the roof, the gutters, the eaves, the crawlspace), and those edges are exactly where this report concentrates. None of this is cause for alarm. It is cause for sequence.\n\nThree findings shape everything else. First, the safety items inside the electrical system: a scorched outlet in the office, non-terminated wiring in the attic, an open shop sub-panel, and worn receptacles throughout. These are in the NOW horizon because they carry active risk and should not wait for a weather cycle. Second, the composition roof, which the inspector describes as very worn with heavy granule loss and poor adhesion, paired with a gutter system that is pulling away and staining the fascia. In our rain load, a tired roof over a failing drainage system is the single condition most likely to compound into interior damage, so I place the roof in SOON and the drainage discipline in NOW. Third, the crawlspace, where disrupted vapor barrier, nested insulation, and an improperly installed sump pump together undermine the dry foundation this house depends on. That belongs in the SOON window, addressed as one coordinated visit.\n\nI would like to set up your portal as the living health record for this property. Rather than a binder that ages on a shelf, it becomes the place where every finding here, every photo the inspector took, and every restoration we complete is tracked over time. It turns a difficult report into a managed standard of care.",
+  "property_character": "Built in 1966, this is a split-level home with a brick and wood siding skin, a masonry chimney, a converted garage, and a wood-burning fireplace. Homes of this vintage in Clark County age at their water-handling details first. Our long wet season puts relentless load on the roof field, the gutters, the eaves, and the crawlspace, and this report reads exactly that way: drip-edge staining at the fascia, gutters pulling away, moisture stains on the roof sheathing, and a crawlspace with disrupted vapor barrier. The house also carries the marks of past modifications without documented permits. A property of this kind rewards disciplined gutter and crawlspace stewardship more than almost anything else.",
+  "summary_1_paragraph": "Daniel, this is a 1966 split-level home that has lived a full life and now asks for a steady, knowledgeable hand. The inspector was candid: the structure shows high levels of wear, the garage has been converted, interior walls have been removed, and several systems are at or past the end of their service horizons. I want to be equally candid with you, but in a way that gives you a path rather than a list. The lens I am applying is triage by consequence. A home of this era in our climate fails quietly at the edges first (the roof, the gutters, the eaves, the crawlspace), and those edges are exactly where this report concentrates. None of this is cause for alarm. It is cause for sequence.",
+  "closing": "I would like to open your portal as the living health record for this property, where these findings, the inspector's own photos, and every restoration we complete are tracked together over time. Please read this as a starting standard of care rather than a bid. Every range here is honest and two-sided, and each will be confirmed against the home before any work begins. The natural next step is a complimentary baseline walkthrough, where we stand in the crawlspace and under the eaves together and turn this roadmap into a calm sequence. Whenever you are ready, I am here.",
+  "findings": [
+    {
+      "category": "Electrical — scorched receptacle and damaged outlet remediation",
+      "finding": "The inspector found a scorched electrical outlet on the west wall of the office, a damaged outlet in the southeast bedroom, an outlet with no power in the dining room, and most receptacles throughout worn to where they no longer hold a plug.",
+      "interpretation": "A scorched receptacle is evidence of heat at a connection, which is the kind of finding that carries fire risk and does not improve on its own. In a 1966 home with an obsolete split-buss panel and a mix of copper and braided aluminum branch wiring, worn receptacles that arc when loaded are a pattern worth taking seriously rather than item by item. This is the clearest NOW item in the report.",
+      "recommended_approach": "We would have a vetted licensed electrician open and evaluate the scorched circuit first, then move through the damaged, dead, and worn receptacles as one coordinated visit under a single written scope of work, rather than returning piecemeal.",
+      "urgency": "NOW",
+      "investment_range_low_usd": 1400,
+      "investment_range_high_usd": 3800,
+      "reasoning": "NOW for the active heat and fire risk; range reflects multiple GFCI/AFCI and standard receptacle replacements across several circuits at the per-circuit anchor of $250 to $650, scaled to a whole-home worn-outlet condition."
+    },
+    {
+      "category": "Electrical — attic non-terminated wiring and panel safety",
+      "finding": "There is non-terminated wiring in the attic, visible rust and corrosion inside the main distribution panel, and two of four cover fasteners missing from the panel.",
+      "interpretation": "Open, non-terminated wiring in an attic is a live-end hazard, and corrosion inside the panel points to moisture reaching the service equipment, which the inspector flagged as a source that should be located and corrected. The panel itself is an obsolete split-buss design, so these are not cosmetic housekeeping items. They are the safety backbone of the house.",
+      "recommended_approach": "We would address the attic wiring termination, the missing panel fasteners, and an evaluation of the corrosion source in the same electrician visit noted above, so the entire service is brought to a known-safe condition at once.",
+      "urgency": "NOW",
+      "investment_range_low_usd": 650,
+      "investment_range_high_usd": 1800,
+      "reasoning": "NOW for live-end and moisture-at-panel risk; range covers termination, fasteners, and corrosion investigation as labor-led work below the panel-replacement anchor, with full panel replacement ($3,800 to $7,200) noted as a possible escalation if the buss is compromised."
+    },
+    {
+      "category": "Roof drainage — gutter system restoration and drip edge",
+      "finding": "The gutters have damaged and disconnected downspouts, debris, and sections pulling away, and there are water stains between the gutter and fascia in many areas indicating leaks from missing drip edge or overflow.",
+      "interpretation": "In our climate the gutter system is the first line of defense for the eaves, the siding, and the crawlspace below. With this house already showing fascia rot and crawlspace moisture, a failing gutter run is the condition most likely to accelerate damage through the coming wet season. I am placing this in NOW even though the gutters themselves are not a safety item, because the water they are mishandling is reaching wood.",
+      "recommended_approach": "We would re-secure and re-pitch the existing runs, reconnect and redirect downspouts well away from the foundation, and add drip edge flashing where the staining shows it is absent, ideally before the roof decision below so the new drainage is ready to protect a future roof.",
+      "urgency": "NOW",
+      "investment_range_low_usd": 2800,
+      "investment_range_high_usd": 5400,
+      "reasoning": "NOW because the water is already reaching fascia and crawlspace; range uses the gutter replacement anchor ($2,800 to $5,400) since disconnected, pulling-away runs across home and garage are closer to replacement than a re-pitch."
+    },
+    {
+      "category": "Plumbing — master bath drain leak and moisture damage",
+      "finding": "The drain trap below the master bathroom sink is actively leaking, with dry stains and damage at the vanity base, and the floor and wall in front of the master shower are moisture-damaged.",
+      "interpretation": "An active drain leak under a cabinet, even at normal moisture readings, is putting water into finished structure every time the fixture is used. Left through a wet season it grows the existing stained and damaged area the inspector already noted. This is the kind of small active leak that earns a NOW placement because it compounds quietly.",
+      "recommended_approach": "We would have a vetted plumber resolve the trap leak first, then assess and restore the moisture-damaged floor and wall structure at the shower as a connected scope so the source and the consequence are addressed together.",
+      "urgency": "NOW",
+      "investment_range_low_usd": 850,
+      "investment_range_high_usd": 2400,
+      "reasoning": "NOW for an active leak into finished structure; range pairs the single-fixture anchor ($425 to $1,200) with localized moisture-damaged floor and wall restoration."
+    },
+    {
+      "category": "Safety — smoke and carbon monoxide alarm coverage",
+      "finding": "The inspector advises smoke detectors on each level and in each bedroom, notes alarms over ten years old should be replaced, and could not confirm whether the upper-level unit is also a CO alarm.",
+      "interpretation": "Washington requires CO alarms in homes sold after April 2012, and detector coverage in this house is incomplete and aging. This is a low-cost, high-consequence item that I will not soften: it belongs in the NOW window because it protects life on the very first night of occupancy.",
+      "recommended_approach": "We would bring the whole home to current coverage in a single visit, placing combination smoke and CO units on each level and in each bedroom with fresh date-stamped devices.",
+      "urgency": "NOW",
+      "investment_range_low_usd": 425,
+      "investment_range_high_usd": 950,
+      "reasoning": "NOW for life-safety; range is the whole-home detector anchor ($425 to $950) directly."
+    },
+    {
+      "category": "Roofing — composition shingle replacement planning",
+      "finding": "The inspector describes the composition roof on home and garage as very worn with heavy granule loss, exposed shingle fibers, excessive wear, and poor adhesion, and notes it may require replacement in the near future. Moisture stains are also visible on the roof sheathing.",
+      "interpretation": "This roof is at the end of its 25 to 30 year service life, and the sheathing stains tell us water has already found its way in at least intermittently. Through one more Pacific Northwest winter a roof in this condition moves from worn to actively leaking. I place it in SOON rather than NOW only because no active interior leak was visible, but it is at the leading edge of that window.",
+      "recommended_approach": "We would commission a full composition replacement in architectural shingle, sequenced after the gutter and drip-edge work so the new drainage details integrate cleanly, and we would inspect and address the stained sheathing as the deck is exposed.",
+      "urgency": "SOON",
+      "investment_range_low_usd": 14000,
+      "investment_range_high_usd": 32000,
+      "reasoning": "SOON because it is end-of-life with sheathing evidence but not yet actively leaking; range is the full composition replacement anchor ($14,000 to $32,000) for a 30-year architectural roof."
+    },
+    {
+      "category": "Crawlspace — vapor barrier, debris, and sump pump correction",
+      "finding": "The crawlspace has missing and disrupted vapor barrier over bare soil, wood and waste insulation debris on the ground, insulation nested by rodents, and a sump pump installed non-professionally with a structural stud excessively notched for its drain line.",
+      "interpretation": "The vapor barrier is what keeps ground moisture out of the floor structure of this home, and in our climate a disrupted barrier over bare soil is a steady source of humidity and eventual decay. The notched stud and improvised sump add a structural and drainage concern on top of the moisture one. Together these belong in the SOON window so the foundation environment is stabilized before the next wet season fully settles in.",
+      "recommended_approach": "We would clear the debris and rodent-soiled insulation, lay continuous vapor barrier across all bare soil, and have a vetted tradesperson correct the sump installation and the notched stud as one coordinated crawlspace visit.",
+      "urgency": "SOON",
+      "investment_range_low_usd": 2200,
+      "investment_range_high_usd": 6400,
+      "reasoning": "SOON to stabilize the foundation environment before deep winter; range is the crawlspace vapor barrier and drainage anchor ($2,200 to $6,400), with debris removal and sump correction folded in."
+    },
+    {
+      "category": "Exterior — eaves, fascia, and trim rot restoration",
+      "finding": "The inspector found rot and deterioration throughout the eaves and fascia, minor rot at the lower trim on home and garage, and gaps in the eaves serving as rodent entry points.",
+      "interpretation": "Eave and fascia rot in a 1966 home is the visible result of the gutter problems above, and the gaps doubling as rodent access tie directly to the activity found in the attic and crawlspace. Addressed in the SOON window, alongside corrected drainage, this becomes a finite restoration. Left longer, the rot migrates inward to rafter tails and soffit.",
+      "recommended_approach": "We would remove and replace the rot-affected eave, fascia, and trim material after the gutter work is set, sealing the eave gaps in the same pass so the pest entry points close as the wood is restored.",
+      "urgency": "SOON",
+      "investment_range_low_usd": 1200,
+      "investment_range_high_usd": 5500,
+      "reasoning": "SOON because rot spreads but is not yet structural; range uses the exterior trim restoration anchor ($1,200 to $5,500), with the wider eave rot pushing toward the upper end."
+    },
+    {
+      "category": "Chimney — crown, flashing, and masonry restoration",
+      "finding": "The masonry chimney shows mortar deterioration, a damaged and loose crown, no rain cap, and cracking on the garage chimney. The fireplace damper appears missing and a clay pot is wedged into a hole at the back of the firebox.",
+      "interpretation": "A damaged crown and missing cap let rain into the flue and accelerate freeze-related masonry decay through our wet winters. The missing damper and the improvised hole at the firebox mean the fireplace should not be used until a qualified chimney professional clears it. This is a SOON item for the masonry and a use-restriction noted now for the fireplace.",
+      "recommended_approach": "We would have a vetted mason restore the crown, repoint the mortar, and add a proper cap, while a chimney specialist evaluates the flue, damper, and firebox before any wood-burning use is considered.",
+      "urgency": "SOON",
+      "investment_range_low_usd": 1400,
+      "investment_range_high_usd": 3600,
+      "reasoning": "SOON for water-driven masonry decay; range is the chimney crown and flashing restoration anchor ($1,400 to $3,600), with the firebox and flue evaluation noted as a separate chimney-sweep prerequisite."
+    },
+    {
+      "category": "HVAC — heat pump service and end-of-life planning",
+      "finding": "The heat pump is older and reaching the end of its typical lifespan, could not be tested in heating mode due to outdoor temperature, and there are dry stains in the furnace drip pan with a non-typical overflow pipe modification and a dirty filter.",
+      "interpretation": "An aging heat pump that could not be verified in heating mode is a system to plan around rather than assume. The drip-pan staining and modified overflow suggest the air handler has leaked before. In the SOON window we want a baseline service to learn what life remains and to set a replacement timeline before a cold-weather failure forces the decision.",
+      "recommended_approach": "We would begin with a full service and heating-mode evaluation by a licensed HVAC technician, correct the overflow termination, and use that visit to give you an honest replacement horizon for the heat pump rather than guessing.",
+      "urgency": "SOON",
+      "investment_range_low_usd": 285,
+      "investment_range_high_usd": 16500,
+      "reasoning": "SOON to establish a replacement timeline; low end is the maintenance tune-up anchor ($285 to $475) and high end is the 3-ton heat pump replacement anchor ($9,500 to $16,500) since the unit is at end of life."
+    },
+    {
+      "category": "Interior — ceiling and vanity stain monitoring",
+      "finding": "There is staining on the living room ceiling, possible mildew or mold staining in the upper hallway vanity, and stained wall structure in the crawlspace closet, all at normal moisture readings with no active leak visible.",
+      "interpretation": "These are the dry stains of past events rather than active intrusion today, which is why they sit in the WAIT horizon. In a home with a tired roof and crawlspace moisture, though, they deserve documentation now so that once the roof and drainage are restored we can confirm they stay dry. They are markers to watch, not emergencies to chase.",
+      "recommended_approach": "We would photograph and record each stained area in your portal as a baseline, then revisit them after the roof and crawlspace work to confirm the moisture history has ended rather than continuing.",
+      "urgency": "WAIT",
+      "investment_range_low_usd": 650,
+      "investment_range_high_usd": 1800,
+      "reasoning": "WAIT because moisture readings are normal and no active leak is present; range covers eventual investigation and localized restoration if monitoring shows movement, inferred at the minor crack-seal anchor level ($650 to $1,800)."
+    },
+    {
+      "category": "Driveway and walkway — concrete deterioration monitoring",
+      "finding": "The driveway shows cracking, deterioration, and spalling, and the walkways are worn and deteriorated, though the inspector notes the driveway is level and serviceable in its current condition.",
+      "interpretation": "Concrete of this age cracks and spalls as a matter of course, and the inspector specifically called the driveway level and serviceable. There is no safety or structural urgency here. This is a WAIT item to revisit at the next assessment cycle once the water-handling and electrical priorities are behind you.",
+      "recommended_approach": "We would note the current condition in your portal and revisit it at a future walkthrough, addressing the concrete on its own timeline rather than competing with the items that protect the structure.",
+      "urgency": "WAIT",
+      "investment_range_low_usd": 850,
+      "investment_range_high_usd": 2400,
+      "reasoning": "WAIT because it is serviceable and level per the inspector; no exact anchor, so inferred at the per-side grading/flatwork range ($850 to $2,400) for eventual surface restoration."
+    }
+  ]
+}
