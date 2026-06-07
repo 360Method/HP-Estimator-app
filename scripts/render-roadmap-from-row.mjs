@@ -16,6 +16,7 @@ import { getDb } from "../server/db.ts";
 import { priorityTranslations } from "../drizzle/schema.priorityTranslation.ts";
 import { renderPriorityTranslationPdf } from "../server/lib/priorityTranslation/pdf.ts";
 import { extractReportPhotos, photosForFindings } from "../server/lib/priorityTranslation/reportPhotos.ts";
+import { matchPhotosToFindings } from "../server/lib/priorityTranslation/photoMatcher.ts";
 
 const [id, outPath, reportPdfPath] = process.argv.slice(2);
 if (!id || !outPath) {
@@ -41,10 +42,20 @@ let photosByFinding;
 if (reportPdfPath) {
   if (!existsSync(reportPdfPath)) throw new Error(`report PDF not found: ${reportPdfPath}`);
   const photosByPage = await extractReportPhotos(new Uint8Array(readFileSync(reportPdfPath)));
-  photosByFinding = photosForFindings({
-    findings: claudeResponse.findings ?? [],
-    photosByPage,
-  });
+  // Vision-verified placement when a key is present (same as production);
+  // bare positional mapping otherwise.
+  if (process.env.ANTHROPIC_API_KEY) {
+    photosByFinding = await matchPhotosToFindings({
+      apiKey: process.env.ANTHROPIC_API_KEY,
+      findings: claudeResponse.findings ?? [],
+      photosByPage,
+    });
+  } else {
+    photosByFinding = photosForFindings({
+      findings: claudeResponse.findings ?? [],
+      photosByPage,
+    });
+  }
   const attached = Object.values(photosByFinding).reduce((n, p) => n + p.length, 0);
   console.log(`[render-row] photos: ${photosByPage.size} pages with images, ${attached} attached`);
 }

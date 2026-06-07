@@ -48,7 +48,8 @@ import {
   issueMagicLink,
 } from "./portalAccount";
 import { renderPriorityTranslationPdf } from "./pdf";
-import { extractReportPhotos, photosForFindings } from "./reportPhotos";
+import { extractReportPhotos } from "./reportPhotos";
+import { matchPhotosToFindings } from "./photoMatcher";
 import { sendPriorityTranslationReady } from "./email";
 import { onLeadCreated } from "../../leadRouting";
 
@@ -772,21 +773,24 @@ async function processRoadmap(args: ProcessArgs): Promise<void> {
       })
       .where(eq(homeHealthRecords.id, args.homeHealthRecordId));
 
-    // 3. Render PDF — with the inspector's own photos beside each finding,
-    // pulled from the report PDF via the source_pages Claude cited. Photo
-    // problems never block delivery; the roadmap just ships photo-less.
+    // 3. Render PDF — with the inspector's own photos beside each finding.
+    // Candidates come from the source_pages Claude cited; a Haiku vision pass
+    // then assigns only photos that clearly depict each finding (page numbers
+    // alone put wrong photos under findings — Marcin's bug report 2026-06-07).
+    // Photo problems never block delivery; the roadmap just ships photo-less.
     let photosByFinding: Record<number, Uint8Array[]> | undefined;
     if (photoSourcePdf) {
       try {
         const photosByPage = await extractReportPhotos(new Uint8Array(photoSourcePdf));
         if (photosByPage.size > 0) {
-          photosByFinding = photosForFindings({
+          photosByFinding = await matchPhotosToFindings({
+            apiKey,
             findings: claudeResponse.findings ?? [],
             photosByPage,
           });
           const attached = Object.values(photosByFinding).reduce((n, p) => n + p.length, 0);
           console.log(
-            `[roadmap-generator] ${args.id} photos: ${photosByPage.size} report pages with usable images, ${attached} attached across ${Object.keys(photosByFinding).length} findings`,
+            `[roadmap-generator] ${args.id} photos: ${photosByPage.size} report pages with usable images, ${attached} vision-verified across ${Object.keys(photosByFinding).length} findings`,
           );
         }
       } catch (err) {
