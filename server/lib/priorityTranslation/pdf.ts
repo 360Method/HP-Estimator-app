@@ -425,7 +425,16 @@ function drawExecutiveSummary(
     x: MARGIN, y, width: CONTENT_W, byUrgency: args.byUrgency,
     homeScore: args.homeScore,
   });
-  y -= 18;
+  y -= 12;
+
+  // Score method, in plain sight — the number should never read as a mystery.
+  const scoreNote =
+    "How the Home Score works: every home starts at 100 and each finding lowers it by urgency. NOW items weigh the most, SOON items less, WAIT items barely. It is a provisional baseline read from your report alone (never below 40, never a perfect 100), and it climbs as items are completed and verified at visits.";
+  const noteLines = drawWrappedText(page, scoreNote, {
+    x: MARGIN, y, size: 7.5, font: fonts.sansItalic, color: BRAND.muted,
+    lineHeight: 10, maxWidth: CONTENT_W,
+  });
+  y -= noteLines * 10 + 12;
 
   // Property character — italic block, full width
   if (args.response.property_character) {

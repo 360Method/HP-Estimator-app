@@ -161,6 +161,12 @@ export default function PortalReportDetail() {
               </div>
             </div>
           </div>
+          <p className="text-xs text-muted-foreground mt-4 leading-relaxed">
+            How this score works: your technician grades every major system and item
+            during the visit. The score blends those grades, the share of items in
+            good standing, and a deduction for urgent or repair items, out of 100.
+            It climbs as work is completed and verified at the next visit.
+          </p>
         </CardContent>
       </Card>
 

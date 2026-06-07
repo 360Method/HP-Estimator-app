@@ -286,7 +286,7 @@ function ReportsSalesPage() {
           <h2 className="text-base font-black text-[#1a2e1a] mb-4">Every report includes</h2>
           <div className="grid sm:grid-cols-2 gap-3">
             {[
-              { icon: <TrendingUp className="w-4 h-4 text-[#c8922a]" />, title: "Home Score (1–100)", sub: "Composite score across all major systems" },
+              { icon: <TrendingUp className="w-4 h-4 text-[#c8922a]" />, title: "Home Score (out of 100)", sub: "Your technician grades every system; the score blends those grades and deducts for urgent items. It climbs as work is completed." },
               { icon: <ClipboardList className="w-4 h-4 text-[#1a2e1a]" />, title: "System Breakdown", sub: "Individual score for 8+ home systems" },
               { icon: <AlertTriangle className="w-4 h-4 text-amber-600" />, title: "Prioritized Action List", sub: "Critical → High → Medium → Low" },
               { icon: <Zap className="w-4 h-4 text-blue-600" />, title: "Cost Estimates", sub: "Ballpark repair costs for each item" },

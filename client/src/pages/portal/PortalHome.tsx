@@ -514,12 +514,15 @@ export default function PortalHome() {
               </div>
               {/* Health score from latest report */}
               {membershipData.reports.length > 0 && (membershipData.reports[0] as any).healthScore != null ? (
-                <div className="bg-white rounded-lg border border-emerald-100 px-2 py-2 text-center">
+                <div
+                  className="bg-white rounded-lg border border-emerald-100 px-2 py-2 text-center"
+                  title="Out of 100. Your technician grades every system during the visit; the score blends those grades and deducts for urgent items. It climbs as work is completed."
+                >
                   <p className={`text-lg font-bold ${
                     (membershipData.reports[0] as any).healthScore >= 80 ? 'text-emerald-600' :
                     (membershipData.reports[0] as any).healthScore >= 60 ? 'text-amber-600' : 'text-red-600'
                   }`}>{(membershipData.reports[0] as any).healthScore}</p>
-                  <p className="text-[10px] text-gray-500">Home Score</p>
+                  <p className="text-[10px] text-gray-500">Home Score (out of 100)</p>
                 </div>
               ) : null}
             </div>
