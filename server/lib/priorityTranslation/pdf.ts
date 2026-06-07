@@ -342,9 +342,9 @@ function drawStandardOfCareLetter(doc: PDFDocument, fonts: Fonts): PDFPage {
 
   // Body — 3 paragraphs, tighter
   const body = [
-    "What follows is the homeowner's edition of the 360° Roadmap. Inspection reports are written in the language of liability — every finding flagged, every observation hedged. That is a good and necessary job; it is not, however, a plan.",
+    "What follows is the homeowner's edition of the 360° Roadmap. Inspection reports are written in the language of liability: every finding flagged, every observation hedged. That is a good and necessary job; it is not, however, a plan.",
     "Our task is to read the report carefully, apply the lens of the Pacific Northwest's rain load and the era of your home, and organize what the inspector saw into three honest time horizons: address now, plan for soon, monitor on the next cycle.",
-    "Every investment range here is the fully-loaded customer price for quality restoration work in Clark County — vetted tradespeople, materials that match the home, end-to-end project management. No \"starting at\" pricing, no hedge.",
+    "Every investment range here is the fully-loaded customer price for quality restoration work in Clark County: vetted tradespeople, materials that match the home, end-to-end project management. No \"starting at\" pricing, no hedge.",
   ];
 
   for (const para of body) {
@@ -493,7 +493,7 @@ function drawAtAGlanceStrip(
     page.drawText("/100", {
       x: args.x + 12 + scoreW + 3, y: cellY + cellH - 48, size: 10, font: fonts.serif, color: BRAND.amberLight,
     });
-    drawWrappedText(page, "Baseline — improves with each completed item and visit", {
+    drawWrappedText(page, "Baseline: improves with each completed item and visit", {
       x: args.x + 12, y: cellY + 22, size: 6.5, font: fonts.sansItalic, color: BRAND.amberLight,
       lineHeight: 8.5, maxWidth: cellW - 20,
     });
@@ -527,8 +527,8 @@ function drawAtAGlanceStrip(
 
     // Range
     const rangeText = items.length > 0
-      ? `$${formatK(totals.low)}–$${formatK(totals.high)}`
-      : "—";
+      ? `$${formatK(totals.low)}-$${formatK(totals.high)}`
+      : "-";
     page.drawText(rangeText, {
       x: cellX + 12, y: cellY + cellH - 44, size: 13, font: fonts.serifBold, color: BRAND.forest,
     });
@@ -636,7 +636,7 @@ function drawSectionBanner(
   page.drawText(itemsText, {
     x: ledgerX, y: bannerY + bannerH - 36, size: 12, font: fonts.serifBold, color: BRAND.forest,
   });
-  const rangeStr = `$${formatK(args.totals.low)}–$${formatK(args.totals.high)}`;
+  const rangeStr = `$${formatK(args.totals.low)}-$${formatK(args.totals.high)}`;
   const rangeW = fonts.serifBold.widthOfTextAtSize(rangeStr, 12);
   page.drawText(rangeStr, {
     x: ledgerX + ledgerW - rangeW, y: bannerY + bannerH - 36, size: 12,
@@ -770,8 +770,8 @@ function drawFinding(
     x: MARGIN + 12, y: ribbonY + ribbonH - 12, size: 7, tracking: 1.8, color: BRAND.amber,
   });
   const rangeStr = f.investment_range_low_usd === 0 && f.investment_range_high_usd === 0
-    ? "Monitor — no investment scheduled"
-    : `$${f.investment_range_low_usd.toLocaleString()}–$${f.investment_range_high_usd.toLocaleString()}`;
+    ? "Monitor: no investment scheduled"
+    : `$${f.investment_range_low_usd.toLocaleString()}-$${f.investment_range_high_usd.toLocaleString()}`;
   page.drawText(rangeStr, {
     x: MARGIN + 12, y: ribbonY + 10, size: 14, font: fonts.serifBold, color: BRAND.forest,
   });
@@ -825,7 +825,7 @@ function drawClosingPage(
 
   // Closing pull-quote
   const closingText = args.closing
-    || "This roadmap is the starting standard of care for your property — a calm reference, not a bid. When you're ready, the natural next step is a complimentary baseline walkthrough so we can see the home in person and shape a written scope of work to the year ahead.";
+    || "This roadmap is the starting standard of care for your property: a calm reference, not a bid. When you're ready, the natural next step is a complimentary baseline walkthrough so we can see the home in person and shape a written scope of work to the year ahead.";
   const closingLines = measureWrappedText(closingText, fonts.serifItalic, 16, CONTENT_W);
   drawWrappedText(page, closingText, {
     x: MARGIN, y, size: 16, font: fonts.serifItalic, color: BRAND.forest,
@@ -848,7 +848,7 @@ function drawClosingPage(
     {
       label: "ASK A QUESTION",
       title: "Speak with us",
-      body: "Email help@handypioneers.com or call (360) 544-9858. Replies in one business day. No call lists, no upselling — just the homeowner's edition.",
+      body: "Email help@handypioneers.com or call (360) 544-9858. Replies in one business day. No call lists, no upselling, just the homeowner's edition.",
     },
   ];
 
@@ -1004,7 +1004,9 @@ function sanitize(input: string): string {
     .replace(/\u201C/g, '"')  // left double quote
     .replace(/\u201D/g, '"')  // right double quote
     .replace(/\u2013/g, "-")  // en-dash
-    .replace(/\u2014/g, "—")  // em-dash → keep (WinAnsi)
+    // Em dash: never render one (Marcin's call 2026-06-06, it reads AI-written).
+    // A spaced hyphen keeps legacy stored content presentable.
+    .replace(/\s*—\s*/g, " - ")
     .replace(/\u2026/g, "...")  // ellipsis
     .replace(/\u00A0/g, " ");   // nbsp
 }
@@ -1059,5 +1061,5 @@ function romanize(n: number): string {
       }
     }
   }
-  return out || "—";
+  return out || "-";
 }
