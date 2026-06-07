@@ -159,6 +159,10 @@ export const priorityTranslations = pgTable(
     pdfStoragePath: text("pdfStoragePath"),
     reportUrl: text("reportUrl"),
     notes: text("notes"),
+    /** sha256 of the submitted report (PDF bytes, or extracted text for URL-only) — dedupe guardrail. */
+    pdfSha256: varchar("pdfSha256", { length: 64 }),
+    /** Submitter IP (X-Forwarded-For aware) — per-IP daily cap guardrail. */
+    submitIp: varchar("submitIp", { length: 45 }),
     status: varchar("status", { length: 32 })
       .notNull()
       .default("submitted")

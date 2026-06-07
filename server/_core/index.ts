@@ -1898,6 +1898,12 @@ async function startServer() {
         partnerRef: fields.partnerRef
           ? String(fields.partnerRef).trim().replace(/[^\w\s\-\.]/g, "").slice(0, 64) || undefined
           : undefined,
+        // Per-IP guardrail: behind Railway's proxy the client lands in
+        // X-Forwarded-For (first hop); req.ip is the proxy otherwise.
+        submitIp:
+          (String(req.headers["x-forwarded-for"] ?? "").split(",")[0].trim() ||
+            req.ip ||
+            "").slice(0, 45) || undefined,
       });
 
       // Phase 4 agent trigger: a Roadmap Generator submission is a hot inbound

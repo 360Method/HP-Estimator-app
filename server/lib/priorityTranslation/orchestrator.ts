@@ -16,7 +16,7 @@
 import { eq } from "drizzle-orm";
 import path from "path";
 import fs from "fs";
-import { randomBytes } from "crypto";
+import { createHash, randomBytes } from "crypto";
 import {
   getDb,
   findCustomerByEmail,
@@ -32,6 +32,7 @@ import {
   homeHealthRecords,
   portalAccounts,
   portalProperties,
+  type ClaudePriorityTranslationResponse,
 } from "../../../drizzle/schema.priorityTranslation";
 import { properties } from "../../../drizzle/schema";
 import {
@@ -91,6 +92,8 @@ export type RoadmapSubmissionInput = {
   unitCount?: number;
   /** Realtor/inspector partner attribution (?ref= on the roadmap page) */
   partnerRef?: string;
+  /** Submitter IP (X-Forwarded-For aware) — per-IP daily cap guardrail */
+  submitIp?: string;
 };
 
 export type RoadmapSubmissionResult = {
@@ -143,6 +146,30 @@ export async function submitRoadmap(
     }
   }
 
+  // Per-IP cap: at most 5 submissions per IP per 24 h. The per-email cap above
+  // is trivially dodged with +aliases; this one isn't. Each run is a full
+  // Claude pass, so the ceiling protects real spend.
+  if (input.submitIp) {
+    const { gte, and: andOp, eq: eqOp } = await import("drizzle-orm");
+    const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const fromIp = await db
+      .select({ id: priorityTranslations.id })
+      .from(priorityTranslations)
+      .where(
+        andOp(
+          eqOp(priorityTranslations.submitIp, input.submitIp),
+          gte(priorityTranslations.createdAt, dayAgo),
+        ),
+      );
+    if (fromIp.length >= 5) {
+      const err = new Error(
+        "We've received several reports from this connection today. Please try again tomorrow, or reach us at help@handypioneers.com.",
+      ) as Error & { code?: string };
+      err.code = "RATE_LIMITED";
+      throw err;
+    }
+  }
+
   // Structured address fields from the funnel's step-2 form win over
   // parseAddress guessing on the free-text line (legacy posts keep the parse).
   const parsedGuess = parseAddress(input.propertyAddress);
@@ -189,6 +216,10 @@ export async function submitRoadmap(
     pdfStoragePath,
     reportUrl: input.reportUrl ?? null,
     notes: input.notes ?? null,
+    pdfSha256: input.pdfBuffer
+      ? createHash("sha256").update(input.pdfBuffer).digest("hex")
+      : null,
+    submitIp: input.submitIp ?? null,
     status: "processing",
   });
 
@@ -510,6 +541,39 @@ async function processRoadmap(args: ProcessArgs): Promise<void> {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set");
 
+    // Global daily cap: each run is a full Claude pass, so a runaway day —
+    // scripted abuse or a marketing spike we didn't plan for — gets held for
+    // a human decision instead of an open-ended bill. Held submissions park
+    // as "submitted" (homeowner sees "report received") and release via the
+    // existing reprocess path.
+    {
+      const cap = Number(process.env.ROADMAP_DAILY_CAP || 25);
+      const { gte } = await import("drizzle-orm");
+      const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const todays = await db
+        .select({ id: priorityTranslations.id })
+        .from(priorityTranslations)
+        .where(gte(priorityTranslations.createdAt, dayAgo));
+      if (todays.length > cap) {
+        await db
+          .update(priorityTranslations)
+          .set({
+            status: "submitted", // parked, not failed
+            failureReason: "DAILY_CAP_REACHED_HOLD",
+            updatedAt: new Date(),
+          })
+          .where(eq(priorityTranslations.id, args.id));
+        await notifyOwnerOfFailure(
+          args,
+          `Daily roadmap cap reached (${todays.length} submissions in 24h, cap ${cap}). ` +
+            `This submission is HELD — no Claude run, customer not emailed. ` +
+            `If volume is legitimate, raise ROADMAP_DAILY_CAP and re-run processing.`,
+        ).catch(() => null);
+        console.warn(`[roadmap-generator] ${args.id} held — daily cap reached (${todays.length}/${cap})`);
+        return;
+      }
+    }
+
     // 0. URL-only submissions: Claude cannot fetch URLs, so passing the bare
     // link used to generate a roadmap from nothing. Fetch the URL ourselves —
     // a direct PDF link becomes a real PDF buffer; an HTML report becomes
@@ -607,13 +671,59 @@ async function processRoadmap(args: ProcessArgs): Promise<void> {
       }
     }
 
+    // 0c. Dedupe guardrail: the same report resubmitted (same person retrying,
+    // a realtor blasting one PDF through aliases) must not buy a second full
+    // Claude pass. Hash whatever we're actually translating and reuse the
+    // stored response from a completed run of the same bytes in the last 30
+    // days. Rendering, photos, and the email still run fresh for this
+    // submitter.
+    let reusedResponse: ClaudePriorityTranslationResponse | null = null;
+    {
+      const hashSource = photoSourcePdf ?? (reportText ? Buffer.from(reportText) : null);
+      if (hashSource) {
+        const sha = createHash("sha256").update(hashSource).digest("hex");
+        const { and: andOp, eq: eqOp, gte, ne, desc, isNotNull } = await import("drizzle-orm");
+        await db
+          .update(priorityTranslations)
+          .set({ pdfSha256: sha, updatedAt: new Date() })
+          .where(eq(priorityTranslations.id, args.id));
+        const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        const prior = await db
+          .select()
+          .from(priorityTranslations)
+          .where(
+            andOp(
+              eqOp(priorityTranslations.pdfSha256, sha),
+              eqOp(priorityTranslations.status, "completed"),
+              ne(priorityTranslations.id, args.id),
+              gte(priorityTranslations.createdAt, monthAgo),
+              isNotNull(priorityTranslations.claudeResponse),
+            ),
+          )
+          .orderBy(desc(priorityTranslations.createdAt))
+          .limit(1);
+        if (prior[0]?.claudeResponse) {
+          reusedResponse =
+            typeof prior[0].claudeResponse === "string"
+              ? JSON.parse(prior[0].claudeResponse)
+              : prior[0].claudeResponse;
+          console.log(
+            `[roadmap-generator] ${args.id} dedupe hit — reusing Claude response from ${prior[0].id} (same report sha)`,
+          );
+        }
+      }
+    }
+
     // 1. Claude — pass PDF directly as document block (handles scans via OCR).
-    const claudeResponse = await callClaudeForTranslation({
-      propertyAddress: args.propertyAddress,
-      pdfBuffer: reportPdfBuffer,
-      reportText,
-      apiKey,
-    });
+    // Skipped entirely on a dedupe hit.
+    const claudeResponse =
+      reusedResponse ??
+      (await callClaudeForTranslation({
+        propertyAddress: args.propertyAddress,
+        pdfBuffer: reportPdfBuffer,
+        reportText,
+        apiKey,
+      }));
 
     // 2. Merge into health record.
     const existing = await db
