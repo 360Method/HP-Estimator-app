@@ -118,7 +118,10 @@ export async function callClaudeForTranslation(args: {
     });
   }
 
-  const response = await client.messages.create({
+  // Streaming is mandatory at this max_tokens (the SDK rejects non-streaming
+  // requests that could exceed 10 minutes); finalMessage() gives the same
+  // shape as a non-streaming response.
+  const stream = client.messages.stream({
     model: PRIORITY_TRANSLATION_MODEL,
     // Real reports run 60+ pages and 20+ findings, each with four prose
     // fields — 4096 used to truncate the JSON mid-array. Give the full
@@ -133,6 +136,7 @@ export async function callClaudeForTranslation(args: {
     ],
     messages: [{ role: "user", content: userContent }],
   });
+  const response = await stream.finalMessage();
 
   if (response.stop_reason === "max_tokens") {
     // Truncated JSON parses into garbage or throws confusingly — fail loud
