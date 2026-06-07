@@ -144,6 +144,8 @@ export type ClaudePriorityTranslationResponse = {
     investment_range_low_usd: number;
     investment_range_high_usd: number;
     reasoning: string;
+    /** 1-based report pages where the inspector documents this finding — used to place the inspector's photos beside it. */
+    source_pages?: number[];
   }>;
 };
 

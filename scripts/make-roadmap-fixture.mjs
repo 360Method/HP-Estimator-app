@@ -7,15 +7,25 @@
  *
  *   node scripts/make-roadmap-fixture.mjs
  *
- * Output: scripts/fixtures/sample-inspection.pdf (~6 pages, 16 findings),
- * shaped like a typical Spectora-style report so the Claude pass has the same
- * structure to chew on as a real submission.
+ * Output: scripts/fixtures/sample-inspection.pdf (16 findings, some with
+ * embedded JPEG photos), shaped like a typical Spectora-style report so the
+ * Claude pass AND the photo-extraction path see the same structure as a real
+ * submission.
  */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
 const OUT = path.resolve(process.cwd(), "scripts/fixtures/sample-inspection.pdf");
+
+// "Inspector photos" — real HP project shots reused as stand-ins, keyed by
+// finding title fragment. Same gallery the marketing sample uses.
+const GALLERY = path.resolve(process.cwd(), "..", "handy-pioneers-manus", "client", "public", "images", "hero-gallery");
+const PHOTOS_BY_FINDING = {
+  "lifted and cracked composition shingles": ["UCqTnokKBAzttFFs.jpg"],
+  "Gutters filled with debris": ["jPOgJPckBdaPcCPr.jpg", "AwSmGNttlDLyBDuO.jpg"],
+  "Vapor barrier incomplete": ["elKuhgxmpmZnBtDa.jpg"],
+};
 
 const PAGE = { w: 612, h: 792, margin: 54 }; // US Letter
 const INK = rgb(0.13, 0.13, 0.15);
@@ -272,6 +282,33 @@ async function main() {
     text(f.body, { size: 10, gap: 4 });
     space(2);
     text(`Recommendation: ${f.rec}`, { size: 10, gap: 4, indent: 12 });
+
+    // Inspector photos for selected findings — exercises photo extraction.
+    const photoFiles = Object.entries(PHOTOS_BY_FINDING).find(([frag]) =>
+      f.title.includes(frag),
+    )?.[1];
+    if (photoFiles?.length) {
+      const PHOTO_W = 180;
+      let x = PAGE.margin;
+      let rowH = 0;
+      ensure(150);
+      for (const file of photoFiles) {
+        const p = path.resolve(GALLERY, file);
+        if (!existsSync(p)) {
+          console.warn(`[fixture] missing gallery photo ${p} — skipping`);
+          continue;
+        }
+        const img = await doc.embedJpg(readFileSync(p));
+        const h = (img.height / img.width) * PHOTO_W;
+        rowH = Math.max(rowH, h);
+        page.drawImage(img, { x, y: y - h, width: PHOTO_W, height: h });
+        x += PHOTO_W + 10;
+      }
+      if (rowH > 0) {
+        y -= rowH + 4;
+        text(`Photo${photoFiles.length > 1 ? "s" : ""}: ${f.location}`, { font: oblique, size: 8, color: MUTED, gap: 4 });
+      }
+    }
     space(12);
   }
 

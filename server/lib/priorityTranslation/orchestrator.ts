@@ -47,6 +47,7 @@ import {
   issueMagicLink,
 } from "./portalAccount";
 import { renderPriorityTranslationPdf } from "./pdf";
+import { extractReportPhotos, photosForFindings } from "./reportPhotos";
 import { sendPriorityTranslationReady } from "./email";
 import { onLeadCreated } from "../../leadRouting";
 
@@ -542,6 +543,11 @@ async function processRoadmap(args: ProcessArgs): Promise<void> {
       }
     }
 
+    // The inspector's photos come from this buffer regardless of how the
+    // report reaches Claude (document block vs extracted text), so hold on to
+    // it before the oversized path lets reportPdfBuffer go.
+    const photoSourcePdf = reportPdfBuffer;
+
     // 0b. Oversized PDFs: the Claude API caps requests at 32 MB and document
     // blocks at 100 pages — large Spectora exports (50–80 MB of photos) 413.
     // Extract the text server-side and translate from that instead; if the
@@ -566,8 +572,14 @@ async function processRoadmap(args: ProcessArgs): Promise<void> {
         try {
           const { extractText, getDocumentProxy } = await import("unpdf");
           const proxy = await getDocumentProxy(new Uint8Array(reportPdfBuffer));
-          const res = await extractText(proxy, { mergePages: true });
-          extracted = String(res.text ?? "").replace(/\s+/g, " ").trim();
+          // Per-page with [Page N] markers (not mergePages) so Claude can
+          // still report source_pages and the photo placement keeps working.
+          const res = await extractText(proxy);
+          const pages: string[] = Array.isArray(res.text) ? res.text : [String(res.text ?? "")];
+          extracted = pages
+            .map((t, i) => `[Page ${i + 1}]\n${String(t ?? "").replace(/\s+/g, " ").trim()}`)
+            .join("\n\n")
+            .trim();
         } catch (err) {
           console.warn(`[roadmap-generator] ${args.id} text extraction failed:`, err);
         }
@@ -623,11 +635,34 @@ async function processRoadmap(args: ProcessArgs): Promise<void> {
       })
       .where(eq(homeHealthRecords.id, args.homeHealthRecordId));
 
-    // 3. Render PDF.
+    // 3. Render PDF — with the inspector's own photos beside each finding,
+    // pulled from the report PDF via the source_pages Claude cited. Photo
+    // problems never block delivery; the roadmap just ships photo-less.
+    let photosByFinding: Record<number, Uint8Array[]> | undefined;
+    if (photoSourcePdf) {
+      try {
+        const photosByPage = await extractReportPhotos(new Uint8Array(photoSourcePdf));
+        if (photosByPage.size > 0) {
+          photosByFinding = photosForFindings({
+            findings: claudeResponse.findings ?? [],
+            photosByPage,
+          });
+          const attached = Object.values(photosByFinding).reduce((n, p) => n + p.length, 0);
+          console.log(
+            `[roadmap-generator] ${args.id} photos: ${photosByPage.size} report pages with usable images, ${attached} attached across ${Object.keys(photosByFinding).length} findings`,
+          );
+        }
+      } catch (err) {
+        console.warn(`[roadmap-generator] ${args.id} photo extraction skipped:`, err);
+      }
+    }
+
     const pdfBuffer = await renderPriorityTranslationPdf({
       firstName: args.firstName,
       propertyAddress: args.propertyAddress,
       claudeResponse,
+      photosByFinding,
+      photosLabel: "FROM YOUR INSPECTION REPORT",
     });
 
     // 4. Magic link + email.
