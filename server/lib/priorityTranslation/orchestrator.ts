@@ -149,24 +149,34 @@ export async function submitRoadmap(
   // Per-IP cap: at most 5 submissions per IP per 24 h. The per-email cap above
   // is trivially dodged with +aliases; this one isn't. Each run is a full
   // Claude pass, so the ceiling protects real spend.
+  //
+  // FAIL OPEN: a broken guardrail must never block a real homeowner (this
+  // exact query took the funnel down on 2026-06-07 when migration 0008 hadn't
+  // applied). Infrastructure failures log loudly and let the submission
+  // through; only the intentional RATE_LIMITED throw propagates.
   if (input.submitIp) {
-    const { gte, and: andOp, eq: eqOp } = await import("drizzle-orm");
-    const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const fromIp = await db
-      .select({ id: priorityTranslations.id })
-      .from(priorityTranslations)
-      .where(
-        andOp(
-          eqOp(priorityTranslations.submitIp, input.submitIp),
-          gte(priorityTranslations.createdAt, dayAgo),
-        ),
-      );
-    if (fromIp.length >= 5) {
-      const err = new Error(
-        "We've received several reports from this connection today. Please try again tomorrow, or reach us at help@handypioneers.com.",
-      ) as Error & { code?: string };
-      err.code = "RATE_LIMITED";
-      throw err;
+    try {
+      const { gte, and: andOp, eq: eqOp } = await import("drizzle-orm");
+      const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const fromIp = await db
+        .select({ id: priorityTranslations.id })
+        .from(priorityTranslations)
+        .where(
+          andOp(
+            eqOp(priorityTranslations.submitIp, input.submitIp),
+            gte(priorityTranslations.createdAt, dayAgo),
+          ),
+        );
+      if (fromIp.length >= 5) {
+        const err = new Error(
+          "We've received several reports from this connection today. Please try again tomorrow, or reach us at help@handypioneers.com.",
+        ) as Error & { code?: string };
+        err.code = "RATE_LIMITED";
+        throw err;
+      }
+    } catch (err: any) {
+      if (err?.code === "RATE_LIMITED") throw err;
+      console.error("[roadmap-generator] per-IP guardrail failed open:", err?.message ?? err);
     }
   }
 
@@ -208,7 +218,7 @@ export async function submitRoadmap(
     }
   }
 
-  await db.insert(priorityTranslations).values({
+  const baseRow = {
     id,
     portalAccountId: account.id,
     propertyId: property.id,
@@ -216,12 +226,22 @@ export async function submitRoadmap(
     pdfStoragePath,
     reportUrl: input.reportUrl ?? null,
     notes: input.notes ?? null,
-    pdfSha256: input.pdfBuffer
-      ? createHash("sha256").update(input.pdfBuffer).digest("hex")
-      : null,
-    submitIp: input.submitIp ?? null,
-    status: "processing",
-  });
+    status: "processing" as const,
+  };
+  try {
+    await db.insert(priorityTranslations).values({
+      ...baseRow,
+      pdfSha256: input.pdfBuffer
+        ? createHash("sha256").update(input.pdfBuffer).digest("hex")
+        : null,
+      submitIp: input.submitIp ?? null,
+    });
+  } catch (err: any) {
+    // Guardrail columns missing (unapplied migration) must not block a real
+    // homeowner — store the row without them and log loudly.
+    console.error("[roadmap-generator] insert with guardrail columns failed, retrying without:", err?.message ?? err);
+    await db.insert(priorityTranslations).values(baseRow);
+  }
 
   const propertyAddressFull = [parsed.street, parsed.city, parsed.state, parsed.zip]
     .filter(Boolean)
@@ -545,8 +565,9 @@ async function processRoadmap(args: ProcessArgs): Promise<void> {
     // scripted abuse or a marketing spike we didn't plan for — gets held for
     // a human decision instead of an open-ended bill. Held submissions park
     // as "submitted" (homeowner sees "report received") and release via the
-    // existing reprocess path.
-    {
+    // existing reprocess path. Fails open: a broken cap check never blocks
+    // a real homeowner.
+    try {
       const cap = Number(process.env.ROADMAP_DAILY_CAP || 25);
       const { gte } = await import("drizzle-orm");
       const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -572,6 +593,8 @@ async function processRoadmap(args: ProcessArgs): Promise<void> {
         console.warn(`[roadmap-generator] ${args.id} held — daily cap reached (${todays.length}/${cap})`);
         return;
       }
+    } catch (err: any) {
+      console.error("[roadmap-generator] daily-cap guardrail failed open:", err?.message ?? err);
     }
 
     // 0. URL-only submissions: Claude cannot fetch URLs, so passing the bare
@@ -678,7 +701,9 @@ async function processRoadmap(args: ProcessArgs): Promise<void> {
     // days. Rendering, photos, and the email still run fresh for this
     // submitter.
     let reusedResponse: ClaudePriorityTranslationResponse | null = null;
-    {
+    // Fails open: a broken dedupe check costs one extra Claude run, never a
+    // failed roadmap.
+    try {
       const hashSource = photoSourcePdf ?? (reportText ? Buffer.from(reportText) : null);
       if (hashSource) {
         const sha = createHash("sha256").update(hashSource).digest("hex");
@@ -712,6 +737,8 @@ async function processRoadmap(args: ProcessArgs): Promise<void> {
           );
         }
       }
+    } catch (err: any) {
+      console.error("[roadmap-generator] dedupe guardrail failed open:", err?.message ?? err);
     }
 
     // 1. Claude — pass PDF directly as document block (handles scans via OCR).
