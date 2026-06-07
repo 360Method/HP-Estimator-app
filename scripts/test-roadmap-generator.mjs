@@ -70,6 +70,12 @@ async function main() {
   form.set("propertyAddress", "8107 NE 14th St, Vancouver, WA 98664");
   form.set("notes", "Automated smoke test — safe to ignore.");
   form.set("source", "roadmap_generator_smoke_test");
+  // Investment-route variant: PROPERTY_KIND=investment UNIT_COUNT=4
+  if (process.env.PROPERTY_KIND) {
+    form.set("propertyKind", process.env.PROPERTY_KIND);
+    if (process.env.UNIT_COUNT) form.set("unitCount", process.env.UNIT_COUNT);
+    console.log(`[setup] propertyKind=${process.env.PROPERTY_KIND} unitCount=${process.env.UNIT_COUNT ?? ""}`);
+  }
 
   const t0 = Date.now();
   const submitRes = await fetch(`${BASE_URL}/api/roadmap-generator/submit`, {
