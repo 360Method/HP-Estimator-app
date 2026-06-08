@@ -15,6 +15,10 @@
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 
+// Hosted HP full logo (CloudFront). Same asset used across the site + portals.
+const HP_LOGO_URL =
+  "https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/PMFhFJDf55eBmmtmS9ai7o/hp-full-logo_4f724ec4.jpg";
+
 type SendArgs = {
   apiKey: string;
   to: string;
@@ -79,6 +83,7 @@ export async function sendPriorityTranslationReady(args: SendArgs): Promise<{ id
 function renderHtml(args: { firstName: string; magicLinkUrl: string; propertyAddress: string }) {
   return `<!doctype html>
 <html><body style="font-family: Georgia, serif; color: #1a2d24; background: #faf8f3; padding: 32px; max-width: 560px; margin: 0 auto;">
+  <img src="${HP_LOGO_URL}" alt="Handy Pioneers" width="180" style="display: block; width: 180px; max-width: 70%; height: auto; margin: 0 0 20px;">
   <p style="font-size: 10px; letter-spacing: 2px; color: #c8892a; text-transform: uppercase;">Handy Pioneers · 360° Method</p>
   <h1 style="font-size: 28px; line-height: 1.2; margin: 12px 0 20px;">Your 360° Roadmap is ready, ${escapeHtml(args.firstName) || "there"}.</h1>
   <p style="font-size: 15px; line-height: 1.6;">

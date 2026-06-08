@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'wouter';
-import { Wrench } from 'lucide-react';
 
 const STORAGE_KEY = 'hp_tech_name';
+const HP_LOGO = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg';
 
 export default function TechLogin() {
   const [, nav] = useLocation();
@@ -24,11 +24,13 @@ export default function TechLogin() {
     <div className="min-h-screen flex flex-col items-center justify-center bg-white px-6">
       <div className="w-full max-w-sm space-y-8">
         <div className="text-center space-y-3">
-          <div className="w-16 h-16 rounded-2xl mx-auto flex items-center justify-center" style={{ background: '#7A5D12' }}>
-            <Wrench className="w-8 h-8 text-white" />
-          </div>
+          <img
+            src={HP_LOGO}
+            alt="Handy Pioneers"
+            className="h-24 w-auto object-contain mx-auto"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+          />
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Handy Pioneers</h1>
             <p className="text-sm text-gray-500 mt-1">Field Technician Portal</p>
           </div>
         </div>
