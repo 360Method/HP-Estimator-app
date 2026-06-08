@@ -1,16 +1,16 @@
 # Staging Workflow
 
-The HP-Estimator-app staging service serves both faces of the app on two clean
+The HP-Estimator-app staging service serves both faces of the app on two
 subdomains, so portal changes can be verified off-prod the same way staff changes are:
 
-- `staging-app.handypioneers.com` — staff app (estimator / CRM / admin).
+- `staging-pro.handypioneers.com` — staff app (estimator / CRM / admin).
 - `staging-client.handypioneers.com` — customer portal (renders portal-only mode;
   `/admin` and `/onboarding` 404 here, same as `client.handypioneers.com`).
 
 Both hostnames point at the one `hp-estimator-staging` service — the SPA build is
 shared and decides which face to show by hostname (`client/src/App.tsx`
-`PORTAL_HOSTNAMES`). The old `staging-pro.handypioneers.com` name is retired (its DNS
-was broken).
+`PORTAL_HOSTNAMES`). Only the portal hostnames go in `PORTAL_HOSTNAMES`; the staff
+domain is anything else pointed at the service.
 
 ## Infrastructure
 
@@ -20,7 +20,7 @@ was broken).
 | Railway env | `production` (`0e57bbed-d422-42c5-9661-c1c931800379`) |
 | App service | `hp-estimator-staging` (`3baf5e9c-8bb1-4718-b81e-33fa6ed621a8`) |
 | DB service | `MySQL-Staging` (`1ebcffab-00d8-40ae-ac2d-19b652b8cfc6`) |
-| Staff domain | `staging-app.handypioneers.com` → `hp-estimator-staging` |
+| Staff domain | `staging-pro.handypioneers.com` → `hp-estimator-staging` |
 | Portal domain | `staging-client.handypioneers.com` → `hp-estimator-staging` |
 | Branch | `staging` (tracked by the Railway service; autodeploys on push) |
 
