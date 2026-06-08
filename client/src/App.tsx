@@ -99,6 +99,7 @@ const AdminVendorDetail = lazy(() => import("./pages/admin/AdminVendorDetail"));
 const AdminVendorNew = lazy(() => import("./pages/admin/AdminVendorNew"));
 const AgentsControl = lazy(() => import("./pages/admin/AgentsControl"));
 const AgentsRuns = lazy(() => import("./pages/admin/AgentsRuns"));
+const ClientDetailPage = lazy(() => import("./pages/clients/ClientDetailPage"));
 const OrgChart = lazy(() => import("./pages/admin/OrgChart"));
 
 // Self-serve password reset (public)
@@ -221,6 +222,9 @@ function Router() {
       <Route path="/admin/vendors/new" component={staffOnly(AdminVendorNew)} />
       <Route path="/admin/vendors/:id" component={staffOnly(AdminVendorDetail)} />
       <Route path="/admin/vendors" component={staffOnly(AdminVendorsList)} />
+
+      {/* Client umbrella — deep-linkable single-client view (Phase C shell) */}
+      <Route path="/admin/clients/:id/:tab?" component={staffOnly(ClientDetailPage)} />
 
       {/* Lead Nurturer admin — drafts inbox + playbook editor */}
       <Route path="/admin/agents/drafts" component={AgentDraftsPage} />

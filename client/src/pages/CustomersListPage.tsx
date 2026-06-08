@@ -6,6 +6,7 @@
 // ============================================================
 
 import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
+import { useLocation } from 'wouter';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { Customer } from '@/lib/types';
 import { trpc } from '@/lib/trpc';
@@ -138,7 +139,15 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function CustomersListPage() {
   const { state, addCustomer, setActiveCustomer, updateCustomer: updateCtxCustomer, removeCustomer } = useEstimator();
+  const [, navigate] = useLocation();
   const { customers } = state;
+
+  // Open a client: focus them inline immediately (snappy), and reflect it in the
+  // URL so the client page is deep-linkable / refresh-safe (ClientDetailPage).
+  const openCustomer = useCallback((id: string) => {
+    setActiveCustomer(id, 'list');
+    navigate(`/admin/clients/${id}`);
+  }, [setActiveCustomer, navigate]);
   const utils = trpc.useUtils();
 
   // ── Column visibility ─────────────────────────────────────────────────────
@@ -613,7 +622,7 @@ export default function CustomersListPage() {
                     <tr
                       key={c.id}
                       className={`border-b border-border/50 hover:bg-muted/30 transition-colors cursor-pointer group ${isSelected ? 'bg-primary/5' : ''}`}
-                      onClick={() => setActiveCustomer(c.id, 'list')}
+                      onClick={() => openCustomer(c.id)}
                     >
                       <td className="py-2.5 pr-2" onClick={e => { e.stopPropagation(); toggleSelect(c.id); }}>
                         <Checkbox checked={isSelected} onCheckedChange={() => toggleSelect(c.id)} />

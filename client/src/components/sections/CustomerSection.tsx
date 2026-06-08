@@ -12,6 +12,7 @@
 // ============================================================
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useLocation } from 'wouter';
 import { ConvertToEstimateModal, ConvertToJobModal } from '@/components/ConversionModal';
 import NewLeadModal from '@/components/intakes/NewLeadModal';
 import NewEstimateModal from '@/components/intakes/NewEstimateModal';
@@ -687,6 +688,7 @@ export default function CustomerSection() {
   } = useEstimator();
   const { jobInfo, customerProfile, activityFeed, activeCustomerTab, opportunities, activePipelineArea, activeCustomerId, customers } = state;
   const activeCustomer = customers.find(c => c.id === activeCustomerId);
+  const [location, navigate] = useLocation();
 
   const [newTag, setNewTag] = useState('');
   const [editingContact, setEditingContact] = useState(false);
@@ -774,6 +776,12 @@ export default function CustomerSection() {
     setCustomerTab(nextTab);
     const area = areaMap[nextTab];
     if (area) setPipelineArea(area);
+    // When viewed through the deep-linkable client route, keep the tab in the URL
+    // so a refresh / back-button lands on the same tab. The inline "/" flow is
+    // left untouched (no navigation there).
+    if (location.startsWith('/admin/clients/') && activeCustomerId) {
+      navigate(`/admin/clients/${activeCustomerId}/${nextTab}`);
+    }
   };
 
   const addTag = () => {
