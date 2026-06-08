@@ -1898,7 +1898,7 @@ export default function CustomerSection() {
       hasMoney ||
       methodStep.key === 'prioritize' ||
       methodStep.key === 'upgrade' ||
-      methodStep.key === 'cfo_intelligence';
+      methodStep.key === 'scale';
 
     if (requiresReview) {
       return {
