@@ -358,7 +358,8 @@ async function startServer() {
     "https://handypioneers.com",
     "https://www.handypioneers.com",
     "https://staging.handypioneers.com",
-    "https://staging-pro.handypioneers.com",
+    "https://staging-app.handypioneers.com",
+    "https://staging-client.handypioneers.com",
   ];
   if (process.env.NODE_ENV === "development") {
     allowedOrigins.push("http://localhost:3001", "http://localhost:5173");

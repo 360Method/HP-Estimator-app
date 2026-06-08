@@ -111,7 +111,10 @@ const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 // physically separate the bundles, but we can refuse to render staff
 // surfaces. This is a soft security boundary (the JS bundle still
 // contains those components); pair with API-side authz for hard guards.
-const PORTAL_HOSTNAMES = ["client.handypioneers.com"];
+const PORTAL_HOSTNAMES = [
+  "client.handypioneers.com",
+  "staging-client.handypioneers.com",
+];
 
 const isPortalDomain = PORTAL_HOSTNAMES.includes(window.location.hostname);
 

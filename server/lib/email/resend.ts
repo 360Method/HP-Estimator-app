@@ -34,6 +34,48 @@ const HELP_INBOX = "help@handypioneers.com";
 const FROM_DEFAULT = "Handy Pioneers <help@handypioneers.com>";
 const FROM_TRANSACTIONAL = "Handy Pioneers <noreply@handypioneers.com>";
 
+// ─── Staging email guard ──────────────────────────────────────────────────────
+// Staging runs with NODE_ENV=production (Railway env is "production"), so we key
+// off the auto-injected RAILWAY_SERVICE_NAME instead (staging service is
+// "hp-estimator-staging"). In safe mode no real customer can be emailed from a
+// non-prod box, no matter what address is in the prod-copied DB: any recipient
+// not already on @handypioneers.com is rewritten to a deliverable sink on our own
+// domain, and the subject is prefixed with the intended target. EMAIL_SAFE_MODE
+// forces the guard on (=1) or off (=0) for local/manual testing.
+const STAGING_EMAIL_SINK = "staging-sink@handypioneers.com";
+
+function isEmailSafeMode(): boolean {
+  if (process.env.EMAIL_SAFE_MODE === "1") return true;
+  if (process.env.EMAIL_SAFE_MODE === "0") return false;
+  return (process.env.RAILWAY_SERVICE_NAME ?? "").toLowerCase().includes("staging");
+}
+
+function addrOf(recipient: string): string {
+  return (recipient.match(/<(.+?)>/)?.[1] ?? recipient).trim().toLowerCase();
+}
+
+function isInternalAddr(recipient: string): boolean {
+  return addrOf(recipient).endsWith("@handypioneers.com");
+}
+
+/**
+ * In safe mode, rewrite recipient lists so only @handypioneers.com addresses pass
+ * through; everything else collapses to the sink. Returns the filtered list plus
+ * the external addresses that were redirected (for the subject prefix / logging).
+ */
+function guardRecipients(list: string[]): { out: string[]; redirected: string[] } {
+  const kept: string[] = [];
+  const redirected: string[] = [];
+  for (const r of list) {
+    if (isInternalAddr(r)) kept.push(r);
+    else redirected.push(addrOf(r));
+  }
+  if (redirected.length > 0 && !kept.includes(STAGING_EMAIL_SINK)) {
+    kept.push(STAGING_EMAIL_SINK);
+  }
+  return { out: kept, redirected };
+}
+
 export type ResendVoice = "transactional" | "concierge" | "default";
 
 export interface SendEmailParams {
@@ -110,16 +152,40 @@ export async function sendEmailViaResend(params: SendEmailParams): Promise<SendE
   const html = params.html ?? (params.body ? plainToHtml(params.body) : "");
   const text = params.body ?? (params.html ? params.html.replace(/<[^>]+>/g, "") : "");
 
+  // Staging guard: never deliver to a real customer from a non-prod box.
+  let subject = params.subject;
+  let bcc = params.bcc ? (Array.isArray(params.bcc) ? params.bcc : [params.bcc]) : [];
+  let outTo = to;
+  let outCc = cc;
+  if (isEmailSafeMode()) {
+    const guardedTo = guardRecipients(to);
+    const guardedCc = guardRecipients(cc);
+    const guardedBcc = guardRecipients(bcc);
+    outTo = guardedTo.out;
+    outCc = guardedCc.out;
+    bcc = guardedBcc.out;
+    const redirected = [
+      ...guardedTo.redirected,
+      ...guardedCc.redirected,
+      ...guardedBcc.redirected,
+    ];
+    subject = redirected.length > 0
+      ? `[STAGING → ${redirected.join(", ")}] ${subject}`
+      : `[STAGING] ${subject}`;
+    // A send addressed only to externals must still go somewhere valid.
+    if (outTo.length === 0) outTo = [STAGING_EMAIL_SINK];
+  }
+
   const payload: Record<string, unknown> = {
     from,
-    to,
-    subject: params.subject,
+    to: outTo,
+    subject,
     html,
     text,
     reply_to: replyTo,
   };
-  if (cc.length > 0) payload.cc = cc;
-  if (params.bcc) payload.bcc = Array.isArray(params.bcc) ? params.bcc : [params.bcc];
+  if (outCc.length > 0) payload.cc = outCc;
+  if (bcc.length > 0) payload.bcc = bcc;
   if (params.attachments && params.attachments.length > 0) {
     payload.attachments = params.attachments;
   }
@@ -141,21 +207,21 @@ export async function sendEmailViaResend(params: SendEmailParams): Promise<SendE
     });
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
-    console.error(`[Resend] sendEmail to ${to.join(",")} NETWORK error: ${reason}`);
+    console.error(`[Resend] sendEmail to ${outTo.join(",")} NETWORK error: ${reason}`);
     throw new Error(`resend_network_error: ${reason}`);
   }
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     console.error(
-      `[Resend] sendEmail to ${to.join(",")} REJECTED ${res.status}: ${body.slice(0, 400)}`,
+      `[Resend] sendEmail to ${outTo.join(",")} REJECTED ${res.status}: ${body.slice(0, 400)}`,
     );
     throw new Error(`resend_rejected_${res.status}: ${body.slice(0, 200)}`);
   }
 
   const out = (await res.json()) as { id: string };
   console.log(
-    `[Resend] sent OK to=${to.join(",")} subject="${params.subject}" id=${out.id}`,
+    `[Resend] sent OK to=${outTo.join(",")} subject="${subject}" id=${out.id}`,
   );
   return out;
 }
