@@ -31,6 +31,7 @@ import {
 } from "../db";
 import { properties } from "../../drizzle/schema";
 import { eq } from "drizzle-orm";
+import { isRoadmapZipServed } from "../lib/priorityTranslation/serviceArea";
 import { upsertPortalCustomer, createPortalToken, generateReferralCode } from "../portalDb";
 import { notifyOwner } from "../_core/notification";
 import { onLeadCreated } from "../leadRouting";
@@ -358,6 +359,21 @@ publicInquiryRouter.post("/inquiry/details", async (req, res) => {
       return;
     }
     const isRoadmapFunnel = funnel === "roadmap_generator";
+    const isBaselineFunnel = funnel === "baseline_walkthrough";
+
+    // Defense-in-depth for the baseline funnel: re-check the ZIP server-side so a
+    // home outside the service area is waitlisted even if the client didn't flag
+    // it. Single source of truth is the serviceZipCodes table (Clark County
+    // constant fallback). Fail open — a lookup error never blocks a booking.
+    let effectiveOutOfArea = Boolean(outOfArea);
+    if (isBaselineFunnel && !effectiveOutOfArea && String(zip).trim()) {
+      try {
+        const served = await isRoadmapZipServed(String(zip));
+        if (!served) effectiveOutOfArea = true;
+      } catch (e) {
+        console.warn("[publicInquiry/details] baseline ZIP recheck failed:", e);
+      }
+    }
 
     // 1. Enrich the customer record with their address.
     await updateCustomer(String(customerId), {
@@ -415,7 +431,7 @@ publicInquiryRouter.post("/inquiry/details", async (req, res) => {
     // 2. Append the home details to the existing lead's notes (preserve step-1 notes).
     const detailBlock = [
       isRoadmapFunnel ? "— Home details (roadmap generator) —" : "— Home details (baseline walkthrough) —",
-      outOfArea ? "OUT OF AREA — waitlist (ZIP outside the current service area)" : "",
+      effectiveOutOfArea ? "OUT OF AREA — waitlist (ZIP outside the current service area)" : "",
       street ? `Address: ${street}, ${city}, ${state} ${zip}` : "",
       sqft ? `Approx. sq ft: ${sqft}` : "",
       yearBuilt ? `Year built: ${yearBuilt}` : "",
@@ -427,17 +443,24 @@ publicInquiryRouter.post("/inquiry/details", async (req, res) => {
       ? `${existing.notes}\n\n${detailBlock}`
       : detailBlock;
 
+    const waitlistLabel = city
+      ? `${String(city).trim()}, ${String(state).trim()}`
+      : `ZIP ${String(zip).trim()}`;
     const patch: { notes: string; title?: string } = { notes: mergedNotes };
-    if (isRoadmapFunnel && outOfArea) {
-      patch.title = `Roadmap Waitlist — ${city ? `${String(city).trim()}, ${String(state).trim()}` : `ZIP ${String(zip).trim()}`}`;
+    if (effectiveOutOfArea) {
+      patch.title = isRoadmapFunnel
+        ? `Roadmap Waitlist — ${waitlistLabel}`
+        : `Baseline Waitlist — ${waitlistLabel}`;
     } else if (city && !isRoadmapFunnel) {
       patch.title = `Baseline Walkthrough — ${String(city).trim()}, ${String(state).trim()}`;
     }
     await updateOpportunity(String(leadId), patch);
 
     // 2b. Out-of-area roadmap lead: the funnel ends here (no report upload) —
-    // drain the dropout drip so the waitlisted lead isn't nudged to finish.
-    if (isRoadmapFunnel && outOfArea) {
+    // drain the dropout drip so the waitlisted lead isn't nudged to finish. The
+    // baseline funnel's drip suppresses itself off the OUT OF AREA note marker
+    // (see baselineDrip.isBaselineStepOneLead), so it needs no cancel call here.
+    if (isRoadmapFunnel && effectiveOutOfArea) {
       try {
         const { cancelPendingFollowupsForCustomer } = await import("../lib/leadNurturer/roadmapFollowup");
         const { ROADMAP_DROPOUT_KEY } = await import("../lib/leadNurturer/playbook");
@@ -451,8 +474,8 @@ publicInquiryRouter.post("/inquiry/details", async (req, res) => {
 
     // 3. Notify owner the details arrived (non-blocking).
     notifyOwner({
-      title: isRoadmapFunnel && outOfArea
-        ? `Roadmap waitlist signup — ${city ? `${city}, ${state}` : `ZIP ${zip}`} (${leadId})`
+      title: effectiveOutOfArea
+        ? `${isRoadmapFunnel ? "Roadmap" : "Baseline"} waitlist signup — ${city ? `${city}, ${state}` : `ZIP ${zip}`} (${leadId})`
         : `Baseline details received — ${city ? `${city}, ${state}` : "lead"} (${leadId})`,
       content: detailBlock,
     }).catch((e) => console.error("[publicInquiry/details] notifyOwner error:", e));
