@@ -48,6 +48,11 @@ describe('isBaselineStepOneLead', () => {
     expect(isBaselineStepOneLead(lead({ notes: null }))).toBe(false);
   });
 
+  it('rejects out-of-area waitlist leads (they cannot enroll)', () => {
+    const waitlistNotes = `${BASELINE_SOURCE_MARKER}\n\n— Home details (baseline walkthrough) —\nOUT OF AREA — waitlist (ZIP outside the current service area)\nAddress: 1 SW Main St, Portland, OR 97201`;
+    expect(isBaselineStepOneLead(lead({ notes: waitlistNotes }))).toBe(false);
+  });
+
   it('marker constant matches what publicInquiry writes', () => {
     expect(BASELINE_SOURCE_MARKER).toBe('Source: baseline-funnel-step1');
   });

@@ -25,6 +25,9 @@ import { getCustomerById, getDb, listOpportunities, updateOpportunity } from "./
 import { isEmailSenderReady, sendEmail } from "./gmail";
 
 export const BASELINE_SOURCE_MARKER = "Source: baseline-funnel-step1";
+// Written into a lead's notes by /inquiry/details when the home is outside the
+// service area. A waitlisted lead can't enroll, so it must drop out of the drip.
+const OUT_OF_AREA_MARKER = "OUT OF AREA — waitlist";
 const MEMBERSHIP_URL = "https://www.handypioneers.com/membership";
 const HP_PHONE = "(360) 334-4428";
 
@@ -46,7 +49,10 @@ export interface BaselineDripLead {
 export function isBaselineStepOneLead(lead: BaselineDripLead): boolean {
   if (lead.archived) return false;
   if (lead.stage !== "New Lead") return false;
-  return (lead.notes ?? "").includes(BASELINE_SOURCE_MARKER);
+  const notes = lead.notes ?? "";
+  // Out-of-area waitlist leads can't enroll — never nudge them to "finish."
+  if (notes.includes(OUT_OF_AREA_MARKER)) return false;
+  return notes.includes(BASELINE_SOURCE_MARKER);
 }
 
 /**
