@@ -6,6 +6,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { randomBytes } from "crypto";
 import { router, publicProcedure, protectedProcedure } from "../_core/trpc";
+import { portalLeakGuard } from "../_core/portalLeakGuard";
 import {
   findPortalCustomerByEmail,
   findPortalCustomerById,
@@ -259,11 +260,12 @@ async function getPortalCustomerFromRequest(req: any) {
   return findPortalCustomerById(session.customerId);
 }
 
-// Public procedure that also resolves portal customer
-const portalPublicProcedure = publicProcedure;
+// Public procedure that also resolves portal customer. Still customer-facing, so
+// it carries the leak guard even though it's unauthenticated.
+const portalPublicProcedure = publicProcedure.use(portalLeakGuard);
 
 // Portal-authenticated procedure
-const portalProcedure = publicProcedure.use(async ({ ctx, next }) => {
+const portalProcedure = publicProcedure.use(portalLeakGuard).use(async ({ ctx, next }) => {
   const customer = await getPortalCustomerFromRequest(ctx.req);
   if (!customer) {
     throw new TRPCError({ code: "UNAUTHORIZED", message: "Portal session required" });
