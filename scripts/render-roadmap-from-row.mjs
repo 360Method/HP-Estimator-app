@@ -13,7 +13,7 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { eq } from "drizzle-orm";
 import { getDb } from "../server/db.ts";
-import { priorityTranslations } from "../drizzle/schema.priorityTranslation.ts";
+import { priorityTranslations, portalAccounts, portalProperties } from "../drizzle/schema.priorityTranslation.ts";
 import { renderPriorityTranslationPdf } from "../server/lib/priorityTranslation/pdf.ts";
 import { extractReportPhotos, photosForFindings } from "../server/lib/priorityTranslation/reportPhotos.ts";
 import { matchPhotosToFindings } from "../server/lib/priorityTranslation/photoMatcher.ts";
@@ -38,6 +38,17 @@ if (!row.claudeResponse) throw new Error(`${id} has no stored claudeResponse (st
 const claudeResponse =
   typeof row.claudeResponse === "string" ? JSON.parse(row.claudeResponse) : row.claudeResponse;
 
+// Cover fields live on the related records, not the translation row (the row
+// has no firstName/propertyAddress columns). Resolve them the way the
+// production pipeline does: name from the portal account, address from the
+// portal property.
+const [account] = await db.select().from(portalAccounts).where(eq(portalAccounts.id, row.portalAccountId)).limit(1);
+const [prop] = await db.select().from(portalProperties).where(eq(portalProperties.id, row.propertyId)).limit(1);
+const firstName = account?.firstName ?? "";
+const propertyAddress = prop
+  ? [prop.street, [prop.city, prop.state].filter(Boolean).join(", "), prop.zip].filter(Boolean).join(", ")
+  : "";
+
 let photosByFinding;
 if (reportPdfPath) {
   if (!existsSync(reportPdfPath)) throw new Error(`report PDF not found: ${reportPdfPath}`);
@@ -61,8 +72,8 @@ if (reportPdfPath) {
 }
 
 const pdfBuffer = await renderPriorityTranslationPdf({
-  firstName: row.firstName ?? "",
-  propertyAddress: row.propertyAddress ?? "",
+  firstName,
+  propertyAddress,
   claudeResponse,
   editionDate: row.deliveredAt ? new Date(row.deliveredAt) : new Date(),
   photosByFinding,
