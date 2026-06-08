@@ -241,7 +241,7 @@ function collectOpportunities(customers: Customer[], working: Opportunity[], act
   return result.filter(opp =>
     !opp.archived ||
     opp.stage === 'Invoice Paid' ||
-    ['track', 'preserve', 'upgrade', 'cfo_intelligence'].includes(opp.methodStep.key)
+    ['track', 'preserve', 'upgrade', 'scale'].includes(opp.methodStep.key)
   );
 }
 
@@ -249,7 +249,7 @@ function isForDesk(opp: DeskOpportunity, desk: DeskKey) {
   if (desk === 'membership') {
     return Boolean(
       opp.membershipId ||
-      ['baseline', 'inspect', 'track', 'preserve', 'upgrade', 'cfo_intelligence'].includes(opp.methodStep.key) ||
+      ['baseline', 'inspect', 'track', 'preserve', 'upgrade', 'scale'].includes(opp.methodStep.key) ||
       opp.threeSixtySource === 'baseline' ||
       opp.threeSixtySource === 'seasonal_visit' ||
       opp.threeSixtySource === 'membership_recommendation'

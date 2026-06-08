@@ -25,13 +25,13 @@ export interface ThreeSixtyMethodStep {
 export type ThreeSixtyStepKey =
   | 'baseline'
   | 'inspect'
+  | 'track'
   | 'prioritize'
-  | 'scope_price_approve'
   | 'schedule'
   | 'execute'
   | 'preserve'
   | 'upgrade'
-  | 'cfo_intelligence';
+  | 'scale';
 
 export interface ThreeSixtyPhase {
   id: ThreeSixtyPhaseId;
@@ -65,25 +65,25 @@ export const THREE_SIXTY_METHOD_STEPS: ThreeSixtyMethodStep[] = [
   },
   {
     number: 3,
-    key: 'prioritize',
+    key: 'track',
     phase: 'aware',
-    name: 'Priority Roadmap',
-    customerLabel: 'Priority Roadmap',
-    operatorOutcome: 'Convert the baseline and condition log into NOW, SOON, and WAIT priorities with investment ranges.',
-    customerOutcome: 'They know what matters now, what can wait, and how to make confident decisions.',
+    name: 'Track',
+    customerLabel: 'Home Health Record',
+    operatorOutcome: 'Maintain a living log of every repair, visit, contractor, and dollar spent so the property history is complete and patterns are visible.',
+    customerOutcome: 'They have one place that holds the full history of the home and what it has needed.',
     owner: 'Consultant Desk',
-    aiSupport: 'Rank findings, draft red/yellow/green priorities, and prepare the customer-facing roadmap.',
+    aiSupport: 'Organize history into a clean timeline, surface spending patterns, and flag recurring issues.',
   },
   {
     number: 4,
-    key: 'scope_price_approve',
+    key: 'prioritize',
     phase: 'act',
-    name: 'Scope, Price, Approve',
-    customerLabel: 'Approved Scope',
-    operatorOutcome: 'Document exact scope, price work correctly, send the proposal, and secure customer approval.',
-    customerOutcome: 'They see clear scope, investment, approval path, and what happens next.',
+    name: 'Prioritize',
+    customerLabel: 'Priority Roadmap',
+    operatorOutcome: 'Convert the baseline and condition log into NOW, SOON, and WAIT priorities with investment ranges, then scope, price, and secure approval before scheduling.',
+    customerOutcome: 'They know what matters now, what can wait, and exactly what each next step involves.',
     owner: 'Consultant Desk',
-    aiSupport: 'Audit scope clarity, pricing risk, missing exclusions, and customer proposal language.',
+    aiSupport: 'Rank findings, draft red/yellow/green priorities, prepare the roadmap, and audit scope and proposal language.',
   },
   {
     number: 5,
@@ -131,9 +131,9 @@ export const THREE_SIXTY_METHOD_STEPS: ThreeSixtyMethodStep[] = [
   },
   {
     number: 9,
-    key: 'cfo_intelligence',
+    key: 'scale',
     phase: 'advance',
-    name: 'CFO Intelligence',
+    name: 'Scale',
     customerLabel: 'Property Value Intelligence',
     operatorOutcome: 'Track maintenance history, investment, risk reduction, condition trends, and value-supporting documentation for this property.',
     customerOutcome: 'They have a practical ownership record that can support refinance, sale, insurance, planning, or wealth-building conversations with licensed professionals.',
@@ -192,9 +192,9 @@ export const THREE_SIXTY_OPERATOR_LADDER = [
 
 export function getThreeSixtyStepByKey(key?: string | null) {
   const normalizedKey =
-    key === 'scale' ? 'cfo_intelligence'
-    : key === 'track' ? 'cfo_intelligence'
-    : key === 'roadmap_execution' ? 'scope_price_approve'
+    key === 'cfo_intelligence' ? 'scale'
+    : key === 'scope_price_approve' ? 'prioritize'
+    : key === 'roadmap_execution' ? 'prioritize'
     : key;
   return THREE_SIXTY_METHOD_STEPS.find(step => step.key === normalizedKey) ?? null;
 }
@@ -267,13 +267,13 @@ export function getCustomerFacingStepAction(step: ThreeSixtyMethodStep) {
   const map: Record<string, string> = {
     baseline: 'Review your home baseline and confirm the goals we should keep in mind.',
     inspect: 'Prepare for your walkthrough or review the findings from the visit.',
-    prioritize: 'Review the priority roadmap and decide what should happen now, soon, or later.',
-    scope_price_approve: 'Review the approved scope, proposal, and next step before work is scheduled.',
+    track: 'Review your home health record and the history we are keeping for the property.',
+    prioritize: 'Review the priority roadmap and the approved scope before work is scheduled.',
     schedule: 'Confirm the appointment window or message us if the timing needs to change.',
     execute: 'Follow the work progress and review completion proof when the job is done.',
     preserve: 'Stay current with seasonal maintenance that protects the home.',
     upgrade: 'Review smart improvement options with clear scope and pricing.',
-    cfo_intelligence: 'Review the property record as a planning tool for qualified professionals.',
+    scale: 'Review the property record as a planning tool for qualified professionals.',
   };
   return map[step.key] ?? step.customerOutcome;
 }
@@ -295,7 +295,7 @@ export function inferOpportunityThreeSixtyStep(opportunity: {
 
   if (opportunity.membershipId) {
     if (opportunity.area === 'job') return getThreeSixtyStepByKey('execute')!;
-    if (opportunity.area === 'estimate') return getThreeSixtyStepByKey('scope_price_approve')!;
+    if (opportunity.area === 'estimate') return getThreeSixtyStepByKey('prioritize')!;
     return getThreeSixtyStepByKey('inspect')!;
   }
 
@@ -307,11 +307,11 @@ export function inferOpportunityThreeSixtyStep(opportunity: {
   if (opportunity.area === 'estimate') {
     if (isUpgrade && ['Unscheduled', 'Scheduled', 'In Progress', 'Draft', 'Ready to Send', 'Sent'].includes(String(opportunity.stage))) return getThreeSixtyStepByKey('upgrade')!;
     if (['Scheduled', 'In Progress', 'Completed'].includes(String(opportunity.stage))) return getThreeSixtyStepByKey('baseline')!;
-    if (['Sent', 'Ready to Send', 'Verbal Acceptance', 'Approved'].includes(String(opportunity.stage))) return getThreeSixtyStepByKey('scope_price_approve')!;
-    return getThreeSixtyStepByKey('scope_price_approve')!;
+    if (['Sent', 'Ready to Send', 'Verbal Acceptance', 'Approved'].includes(String(opportunity.stage))) return getThreeSixtyStepByKey('prioritize')!;
+    return getThreeSixtyStepByKey('prioritize')!;
   }
   if (opportunity.area === 'job') {
-    if (['Invoice Sent', 'Invoice Paid'].includes(String(opportunity.stage))) return getThreeSixtyStepByKey('cfo_intelligence')!;
+    if (['Invoice Sent', 'Invoice Paid'].includes(String(opportunity.stage))) return getThreeSixtyStepByKey('scale')!;
     if (['Completed', 'Awaiting Sign-Off'].includes(String(opportunity.stage))) return getThreeSixtyStepByKey('execute')!;
     return getThreeSixtyStepByKey('schedule')!;
   }
@@ -439,23 +439,23 @@ export const THREE_SIXTY_SOP_GATES: Record<ThreeSixtyStepKey, ThreeSixtySopGate>
     customerVisibleWhen: 'Findings are reviewed and converted into clear customer language.',
     cannotAdvanceIfMissing: ['condition rating', 'finding note'],
   },
+  track: {
+    stepKey: 'track',
+    source: 'Step_03_Tracking_SOP',
+    owner: 'Consultant Desk',
+    requiredOutputs: ['updated property history', 'repair/visit log', 'cost history', 'condition trend'],
+    approvalRequiredFor: ['customer-visible history summary'],
+    customerVisibleWhen: 'Property history is current and reviewed for accuracy.',
+    cannotAdvanceIfMissing: ['logged findings', 'updated history'],
+  },
   prioritize: {
     stepKey: 'prioritize',
-    source: 'Step_03_Priority_Roadmap_SOP',
+    source: 'Step_04_Priority_Roadmap_SOP',
     owner: 'Consultant Desk',
-    requiredOutputs: ['NOW/SOON/WAIT roadmap', 'investment ranges', 'red/yellow/green priority', 'source findings'],
-    approvalRequiredFor: ['investment ranges', 'roadmap PDF/page', 'customer recommendation'],
-    customerVisibleWhen: 'Consultant approves roadmap language and investment ranges.',
-    cannotAdvanceIfMissing: ['priority bucket', 'investment range', 'approved customer summary'],
-  },
-  scope_price_approve: {
-    stepKey: 'scope_price_approve',
-    source: 'Step_04_Roadmap_Execution_SOP',
-    owner: 'Consultant Desk',
-    requiredOutputs: ['exact scope', 'materials/labor assumptions', 'margin audit', 'proposal', 'customer approval'],
-    approvalRequiredFor: ['scope', 'price', 'deposit', 'schedule promise', 'change in exclusions'],
-    customerVisibleWhen: 'Proposal passes audit and consultant marks it ready for customer.',
-    cannotAdvanceIfMissing: ['scope', 'price', 'approval path'],
+    requiredOutputs: ['NOW/SOON/WAIT roadmap', 'investment ranges', 'red/yellow/green priority', 'source findings', 'exact scope', 'proposal', 'customer approval'],
+    approvalRequiredFor: ['investment ranges', 'roadmap PDF/page', 'scope', 'price', 'customer recommendation'],
+    customerVisibleWhen: 'Consultant approves the roadmap, scope, and investment ranges.',
+    cannotAdvanceIfMissing: ['priority bucket', 'investment range', 'approved scope and proposal'],
   },
   schedule: {
     stepKey: 'schedule',
@@ -493,8 +493,8 @@ export const THREE_SIXTY_SOP_GATES: Record<ThreeSixtyStepKey, ThreeSixtySopGate>
     customerVisibleWhen: 'Consultant approves customer-facing recommendation and disclaimers.',
     cannotAdvanceIfMissing: ['client goal', 'scope option', 'approval rule'],
   },
-  cfo_intelligence: {
-    stepKey: 'cfo_intelligence',
+  scale: {
+    stepKey: 'scale',
     source: 'Step_09_Home_Score_SOP',
     owner: 'CFO Intelligence',
     requiredOutputs: ['10-category Home Score', 'maintenance investment history', 'condition trend', 'documentation gaps', 'non-advisory disclaimer'],
@@ -584,10 +584,10 @@ export function deriveThreeSixtyOperatingStatus(input: {
   const currentStep = (() => {
     if (!hasMembership || baselineStatus === 'needed' || baselineStatus === 'scheduled') return THREE_SIXTY_METHOD_STEPS[0];
     if (openWorkOrders.length > 0) return THREE_SIXTY_METHOD_STEPS[5];
-    if (pendingRepairEstimates.length > 0) return getThreeSixtyStepByKey('scope_price_approve')!;
+    if (pendingRepairEstimates.length > 0) return getThreeSixtyStepByKey('prioritize')!;
     if (priorityCounts.red > 0) return getThreeSixtyStepByKey('prioritize')!;
     if (seasonalVisits.some(visit => visit.status === 'due')) return THREE_SIXTY_METHOD_STEPS[6];
-    return getThreeSixtyStepByKey('cfo_intelligence')!;
+    return getThreeSixtyStepByKey('scale')!;
   })();
 
   const nextInternalAction = (() => {
@@ -670,8 +670,8 @@ export const THREE_SIXTY_MEMBERSHIP_FLYWHEEL: ThreeSixtyMembershipEngineStep[] =
     completionSignal: 'Customer record shows what happened, what changed, and what comes next.',
   },
   {
-    key: 'cfo_intelligence',
-    label: 'CFO Intelligence',
+    key: 'scale',
+    label: 'Scale',
     owner: 'CFO Intelligence',
     internalAction: 'Update the property intelligence record with maintenance investment, condition trend, risk reduction, and value-supporting documentation.',
     customerAction: 'Review the property intelligence summary as a planning tool, not financial or real estate advice.',
@@ -686,7 +686,7 @@ export function deriveThreeSixtyMembershipEnginePlan(status: ThreeSixtyOperating
     if (status.pendingRepairEstimates.length > 0 || status.priorityCounts.red > 0) return 'priority_plan';
     if (status.openWorkOrders.length > 0) return 'work_order';
     if (status.completedWorkOrders.length > 0) return 'proof_and_history';
-    return 'cfo_intelligence';
+    return 'scale';
   })();
 
   const currentIndex = THREE_SIXTY_MEMBERSHIP_FLYWHEEL.findIndex(step => step.key === currentKey);
