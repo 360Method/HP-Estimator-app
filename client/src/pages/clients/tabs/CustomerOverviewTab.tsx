@@ -2,6 +2,7 @@
 import { Button } from '@/components/ui/button';
 import ConciergeBrief from '@/components/ConciergeBrief';
 import ProfileTab from '@/components/clients/ProfileTab';
+import ClientPortalMirror from '@/components/clients/ClientPortalMirror';
 import { fmtDollar } from '@/components/clients/formatters';
 import {
   CustomerActionQueuePanel,
@@ -17,6 +18,7 @@ const CustomerOverviewTab = () => {
   } = useClientUmbrella();
   return (
     <div className="space-y-5">
+      <ClientPortalMirror />
       {activeCustomer && <ConciergeBrief customer={activeCustomer} opportunities={opportunities} />}
       <CustomerActionQueuePanel />
       <PropertyThreeSixtyWorkspace />
