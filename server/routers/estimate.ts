@@ -501,7 +501,7 @@ export const estimateRouter = router({
 
           const res = await sendEmail({
             to: input.toEmail,
-            subject: `Handy Pioneers Project Estimate ${input.estimateNumber}`,
+            subject: `Your estimate from Handy Pioneers is ready`,
             html,
           });
           results.email = res.messageId || "sent";
@@ -518,7 +518,7 @@ export const estimateRouter = router({
           try {
             const parts = [
               `Hi ${input.customerName}, your Handy Pioneers estimate is ready!`,
-              `Estimate ${input.estimateNumber}: ${input.jobTitle}`,
+              `Project: ${input.jobTitle}`,
               `Total: $${fmt(emailGrandTotal)}`,
               input.depositLabel && input.depositAmount
                 ? `Deposit: ${input.depositLabel}, $${fmt(input.depositAmount)}`

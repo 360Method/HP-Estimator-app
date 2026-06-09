@@ -442,7 +442,7 @@ async function startServer() {
   <p style="text-align:center;"><a href="${invoiceUrl}" style="display:inline-block;background:#c8922a;color:#fff;font-weight:700;padding:12px 32px;border-radius:6px;text-decoration:none;">View Invoice</a></p>
   <p style="font-size:13px;color:#888;text-align:center;">Questions? <a href="mailto:help@handypioneers.com" style="color:#c8922a;">help@handypioneers.com</a> | (360) 838-6731</p>
 </td></tr></table></body></html>`;
-                await sendEmail({ to: customer.email, subject: `Payment received for Invoice ${inv.invoiceNumber}`, html: receiptHtml }).catch(() => null);
+                await sendEmail({ to: customer.email, subject: `Payment received, thank you!`, html: receiptHtml }).catch(() => null);
                 await notifyOwner({ title: `💳 Invoice Paid: ${inv.invoiceNumber}`, content: `${customer.name} paid ${amountStr} for invoice ${inv.invoiceNumber} via Stripe PaymentIntent.` }).catch(() => null);
               }
             } catch (emailErr) {
@@ -541,7 +541,7 @@ async function startServer() {
   <p style="text-align:center;"><a href="${invoiceUrl}" style="display:inline-block;background:#c8922a;color:#fff;font-weight:700;padding:12px 32px;border-radius:6px;text-decoration:none;">View Invoice</a></p>
   <p style="font-size:13px;color:#888;text-align:center;">Questions? <a href="mailto:help@handypioneers.com" style="color:#c8922a;">help@handypioneers.com</a> | (360) 838-6731</p>
 </td></tr></table></body></html>`;
-                await sendEmail({ to: customer.email, subject: `Payment received for Invoice ${inv.invoiceNumber}`, html: receiptHtml }).catch(() => null);
+                await sendEmail({ to: customer.email, subject: `Payment received, thank you!`, html: receiptHtml }).catch(() => null);
                 await notifyOwner({ title: `💳 Invoice Paid: ${inv.invoiceNumber}`, content: `${customer.name} paid ${amountStr} for invoice ${inv.invoiceNumber} via Stripe Checkout.` }).catch(() => null);
               }
             } catch (emailErr) {
