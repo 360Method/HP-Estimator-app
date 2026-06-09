@@ -167,7 +167,7 @@ export default function Welcome360Page() {
               </a>
 
               <p style={{ textAlign: "center", fontSize: 12, color: "#aaa", marginTop: 20 }}>
-                Questions? <a href="mailto:help@handypioneers.com" style={{ color: Gold }}>help@handypioneers.com</a> · (360) 544-9858
+                Questions? <a href="mailto:help@handypioneers.com" style={{ color: Gold }}>help@handypioneers.com</a> · (360) 838-6731
               </p>
             </>
           )}

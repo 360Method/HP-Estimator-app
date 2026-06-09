@@ -224,7 +224,7 @@ export default function CompanySettings() {
               <Field label="Company Name" field="companyName" placeholder="Handy Pioneers" {...fieldProps} />
               <Field label="Support Email" field="supportEmail" type="email" placeholder="help@company.com"
                 hint="Used in all customer-facing emails and estimates." {...fieldProps} />
-              <Field label="Support Phone" field="supportPhone" type="tel" placeholder="(360) 544-9858"
+              <Field label="Support Phone" field="supportPhone" type="tel" placeholder="(360) 838-6731"
                 hint="Shown on estimates, invoices, and the portal." {...fieldProps} />
               <Field label="Website URL" field="websiteUrl" type="url" placeholder="https://handypioneers.com" {...fieldProps} />
               <Field label="Google Review Link" field="googleReviewLink" type="url"

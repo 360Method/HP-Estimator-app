@@ -857,7 +857,7 @@ function drawClosingPage(
     {
       label: "ASK A QUESTION",
       title: "Speak with us",
-      body: "Email help@handypioneers.com or call (360) 544-9858. Replies in one business day. No call lists, no upselling, just the homeowner's edition.",
+      body: "Email help@handypioneers.com or call (360) 838-6731. Replies in one business day. No call lists, no upselling, just the homeowner's edition.",
     },
   ];
 
@@ -891,7 +891,7 @@ function drawClosingPage(
   page.drawText("808 SE Chkalov Dr, 3-433  ·  Vancouver, WA 98683", {
     x: MARGIN + 18, y: contactY + 26, size: 11, font: fonts.serif, color: BRAND.cream,
   });
-  page.drawText("(360) 544-9858  ·  help@handypioneers.com  ·  handypioneers.com", {
+  page.drawText("(360) 838-6731  ·  help@handypioneers.com  ·  handypioneers.com", {
     x: MARGIN + 18, y: contactY + 10, size: 11, font: fonts.serif, color: BRAND.amberLight,
   });
 

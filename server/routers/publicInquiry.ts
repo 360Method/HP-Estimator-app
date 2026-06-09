@@ -233,21 +233,21 @@ publicInquiryRouter.post("/inquiry", async (req, res) => {
     if (isEmailSenderReady() && !isQuietCapture) {
       const ackHtml = isRoadmapFunnel
         ? `<p>Hi ${greetName},</p>
-<p>You're one step from your complimentary 360° Roadmap. Finish by adding your home's details and your inspection report — it takes about two minutes.</p>
+<p>You're one step from your complimentary 360° Roadmap. Finish by adding your home's details and your inspection report. It takes about two minutes.</p>
 <p><a href="https://handypioneers.com/roadmap-generator" style="display:inline-block;background:#1a2e1a;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-family:sans-serif;">Finish My Roadmap</a></p>
 <p>Once your report is in, we'll sort every item into NOW, SOON, and WAIT with investment ranges, and deliver your roadmap by email.</p>
-<p>Questions? Call or text us at <a href="tel:+13603344428">(360) 334-4428</a>.</p>
-<p>— The Handy Pioneers Team</p>`
+<p>Questions? Call or text us at <a href="tel:+13608386731">(360) 838-6731</a>.</p>
+<p>The Handy Pioneers Team</p>`
         : `<p>Hi ${greetName},</p>
 <p>We've received your inquiry and are getting ready for a thoughtful first conversation.</p>
-<p>Our Concierge will reach out within one business day to learn more about your home and what you have in mind. There's no pressure — the first conversation is simply exploratory.</p>
-<p>In the meantime, feel free to call or text us at <a href="tel:+13603344428">(360) 334-4428</a>.</p>
-<p>— The Handy Pioneers Team</p>`;
+<p>Our Concierge will reach out within one business day to learn more about your home and what you have in mind. There's no pressure. The first conversation is simply exploratory.</p>
+<p>In the meantime, feel free to call or text us at <a href="tel:+13608386731">(360) 838-6731</a>.</p>
+<p>The Handy Pioneers Team</p>`;
       sendEmail({
         to: emailNorm,
         subject: isRoadmapFunnel
           ? `Your 360° Roadmap is one step away${firstSafe ? `, ${firstSafe}` : ""}`
-          : `Your inquiry is in our care${firstSafe ? `, ${firstSafe}` : ""} — Handy Pioneers`,
+          : `Your inquiry is in our care${firstSafe ? `, ${firstSafe}` : ""}`,
         html: ackHtml,
       }).catch((e) => console.error("[publicInquiry] ack email error:", e));
     }
@@ -257,8 +257,8 @@ publicInquiryRouter.post("/inquiry", async (req, res) => {
       sendSms(
         phoneSafe,
         isRoadmapFunnel
-          ? `Hi ${greetName}, it's Handy Pioneers. Your 360° Roadmap is started — just add your home details and inspection report to finish: handypioneers.com/roadmap-generator`
-          : `Your inquiry is in our care, ${greetName}. Your Handy Pioneers Concierge will reach out within one business day. (360) 334-4428 if anything is time-sensitive.`
+          ? `Hi ${greetName}, it's Handy Pioneers. Your 360° Roadmap is started. Just add your home details and inspection report to finish: handypioneers.com/roadmap-generator`
+          : `Your inquiry is in our care, ${greetName}. Your Handy Pioneers Concierge will reach out within one business day. (360) 838-6731 if anything is time-sensitive.`
       ).catch((e) => console.error("[publicInquiry] ack sms error:", e));
     }
 
@@ -285,10 +285,10 @@ publicInquiryRouter.post("/inquiry", async (req, res) => {
               to: emailNorm,
               subject: `Your Handy Pioneers portal is ready${firstSafe ? `, ${firstSafe}` : ""}`,
               html: `<p>Hi ${greetName},</p>
-<p>Your inquiry is confirmed. While we prepare for our first conversation, you can access your secure Handy Pioneers portal — where you can view your 360° Roadmap, track your project, and message our team.</p>
+<p>Your inquiry is confirmed. While we prepare for our first conversation, you can access your secure Handy Pioneers portal, where you can view your 360° Roadmap, track your project, and message our team.</p>
 <p><a href="${portalLink}" style="display:inline-block;background:#1a2e1a;color:white;padding:12px 24px;border-radius:6px;text-decoration:none;font-family:sans-serif;">Open My Portal</a></p>
 <p style="font-size:12px;color:#888;">This link is valid for 7 days and works on any device. No password needed.</p>
-<p>— The Handy Pioneers Team</p>`,
+<p>The Handy Pioneers Team</p>`,
             }).catch((e) => console.error("[publicInquiry] portal magic link email error:", e));
           }
         }

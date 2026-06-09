@@ -73,11 +73,11 @@ export default function PortalMessages() {
             </div>
             <div className="flex gap-2 shrink-0">
               <a
-                href="tel:3605449858"
+                href="tel:3608386731"
                 className="flex items-center gap-1 text-xs text-gray-500 hover:text-[#1a2e1a] transition-colors px-2 py-1 rounded-lg hover:bg-gray-100"
               >
                 <Phone className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">(360) 544-9858</span>
+                <span className="hidden sm:inline">(360) 838-6731</span>
               </a>
               <a
                 href="mailto:help@handypioneers.com"
@@ -186,7 +186,7 @@ export default function PortalMessages() {
             </Button>
           </div>
           <p className="text-xs text-center text-gray-400 mt-1.5">
-            We typically respond within 1 business day &bull; (360) 544-9858
+            We typically respond within 1 business day &bull; (360) 838-6731
           </p>
         </div>
       </div>

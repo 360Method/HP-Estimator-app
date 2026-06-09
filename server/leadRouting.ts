@@ -517,8 +517,8 @@ async function sendAppointmentConfirmationToCustomer(params: {
   <li><strong>Length:</strong> approximately ${appointmentDuration}</li>
 </ul>
 <p>This is a stewardship conversation, not a presentation. We will walk your home with you, listen to what you have in mind, and share what a proper standard of care looks like for the project ahead.</p>
-<p>Need to adjust the time? Reply to this email or call (360) 241-5718.</p>
-<p>— The Handy Pioneers Team</p>`;
+<p>Need to adjust the time? Reply to this email or call (360) 838-6731.</p>
+<p>The Handy Pioneers Team</p>`;
 
     const { sendEmail, isEmailSenderReady } = await import("./gmail");
     if (isEmailSenderReady()) {
@@ -530,8 +530,8 @@ async function sendAppointmentConfirmationToCustomer(params: {
     // Optional SMS — only if the customer opted in to notifications.
     if (c.sendNotifications && c.mobilePhone && isTwilioConfigured()) {
       const smsBody = appointmentTime
-        ? `${firstName}, your Handy Pioneers visit is confirmed for ${appointmentDate} at ${appointmentTime}. ${consultantName} will see you. (360) 241-5718 if anything changes.`
-        : `${firstName}, your Handy Pioneers visit is confirmed for ${appointmentDate}. ${consultantName} will see you. (360) 241-5718 if anything changes.`;
+        ? `${firstName}, your Handy Pioneers visit is confirmed for ${appointmentDate} at ${appointmentTime}. ${consultantName} will see you. (360) 838-6731 if anything changes.`
+        : `${firstName}, your Handy Pioneers visit is confirmed for ${appointmentDate}. ${consultantName} will see you. (360) 838-6731 if anything changes.`;
       await sendSms(c.mobilePhone, smsBody).catch((e) =>
         console.warn("[appointment ack] sms failed:", e),
       );

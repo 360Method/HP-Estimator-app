@@ -17,7 +17,7 @@ const HP_COMPANY = {
   name: 'Handy Pioneers',
   address: '808 SE Chkalov Dr, 3-433',
   city: 'Vancouver, WA 98683',
-  phone: '(360) 544-9858',
+  phone: '(360) 838-6731',
   email: 'help@handypioneers.com',
   website: 'http://handypioneers.com',
   license: 'HANDYP*761NH',

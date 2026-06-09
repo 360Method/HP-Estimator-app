@@ -34,10 +34,10 @@ export function buildAutoAckEmail(args: {
     Thank you for thinking of us for <strong>${esc(args.serviceType)}</strong>. We treat every property as if it were our own, so the first step is making sure we understand exactly what you have in mind.
   </p>
   <p style="font-size: 15px; line-height: 1.7;">
-    A member of our Concierge team is reviewing your details now. You'll hear from us personally within one business day — by text or email, whichever you prefer.
+    A member of our Concierge team is reviewing your details now. You'll hear from us personally within one business day.
   </p>
   <p style="font-size: 15px; line-height: 1.7;">
-    If your project is straightforward, you'll see an investment range in your portal within forty-eight hours. If we'd benefit from additional context — a photo, a measurement, or a brief walkthrough — your Concierge will let you know what would help.
+    If your project is straightforward, you'll see an investment range in your portal within forty-eight hours. If we'd benefit from additional context (a photo, a measurement, or a brief walkthrough), your Concierge will let you know what would help.
   </p>
   <p style="margin: 28px 0;">
     <a href="${args.portalUrl}"
@@ -46,7 +46,7 @@ export function buildAutoAckEmail(args: {
     </a>
   </p>
   <p style="font-size: 13px; line-height: 1.6; color: #6a6a62;">
-    Your portal is the living record for this project — every photo, every conversation, every step. While we prepare your range, you're welcome to preview what ongoing 360° Method stewardship looks like.
+    Your portal is the living record for this project: every photo, every conversation, every step. While we prepare your range, you're welcome to preview what ongoing 360° Method stewardship looks like.
   </p>
   <hr style="border: 0; border-top: 1px solid #e0dcc8; margin: 32px 0;">
   <p style="font-size: 11px; color: #6a6a62; line-height: 1.6;">
@@ -58,9 +58,9 @@ export function buildAutoAckEmail(args: {
     "",
     `Thank you for thinking of us for ${args.serviceType}. We treat every property as if it were our own, so the first step is making sure we understand exactly what you have in mind.`,
     "",
-    `A member of our Concierge team is reviewing your details now. You'll hear from us personally within one business day — by text or email, whichever you prefer.`,
+    `A member of our Concierge team is reviewing your details now. You'll hear from us personally within one business day.`,
     "",
-    `If your project is straightforward, you'll see an investment range in your portal within forty-eight hours. If we'd benefit from additional context — a photo, a measurement, or a brief walkthrough — your Concierge will let you know what would help.`,
+    `If your project is straightforward, you'll see an investment range in your portal within forty-eight hours. If we'd benefit from additional context (a photo, a measurement, or a brief walkthrough), your Concierge will let you know what would help.`,
     "",
     `Open your portal: ${args.portalUrl}`,
     "",
@@ -71,7 +71,7 @@ export function buildAutoAckEmail(args: {
 
 export function buildAutoAckSms(args: { firstName: string }): string {
   const name = args.firstName?.trim();
-  return `Hi${name ? ` ${name}` : ""}, this is Handy Pioneers — your project request landed and is in our care. Your Concierge will reach out within one business day. Reply STOP to opt out.`;
+  return `Hi${name ? ` ${name}` : ""}, this is Handy Pioneers. Your project request landed and is in our care. Your Concierge will reach out within one business day. Reply STOP to opt out.`;
 }
 
 // ─── T+24h Estimate ready (high confidence) ─────────────────────────────────
@@ -83,7 +83,7 @@ export function buildEstimateReadyEmail(args: {
   portalProjectUrl: string;
 }): { subject: string; html: string; text: string } {
   const subject = "Your project investment range is ready";
-  const fmtRange = `$${args.rangeLow.toLocaleString()} – $${args.rangeHigh.toLocaleString()}`;
+  const fmtRange = `$${args.rangeLow.toLocaleString()} to $${args.rangeHigh.toLocaleString()}`;
   const html = `<!doctype html>
 <html><body style="font-family: Georgia, serif; color: #1a2d24; background: #faf8f3; padding: 32px; max-width: 560px; margin: 0 auto;">
   <p style="font-size: 10px; letter-spacing: 2px; color: #c8892a; text-transform: uppercase; margin: 0 0 8px;">Handy Pioneers · 360° Method</p>
@@ -135,7 +135,7 @@ export function buildMissingInfoDraft(args: {
     .filter(Boolean)
     .map((q, i) => `${i + 1}. ${q}`)
     .join("\n");
-  const close = `Reply when you have a moment — even a quick photo or a short note helps us be precise on your behalf.\n\nWith care,\nYour Handy Pioneers Concierge`;
+  const close = `Reply when you have a moment. Even a quick photo or a short note helps us be precise on your behalf.\n\nWith care,\nYour Handy Pioneers Concierge`;
   const body = [intro, "", middle, "", list, "", close].join("\n");
   return { subject, body };
 }
@@ -145,7 +145,7 @@ export function buildConciergePersonalFollowupDraft(args: {
   firstName: string;
   serviceType: string;
 }): { body: string } {
-  const body = `Hi ${args.firstName || "there"} — checking in personally on your ${args.serviceType.toLowerCase()} request. We're putting your project in front of the right person on our team. If anything's changed since you submitted, or if there's a photo or detail that would help us, send it whenever it's convenient. — Your Handy Pioneers Concierge`;
+  const body = `Hi ${args.firstName || "there"}, checking in personally on your ${args.serviceType.toLowerCase()} request. We're putting your project in front of the right person on our team. If anything's changed since you submitted, or if there's a photo or detail that would help us, send it whenever it's convenient. Your Handy Pioneers Concierge`;
   return { body };
 }
 
@@ -176,9 +176,9 @@ export function buildMembershipIntroDraft(args: { firstName: string }): {
   const subject = "An invitation to ongoing 360° stewardship";
   const body = `Hi ${args.firstName || "there"},
 
-While we wrap up your project, I wanted to share something most of our clients ask about within their first year with us: the 360° Method. It's the way Handy Pioneers becomes the steward of your home year-round — proactive return visits, a living maintenance record, and one trusted point of contact for everything property-related.
+While we wrap up your project, I wanted to share something most of our clients ask about within their first year with us: the 360° Method. It's the way Handy Pioneers becomes the steward of your home year-round, with proactive return visits, a living maintenance record, and one trusted point of contact for everything property-related.
 
-It isn't a sales pitch — most of our 360° members started exactly where you are, with a single project, and chose to stay. There's a short overview waiting for you in your portal under "360° Membership" whenever you'd like to read.
+It isn't a sales pitch. Most of our 360° members started exactly where you are, with a single project, and chose to stay. There's a short overview waiting for you in your portal under "360° Membership" whenever you'd like to read.
 
 With care,
 Your Handy Pioneers Concierge`;
@@ -193,7 +193,7 @@ export function buildLongTermNurtureDraft(args: { firstName: string }): {
   const subject = "Whenever you're ready, we're here";
   const body = `Hi ${args.firstName || "there"},
 
-Just a brief note — your project remains in your portal whenever the timing is right for you. There's no expiration, and the scope and range we put together for you are still good. If something has changed about the project or you'd like us to revisit any details, a single reply gets us back in motion.
+Just a brief note. Your project remains in your portal whenever the timing is right for you. There's no expiration, and the scope and range we put together for you are still good. If something has changed about the project or you'd like us to revisit any details, a single reply gets us back in motion.
 
 With care,
 Your Handy Pioneers Concierge`;

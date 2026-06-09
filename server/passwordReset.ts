@@ -51,7 +51,7 @@ function renderResetEmailHtml(args: { name: string; resetUrl: string }): string 
   <p style="font-size: 10px; letter-spacing: 2px; color: #c8892a; text-transform: uppercase; margin: 0 0 8px;">Handy Pioneers</p>
   <h1 style="font-size: 24px; line-height: 1.3; margin: 0 0 16px;">Reset your password</h1>
   <p style="font-size: 15px; line-height: 1.6;">
-    ${escapeHtml(args.name) || "Hello"} — someone (likely you) asked to reset
+    ${escapeHtml(args.name) || "Hello"}, someone (likely you) asked to reset
     the password on your Handy Pioneers staff account. Use the link below to
     choose a new password. The link is valid for 1 hour.
   </p>
@@ -62,7 +62,7 @@ function renderResetEmailHtml(args: { name: string; resetUrl: string }): string 
     </a>
   </p>
   <p style="font-size: 13px; color: #6a6a62; line-height: 1.5;">
-    If you did not request this, ignore this email — your password stays the
+    If you did not request this, ignore this email. Your password stays the
     same and the link expires on its own.
   </p>
   <hr style="border: 0; border-top: 1px solid #e0dcc8; margin: 32px 0;">
@@ -76,12 +76,12 @@ function renderResetEmailText(args: { name: string; resetUrl: string }): string 
   return [
     `Reset your password`,
     ``,
-    `${args.name || "Hello"} — someone (likely you) asked to reset the password on your Handy Pioneers staff account.`,
+    `${args.name || "Hello"}, someone (likely you) asked to reset the password on your Handy Pioneers staff account.`,
     ``,
     `Open this link within 1 hour to choose a new password:`,
     args.resetUrl,
     ``,
-    `If you did not request this, ignore this email — your password stays the same.`,
+    `If you did not request this, ignore this email. Your password stays the same.`,
     ``,
     `Questions? help@handypioneers.com`,
   ].join("\n");

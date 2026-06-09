@@ -57,7 +57,7 @@ COLD (24+ months):
 - Use the customer's first name in the greeting if provided. If first name is missing, use "Hi there".
 - Don't say "as a valued customer" or anything resembling a CRM template.
 - The SMS must NOT be a truncated email — write it natively as a one-liner from Marcin.
-- Phone for replies: (360) 544-9858. Email: help@handypioneers.com.
+- Phone for replies: (360) 838-6731. Email: help@handypioneers.com.
 
 # Output
 Respond with ONE JSON object, nothing else. Schema:

@@ -74,7 +74,7 @@ export default function AdminAccessDenied({ email }: { email?: string | null }) 
         </div>
 
         <p className="mt-8 text-xs text-gray-400">
-          (360) 544-9858 · help@handypioneers.com
+          (360) 838-6731 · help@handypioneers.com
         </p>
       </div>
     </div>

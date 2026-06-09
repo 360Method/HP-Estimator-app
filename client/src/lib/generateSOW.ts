@@ -420,7 +420,7 @@ export function generateSOW(snapshot: EstimateSnapshot): string {
 
   // ── Footer ───────────────────────────────────────────────────
   lines.push('═══════════════════════════════════════════════════════════');
-  lines.push('Handy Pioneers LLC | (360) 544-9858 | handypioneers.com');
+  lines.push('Handy Pioneers LLC | (360) 838-6731 | handypioneers.com');
   lines.push('License #HANDYPL773RN | Vancouver, WA');
   lines.push(`Generated: ${dateStr}`);
   lines.push('═══════════════════════════════════════════════════════════');

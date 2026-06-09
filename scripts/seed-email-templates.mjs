@@ -28,11 +28,11 @@ if (!url) {
 
 // ─── shared snippets ─────────────────────────────────────────────────────────
 const SIG_HTML = `<p> - The Handy Pioneers Team<br>
-(360) 241-5718 · help@handypioneers.com<br>
+(360) 838-6731 · help@handypioneers.com<br>
 <a href="{{portalUrl}}">{{portalUrl}}</a></p>`;
 
 const SIG_TEXT = ` - The Handy Pioneers Team
-(360) 241-5718 · help@handypioneers.com
+(360) 838-6731 · help@handypioneers.com
 {{portalUrl}}`;
 
 const btn = (href, label) =>
@@ -95,7 +95,7 @@ ${SIG_TEXT}`,
 <p>The login link you tried to use has expired - for security, each link is single-use and only valid for 15 minutes after we send it.</p>
 <p>Request a fresh one below and you'll be back in your portal in a few seconds:</p>
 ${btn('{{portalUrl}}/login', 'Send me a new link →')}
-<p>If you're running into trouble, reply to this email or call us at (360) 241-5718 and we'll help.</p>
+<p>If you're running into trouble, reply to this email or call us at (360) 838-6731 and we'll help.</p>
 ${SIG_HTML}`,
     text: `Hi {{customerFirstName}},
 
@@ -103,7 +103,7 @@ The login link you tried to use has expired - each link is single-use and only v
 
 Request a fresh one: {{portalUrl}}/login
 
-If you're running into trouble, reply to this email or call (360) 241-5718.
+If you're running into trouble, reply to this email or call (360) 838-6731.
 
 ${SIG_TEXT}`,
     mergeTagSchema: [CUSTOMER, PORTAL],
@@ -137,7 +137,7 @@ ${SIG_TEXT}`,
     html: `<p>Hi {{customerFirstName}},</p>
 <p>This is a quick confirmation that the email address on your Handy Pioneers portal account was just changed to <strong>{{newEmail}}</strong>.</p>
 <p>All future estimates, invoices, and appointment reminders will go to that address.</p>
-<p>If you did not make this change, call us immediately at (360) 241-5718 or reply to this email - we'll reverse it right away and check for any suspicious activity on your account.</p>
+<p>If you did not make this change, call us immediately at (360) 838-6731 or reply to this email - we'll reverse it right away and check for any suspicious activity on your account.</p>
 ${SIG_HTML}`,
     text: `Hi {{customerFirstName}},
 
@@ -145,7 +145,7 @@ This is a confirmation that the email address on your portal account was just ch
 
 All future estimates, invoices, and reminders will go to that address.
 
-If you did not make this change, call us immediately at (360) 241-5718.
+If you did not make this change, call us immediately at (360) 838-6731.
 
 ${SIG_TEXT}`,
     mergeTagSchema: [CUSTOMER, { tag: 'newEmail', description: 'New email address on file' }, PORTAL],
@@ -158,7 +158,7 @@ ${SIG_TEXT}`,
     html: `<p>Hi {{customerFirstName}},</p>
 <p>Just letting you know your Handy Pioneers profile was updated. Here's what changed:</p>
 <p style="background:#f5f5f5;padding:12px;border-radius:6px;font-family:monospace;white-space:pre-wrap;">{{changeSummary}}</p>
-<p>If any of these changes don't look right, reply to this email or call (360) 241-5718 and we'll fix it.</p>
+<p>If any of these changes don't look right, reply to this email or call (360) 838-6731 and we'll fix it.</p>
 ${SIG_HTML}`,
     text: `Hi {{customerFirstName}},
 
@@ -167,7 +167,7 @@ Your Handy Pioneers profile was updated.
 Changes:
 {{changeSummary}}
 
-If any of these changes don't look right, reply to this email or call (360) 241-5718.
+If any of these changes don't look right, reply to this email or call (360) 838-6731.
 
 ${SIG_TEXT}`,
     mergeTagSchema: [CUSTOMER, { tag: 'changeSummary', description: 'Multi-line summary of fields changed' }, PORTAL],
@@ -190,7 +190,7 @@ const APPT = [
 <p>Your inquiry has reached us at Handy Pioneers, and it is in our care.</p>
 <p>Here is what happens next: a member of our Concierge team will reach out personally - by text or by email - within one business day to learn more about your home, understand the project you have in mind, and find a window of time that fits your schedule for a walkthrough conversation.</p>
 <p>Nothing further is needed from you in the meantime. We come to you.</p>
-<p>If anything time-sensitive surfaces, you are always welcome to call us directly at (360) 241-5718.</p>
+<p>If anything time-sensitive surfaces, you are always welcome to call us directly at (360) 838-6731.</p>
 ${SIG_HTML}`,
     text: `{{customerFirstName}},
 
@@ -200,7 +200,7 @@ Here is what happens next: a member of our Concierge team will reach out persona
 
 Nothing further is needed from you in the meantime. We come to you.
 
-If anything time-sensitive surfaces, you are welcome to call us directly at (360) 241-5718.
+If anything time-sensitive surfaces, you are welcome to call us directly at (360) 838-6731.
 
 ${SIG_TEXT}`,
     mergeTagSchema: [CUSTOMER, PORTAL],
@@ -215,7 +215,7 @@ ${SIG_TEXT}`,
 <p>Here is what happens next: your Concierge will review the details, gather what is needed from our records, and reach out personally to align on next steps and timing. Expect to hear from them within one business day.</p>
 <p>Your full home history is always available in your portal:</p>
 ${btn('{{portalUrl}}', 'Open my portal →')}
-<p>For anything time-sensitive, call us directly at (360) 241-5718.</p>
+<p>For anything time-sensitive, call us directly at (360) 838-6731.</p>
 ${SIG_HTML}`,
     text: `{{customerFirstName}},
 
@@ -225,7 +225,7 @@ Here is what happens next: your Concierge will review the details, gather what i
 
 Open your portal: {{portalUrl}}
 
-For anything time-sensitive, call us directly at (360) 241-5718.
+For anything time-sensitive, call us directly at (360) 838-6731.
 
 ${SIG_TEXT}`,
     mergeTagSchema: [CUSTOMER, PORTAL],
@@ -246,7 +246,7 @@ ${SIG_TEXT}`,
 <p>This is a stewardship conversation, not a presentation. We will walk your home with you, listen to what you have in mind, and share what a proper standard of care looks like for the project ahead.</p>
 <p>Nothing to prepare on your end - though if there is anything you have been watching or wondering about, jot it down so we can attend to it together.</p>
 ${btn('{{portalUrl}}/appointments', 'View in portal →')}
-<p>Need to adjust the time? Reply to this email or call (360) 241-5718.</p>
+<p>Need to adjust the time? Reply to this email or call (360) 838-6731.</p>
 ${SIG_HTML}`,
     text: `{{customerFirstName}},
 
@@ -263,7 +263,7 @@ Nothing to prepare on your end - though if there is anything you have been watch
 
 View in portal: {{portalUrl}}/appointments
 
-Need to adjust the time? Reply to this email or call (360) 241-5718.
+Need to adjust the time? Reply to this email or call (360) 838-6731.
 
 ${SIG_TEXT}`,
     mergeTagSchema: [
@@ -293,7 +293,7 @@ ${SIG_TEXT}`,
 <p>This is a stewardship conversation, not a presentation. We will walk your home with you, listen to what you have in mind, and share what a proper standard of care looks like for the project ahead. You will leave with clarity on the scope, the sequence, and the considerations that matter for your home specifically.</p>
 <p>Nothing to prepare on your end - just be home.</p>
 ${btn('{{portalUrl}}/appointments', 'View in portal →')}
-<p>If anything changes, reply to this email or call (360) 241-5718.</p>
+<p>If anything changes, reply to this email or call (360) 838-6731.</p>
 ${SIG_HTML}`,
     text: `{{customerFirstName}},
 
@@ -309,7 +309,7 @@ Nothing to prepare on your end - just be home.
 
 View in portal: {{portalUrl}}/appointments
 
-If anything changes, reply to this email or call (360) 241-5718.
+If anything changes, reply to this email or call (360) 838-6731.
 
 ${SIG_TEXT}`,
     mergeTagSchema: [
@@ -366,14 +366,14 @@ ${SIG_TEXT}`,
     preheader: '{{appointmentDate}} at {{appointmentTime}}',
     html: `<p>Hi {{customerFirstName}},</p>
 <p>Quick reminder that Handy Pioneers is headed to <strong>{{appointmentAddress}}</strong> on <strong>{{appointmentDate}} at {{appointmentTime}}</strong>.</p>
-<p>If anything has changed on your end, reply to this email or call (360) 241-5718 and we'll adjust the schedule.</p>
+<p>If anything has changed on your end, reply to this email or call (360) 838-6731 and we'll adjust the schedule.</p>
 ${btn('{{portalUrl}}/appointments', 'View in portal →')}
 ${SIG_HTML}`,
     text: `Hi {{customerFirstName}},
 
 Quick reminder that Handy Pioneers is headed to {{appointmentAddress}} on {{appointmentDate}} at {{appointmentTime}}.
 
-If anything has changed, reply or call (360) 241-5718.
+If anything has changed, reply or call (360) 838-6731.
 
 View in portal: {{portalUrl}}/appointments
 
@@ -394,7 +394,7 @@ ${SIG_TEXT}`,
     html: `<p>Hi {{customerFirstName}},</p>
 <p>Today's the day! We'll see you at <strong>{{appointmentAddress}}</strong> around <strong>{{appointmentTime}}</strong>.</p>
 <p>Your tech today is <strong>{{techName}}</strong> - they'll text you on their way over.</p>
-<p>Need to push the time? Call (360) 241-5718 - the sooner the better.</p>
+<p>Need to push the time? Call (360) 838-6731 - the sooner the better.</p>
 ${SIG_HTML}`,
     text: `Hi {{customerFirstName}},
 
@@ -402,7 +402,7 @@ Today's the day! We'll see you at {{appointmentAddress}} around {{appointmentTim
 
 Your tech today is {{techName}} - they'll text you on their way over.
 
-Need to push the time? Call (360) 241-5718.
+Need to push the time? Call (360) 838-6731.
 
 ${SIG_TEXT}`,
     mergeTagSchema: [
@@ -421,7 +421,7 @@ ${SIG_TEXT}`,
     html: `<p>Hi {{customerFirstName}},</p>
 <p>Heads up - <strong>{{techName}}</strong> is running about <strong>{{delayMinutes}} minutes</strong> behind on the way to your home. New ETA is around <strong>{{newEta}}</strong>.</p>
 <p>Sorry for the wait. We'll text you the moment they're a few blocks out.</p>
-<p>If the new time doesn't work, reply or call (360) 241-5718 and we'll reschedule.</p>
+<p>If the new time doesn't work, reply or call (360) 838-6731 and we'll reschedule.</p>
 ${SIG_HTML}`,
     text: `Hi {{customerFirstName}},
 
@@ -429,7 +429,7 @@ Heads up - {{techName}} is running about {{delayMinutes}} minutes behind. New ET
 
 Sorry for the wait. We'll text you when they're a few blocks out.
 
-If the new time doesn't work, reply or call (360) 241-5718.
+If the new time doesn't work, reply or call (360) 838-6731.
 
 ${SIG_TEXT}`,
     mergeTagSchema: [
@@ -450,7 +450,7 @@ ${SIG_TEXT}`,
 <p style="background:#f5f5f5;padding:12px;border-radius:6px;white-space:pre-wrap;">{{visitSummary}}</p>
 <p>The full write-up - photos, recommendations, and any estimates we promised - is waiting in your portal.</p>
 ${btn('{{portalUrl}}/visits/{{visitId}}', 'View full report →')}
-<p>Questions? Reply to this email or call (360) 241-5718.</p>
+<p>Questions? Reply to this email or call (360) 838-6731.</p>
 ${SIG_HTML}`,
     text: `Hi {{customerFirstName}},
 
@@ -461,7 +461,7 @@ Thanks for having us out today! Quick recap:
 Full write-up - photos, recommendations, any estimates - is in your portal:
 {{portalUrl}}/visits/{{visitId}}
 
-Questions? Reply or call (360) 241-5718.
+Questions? Reply or call (360) 838-6731.
 
 ${SIG_TEXT}`,
     mergeTagSchema: [
@@ -515,7 +515,7 @@ const SCOPE = [
   <li><strong>Total:</strong> {{amount}}</li>
 </ul>
 ${btn('{{estimateUrl}}', 'Review + Approve →')}
-<p>Approvals happen in one click through your portal - no printing, no scanning. Questions? Reply to this email or call us at (360) 241-5718.</p>
+<p>Approvals happen in one click through your portal - no printing, no scanning. Questions? Reply to this email or call us at (360) 838-6731.</p>
 ${SIG_HTML}`,
     text: `Hi {{customerFirstName}},
 
@@ -527,7 +527,7 @@ Thanks for the opportunity to work with you! Your estimate is ready.
 
 Review + approve online: {{estimateUrl}}
 
-Questions? Reply or call (360) 241-5718.
+Questions? Reply or call (360) 838-6731.
 
 ${SIG_TEXT}`,
     mergeTagSchema: [
@@ -580,13 +580,13 @@ ${SIG_TEXT}`,
     preheader: 'We\'re here whenever you\'re ready',
     html: `<p>Hi {{customerFirstName}},</p>
 <p>Thanks for letting us know estimate <strong>{{referenceNumber}}</strong> isn't moving forward. We appreciate you taking the time to look it over.</p>
-<p>If it came down to scope, price, or timing and you'd like to chat through options, we're happy to - just reply to this email or call (360) 241-5718. And if the project resurfaces down the road, your estimate stays in your portal so we can reopen it in a click.</p>
+<p>If it came down to scope, price, or timing and you'd like to chat through options, we're happy to - just reply to this email or call (360) 838-6731. And if the project resurfaces down the road, your estimate stays in your portal so we can reopen it in a click.</p>
 ${SIG_HTML}`,
     text: `Hi {{customerFirstName}},
 
 Thanks for letting us know estimate {{referenceNumber}} isn't moving forward. We appreciate you taking the time to look it over.
 
-If it came down to scope, price, or timing and you'd like to chat through options, reply or call (360) 241-5718. Your estimate stays in your portal if the project resurfaces later.
+If it came down to scope, price, or timing and you'd like to chat through options, reply or call (360) 838-6731. Your estimate stays in your portal if the project resurfaces later.
 
 ${SIG_TEXT}`,
     mergeTagSchema: [CUSTOMER, { tag: 'referenceNumber', description: 'Estimate number' }, PORTAL],
@@ -706,7 +706,7 @@ ${SIG_TEXT}`,
 <p>Heads up - the payment of <strong>{{amount}}</strong> you tried on invoice <strong>{{referenceNumber}}</strong> didn't go through. The bank returned: <em>"{{failureReason}}"</em></p>
 <p>This usually means an expired card, mistyped number, or a temporary bank hold. You can try again in your portal:</p>
 ${btn('{{invoiceUrl}}', 'Try again →')}
-<p>Still stuck? Reply or call (360) 241-5718 and we'll sort it out.</p>
+<p>Still stuck? Reply or call (360) 838-6731 and we'll sort it out.</p>
 ${SIG_HTML}`,
     text: `Hi {{customerFirstName}},
 
@@ -714,7 +714,7 @@ The payment of {{amount}} on invoice {{referenceNumber}} didn't go through. The 
 
 This usually means an expired card, mistyped number, or temporary hold. Try again: {{invoiceUrl}}
 
-Still stuck? Reply or call (360) 241-5718.
+Still stuck? Reply or call (360) 838-6731.
 
 ${SIG_TEXT}`,
     mergeTagSchema: [
@@ -734,7 +734,7 @@ ${SIG_TEXT}`,
     html: `<p>Hi {{customerFirstName}},</p>
 <p>Quick reminder that invoice <strong>{{referenceNumber}}</strong> for <strong>{{amount}}</strong> is due on <strong>{{dueDate}}</strong> - about two weeks out.</p>
 ${btn('{{invoiceUrl}}', 'Pay now →')}
-<p>If you need a different payment plan or have questions about the invoice, reply or call (360) 241-5718 and we'll work it out.</p>
+<p>If you need a different payment plan or have questions about the invoice, reply or call (360) 838-6731 and we'll work it out.</p>
 ${SIG_HTML}`,
     text: `Hi {{customerFirstName}},
 
@@ -742,7 +742,7 @@ Quick reminder - invoice {{referenceNumber}} for {{amount}} is due on {{dueDate}
 
 Pay online: {{invoiceUrl}}
 
-Need a different payment plan? Reply or call (360) 241-5718.
+Need a different payment plan? Reply or call (360) 838-6731.
 
 ${SIG_TEXT}`,
     mergeTagSchema: [
@@ -762,7 +762,7 @@ ${SIG_TEXT}`,
     html: `<p>Hi {{customerFirstName}},</p>
 <p>Invoice <strong>{{referenceNumber}}</strong> for <strong>{{amount}}</strong> was due on <strong>{{dueDate}}</strong> and is now about 30 days past. We wanted to reach out directly before anything escalates.</p>
 ${btn('{{invoiceUrl}}', 'Pay now →')}
-<p>If there's something going on - payment trouble, a dispute about the work, or you'd just like to set up a payment plan - please reply or call us at (360) 241-5718. We're a small team and we'd rather talk it through than anything else.</p>
+<p>If there's something going on - payment trouble, a dispute about the work, or you'd just like to set up a payment plan - please reply or call us at (360) 838-6731. We're a small team and we'd rather talk it through than anything else.</p>
 ${SIG_HTML}`,
     text: `Hi {{customerFirstName}},
 
@@ -770,7 +770,7 @@ Invoice {{referenceNumber}} for {{amount}} was due on {{dueDate}} and is now abo
 
 Pay online: {{invoiceUrl}}
 
-If there's something going on - payment trouble, a dispute, or wanting a payment plan - please reply or call (360) 241-5718. We'd rather talk it through.
+If there's something going on - payment trouble, a dispute, or wanting a payment plan - please reply or call (360) 838-6731. We'd rather talk it through.
 
 ${SIG_TEXT}`,
     mergeTagSchema: [
@@ -885,7 +885,7 @@ ${SIG_TEXT}`,
 <p>Thanks for letting us know. Your 360° membership will move from <strong>{{oldTier}}</strong> to <strong>{{newTier}}</strong> starting <strong>{{effectiveDate}}</strong>.</p>
 <p><strong>What changes on that date:</strong></p>
 <p style="background:#f5f5f5;padding:12px;border-radius:6px;white-space:pre-wrap;">{{changeSummary}}</p>
-<p>Anything already scheduled at your old tier stays as-is. If you want to revisit the decision, reply to this email or call (360) 241-5718 any time.</p>
+<p>Anything already scheduled at your old tier stays as-is. If you want to revisit the decision, reply to this email or call (360) 838-6731 any time.</p>
 ${SIG_HTML}`,
     text: `Hi {{customerFirstName}},
 
@@ -894,7 +894,7 @@ Your 360° membership will move from {{oldTier}} to {{newTier}} starting {{effec
 What changes:
 {{changeSummary}}
 
-Anything already scheduled at your old tier stays as-is. Reply or call (360) 241-5718 any time.
+Anything already scheduled at your old tier stays as-is. Reply or call (360) 838-6731 any time.
 
 ${SIG_TEXT}`,
     mergeTagSchema: [
