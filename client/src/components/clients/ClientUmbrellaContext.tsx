@@ -123,6 +123,15 @@ export interface ClientUmbrellaValue {
   setIntakeModal: Dispatch<SetStateAction<IntakeArea | null>>;
   setShowDuplicateWarning: Dispatch<SetStateAction<{ area: IntakeArea; existing: string } | null>>;
   handleTabClick: (tab: CustomerProfileTab) => void;
+
+  // ── D6: tab compositions ──
+  hotOpps: Opportunity[];
+  leadOpps: Opportunity[];
+  estimateOpps: Opportunity[];
+  jobOpps: Opportunity[];
+  newNote: string;
+  setNewNote: Dispatch<SetStateAction<string>>;
+  addNote: () => void;
 }
 
 const ClientUmbrellaContext = createContext<ClientUmbrellaValue | null>(null);
