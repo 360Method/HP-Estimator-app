@@ -8,9 +8,18 @@
 // EstimatorContext (those useState/useEstimator calls stay in CustomerSection).
 import { createContext, useContext, type Dispatch, type SetStateAction } from 'react';
 import { trpc } from '@/lib/trpc';
+import { useEstimator } from '@/contexts/EstimatorContext';
 import type {
   JobInfo, CustomerProfile, Customer, Opportunity, AppSection, LeadSource,
+  CustomerProfileTab, PipelineArea,
 } from '@/lib/types';
+import type { ThreeSixtyPhaseId } from '@/lib/threeSixtyMethod';
+
+// The EstimatorContext ops are re-exposed as-is; type them off the hook so the
+// signatures stay identical to source and assignability is guaranteed.
+type EstimatorCtx = ReturnType<typeof useEstimator>;
+
+export type IntakeArea = 'lead' | 'estimate' | 'job';
 
 // Inline-shaped local UI state, matching CustomerSection's useState declarations.
 export interface ContactDraft {
@@ -90,6 +99,30 @@ export interface ClientUmbrellaValue {
   // ── tRPC mutation objects (used for .mutate / .isPending) ──
   syncToDbMutation: ReturnType<typeof trpc.customers.update.useMutation>;
   inviteToPortalMutation: ReturnType<typeof trpc.portal.inviteCustomerToPortal.useMutation>;
+
+  // ── D4: shared 360 / opportunity panels ──
+  activeCustomerTab: CustomerProfileTab;
+  areaMap: Record<CustomerProfileTab, PipelineArea | null>;
+  displayName: string;
+  customerFullName: string;
+  activeOpps: Opportunity[];
+  // Derived 360 structures — typed loosely on purpose (pass-through transport only).
+  activeProperty: any;
+  propertyBoard: any;
+  threeSixtyStatus: any;
+  membershipEnginePlan: any;
+  selectedPropertyPhase: ThreeSixtyPhaseId;
+  setSelectedPropertyPhase: Dispatch<SetStateAction<ThreeSixtyPhaseId>>;
+  addOpportunity: EstimatorCtx['addOpportunity'];
+  updateOpportunity: EstimatorCtx['updateOpportunity'];
+  removeOpportunity: EstimatorCtx['removeOpportunity'];
+  convertLeadToEstimate: EstimatorCtx['convertLeadToEstimate'];
+  convertEstimateToJob: EstimatorCtx['convertEstimateToJob'];
+  archiveJob: EstimatorCtx['archiveJob'];
+  createOpportunityMutation: ReturnType<typeof trpc.opportunities.create.useMutation>;
+  setIntakeModal: Dispatch<SetStateAction<IntakeArea | null>>;
+  setShowDuplicateWarning: Dispatch<SetStateAction<{ area: IntakeArea; existing: string } | null>>;
+  handleTabClick: (tab: CustomerProfileTab) => void;
 }
 
 const ClientUmbrellaContext = createContext<ClientUmbrellaValue | null>(null);
