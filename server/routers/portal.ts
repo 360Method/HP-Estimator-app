@@ -532,7 +532,7 @@ export const portalRouter = router({
           invoiceUrl,
           portalUrl: baseUrl,
         };
-        const approvalSubject = appCfg?.emailEstimateApprovedSubject?.trim() || `Estimate ${est.estimateNumber} Approved. Thank You!`;
+        const approvalSubject = appCfg?.emailEstimateApprovedSubject?.trim() || `Your estimate is approved. Thank you!`;
         const approvalHtml = interpolatePortalTemplate(appCfg?.emailEstimateApprovedBody, tmplVars)
           ? `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;">${interpolatePortalTemplate(appCfg?.emailEstimateApprovedBody, tmplVars)!.replace(/\n/g, '<br/>')}</div>`
           : buildApprovalConfirmationEmail(ctx.portalCustomer.name, est.estimateNumber, est.title ?? 'Your Project', depositFmt, invoiceUrl, baseUrl);
@@ -981,7 +981,7 @@ export const portalRouter = router({
 
       await sendEmail({
         to: customer.email,
-        subject: `Approve Estimate ${input.estimateNumber} from Handy Pioneers`,
+        subject: `Your estimate from Handy Pioneers is ready to review`,
         html: buildEstimateEmail(customer.name, input.estimateNumber, input.title, estimateUrl, baseUrl),
       }).catch(() => null);
 
@@ -1062,7 +1062,7 @@ export const portalRouter = router({
 
       await sendEmail({
         to: customer.email,
-        subject: `Invoice ${input.invoiceNumber} from Handy Pioneers`,
+        subject: `Your invoice from Handy Pioneers is ready`,
         html: buildInvoiceEmail(customer.name, input.invoiceNumber, input.amountDue, invoiceUrl, baseUrl),
       }).catch(() => null);
 
@@ -1253,7 +1253,7 @@ export const portalRouter = router({
       const estimateUrl = `${baseUrl}/portal/auth?token=${token}&redirect=/portal/estimates/${est.id}`;
       await sendEmail({
         to: customer.email,
-        subject: `Approve Estimate ${est.estimateNumber} from Handy Pioneers`,
+        subject: `Your estimate from Handy Pioneers is ready to review`,
         html: buildEstimateEmail(customer.name, est.estimateNumber, est.title, estimateUrl, baseUrl),
       });
       return { sent: true };
@@ -1274,7 +1274,7 @@ export const portalRouter = router({
       const invoiceUrl = `${baseUrl}/portal/auth?token=${token}&redirect=/portal/invoices/${inv.id}`;
       await sendEmail({
         to: customer.email,
-        subject: `Invoice ${inv.invoiceNumber} from Handy Pioneers`,
+        subject: `Your invoice from Handy Pioneers is ready`,
         html: buildInvoiceEmail(customer.name, inv.invoiceNumber, inv.amountDue, invoiceUrl, baseUrl),
       });
       return { sent: true };
@@ -1856,7 +1856,7 @@ export const portalRouter = router({
           invoiceUrl: invoiceUrl ?? '',
           portalUrl: baseUrl,
         };
-        const coSubject = appCfg?.emailChangeOrderApprovedSubject?.trim() || `Change Order Approved: ${co.coNumber}`;
+        const coSubject = appCfg?.emailChangeOrderApprovedSubject?.trim() || `Your change order is approved. Thank you!`;
         const coHtml = interpolatePortalTemplate(appCfg?.emailChangeOrderApprovedBody, tmplVars)
           ? `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;">${interpolatePortalTemplate(appCfg?.emailChangeOrderApprovedBody, tmplVars)!.replace(/\n/g, '<br/>')}</div>`
           : buildChangeOrderApprovalEmail(ctx.portalCustomer.name, co.title, co.coNumber, co.totalAmount, invoiceUrl, baseUrl);

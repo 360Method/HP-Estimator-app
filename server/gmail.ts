@@ -556,7 +556,7 @@ export async function sendOverdueReminderEmail({
 
   await sendEmail({
     to,
-    subject: `[Overdue] Invoice ${invoiceNumber}: ${amountStr} past due`,
+    subject: `A quick note about your invoice`,
     html,
   });
 }

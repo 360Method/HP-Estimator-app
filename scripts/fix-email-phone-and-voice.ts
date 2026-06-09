@@ -38,6 +38,20 @@ const VOICE: Record<string, [string, string][]> = {
   mem_welcome: [["and we're thrilled to be the long-term home-care team you can count on", "and we're glad to be the long-term home-care team you can count on"]],
 };
 
+// Warmer subject lines, stripped of the raw reference/estimate ID (which reads
+// machine-generated to a buyer). The number still lives in the email body.
+const SUBJECT_OVERRIDES: Record<string, string> = {
+  invoice_delivered: "Your invoice from Handy Pioneers is ready",
+  scope_delivered: "Your estimate from Handy Pioneers is ready",
+  scope_revised: "Your updated estimate is ready",
+  scope_accepted: "We're on. Thank you for the go-ahead!",
+  nurt_declined_1: "A quick question, whenever you have a moment",
+  nurt_est_silent_1: "Any questions on your estimate?",
+  nurt_est_silent_3: "Closing out your estimate for now",
+  payment_reminder_14: "A friendly reminder: your invoice is due soon",
+  payment_reminder_30: "A quick note about your invoice",
+};
+
 function fixVoice(key: string, s: string | null): string | null {
   if (!s || !VOICE[key]) return s;
   let out = s;
@@ -53,7 +67,7 @@ let changed = 0;
 for (const row of await db.select().from(emailTemplates)) {
   const next = {
     name: fixPhone(row.name),
-    subject: fixVoice(row.key, fixPhone(row.subject)),
+    subject: SUBJECT_OVERRIDES[row.key] ?? fixVoice(row.key, fixPhone(row.subject)),
     preheader: fixPhone(row.preheader),
     html: fixVoice(row.key, fixPhone(row.html)),
     text: fixVoice(row.key, fixPhone(row.text)),
