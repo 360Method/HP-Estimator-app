@@ -49,7 +49,7 @@ const SUBJECT_OVERRIDES: Record<string, string> = {
   nurt_est_silent_1: "Any questions on your estimate?",
   nurt_est_silent_3: "Closing out your estimate for now",
   payment_reminder_14: "A friendly reminder: your invoice is due soon",
-  payment_reminder_30: "A quick note about your invoice",
+  payment_reminder_30: "Following up on your past-due invoice",
 };
 
 function fixVoice(key: string, s: string | null): string | null {
