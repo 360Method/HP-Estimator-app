@@ -46,7 +46,7 @@ const INITIAL_TEAM: TeamMember[] = [
     id: '1',
     name: 'Handy Pioneers Owner',
     email: 'help@handypioneers.com',
-    phone: '(360) 544-9858',
+    phone: '(360) 838-6731',
     role: 'Owner',
     color: '#d97706',
     initials: 'HP',

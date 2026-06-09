@@ -43,7 +43,7 @@ const DEFAULTS = {
   hairline: '#e7e1d4',
   serif: 'Cormorant Garamond, "Playfair Display", Georgia, serif',
   sans: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
-  contact: 'Vancouver, WA · (360) 544-9858 · help@handypioneers.com',
+  contact: 'Vancouver, WA · (360) 838-6731 · help@handypioneers.com',
   footer: 'Handy Pioneers, LLC · Licensed &amp; Insured · HANDYP*761NH',
 };
 

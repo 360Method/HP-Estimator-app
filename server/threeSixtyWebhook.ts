@@ -204,7 +204,7 @@ export async function create360MembershipFromWebhook(
         : "";
 
     const priorityNote = tierDef.priorityScheduling
-      ? `<p>As a ${tierDef.label} member, you have <strong>priority scheduling</strong> — your calls go to the front of the queue.</p>`
+      ? `<p>As a ${tierDef.label} member, you have <strong>priority scheduling</strong>, so your calls go to the front of the queue.</p>`
       : "";
 
     const welcomeHtml = `<!DOCTYPE html><html><body style="font-family:Helvetica,Arial,sans-serif;background:#f4f5f7;padding:32px 16px;">
@@ -216,7 +216,7 @@ export async function create360MembershipFromWebhook(
 </td></tr>
 <tr><td style="padding:36px 40px;color:#1a1a1a;font-size:15px;line-height:1.7;">
   <p>Hi ${customerName.split(" ")[0]},</p>
-  <p>You're officially enrolled in the <strong>${tierDef.label} plan</strong> of the 360° Method. Your home is now on a proactive maintenance plan — no more reactive emergencies.</p>
+  <p>You're officially enrolled in the <strong>${tierDef.label} plan</strong> of the 360° Method. Your home is now on a proactive maintenance plan, so you're cared for before things become emergencies.</p>
   <p><strong>What happens next:</strong></p>
   <ul style="padding-left:20px;color:#333;">
     <li>Our team will reach out within 48 hours to schedule your <strong>Annual 360° Home Scan</strong></li>
@@ -230,12 +230,12 @@ export async function create360MembershipFromWebhook(
   </p>
   <p style="font-size:12px;color:#aaa;text-align:center;margin-top:8px;">This link is valid for 7 days and logs you in automatically.
   </p>
-  <p style="font-size:13px;color:#888;text-align:center;margin-top:24px;">Questions? <a href="mailto:help@handypioneers.com" style="color:#c8922a;">help@handypioneers.com</a> | (360) 544-9858</p>
+  <p style="font-size:13px;color:#888;text-align:center;margin-top:24px;">Questions? <a href="mailto:help@handypioneers.com" style="color:#c8922a;">help@handypioneers.com</a> | (360) 838-6731</p>
 </td></tr></table></body></html>`;
 
     await sendEmail({
       to: customerEmail,
-      subject: `Welcome to the 360° Method — ${tierDef.label} Membership Confirmed`,
+      subject: `Welcome to the 360° Method: ${tierDef.label} membership confirmed`,
       html: welcomeHtml,
       // Transactional welcome email — keep the subject clean (no [#reply-token]).
       skipReplyToken: true,

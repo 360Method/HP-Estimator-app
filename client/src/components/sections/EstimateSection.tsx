@@ -31,7 +31,7 @@ const HP_COMPANY = {
   name: 'Handy Pioneers',
   address: '808 SE Chkalov Dr 3-433',
   city: 'Vancouver, WA 98683',
-  phone: '(360) 544-9858',
+  phone: '(360) 838-6731',
   email: 'help@handypioneers.com',
   website: 'www.HandyPioneers.com',
   license: 'HANDYP*761NH',
@@ -498,7 +498,7 @@ export default function EstimateSection() {
     const lines: string[] = [
       'HANDY PIONEERS — PROJECT ESTIMATE',
       '808 SE Chkalov Dr 3-433, Vancouver, WA 98683',
-      '(360) 544-9858 | help@handypioneers.com | www.HandyPioneers.com',
+      '(360) 838-6731 | help@handypioneers.com | www.HandyPioneers.com',
       `WA Contractor License: ${HP_COMPANY.license}`,
       '─────────────────────────────────────',
       `Estimate #: ${estimateNumber}`,
@@ -1231,7 +1231,7 @@ export default function EstimateSection() {
             </div>
           </div>
           <div className="text-xs text-muted-foreground text-right">
-            <a href="tel:(360)544-9858" className="hover:text-primary">(360) 544-9858</a>
+            <a href="tel:(360)544-9858" className="hover:text-primary">(360) 838-6731</a>
             {' · '}
             <a href="mailto:help@handypioneers.com" className="hover:text-primary">help@handypioneers.com</a>
           </div>

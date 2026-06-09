@@ -480,7 +480,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           borderTop: `1px solid ${HP_DIVIDER}`,
         }}
       >
-        Handy Pioneers · (360) 544-9858 ·{" "}
+        Handy Pioneers · (360) 838-6731 ·{" "}
         <a href="mailto:help@handypioneers.com" style={{ color: HP_GOLD }}>
           help@handypioneers.com
         </a>

@@ -200,7 +200,7 @@ function buildPortalReplyCta(token: string): { html: string; plain: string } {
     </a>
   </td></tr>
 </table>`;
-  const plain = `\n\n— — —\nPrefer to reply in your portal? Open this conversation: ${url}`;
+  const plain = `\n\n---\nPrefer to reply in your portal? Open this conversation: ${url}`;
   return { html, plain };
 }
 
@@ -528,14 +528,14 @@ export async function sendOverdueReminderEmail({
               <tr>
                 <td style="background:#2D5016;border-radius:8px;padding:14px 32px;">
                   <a href="${payUrl}" style="color:#ffffff;font-size:15px;font-weight:700;text-decoration:none;">
-                    Pay Now — ${amountStr}
+                    Pay Now: ${amountStr}
                   </a>
                 </td>
               </tr>
             </table>
             <p style="margin:0;font-size:13px;color:#888;line-height:1.6;">
               If you've already sent payment or have questions, please reply to this email or
-              call us at <strong>(360) 544-9858</strong>. We're happy to help.
+              call us at <strong>(360) 838-6731</strong>. We're happy to help.
             </p>
           </td>
         </tr>
@@ -556,7 +556,7 @@ export async function sendOverdueReminderEmail({
 
   await sendEmail({
     to,
-    subject: `[Overdue] Invoice ${invoiceNumber} — ${amountStr} past due`,
+    subject: `[Overdue] Invoice ${invoiceNumber}: ${amountStr} past due`,
     html,
   });
 }

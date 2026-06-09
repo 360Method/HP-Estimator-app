@@ -141,7 +141,7 @@ export default function TermsAndConditions({ onClose }: TermsAndConditionsProps)
 
           <div className="pt-2 border-t border-gray-100 text-xs text-gray-400">
             Handy Pioneers, LLC · 808 SE Chkalov Dr, 3-433 · Vancouver, WA 98683 ·
-            (360) 544-9858 · help@handypioneers.com · handypioneers.com
+            (360) 838-6731 · help@handypioneers.com · handypioneers.com
           </div>
         </div>
 

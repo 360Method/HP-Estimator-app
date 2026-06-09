@@ -151,8 +151,8 @@ export const bookingRouter = router({
         html: `<p>Hi ${input.firstName},</p>
 <p>We've received your inquiry and are getting ready for a thoughtful first conversation.</p>
 <p>Our Concierge will reach out shortly to learn more about your home and what you have in mind. There's no pressure — the first conversation is simply exploratory.</p>
-<p>In the meantime, feel free to call or text us at <a href="tel:+13603344428">(360) 334-4428</a>.</p>
-<p>— The Handy Pioneers Team</p>`,
+<p>In the meantime, feel free to call or text us at <a href="tel:+13608386731">(360) 838-6731</a>.</p>
+<p>The Handy Pioneers Team</p>`,
       }).catch((e) => console.error('[booking] ack email error:', e));
 
       // Fire new_booking automation (non-blocking)
@@ -311,7 +311,7 @@ async function sendBookingInquiryAck(params: {
   // SMS only if customer consented (TCPA hygiene)
   try {
     if (params.smsConsent && params.phone && isTwilioConfigured()) {
-      const smsBody = `Your inquiry is in our care, ${params.firstName}. Your Handy Pioneers Concierge will reach out within one business day to align on timing. (360) 241-5718 if anything is time-sensitive.`;
+      const smsBody = `Your inquiry is in our care, ${params.firstName}. Your Handy Pioneers Concierge will reach out within one business day to align on timing. (360) 838-6731 if anything is time-sensitive.`;
       await sendSms(params.phone, smsBody).catch((e) =>
         console.warn("[booking ack] sms failed:", e),
       );
@@ -324,10 +324,10 @@ async function sendBookingInquiryAck(params: {
 function defaultBookingAckHtml(firstName: string): string {
   return `<p>${firstName},</p>
 <p>Your inquiry has reached us at Handy Pioneers, and it is in our care.</p>
-<p>Here is what happens next: a member of our Concierge team will reach out personally — by text or by email — within one business day to learn more about your home, understand the project you have in mind, and find a window of time that fits your schedule for a walkthrough conversation.</p>
+<p>Here is what happens next: a member of our Concierge team will reach out personally, by text or by email, within one business day to learn more about your home, understand the project you have in mind, and find a window of time that fits your schedule for a walkthrough conversation.</p>
 <p>Nothing further is needed from you in the meantime. We come to you.</p>
-<p>If anything time-sensitive surfaces, you are welcome to call us directly at (360) 241-5718.</p>
-<p>— The Handy Pioneers Team<br>(360) 241-5718 · help@handypioneers.com</p>`;
+<p>If anything time-sensitive surfaces, you are welcome to call us directly at (360) 838-6731.</p>
+<p>The Handy Pioneers Team<br>(360) 838-6731 · help@handypioneers.com</p>`;
 }
 
 function defaultBookingAckText(firstName: string): string {
@@ -335,12 +335,12 @@ function defaultBookingAckText(firstName: string): string {
 
 Your inquiry has reached us at Handy Pioneers, and it is in our care.
 
-A member of our Concierge team will reach out personally — by text or by email — within one business day to learn more about your home, understand the project you have in mind, and find a window of time that fits your schedule.
+A member of our Concierge team will reach out personally, by text or by email, within one business day to learn more about your home, understand the project you have in mind, and find a window of time that fits your schedule.
 
 Nothing further is needed from you in the meantime. We come to you.
 
-If anything time-sensitive surfaces, call us at (360) 241-5718.
+If anything time-sensitive surfaces, call us at (360) 838-6731.
 
-— The Handy Pioneers Team
-(360) 241-5718 · help@handypioneers.com`;
+The Handy Pioneers Team
+(360) 838-6731 · help@handypioneers.com`;
 }

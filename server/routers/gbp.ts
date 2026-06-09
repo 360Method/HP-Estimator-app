@@ -117,7 +117,7 @@ export const gbpRouter = router({
       return {
         draft: true,
         topic: input.topic,
-        suggestedPost: `${input.topic}${input.callToAction ? ` — ${input.callToAction}` : ""}\n\nHandy Pioneers | Licensed & Insured | Vancouver, WA | (360) 544-9858`,
+        suggestedPost: `${input.topic}${input.callToAction ? ` — ${input.callToAction}` : ""}\n\nHandy Pioneers | Licensed & Insured | Vancouver, WA | (360) 838-6731`,
         note: "Review this draft in /admin/marketing/posts before publishing.",
       };
     }),

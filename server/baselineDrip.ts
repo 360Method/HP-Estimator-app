@@ -29,7 +29,7 @@ export const BASELINE_SOURCE_MARKER = "Source: baseline-funnel-step1";
 // service area. A waitlisted lead can't enroll, so it must drop out of the drip.
 const OUT_OF_AREA_MARKER = "OUT OF AREA — waitlist";
 const MEMBERSHIP_URL = "https://www.handypioneers.com/membership";
-const HP_PHONE = "(360) 334-4428";
+const HP_PHONE = "(360) 838-6731";
 const HP_LOGO_URL =
   "https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/PMFhFJDf55eBmmtmS9ai7o/hp-full-logo_4f724ec4.jpg";
 const logoHeader = `<p><img src="${HP_LOGO_URL}" alt="Handy Pioneers" width="170" style="display:block;width:170px;max-width:70%;height:auto;"></p>`;
@@ -94,7 +94,7 @@ export function buildBaselineDripEmail(step: 1 | 2 | 3, firstName: string): { su
 <p>You started telling us about your home but didn't get to finish. No problem, your information is saved and the rest takes about two minutes.</p>
 <p>The next step is a few quick details about your home, then we schedule your Baseline Walkthrough. That first visit is where we learn your home top to bottom and build your maintenance plan around it.</p>
 ${ctaButton("Finish My Enrollment")}
-<p>If you'd rather talk it through first, reply to this email or call us at <a href="tel:+13603344428">${HP_PHONE}</a>.</p>
+<p>If you'd rather talk it through first, reply to this email or call us at <a href="tel:+13608386731">${HP_PHONE}</a>.</p>
 <p>The Handy Pioneers Team</p>`,
     };
   }
@@ -105,7 +105,7 @@ ${ctaButton("Finish My Enrollment")}
 <p>Most expensive home repairs start as something small that nobody caught. A slow drip, a clogged gutter, a furnace filter past its date.</p>
 <p>That's what the Proactive Path is for: a Baseline Walkthrough of your whole home, seasonal check-ins through the year, and member pricing whenever work does come up. You handle life, we watch the house.</p>
 ${ctaButton("Continue My Enrollment")}
-<p>Questions first? Reply here or call <a href="tel:+13603344428">${HP_PHONE}</a>.</p>
+<p>Questions first? Reply here or call <a href="tel:+13608386731">${HP_PHONE}</a>.</p>
 <p>The Handy Pioneers Team</p>`,
     };
   }

@@ -567,7 +567,7 @@ function renderEmailHtml(plainBody: string, subject: string): string {
   </td></tr>
   <tr><td style="padding:32px 36px;font-size:15px;line-height:1.6;color:#222;">${escaped}</td></tr>
   <tr><td style="padding:18px 36px;border-top:1px solid #eee;font-size:12px;color:#888;">
-    Handy Pioneers · 808 SE Chkalov Dr 3-433, Vancouver, WA 98683 · (360) 544-9858
+    Handy Pioneers · 808 SE Chkalov Dr 3-433, Vancouver, WA 98683 · (360) 838-6731
   </td></tr>
 </table></body></html>`;
 }

@@ -23,7 +23,7 @@ import SendEstimateDialog from '@/components/SendEstimateDialog';
 
 const HP_LOGO = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg';
 const HP_ADDRESS = '808 SE Chkalov Dr, 3-433\nVancouver, WA 98683';
-const HP_PHONE = '(360) 544-9858';
+const HP_PHONE = '(360) 838-6731';
 const HP_EMAIL = 'help@handypioneers.com';
 const HP_WEB = 'http://handypioneers.com';
 

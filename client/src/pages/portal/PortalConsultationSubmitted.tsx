@@ -273,7 +273,7 @@ export default function PortalConsultationSubmitted() {
           borderTop: `1px solid ${HP_DIVIDER}`,
         }}
       >
-        Handy Pioneers · 808 SE Chkalov Dr, 3-433, Vancouver, WA 98683 · (360) 544-9858
+        Handy Pioneers · 808 SE Chkalov Dr, 3-433, Vancouver, WA 98683 · (360) 838-6731
         <br />
         <a
           href="mailto:help@handypioneers.com"

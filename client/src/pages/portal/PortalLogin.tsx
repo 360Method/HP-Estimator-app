@@ -92,11 +92,11 @@ export default function PortalLogin() {
           </div>
         </a>
         <a
-          href="tel:3605449858"
+          href="tel:3608386731"
           style={{ color: "rgba(255,255,255,0.6)", fontSize: "0.8rem", fontFamily: "Georgia, serif" }}
           className="hidden sm:block hover:opacity-100 transition-opacity"
         >
-          (360) 544-9858
+          (360) 838-6731
         </a>
       </div>
 
@@ -230,7 +230,7 @@ export default function PortalLogin() {
           {/* Footer contact */}
           <div className="text-center mt-6 space-y-1">
             <p style={{ color: "rgba(255,255,255,0.3)", fontSize: "0.7rem", letterSpacing: "0.04em" }}>
-              (360) 544-9858 &nbsp;·&nbsp; help@handypioneers.com &nbsp;·&nbsp; Vancouver, WA
+              (360) 838-6731 &nbsp;·&nbsp; help@handypioneers.com &nbsp;·&nbsp; Vancouver, WA
             </p>
             <a
               href="https://handypioneers.com"

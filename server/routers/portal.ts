@@ -534,7 +534,7 @@ export const portalRouter = router({
           invoiceUrl,
           portalUrl: baseUrl,
         };
-        const approvalSubject = appCfg?.emailEstimateApprovedSubject?.trim() || `Estimate ${est.estimateNumber} Approved — Thank You!`;
+        const approvalSubject = appCfg?.emailEstimateApprovedSubject?.trim() || `Estimate ${est.estimateNumber} Approved. Thank You!`;
         const approvalHtml = interpolatePortalTemplate(appCfg?.emailEstimateApprovedBody, tmplVars)
           ? `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;">${interpolatePortalTemplate(appCfg?.emailEstimateApprovedBody, tmplVars)!.replace(/\n/g, '<br/>')}</div>`
           : buildApprovalConfirmationEmail(ctx.portalCustomer.name, est.estimateNumber, est.title ?? 'Your Project', depositFmt, invoiceUrl, baseUrl);
@@ -1399,10 +1399,10 @@ export const portalRouter = router({
           const subject = tpl?.subject ?? `Your request is in our care, ${firstName}`;
           const html = tpl?.html ?? `<p>${firstName},</p>
 <p>We have received your request and added it to your home's standard-of-care file.</p>
-<p>Your Concierge will review the details and reach out personally to align on next steps and timing — expect to hear from them within one business day.</p>
+<p>Your Concierge will review the details and reach out personally to align on next steps and timing, and you can expect to hear from them within one business day.</p>
 <p>Your full home history is always available in your portal: <a href="${portalUrl}">${portalUrl}</a></p>
-<p>For anything time-sensitive, call us directly at (360) 241-5718.</p>
-<p>— The Handy Pioneers Team</p>`;
+<p>For anything time-sensitive, call us directly at (360) 838-6731.</p>
+<p>The Handy Pioneers Team</p>`;
           await sendEmail({ to: ctx.portalCustomer.email, subject, html }).catch((err) =>
             console.warn('[service request ack] email failed:', err),
           );
@@ -1684,7 +1684,7 @@ export const portalRouter = router({
           invoiceUrl,
           portalUrl: baseUrl,
         };
-        const signOffSubject = appCfg?.emailJobSignOffSubject?.trim() || 'Job Completion Confirmed — Thank You!';
+        const signOffSubject = appCfg?.emailJobSignOffSubject?.trim() || 'Job Completion Confirmed. Thank You!';
         const signOffHtml = interpolatePortalTemplate(appCfg?.emailJobSignOffBody, tmplVars)
           ? `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;">${interpolatePortalTemplate(appCfg?.emailJobSignOffBody, tmplVars)!.replace(/\n/g, '<br/>')}</div>`
           : buildSignOffConfirmationEmail(ctx.portalCustomer.name, estimate?.title ?? 'Your Project', signedAt, finalInvoice ? finalInvoice.amountDue : null, invoiceUrl, baseUrl);
@@ -1858,7 +1858,7 @@ export const portalRouter = router({
           invoiceUrl: invoiceUrl ?? '',
           portalUrl: baseUrl,
         };
-        const coSubject = appCfg?.emailChangeOrderApprovedSubject?.trim() || `Change Order Approved — ${co.coNumber}`;
+        const coSubject = appCfg?.emailChangeOrderApprovedSubject?.trim() || `Change Order Approved: ${co.coNumber}`;
         const coHtml = interpolatePortalTemplate(appCfg?.emailChangeOrderApprovedBody, tmplVars)
           ? `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;">${interpolatePortalTemplate(appCfg?.emailChangeOrderApprovedBody, tmplVars)!.replace(/\n/g, '<br/>')}</div>`
           : buildChangeOrderApprovalEmail(ctx.portalCustomer.name, co.title, co.coNumber, co.totalAmount, invoiceUrl, baseUrl);
@@ -2121,7 +2121,7 @@ export const portalRouter = router({
       const priority = rec.priority ?? 'Medium';
       const timeline = priority === 'Critical' ? 'asap' : priority === 'High' ? 'within_week' : 'flexible';
       const costRange = (rec.estimatedCostLow || rec.estimatedCostHigh)
-        ? `\nScan-time range: $${rec.estimatedCostLow ?? '?'} – $${rec.estimatedCostHigh ?? '?'}`
+        ? `\nScan-time range: $${rec.estimatedCostLow ?? '?'} to $${rec.estimatedCostHigh ?? '?'}`
         : '';
       const description = [
         `Recommended work from 360° report #${report.id}`,
@@ -2632,7 +2632,7 @@ function emailWrapper(content: string, accentColor = "#c8922a") {
           <td style="padding:20px 40px 28px;text-align:center;">
             <p style="margin:0 0 4px;font-size:12px;color:#888;">Handy Pioneers &bull; Vancouver, WA 98683</p>
             <p style="margin:0 0 4px;font-size:12px;color:#888;">
-              <a href="tel:3605449858" style="color:#888;text-decoration:none;">(360) 544-9858</a>
+              <a href="tel:3608386731" style="color:#888;text-decoration:none;">(360) 838-6731</a>
               &nbsp;&bull;&nbsp;
               <a href="mailto:help@handypioneers.com" style="color:#888;text-decoration:none;">help@handypioneers.com</a>
             </p>
@@ -2661,7 +2661,7 @@ function buildMagicLinkEmail(name: string, url: string) {
   return emailWrapper(`
     <h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#1a2e1a;">Your Portal Access Link</h2>
     <p style="margin:0 0 12px;">Hi ${firstName},</p>
-    <p style="margin:0 0 20px;">Your secure link to the <strong>Handy Pioneers Customer Portal</strong> is ready. Use it to view your estimates, invoices, and upcoming appointments — all in one place.</p>
+    <p style="margin:0 0 20px;">Your secure link to the <strong>Handy Pioneers Customer Portal</strong> is ready. Use it to view your estimates, invoices, and upcoming appointments, all in one place.</p>
     ${ctaButton('Access My Portal', url)}
     <p style="margin:0 0 8px;font-size:13px;color:#666;">This link expires in <strong>7 days</strong> and can only be used once. If you didn't request this, you can safely ignore this email.</p>
     <p style="margin:0;font-size:13px;color:#aaa;">Or copy this URL into your browser:<br/><span style="word-break:break-all;color:#888;">${url}</span></p>
@@ -2677,7 +2677,7 @@ function buildEstimateEmail(name: string, estimateNumber: string, title: string,
     <p style="margin:0 0 20px;padding:12px 16px;background:#f8f9fa;border-left:3px solid #c8922a;border-radius:0 4px 4px 0;font-weight:600;color:#1a2e1a;">${title}</p>
     <p style="margin:0 0 20px;">Please review the details and approve when you're ready to move forward.</p>
     ${ctaButton('Review & Approve Estimate', url)}
-    <p style="margin:0;font-size:13px;color:#888;text-align:center;">Questions? <a href="mailto:help@handypioneers.com" style="color:#c8922a;">Reply to this email</a> or call us at (360) 544-9858.</p>
+    <p style="margin:0;font-size:13px;color:#888;text-align:center;">Questions? <a href="mailto:help@handypioneers.com" style="color:#c8922a;">Reply to this email</a> or call us at (360) 838-6731.</p>
   `);
 }
 
@@ -2713,12 +2713,12 @@ function buildApprovalConfirmationEmail(
        ${ctaButton('Pay Deposit Now', invoiceUrl, '#1a2e1a')}`
     : `<p style="margin:0 0 20px;">Our team will be in touch shortly to schedule your project.</p>`;
   return emailWrapper(`
-    <h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#1a2e1a;">Estimate Approved — Thank You!</h2>
+    <h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#1a2e1a;">Estimate Approved. Thank You!</h2>
     <p style="margin:0 0 12px;">Hi ${firstName},</p>
     <p style="margin:0 0 8px;">We've received your approval for estimate <strong>${estimateNumber}</strong>:</p>
     <p style="margin:0 0 20px;padding:12px 16px;background:#f8f9fa;border-left:3px solid #1a2e1a;border-radius:0 4px 4px 0;font-weight:600;color:#1a2e1a;">${title}</p>
     ${depositSection}
-    <p style="margin:0;font-size:13px;color:#888;text-align:center;">Questions? <a href="mailto:help@handypioneers.com" style="color:#c8922a;">Reply to this email</a> or call us at (360) 544-9858.</p>
+    <p style="margin:0;font-size:13px;color:#888;text-align:center;">Questions? <a href="mailto:help@handypioneers.com" style="color:#c8922a;">Reply to this email</a> or call us at (360) 838-6731.</p>
   `);
 }
 
@@ -2726,7 +2726,7 @@ function buildReferralEmail(referrerName: string, referralLink: string) {
   return emailWrapper(`
     <h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#1a2e1a;">You've Been Referred to Handy Pioneers</h2>
     <p style="margin:0 0 12px;">Hi there,</p>
-    <p style="margin:0 0 20px;"><strong>${referrerName}</strong> thinks you'd love Handy Pioneers for your home improvement needs in the Vancouver, WA area. Sign up through the link below — both you and ${referrerName} will receive a reward when your first job is completed.</p>
+    <p style="margin:0 0 20px;"><strong>${referrerName}</strong> thinks you'd love Handy Pioneers for your home improvement needs in the Vancouver, WA area. Sign up through the link below. Both you and ${referrerName} will receive a reward when your first job is completed.</p>
     ${ctaButton('Claim Your Referral Reward', referralLink)}
     <p style="margin:0;font-size:13px;color:#888;text-align:center;">Handy Pioneers &bull; Reliable Renovations, Trusted Results</p>
   `);
@@ -2749,13 +2749,13 @@ function buildSignOffConfirmationEmail(
        ${ctaButton('Pay Final Invoice', invoiceUrl, '#1a2e1a')}`
     : `<p style="margin:0 0 20px;">Our team will send your final invoice shortly.</p>`;
   return emailWrapper(`
-    <h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#1a2e1a;">Job Completion Confirmed — Thank You!</h2>
+    <h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#1a2e1a;">Job Completion Confirmed. Thank You!</h2>
     <p style="margin:0 0 12px;">Hi ${firstName},</p>
     <p style="margin:0 0 8px;">Thank you for signing off on the completion of:</p>
     <p style="margin:0 0 20px;padding:12px 16px;background:#f8f9fa;border-left:3px solid #1a2e1a;border-radius:0 4px 4px 0;font-weight:600;color:#1a2e1a;">${jobTitle}</p>
     <p style="margin:0 0 20px;font-size:13px;color:#666;">Signed on ${signedDate}. A copy of your signature has been saved to your project record.</p>
     ${balanceSection}
-    <p style="margin:0;font-size:13px;color:#888;text-align:center;">Questions? <a href="mailto:help@handypioneers.com" style="color:#c8922a;">Reply to this email</a> or call us at (360) 544-9858.</p>
+    <p style="margin:0;font-size:13px;color:#888;text-align:center;">Questions? <a href="mailto:help@handypioneers.com" style="color:#c8922a;">Reply to this email</a> or call us at (360) 838-6731.</p>
   `);
 }
 
@@ -2779,7 +2779,7 @@ function buildChangeOrderApprovalEmail(
     <p style="margin:0 0 8px;">Thank you for approving change order <strong>${coNumber}</strong> for:</p>
     <p style="margin:0 0 20px;padding:12px 16px;background:#f8f9fa;border-left:3px solid #1a2e1a;border-radius:0 4px 4px 0;font-weight:600;color:#1a2e1a;">${jobTitle}</p>
     ${invoiceSection}
-    <p style="margin:0;font-size:13px;color:#888;text-align:center;">Questions? <a href="mailto:help@handypioneers.com" style="color:#c8922a;">Reply to this email</a> or call us at (360) 544-9858.</p>
+    <p style="margin:0;font-size:13px;color:#888;text-align:center;">Questions? <a href="mailto:help@handypioneers.com" style="color:#c8922a;">Reply to this email</a> or call us at (360) 838-6731.</p>
   `);
 }
 
@@ -2792,9 +2792,9 @@ export function buildReviewRequestEmail(
   const firstName = name.split(' ')[0];
   const subject = isReminder
     ? `Reminder: Share your experience with Handy Pioneers`
-    : `How did we do? — ${jobTitle}`;
+    : `How did we do on ${jobTitle}?`;
   const headline = isReminder
-    ? `A Quick Reminder — We'd Love Your Feedback`
+    ? `A Quick Reminder: We'd Love Your Feedback`
     : `How Did We Do?`;
   const intro = isReminder
     ? `We wanted to follow up on your recently completed project. Your feedback means the world to our small team.`
@@ -2820,12 +2820,12 @@ export function buildSignOffRequestEmail(
 ) {
   const firstName = name.split(' ')[0];
   return emailWrapper(`
-    <h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#1a2e1a;">Your Job is Complete — Please Sign Off</h2>
+    <h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#1a2e1a;">Your Job is Complete. Please Sign Off</h2>
     <p style="margin:0 0 12px;">Hi ${firstName},</p>
     <p style="margin:0 0 8px;">Great news! Your project has been completed:</p>
     <p style="margin:0 0 20px;padding:12px 16px;background:#f8f9fa;border-left:3px solid #1a2e1a;border-radius:0 4px 4px 0;font-weight:600;color:#1a2e1a;">${jobTitle}</p>
     <p style="margin:0 0 20px;">Please take a moment to review the work and sign off on completion. This allows us to close out your project and issue your final invoice.</p>
     ${ctaButton('Sign Off on This Job', signOffUrl, '#1a2e1a')}
-    <p style="margin:0;font-size:13px;color:#888;text-align:center;">Questions? <a href="mailto:help@handypioneers.com" style="color:#c8922a;">Reply to this email</a> or call us at (360) 544-9858.</p>
+    <p style="margin:0;font-size:13px;color:#888;text-align:center;">Questions? <a href="mailto:help@handypioneers.com" style="color:#c8922a;">Reply to this email</a> or call us at (360) 838-6731.</p>
   `);
 }

@@ -223,7 +223,7 @@ function buildConfirmationHtml(args: {
       <p style="font-size:11px;letter-spacing:0.18em;color:#c8922a;text-transform:uppercase;margin:0 0 12px;font-family:system-ui,-apple-system,sans-serif;">Handy Pioneers · 360° Home Method</p>
       <h1 style="font-size:24px;line-height:1.3;margin:0 0 16px;font-weight:600;color:#1a2e1a;">Your Baseline Walkthrough is set, ${args.firstName}.</h1>
       <p style="font-size:15px;line-height:1.6;margin:0 0 20px;color:#3d4f3d;">
-        Thank you for trusting us with the care of your home. We've reserved time to walk it together —
+        Thank you for trusting us with the care of your home. We've reserved time to walk it together:
         an honest, unhurried conversation about what we observe and what matters most to you.
       </p>
       <div style="border-left:3px solid #c8922a;padding:12px 18px;margin:20px 0;background:#faf7f0;font-family:system-ui,-apple-system,sans-serif;">
@@ -236,7 +236,7 @@ function buildConfirmationHtml(args: {
       </p>
       <hr style="border:0;border-top:1px solid #e5e0d3;margin:28px 0 16px;" />
       <p style="font-size:11px;color:#8a8a8a;font-family:system-ui,-apple-system,sans-serif;line-height:1.5;">
-        Questions? Reply to this email or call us at (360) 519-9618. We're privileged to be of service.
+        Questions? Reply to this email or call us at (360) 838-6731. We're privileged to be of service.
       </p>
     </div>
   `;

@@ -110,7 +110,7 @@ export const metaRouter = router({
       // Draft-only — never auto-send via Messenger
       return {
         draft: true,
-        suggestedReply: `Hi ${input.senderName}, thanks for reaching out to Handy Pioneers! ${input.context ?? "We'd love to help with your home repair needs."}  Please call us at (360) 544-9858 or visit handypioneers.com to schedule a free consultation.`,
+        suggestedReply: `Hi ${input.senderName}, thanks for reaching out to Handy Pioneers! ${input.context ?? "We'd love to help with your home repair needs."}  Please call us at (360) 838-6731 or visit handypioneers.com to schedule a free consultation.`,
         note: "Review this draft in /admin/marketing/messages before sending.",
       };
     }),

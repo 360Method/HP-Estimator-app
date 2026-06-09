@@ -198,7 +198,7 @@ export default function PortalInvoiceDetail() {
               <p className="font-bold text-gray-900 text-lg">Handy Pioneers</p>
               <p className="text-xs text-gray-500 mt-0.5">808 SE Chkalov Dr 3-433</p>
               <p className="text-xs text-gray-500">Vancouver, WA 98683</p>
-              <p className="text-xs text-gray-500">(360) 544-9858 | help@handypioneers.com</p>
+              <p className="text-xs text-gray-500">(360) 838-6731 | help@handypioneers.com</p>
             </div>
             <img
               src={HP_LOGO}
@@ -307,7 +307,7 @@ export default function PortalInvoiceDetail() {
 
           {/* Footer */}
           <div className="mt-8 pt-4 border-t border-gray-100 text-center text-xs text-gray-400 space-y-0.5">
-            <p>Handy Pioneers &bull; (360) 544-9858 &bull; help@handypioneers.com</p>
+            <p>Handy Pioneers &bull; (360) 838-6731 &bull; help@handypioneers.com</p>
             <p>808 SE Chkalov Dr 3-433, Vancouver, WA 98683</p>
           </div>
         </div>
