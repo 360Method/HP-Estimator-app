@@ -295,9 +295,8 @@ function InvoicesMirror() {
 }
 
 const ClientMirrorStatus = ({ section }: { section: 'estimates' | 'invoices' }) => {
-  const { customerContext, customerContextLoading, customerFullName, displayName } = useClientUmbrella();
+  const { customerContext, customerFullName, displayName } = useClientUmbrella();
   if (!customerContext) return null;
-  if (customerContextLoading && !customerContext) return null;
 
   // No portal account: nothing is mirrored, so a status table is noise. One
   // compact line says it all (the invite action lives in ClientPortalMirror).

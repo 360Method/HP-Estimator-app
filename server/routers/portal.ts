@@ -89,6 +89,7 @@ import { createNotification } from "../leadRouting";
 import { notifyOwner } from "../_core/notification";
 import { storagePut } from "../storage";
 import { broadcastOpportunityUpdate, broadcastPortalMessage } from "../sse";
+import { declinedOpportunityStage, planEstimateResend } from "../lib/estimateSync";
 import Stripe from "stripe";
 import { ENV } from "../_core/env";
 import { runAutomationsForTrigger } from "../automationEngine";
@@ -581,7 +582,6 @@ export const portalRouter = router({
       if (est.hpOpportunityId) {
         try {
           const opp = await getOpportunityById(est.hpOpportunityId);
-          const { declinedOpportunityStage } = await import("../lib/estimateSync");
           const stage = declinedOpportunityStage(opp?.area, opp?.stage);
           if (opp && stage) {
             const now = new Date().toISOString();
@@ -992,7 +992,6 @@ export const portalRouter = router({
       // copy is never overwritten, and still-live siblings under old numbers
       // are expired so the customer only ever sees one live estimate per job.
       if (input.hpOpportunityId) {
-        const { planEstimateResend } = await import("../lib/estimateSync");
         const siblings = await getAllPortalEstimatesByHpOpportunityId(input.hpOpportunityId);
         const plan = planEstimateResend(siblings, input.estimateNumber);
         if (plan.blockedBy) {

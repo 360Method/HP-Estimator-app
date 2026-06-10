@@ -6,7 +6,7 @@
 // or it is internal-only (calendar events, job schedules). A scheduleEvent
 // linked to a job via opportunityId supersedes that job's own scheduledDate
 // row so the same visit isn't listed twice.
-import { Calendar, Globe, EyeOff, CheckCircle, XCircle, User } from 'lucide-react';
+import { Globe, EyeOff, CheckCircle, XCircle, User } from 'lucide-react';
 import { useClientUmbrella } from '@/components/clients/ClientUmbrellaContext';
 
 type ItemSource = 'portal' | 'event' | 'job';
@@ -237,12 +237,6 @@ const CustomerScheduleTab = () => {
             {past.map((item) => <ItemRow key={item.key} item={item} />)}
           </div>
         </div>
-      )}
-
-      {items.length > 0 && upcoming.length === 0 && past.length === 0 && (
-        <p className="rounded-lg border border-dashed p-5 text-sm text-muted-foreground flex items-center gap-2">
-          <Calendar className="w-4 h-4" />No schedule history for this customer.
-        </p>
       )}
     </div>
   );

@@ -41,6 +41,7 @@ import {
   getPortalInvoicesByHpOpportunityId,
   getPortalMessagesByCustomer,
   getPortalServiceRequestsByCustomer,
+  updatePortalCustomerProfile,
   getMilestonesByJob,
   getUpdatesByJob,
   getJobSignOff,
@@ -414,7 +415,24 @@ export const customersRouter = router({
         ...(tags !== undefined ? { tags: JSON.stringify(tags) } : {}),
         ...(rest.email ? { email: rest.email.toLowerCase().trim() } : {}),
       });
-      return getCustomerById(id);
+      const fresh = await getCustomerById(id);
+      // Phase F #5 (auto direction): the CRM is the source of truth for
+      // identity — staff edits flow to the linked portal profile. The reverse
+      // (portal→CRM) stays review-gated on the client Overview.
+      try {
+        const portalCustomer = await findPortalCustomerByHpId(id).catch(() => null);
+        if (fresh && portalCustomer) {
+          const { buildPortalProfilePatch } = await import("../lib/profileSync");
+          const patch = buildPortalProfilePatch(rest, fresh, portalCustomer);
+          if (patch) {
+            await updatePortalCustomerProfile(portalCustomer.id, patch);
+            console.log(`[customers.update] Portal profile synced for ${id}:`, Object.keys(patch).join(", "));
+          }
+        }
+      } catch (e) {
+        console.warn("[customers.update] portal profile sync failed:", e);
+      }
+      return fresh;
     }),
 
   /** Delete a customer (only if no linked opportunities) */
