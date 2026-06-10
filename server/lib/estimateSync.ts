@@ -21,3 +21,37 @@ export function declinedOpportunityStage(
   if (!target || currentStage === target) return null;
   return target;
 }
+
+export interface PortalEstimateSibling {
+  id: number;
+  estimateNumber: string;
+  status: string;
+}
+
+/**
+ * Gap #1: what to do with the existing portal estimates for an opportunity
+ * when staff send (or re-send) an estimate.
+ *  - blockedBy: the incoming number collides with an APPROVED estimate — a
+ *    signed agreement is never overwritten; the caller should refuse and ask
+ *    for a new number / change order.
+ *  - supersedeIds: still-live unapproved siblings under OLD numbers; expire
+ *    them so the customer only ever sees one live estimate per job. Approved,
+ *    declined, and already-expired siblings are history and stay untouched.
+ * A same-number unapproved row is neither blocked nor superseded: the
+ * createPortalEstimate upsert refreshes it in place.
+ */
+export function planEstimateResend(
+  existing: PortalEstimateSibling[],
+  incomingNumber: string,
+): { blockedBy: PortalEstimateSibling | null; supersedeIds: number[] } {
+  const norm = (s: string) => s.trim().toLowerCase();
+  const sameNumber = existing.find((e) => norm(e.estimateNumber) === norm(incomingNumber));
+  if (sameNumber && sameNumber.status === 'approved') {
+    return { blockedBy: sameNumber, supersedeIds: [] };
+  }
+  const LIVE = new Set(['pending', 'sent', 'viewed']);
+  const supersedeIds = existing
+    .filter((e) => norm(e.estimateNumber) !== norm(incomingNumber) && LIVE.has(e.status))
+    .map((e) => e.id);
+  return { blockedBy: null, supersedeIds };
+}

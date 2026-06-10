@@ -263,6 +263,24 @@ export async function deletePortalSession(sessionToken: string) {
 
 export async function createPortalEstimate(data: InsertPortalEstimate) {
   const db = await d();
+  // Phase F #1 guard: an approved estimate is a signed agreement — never
+  // overwrite it, whatever path led here. Revisions need a new number.
+  const prior = await db
+    .select()
+    .from(portalEstimates)
+    .where(
+      and(
+        eq(portalEstimates.customerId, data.customerId),
+        eq(portalEstimates.estimateNumber, data.estimateNumber),
+      )
+    )
+    .limit(1);
+  if (prior[0]?.status === "approved") {
+    console.warn(
+      `[portalDb] createPortalEstimate: ${data.estimateNumber} is already approved; refusing to overwrite`,
+    );
+    return prior[0];
+  }
   // Upsert: if an estimate with the same customerId + estimateNumber already exists,
   // update it with the latest structured lineItemsJson and other fields.
   await db
@@ -284,6 +302,11 @@ export async function createPortalEstimate(data: InsertPortalEstimate) {
         taxRateCode: data.taxRateCode ?? '0603',
         customTaxPct: data.customTaxPct ?? 890,
         taxAmount: data.taxAmount ?? 0,
+        // A re-send starts a fresh review cycle: clear the previous
+        // viewed/declined state so the status reflects the new copy.
+        viewedAt: null,
+        declinedAt: null,
+        declineReason: null,
         updatedAt: new Date(),
       },
     });
@@ -310,6 +333,16 @@ export async function getPortalEstimateByOpportunityId(hpOpportunityId: string) 
     .orderBy(desc(portalEstimates.createdAt))
     .limit(1);
   return rows[0] ?? null;
+}
+
+/** All portal estimates ever sent for one pro-side opportunity, newest first. */
+export async function getAllPortalEstimatesByHpOpportunityId(hpOpportunityId: string) {
+  const db = await d();
+  return db
+    .select()
+    .from(portalEstimates)
+    .where(eq(portalEstimates.hpOpportunityId, hpOpportunityId))
+    .orderBy(desc(portalEstimates.createdAt));
 }
 
 export async function getPortalEstimatesByCustomer(customerId: number) {

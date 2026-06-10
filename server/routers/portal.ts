@@ -21,6 +21,7 @@ import {
   deletePortalSession,
   getPortalEstimateById,
   getPortalEstimatesByCustomer,
+  getAllPortalEstimatesByHpOpportunityId,
   getPortalEstimateByOpportunityId,
   updatePortalEstimateStatus,
   markPortalEstimateViewed,
@@ -985,6 +986,25 @@ export const portalRouter = router({
       });
 
       if (!customer) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+
+      // Phase F #1 (estimate mirror): re-sending for the same opportunity
+      // refreshes the portal copy instead of stacking duplicates. An approved
+      // copy is never overwritten, and still-live siblings under old numbers
+      // are expired so the customer only ever sees one live estimate per job.
+      if (input.hpOpportunityId) {
+        const { planEstimateResend } = await import("../lib/estimateSync");
+        const siblings = await getAllPortalEstimatesByHpOpportunityId(input.hpOpportunityId);
+        const plan = planEstimateResend(siblings, input.estimateNumber);
+        if (plan.blockedBy) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `Estimate ${plan.blockedBy.estimateNumber} was already approved by the customer. Send the revision under a new estimate number, or use a change order — an approved estimate is never overwritten.`,
+          });
+        }
+        for (const id of plan.supersedeIds) {
+          await updatePortalEstimateStatus(id, "expired");
+        }
+      }
 
       const depositAmount = Math.round(
         (input.totalAmount * input.depositPercent) / 100
