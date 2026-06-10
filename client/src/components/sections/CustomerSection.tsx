@@ -923,7 +923,18 @@ export default function CustomerSection() {
         <div className="max-w-6xl mx-auto">
           {/* Breadcrumb */}
           <div className="text-[10px] uppercase tracking-[0.18em] font-semibold text-[#c8922a] mb-1">
-            Clients <span className="text-[#a39f95]">/</span> <span className="text-[#5b574f]">{displayName}</span>
+            <button
+              onClick={() => {
+                setSection('customers' as any);
+                // Mirror handleTabClick: when viewed through the deep-linkable
+                // client route, reset the URL so a refresh stays on the list.
+                if (location.startsWith('/admin/clients/')) navigate('/');
+              }}
+              className="uppercase tracking-[0.18em] font-semibold text-[#c8922a] hover:text-[#a07320] hover:underline underline-offset-2 transition-colors"
+            >
+              Clients
+            </button>
+            {' '}<span className="text-[#a39f95]">/</span> <span className="text-[#5b574f]">{displayName}</span>
           </div>
           {/* Name + actions */}
           <div className="flex flex-wrap items-start justify-between gap-3">
