@@ -354,6 +354,7 @@ export type CustomerProfileTab =
   | 'overview'
   | 'opportunities'
   | 'schedule'
+  | 'roadmap'
   | 'workflow'
   | 'membership'
   | 'communication'

@@ -97,6 +97,7 @@ import {
 import CustomerOverviewTab from '@/pages/clients/tabs/CustomerOverviewTab';
 import CustomerOpportunitiesTab from '@/pages/clients/tabs/CustomerOpportunitiesTab';
 import CustomerScheduleTab from '@/pages/clients/tabs/CustomerScheduleTab';
+import CustomerRoadmapTab from '@/pages/clients/tabs/CustomerRoadmapTab';
 import CustomerWorkflowTab from '@/pages/clients/tabs/CustomerWorkflowTab';
 import CustomerMembershipTab from '@/pages/clients/tabs/CustomerMembershipTab';
 import CustomerDocumentsTab from '@/pages/clients/tabs/CustomerDocumentsTab';
@@ -114,6 +115,7 @@ const CUSTOMER_OPERATING_TABS: { key: CustomerProfileTab; label: string; icon: R
   { key: 'properties', label: 'Properties', icon: <Building2 size={13} /> },
   { key: 'opportunities', label: 'Opportunities', icon: <GitMerge size={13} /> },
   { key: 'schedule', label: 'Schedule', icon: <Calendar size={13} /> },
+  { key: 'roadmap', label: 'Roadmap', icon: <TrendingUp size={13} /> },
   { key: 'membership', label: 'Membership', icon: <RefreshCw size={13} /> },
   { key: 'billing', label: 'Billing', icon: <Wallet size={13} /> },
   { key: 'portal', label: 'Portal', icon: <ExternalLink size={13} /> },
@@ -456,7 +458,7 @@ export default function CustomerSection() {
     if (redirected) setCustomerTab(redirected);
   }, [activeCustomerTab, setCustomerTab]);
   const areaMap: Record<CustomerProfileTab, PipelineArea | null> = {
-    overview: null, opportunities: null, schedule: null, workflow: null, membership: null, documents: null, billing: null, history: null,
+    overview: null, opportunities: null, schedule: null, roadmap: null, workflow: null, membership: null, documents: null, billing: null, history: null,
     profile: null, properties: null, leads: 'lead', estimates: 'estimate', jobs: 'job',
     invoices: null, expenses: null, communication: null, attachments: null, notes: null, portal: null,
     membership360: null,
@@ -1201,6 +1203,7 @@ export default function CustomerSection() {
         {currentCustomerTab === 'overview' && <CustomerOverviewTab />}
         {currentCustomerTab === 'opportunities' && <CustomerOpportunitiesTab />}
         {currentCustomerTab === 'schedule' && <CustomerScheduleTab />}
+        {currentCustomerTab === 'roadmap' && <CustomerRoadmapTab />}
         {currentCustomerTab === 'workflow' && <CustomerWorkflowTab />}
         {currentCustomerTab === 'membership' && <CustomerMembershipTab />}
         {currentCustomerTab === 'documents' && <CustomerDocumentsTab />}
