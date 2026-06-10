@@ -199,18 +199,40 @@ export const customersRouter = router({
         : null;
 
       const db = await getDb();
+      // Membership match (Phase F #6): direct hpCustomerId/customerId links
+      // first, plus a fallback through the portal customer's Stripe ID for
+      // memberships created before the CRM link existed. Anything reached
+      // only via Stripe gets its hpCustomerId stamped on read (lazy backfill)
+      // so the next lookup is direct.
+      const membershipConditions = [
+        eq(threeSixtyMemberships.customerId, input.id),
+        eq(threeSixtyMemberships.hpCustomerId, input.id),
+      ];
+      if (portalCustomer?.stripeCustomerId) {
+        membershipConditions.push(
+          eq(threeSixtyMemberships.stripeCustomerId, portalCustomer.stripeCustomerId),
+        );
+      }
       const memberships = db
         ? await db
             .select()
             .from(threeSixtyMemberships)
-            .where(
-              or(
-                eq(threeSixtyMemberships.customerId, input.id),
-                eq(threeSixtyMemberships.hpCustomerId, input.id),
-              ),
-            )
+            .where(or(...membershipConditions))
             .orderBy(desc(threeSixtyMemberships.createdAt))
         : [];
+      for (const m of memberships) {
+        if (db && !m.hpCustomerId) {
+          try {
+            await db
+              .update(threeSixtyMemberships)
+              .set({ hpCustomerId: input.id })
+              .where(eq(threeSixtyMemberships.id, m.id));
+            m.hpCustomerId = input.id;
+          } catch {
+            /* the read path never fails on the backfill */
+          }
+        }
+      }
       const membershipIds = memberships.map((m) => m.id);
       const workOrders = db && membershipIds.length
         ? await db
