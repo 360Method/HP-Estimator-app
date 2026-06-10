@@ -572,9 +572,30 @@ export const portalRouter = router({
         declinedAt: new Date(),
         declineReason: input.reason ?? "",
       });
+
+      // Mirror the decline to the pro side (the reverse of approveEstimate's
+      // Won update): estimate-area → Rejected, lead-area → Lost, converted
+      // jobs left alone.
+      let opportunityStage: string | null = null;
+      if (est.hpOpportunityId) {
+        try {
+          const opp = await getOpportunityById(est.hpOpportunityId);
+          const { declinedOpportunityStage } = await import("../lib/estimateSync");
+          const stage = declinedOpportunityStage(opp?.area, opp?.stage);
+          if (opp && stage) {
+            const now = new Date().toISOString();
+            await updateOpportunity(est.hpOpportunityId, { stage });
+            broadcastOpportunityUpdate(est.hpOpportunityId, { stage, updatedAt: now });
+            opportunityStage = stage;
+          }
+        } catch (e) {
+          console.warn('[portal.declineEstimate] Could not mark opportunity declined:', e);
+        }
+      }
+
       await notifyOwner({
         title: `Estimate Declined: ${est.estimateNumber}`,
-        content: `${ctx.portalCustomer.name} declined estimate ${est.estimateNumber}. Reason: ${input.reason ?? "none"}`,
+        content: `${ctx.portalCustomer.name} declined estimate ${est.estimateNumber}. Reason: ${input.reason ?? "none"}${opportunityStage ? ` Opportunity ${est.hpOpportunityId} marked ${opportunityStage}.` : ''}`,
       }).catch(() => null);
       return { ok: true };
     }),
