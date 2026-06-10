@@ -916,19 +916,19 @@ export default function CustomerSection() {
   return (
     <ClientUmbrellaContext.Provider value={umbrella}>
     <>
-    <div className="space-y-0">
+    <div className="space-y-0 bg-[#faf6ef]">
 
-      {/* ── Customer Header ── */}
-      <div className="bg-white border-b border-border px-4 py-4">
+      {/* ── Customer Header — portal chrome (parchment, serif ink, gold) ── */}
+      <div className="bg-[#fdfaf3] border-b border-[#e7e1d4] px-4 py-4">
         <div className="max-w-6xl mx-auto">
           {/* Breadcrumb */}
-          <div className="text-xs text-muted-foreground mb-1">
-            Customers / <span className="text-foreground">{displayName}</span>
+          <div className="text-[10px] uppercase tracking-[0.18em] font-semibold text-[#c8922a] mb-1">
+            Clients <span className="text-[#a39f95]">/</span> <span className="text-[#5b574f]">{displayName}</span>
           </div>
           {/* Name + actions */}
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex items-center gap-2">
-              <h1 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight">{displayName}</h1>
+              <h1 className="hp-serif text-2xl sm:text-3xl text-[#1a2e1a] tracking-tight">{displayName}</h1>
               {/* Unread badge */}
               {unreadBadgeCount > 0 && (
                 <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-bold leading-none" title={`${unreadBadgeCount} unread message${unreadBadgeCount > 1 ? 's' : ''}`}>
@@ -954,7 +954,7 @@ export default function CustomerSection() {
               )}
               {/* Lifetime value badge */}
               {customerProfile.lifetimeValue > 0 && (
-                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg text-xs font-semibold text-emerald-800">
+                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[#e9f0e6] border border-[#cfdec9] rounded-lg text-xs font-semibold text-[#3f6b3a]">
                   <TrendingUp size={13} />
                   <span className="hidden sm:inline">LTV:</span>
                   {fmtDollar(customerProfile.lifetimeValue)}
@@ -962,7 +962,7 @@ export default function CustomerSection() {
               )}
               {/* Payment method indicator */}
               {customerProfile.paymentMethodOnFile ? (
-                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg text-xs font-medium text-emerald-800">
+                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[#e9f0e6] border border-[#cfdec9] rounded-lg text-xs font-medium text-[#3f6b3a]">
                   <CreditCard size={13} />
                   <span className="hidden sm:inline">Card on file</span>
                 </div>
@@ -975,7 +975,7 @@ export default function CustomerSection() {
                       toast.success('Payment method saved');
                     }
                   }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-[#d9d2c1] rounded-lg text-xs font-medium text-[#5b574f] hover:border-[#1a2e1a] hover:text-[#1a2e1a] transition-colors"
                 >
                   <CreditCard size={13} />
                   <span className="hidden sm:inline">Add card</span>
@@ -985,7 +985,7 @@ export default function CustomerSection() {
               <button
                 onClick={() => { setQuickAction(q => q === 'sms' ? null : 'sms'); setShowCallPanel(false); }}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors border ${
-                  quickAction === 'sms' ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground hover:border-primary hover:text-primary'
+                  quickAction === 'sms' ? 'bg-[#1a2e1a] text-white border-[#1a2e1a]' : 'border-[#d9d2c1] text-[#5b574f] hover:border-[#1a2e1a] hover:text-[#1a2e1a]'
                 }`}
                 title="Send SMS"
               >
@@ -995,7 +995,7 @@ export default function CustomerSection() {
               <button
                 onClick={() => { setQuickAction(q => q === 'email' ? null : 'email'); setShowCallPanel(false); }}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors border ${
-                  quickAction === 'email' ? 'bg-sky-600 text-white border-sky-600' : 'border-border text-muted-foreground hover:border-sky-500 hover:text-sky-600'
+                  quickAction === 'email' ? 'bg-[#1a2e1a] text-white border-[#1a2e1a]' : 'border-[#d9d2c1] text-[#5b574f] hover:border-[#1a2e1a] hover:text-[#1a2e1a]'
                 }`}
                 title="Send Email"
               >
@@ -1005,7 +1005,7 @@ export default function CustomerSection() {
               <button
                 onClick={() => { setQuickAction(q => q === 'note' ? null : 'note'); setShowCallPanel(false); }}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors border ${
-                  quickAction === 'note' ? 'bg-amber-500 text-white border-amber-500' : 'border-border text-muted-foreground hover:border-amber-500 hover:text-amber-600'
+                  quickAction === 'note' ? 'bg-[#c8922a] text-white border-[#c8922a]' : 'border-[#d9d2c1] text-[#5b574f] hover:border-[#c8922a] hover:text-[#a07320]'
                 }`}
                 title="Add internal note"
               >
@@ -1016,7 +1016,7 @@ export default function CustomerSection() {
               <button
                 onClick={() => { setShowCallPanel(v => !v); setQuickAction(null); }}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                  showCallPanel ? 'bg-emerald-600 text-white' : 'bg-primary text-primary-foreground hover:bg-primary/90'
+                  showCallPanel ? 'bg-[#3f6b3a] text-white' : 'bg-[#1a2e1a] text-white hover:bg-[#243c24]'
                 }`}
                 title="In-app call"
               >
@@ -1027,7 +1027,7 @@ export default function CustomerSection() {
               {activeCustomerId && (
                 <button
                   onClick={() => setShowMergeDialog(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-[#d9d2c1] rounded-lg text-xs font-medium text-[#5b574f] hover:border-[#1a2e1a] hover:text-[#1a2e1a] transition-colors"
                   title="Merge this customer with another"
                 >
                   <GitMerge size={13} />
@@ -1039,7 +1039,7 @@ export default function CustomerSection() {
                 <button
                   onClick={handleSyncToDb}
                   disabled={syncToDbMutation.isPending}
-                  className="flex items-center gap-1.5 px-3 py-1.5 border border-border rounded-lg text-xs font-medium text-muted-foreground hover:border-primary hover:text-primary transition-colors disabled:opacity-50"
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-[#d9d2c1] rounded-lg text-xs font-medium text-[#5b574f] hover:border-[#1a2e1a] hover:text-[#1a2e1a] transition-colors disabled:opacity-50"
                   title="Save current customer data to the database"
                 >
                   <Save size={13} />
@@ -1054,7 +1054,7 @@ export default function CustomerSection() {
             const billingAddr = addrs.find(a => a.isBilling) ?? addrs.find(a => a.isPrimary) ?? addrs[0];
             const addrStr = billingAddr ? [billingAddr.street, billingAddr.city].filter(Boolean).join(', ') : (jobInfo.address ? `${jobInfo.address}${jobInfo.city ? `, ${jobInfo.city}` : ''}` : null);
             return (
-              <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-[#5b574f]">
                 {jobInfo.companyName && <span className="flex items-center gap-1"><Building2 size={11} />{jobInfo.companyName}</span>}
                 {jobInfo.phone && <span className="flex items-center gap-1"><Phone size={11} />{jobInfo.phone}</span>}
                 {jobInfo.email && <span className="flex items-center gap-1"><Mail size={11} />{jobInfo.email}</span>}
@@ -1072,7 +1072,7 @@ export default function CustomerSection() {
 
       {/* ── Inline Quick-Action Compose Panel ── */}
       {(quickAction || showCallPanel) && (
-        <div className="bg-muted/30 border-b border-border px-4 py-3">
+        <div className="bg-[#f4ede0]/60 border-b border-[#e7e1d4] px-4 py-3">
           <div className="max-w-6xl mx-auto">
             {showCallPanel && (
               <div className="rounded-xl border bg-card overflow-hidden">
@@ -1163,8 +1163,8 @@ export default function CustomerSection() {
         </div>
       )}
 
-      {/* ── Tab Nav ── */}
-      <div className="bg-white border-b border-border sticky top-[var(--header-h,112px)] z-10">
+      {/* ── Tab Nav — portal chrome (parchment, gold active underline) ── */}
+      <div className="bg-[#fdfaf3] border-b border-[#e7e1d4] sticky top-[var(--header-h,112px)] z-10">
         <div className="max-w-6xl mx-auto px-4">
           <div className="flex overflow-x-auto scrollbar-hide -mb-px gap-0">
             {CUSTOMER_OPERATING_TABS.map(tab => {
@@ -1178,15 +1178,15 @@ export default function CustomerSection() {
                   onClick={() => handleTabClick(tab.key)}
                   className={`shrink-0 flex items-center gap-1 px-3 sm:px-4 py-3 text-xs font-semibold whitespace-nowrap border-b-2 transition-colors ${
                     currentCustomerTab === tab.key
-                      ? 'border-primary text-primary'
-                      : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+                      ? 'border-[#c8922a] text-[#1a2e1a]'
+                      : 'border-transparent text-[#5b574f] hover:text-[#1a2e1a] hover:border-[#d9d2c1]'
                   }`}
                 >
                   <span className="hidden sm:inline-flex">{tab.icon}</span>
                   {tab.label}
                   {count > 0 && (
                     <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold ${
-                      currentCustomerTab === tab.key ? 'bg-primary text-white' : 'bg-muted text-muted-foreground'
+                      currentCustomerTab === tab.key ? 'bg-[#1a2e1a] text-white' : 'bg-[#f4ede0] text-[#5b574f]'
                     }`}>
                       {count}
                     </span>
