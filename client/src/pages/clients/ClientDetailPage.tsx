@@ -18,7 +18,7 @@ import Home from '@/pages/Home';
 // customer's last/default tab is used (CustomerSection also redirects legacy
 // tab keys, so we don't need to replicate that table here).
 const URL_TABS: CustomerProfileTab[] = [
-  'overview', 'properties', 'opportunities', 'membership', 'billing', 'portal',
+  'overview', 'properties', 'opportunities', 'schedule', 'roadmap', 'membership', 'billing', 'portal',
 ];
 
 export default function ClientDetailPage() {
