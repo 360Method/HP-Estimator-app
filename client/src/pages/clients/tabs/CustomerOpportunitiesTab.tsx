@@ -2,6 +2,7 @@
 import { Button } from '@/components/ui/button';
 import { Opportunity } from '@/lib/types';
 import { CustomerOpportunityCommandCard } from '@/components/clients/ClientPanels';
+import ClientMirrorStatus from '@/components/clients/ClientMirrorStatus';
 import { useClientUmbrella } from '@/components/clients/ClientUmbrellaContext';
 
 const CustomerOpportunitiesTab = () => {
@@ -26,6 +27,7 @@ const CustomerOpportunitiesTab = () => {
           </div>
         </div>
       </div>
+      <ClientMirrorStatus section="estimates" />
       {groups.map(([label, opps]) => (
         <div key={label} className="space-y-3">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}s ({opps.length})</h3>

@@ -1,12 +1,14 @@
 // Phase D6 — Billing tab composition, lifted verbatim from CustomerSection.
 import InvoiceSection from '@/components/sections/InvoiceSection';
 import CustomerExpensesTab from '@/components/CustomerExpensesTab';
+import ClientMirrorStatus from '@/components/clients/ClientMirrorStatus';
 import { useClientUmbrella } from '@/components/clients/ClientUmbrellaContext';
 
 const CustomerBillingTab = () => {
   const { opportunities, activeCustomerId } = useClientUmbrella();
   return (
     <div className="space-y-6">
+      <ClientMirrorStatus section="invoices" />
       <InvoiceSection />
       <CustomerExpensesTab
         customerId={activeCustomerId ?? ''}
