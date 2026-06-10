@@ -40,6 +40,7 @@ import {
   getPortalInvoicesByCustomer,
   getPortalInvoicesByHpOpportunityId,
   getPortalMessagesByCustomer,
+  getPortalServiceRequestsByCustomer,
   getMilestonesByJob,
   getUpdatesByJob,
   getJobSignOff,
@@ -192,6 +193,7 @@ export const customersRouter = router({
             messages: await getPortalMessagesByCustomer(portalCustomer.id),
             changeOrders: await getPortalChangeOrdersByCustomer(portalCustomer.id),
             documents: await getPortalDocumentsByCustomer(portalCustomer.id),
+            serviceRequests: await getPortalServiceRequestsByCustomer(portalCustomer.id).catch(() => []),
           }
         : null;
 
