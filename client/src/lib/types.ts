@@ -353,6 +353,7 @@ export interface ChangeOrder {
 export type CustomerProfileTab =
   | 'overview'
   | 'opportunities'
+  | 'schedule'
   | 'workflow'
   | 'membership'
   | 'communication'
