@@ -683,6 +683,17 @@ export const portalRouter = router({
         input.amountPaid,
         input.stripePaymentIntentId
       );
+      // Phase F #3: reflect the payment onto the internal invoice.
+      try {
+        const { reflectPortalInvoicePaymentToInternal } = await import("../lib/invoiceSync");
+        await reflectPortalInvoicePaymentToInternal(
+          inv,
+          input.amountPaid,
+          input.stripePaymentIntentId ?? `portal-manual-${input.invoiceId}`,
+        );
+      } catch (syncErr) {
+        console.warn("[portal.markInvoicePaid] internal invoice reflection failed:", syncErr);
+      }
       await notifyOwner({
         title: `Invoice Paid: ${inv.invoiceNumber}`,
         content: `${ctx.portalCustomer.name} paid invoice ${inv.invoiceNumber} — $${(input.amountPaid / 100).toFixed(2)}`,

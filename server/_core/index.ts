@@ -419,6 +419,13 @@ async function startServer() {
             await updatePortalInvoicePaid(inv.id, pi.amount_received, pi.id);
             portalInvoiceId = inv.id;
             console.log(`[Webhook] Portal invoice ${inv.id} marked paid via PI ${pi.id}`);
+            // Phase F #3: reflect the payment onto the internal invoice.
+            try {
+              const { reflectPortalInvoicePaymentToInternal } = await import("../lib/invoiceSync");
+              await reflectPortalInvoicePaymentToInternal(inv, pi.amount_received, pi.id);
+            } catch (syncErr) {
+              console.warn("[Webhook] internal invoice reflection failed:", syncErr);
+            }
             try {
               const customer = await findPortalCustomerById(inv.customerId);
               if (customer) {
@@ -517,6 +524,17 @@ async function startServer() {
             const amountPaid = session.amount_total ?? inv.amountDue;
             await updatePortalInvoicePaid(inv.id, amountPaid, session.payment_intent as string | undefined);
             console.log(`[Webhook] Portal invoice ${inv.id} marked paid via Checkout ${session.id}`);
+            // Phase F #3: reflect the payment onto the internal invoice.
+            try {
+              const { reflectPortalInvoicePaymentToInternal } = await import("../lib/invoiceSync");
+              await reflectPortalInvoicePaymentToInternal(
+                inv,
+                amountPaid,
+                (session.payment_intent as string | undefined) ?? session.id,
+              );
+            } catch (syncErr) {
+              console.warn("[Webhook] internal invoice reflection failed:", syncErr);
+            }
             // Send payment receipt email
             try {
               const customer = await findPortalCustomerById(inv.customerId);
