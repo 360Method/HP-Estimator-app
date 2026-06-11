@@ -9,9 +9,11 @@
 // Visual language deliberately mirrors PortalHome (forest green #1a2e1a / gold
 // #c8922a, white rounded-xl cards) so staff see the client's view as the client
 // sees it.
-import { ClipboardList, FileText, Calendar, MessageSquare, RefreshCw, Send, ChevronRight, Clock, CheckCircle, X, AlertCircle } from 'lucide-react';
+import { useState } from 'react';
+import { ClipboardList, FileText, Calendar, MessageSquare, RefreshCw, Send, ChevronRight, Clock, CheckCircle, X, AlertCircle, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { TIER_DEFINITIONS, type MemberTier } from '@shared/threeSixtyTiers';
+import ClientPortalPreview from '@/components/clients/ClientPortalPreview';
 import { useClientUmbrella } from '@/components/clients/ClientUmbrellaContext';
 
 interface MirrorEstimate { id: number; estimateNumber: string; title: string; status: string; totalAmount: number; sentAt: string | Date | null }
@@ -63,6 +65,7 @@ function InvoiceStatusBadge({ status }: { status: string }) {
 
 const ClientPortalMirror = () => {
   const { customerContext, customerFullName, displayName, sendPortalInvite, inviteToPortalMutation } = useClientUmbrella();
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const firstName = (customerFullName || displayName || 'this customer').split(' ')[0];
   const portal = customerContext?.portal ?? null;
@@ -106,14 +109,26 @@ const ClientPortalMirror = () => {
               <p className="mt-1 text-sm text-white/75">Not a 360° member yet</p>
             )}
           </div>
-          {totalDue > 0 && (
-            <div className="shrink-0 text-right">
-              <p className="text-[10px] uppercase tracking-wide text-white/60">Balance they owe</p>
-              <p className="text-lg font-bold" style={{ color: '#e2b96a' }}>{fmtMoney(totalDue)}</p>
-            </div>
-          )}
+          <div className="shrink-0 flex flex-col items-end gap-2">
+            {totalDue > 0 && (
+              <div className="text-right">
+                <p className="text-[10px] uppercase tracking-wide text-white/60">Balance they owe</p>
+                <p className="text-lg font-bold" style={{ color: '#e2b96a' }}>{fmtMoney(totalDue)}</p>
+              </div>
+            )}
+            {portal && (
+              <button
+                onClick={() => setPreviewOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
+                style={{ background: '#c8922a', color: '#fff' }}
+              >
+                <Eye className="w-3.5 h-3.5" /> View as {firstName}
+              </button>
+            )}
+          </div>
         </div>
       </div>
+      {previewOpen && <ClientPortalPreview onClose={() => setPreviewOpen(false)} />}
 
       {portal ? (
         <div className="bg-white p-4 space-y-4">

@@ -2,7 +2,7 @@
 // Self-contained, prop-based (uses EstimatorContext directly). Markup moved verbatim.
 import { useState, useRef } from 'react';
 import {
-  Calendar, CalendarPlus, Camera, CheckCircle2, DollarSign, ExternalLink,
+  Calendar, CalendarPlus, Camera, CheckCircle2, DollarSign, ExternalLink, Eye,
   FileText, FileUp, RefreshCw, Trophy, User, Wrench, X,
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
@@ -10,10 +10,12 @@ import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { fmtDate, fmtDollar, fmtRelative } from '@/components/clients/formatters';
+import ClientPortalPreview from '@/components/clients/ClientPortalPreview';
 export default function CustomerPortalTab({ customerId }: { customerId: string }) {
   const utils = trpc.useUtils();
   const { approveEstimate, updateOpportunity, state } = useEstimator();
   const uploadFile = trpc.uploads.uploadFile.useMutation();
+  const [previewOpen, setPreviewOpen] = useState(false);
   // Share Document modal
   const [showShareDoc, setShowShareDoc] = useState(false);
   const [docFile, setDocFile] = useState<File | null>(null);
@@ -174,6 +176,12 @@ import { fmtDate, fmtDollar, fmtRelative } from '@/components/clients/formatters
             )}
           </p>
         </div>
+        <button
+          onClick={() => setPreviewOpen(true)}
+          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-[#c8922a] text-white rounded-lg text-xs font-semibold hover:bg-[#a07320] transition-colors"
+        >
+          <Eye size={12} /> View as customer
+        </button>
         <a
           href={`${portalBase}/portal/home`}
           target="_blank"
@@ -183,6 +191,7 @@ import { fmtDate, fmtDollar, fmtRelative } from '@/components/clients/formatters
           <ExternalLink size={12} /> View in Portal
         </a>
       </div>
+      {previewOpen && <ClientPortalPreview onClose={() => setPreviewOpen(false)} />}
 
       {/* Estimates */}
       <div>
