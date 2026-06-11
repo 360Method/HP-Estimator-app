@@ -321,7 +321,28 @@ export async function createPortalEstimate(data: InsertPortalEstimate) {
       )
     )
     .limit(1);
-  return rows[0] ?? null;
+  const upserted = rows[0] ?? null;
+
+  // HP-OS trigger: estimate.sent. Every estimate that reaches the customer
+  // portal passes through here, so this is the one choke point for the
+  // margin-audit loop (P4 spawns a human task). Fire-and-forget; never
+  // blocks the estimate write.
+  if (upserted) {
+    (async () => {
+      const portalCustomer = await findPortalCustomerById(data.customerId).catch(() => null);
+      const { emitAgentEvent } = await import("./lib/agentRuntime/triggerBus");
+      await emitAgentEvent("estimate.sent", {
+        estimateNumber: upserted.estimateNumber,
+        portalCustomerId: data.customerId,
+        customerId: portalCustomer?.hpCustomerId ?? null,
+        customerName: portalCustomer?.name ?? "customer",
+        opportunityId: upserted.hpOpportunityId ?? null,
+        title: upserted.title ?? null,
+        totalAmount: upserted.totalAmount,
+      });
+    })().catch(() => null);
+  }
+  return upserted;
 }
 
 export async function getPortalEstimateByOpportunityId(hpOpportunityId: string) {

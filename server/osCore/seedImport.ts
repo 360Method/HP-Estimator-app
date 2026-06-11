@@ -40,6 +40,8 @@ type SeedDoc = {
   model?: string | null;
   maxTurns?: number;
   runLimitDaily?: number;
+  taskTitleTemplate?: string | null;
+  taskDueOffsetHours?: number | null;
 };
 
 type SeedBundle = {
@@ -167,6 +169,8 @@ export async function importOsSeedBundle(): Promise<void> {
           events: osDocuments.events,
           tools: osDocuments.tools,
           approval: osDocuments.approval,
+          taskTitleTemplate: osDocuments.taskTitleTemplate,
+          taskDueOffsetHours: osDocuments.taskDueOffsetHours,
         })
         .from(osDocuments)
         .where(eq(osDocuments.sourcePath, doc.sourcePath))
@@ -183,7 +187,9 @@ export async function importOsSeedBundle(): Promise<void> {
           (row.cron ?? null) === (doc.cron ?? null) &&
           (row.events ?? null) === (doc.events ?? null) &&
           (row.tools ?? null) === (doc.tools ?? null) &&
-          row.approval === (doc.approval ?? "default");
+          row.approval === (doc.approval ?? "default") &&
+          (row.taskTitleTemplate ?? null) === (doc.taskTitleTemplate ?? null) &&
+          (row.taskDueOffsetHours ?? null) === (doc.taskDueOffsetHours ?? null);
         if (unchanged) continue;
         const [latestVer] = await db
           .select({ version: osDocumentVersions.version, editedBy: osDocumentVersions.editedBy })
@@ -216,6 +222,8 @@ export async function importOsSeedBundle(): Promise<void> {
             maxTurns: doc.maxTurns ?? 6,
             runLimitDaily: doc.runLimitDaily ?? 20,
             enabled: doc.enabled,
+            taskTitleTemplate: doc.taskTitleTemplate ?? null,
+            taskDueOffsetHours: doc.taskDueOffsetHours ?? null,
             updatedAt: new Date(),
           })
           .where(eq(osDocuments.docId, docId));
@@ -257,6 +265,8 @@ export async function importOsSeedBundle(): Promise<void> {
         maxTurns: doc.maxTurns ?? 6,
         runLimitDaily: doc.runLimitDaily ?? 20,
         enabled: doc.enabled,
+        taskTitleTemplate: doc.taskTitleTemplate ?? null,
+        taskDueOffsetHours: doc.taskDueOffsetHours ?? null,
         internal: true,
         sourcePath: doc.sourcePath,
         version: 1,

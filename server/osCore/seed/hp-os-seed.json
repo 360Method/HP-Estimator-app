@@ -1,5 +1,5 @@
 {
- "builtAt": "2026-06-11T19:14:50.051Z",
+ "builtAt": "2026-06-11T20:28:55.770Z",
  "business": {
   "guardrails": {
    "marginFloorStandardPct": 30,
@@ -3502,7 +3502,10 @@
    "docId": "HP-SOP-004",
    "type": "SOP",
    "layer": "L2",
-   "title": "P4 — ESTIMATING & MARGIN AUDIT SOP"
+   "title": "P4 — ESTIMATING & MARGIN AUDIT SOP",
+   "events": "estimate.sent",
+   "taskTitleTemplate": "Run P4 margin audit for {{customerName}} ({{estimateNumber}})",
+   "taskDueOffsetHours": 8
   },
   {
    "sourcePath": "Pioneers-Compass/SOPs/P5-Invoice.md",

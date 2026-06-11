@@ -12,7 +12,7 @@ import { ReactNode, useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
   Sun, MessageSquareText, Inbox, BookOpen, GitBranch, Users, Wallet,
-  CalendarDays, HardHat, Bot, MoreHorizontal, X, MessageCircle,
+  CalendarDays, HardHat, Bot, MoreHorizontal, X, MessageCircle, ScrollText,
 } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
@@ -43,7 +43,10 @@ const ROOM_NAV: NavItem[] = [
   { href: "/admin/vendors", label: "Team", icon: HardHat, legacy: true },
 ];
 
-const SYSTEM_NAV: NavItem[] = [{ href: "/admin/agents", label: "Agents", icon: Bot, legacy: true }];
+const SYSTEM_NAV: NavItem[] = [
+  { href: "/os/decisions", label: "Decisions", icon: ScrollText },
+  { href: "/admin/agents", label: "Agents", icon: Bot, legacy: true },
+];
 
 /** Phone bottom bar: the four most-used surfaces; everything else under More. */
 const MOBILE_TABS: NavItem[] = [

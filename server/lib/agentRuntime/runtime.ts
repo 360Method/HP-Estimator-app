@@ -142,6 +142,19 @@ export async function runAgent(input: RunAgentInput): Promise<RunResult> {
     }
   }
 
+  // ── First run after publish parks for approval ──────────────────────────────
+  // DB-edited SOPs go live without a code review, so the first tool-using run
+  // after any publish/enable is forced to "always" approval. Earlier runs
+  // exist beyond publishedAt -> the edit has been seen once, normal posture.
+  let firstRunAfterPublish = false;
+  if (sop?.publishedAt) {
+    const [seen] = await db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(aiAgentRuns)
+      .where(and(eq(aiAgentRuns.sopPath, sop.sopPath), gte(aiAgentRuns.createdAt, sop.publishedAt)));
+    firstRunAfterPublish = Number(seen?.count ?? 0) === 0;
+  }
+
   // ── Cost + run-count ceiling ────────────────────────────────────────────────
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const todayRuns = await db
@@ -298,6 +311,8 @@ export async function runAgent(input: RunAgentInput): Promise<RunResult> {
       let policy = evaluateToolApproval(key, getTool(key), u.input);
       if (sop?.approval === "always" && policy.approvalDecision === "auto_execute") {
         policy = { ...policy, approvalDecision: "requires_approval", approvalReason: "SOP requires approval on every action." };
+      } else if (firstRunAfterPublish && policy.approvalDecision === "auto_execute") {
+        policy = { ...policy, approvalDecision: "requires_approval", approvalReason: "First run after a publish: parked so a human sees the new behavior once." };
       } else if (sop?.approval === "never-send" && policy.approvalDecision === "requires_approval") {
         policy = { ...policy, approvalDecision: "blocked", approvalReason: "SOP forbids send-class tools." };
       }

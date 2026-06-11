@@ -45,6 +45,12 @@ export type SopDefinition = {
   kind: SopKind;
   /** The markdown body — the system prompt for this SOP's runs. */
   body: string;
+  /**
+   * DB-sourced SOPs: when the live row last changed (publish/enable). The
+   * runtime parks the first run after this moment for human approval. Null
+   * for file SOPs (those change via deploy, reviewed in git).
+   */
+  publishedAt?: Date | null;
 };
 
 export const DEFAULT_SOP_MODEL = "claude-haiku-4-5";
@@ -202,6 +208,7 @@ export function sopFromDbRow(row: {
   maxTurns: number;
   runLimitDaily: number;
   enabled: boolean;
+  updatedAt?: Date | null;
 }): SopDefinition {
   const split = (v: string | null): string[] =>
     (v ?? "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -222,6 +229,7 @@ export function sopFromDbRow(row: {
     enabled: row.enabled,
     kind: "agent",
     body: (row.body ?? "").trim(),
+    publishedAt: row.updatedAt ?? null,
   };
 }
 

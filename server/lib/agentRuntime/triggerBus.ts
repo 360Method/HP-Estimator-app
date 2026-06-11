@@ -24,6 +24,7 @@ import { aiAgentEventSubscriptions, aiAgentTasks } from "../../../drizzle/schema
 export const AGENT_EVENTS = [
   "lead.created",
   "opportunity.stage_changed",
+  "estimate.sent",
   "invoice.created",
   "invoice.overdue",
   "customer.portal_account_created",

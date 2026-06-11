@@ -47,6 +47,19 @@ const folders = [];
 const docs = [];
 const skippedBinaries = [];
 
+/**
+ * Trigger wiring for human SOPs that have a live event in the app. Everything
+ * still ships enabled=false; Marcin flips each on in the Library when ready.
+ * P4: every estimate that reaches the portal spawns a margin-audit task.
+ */
+const HUMAN_SOP_TRIGGERS = {
+  "HP-SOP-004": {
+    events: "estimate.sent",
+    taskTitleTemplate: "Run P4 margin audit for {{customerName}} ({{estimateNumber}})",
+    taskDueOffsetHours: 8,
+  },
+};
+
 function slugify(name) {
   return (
     name
@@ -142,6 +155,7 @@ function walk(dirAbs, relPath) {
     }
     const body = fs.readFileSync(abs, "utf-8");
     const folderPath = relPath || "Pioneers-Compass"; // root files (CLAUDE.md) live in Compass
+    const cls = classify(rel, entry.name, body);
     docs.push({
       sourcePath: rel,
       folderPath,
@@ -149,7 +163,8 @@ function walk(dirAbs, relPath) {
       status: "final",
       enabled: false,
       body,
-      ...classify(rel, entry.name, body),
+      ...cls,
+      ...(HUMAN_SOP_TRIGGERS[cls.docId] ?? {}),
     });
   }
 }

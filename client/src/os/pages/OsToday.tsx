@@ -11,6 +11,7 @@ import {
   CheckCircle2, Circle, Inbox, Plus, ExternalLink, BookOpen, X,
 } from "lucide-react";
 import { OsShell } from "../OsShell";
+import { SCORECARD_METRICS_BY_KEY } from "@shared/scorecard";
 
 const fmtDue = (d: string | Date | null | undefined): { label: string; overdue: boolean } => {
   if (!d) return { label: "", overdue: false };
@@ -54,6 +55,7 @@ export default function OsToday() {
     { refetchInterval: 30_000 },
   );
   const { data: readyDrafts } = trpc.agentDrafts.listReady.useQuery(undefined, { refetchInterval: 30_000 });
+  const { data: signals } = trpc.scorecard.liveSignals.useQuery(undefined, { staleTime: 120_000 });
 
   const createTask = trpc.os.tasks.create.useMutation({
     onSuccess: () => {
@@ -215,6 +217,46 @@ export default function OsToday() {
           })
         )}
       </div>
+
+      {/* ── Scorecard strip ─────────────────────────────────────── */}
+      {signals && Object.values(signals).some((s) => s.value !== null) && (
+        <>
+          <h2 className="hp-eyebrow mt-7 mb-2" style={{ color: "var(--hp-gold-deep)" }}>
+            Health
+          </h2>
+          <div className="flex gap-2 flex-wrap">
+            {Object.entries(signals)
+              .filter(([, s]) => s.value !== null)
+              .map(([key, s]) => {
+                const metric = SCORECARD_METRICS_BY_KEY[key];
+                const unit = metric?.unit;
+                const display =
+                  s.value === null
+                    ? "?"
+                    : unit === "cents"
+                      ? `$${(s.value / 100).toLocaleString("en-US", { maximumFractionDigits: 0 })}`
+                      : unit === "ratio"
+                        ? `${Math.round(s.value * 100)}%`
+                        : String(s.value);
+                const dot =
+                  s.status === "green" ? "bg-emerald-500" : s.status === "yellow" ? "bg-amber-400" : s.status === "red" ? "bg-red-500" : "bg-gray-300";
+                return (
+                  <div
+                    key={key}
+                    className="bg-white rounded-lg border px-3 py-2 flex items-center gap-2 text-xs"
+                    style={{ borderColor: "var(--hp-hairline)" }}
+                  >
+                    <span className={`w-2 h-2 rounded-full ${dot}`} />
+                    <span className="text-muted-foreground">{metric?.label ?? key}</span>
+                    <span className="font-semibold" style={{ color: "var(--hp-ink)" }}>
+                      {display}
+                    </span>
+                  </div>
+                );
+              })}
+          </div>
+        </>
+      )}
     </OsShell>
   );
 }
