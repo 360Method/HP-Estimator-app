@@ -90,6 +90,38 @@ export async function isDispatcherAutonomous(db: Db): Promise<boolean> {
   return row?.status === "autonomous";
 }
 
+/**
+ * Seat-system retirement (2026-06-11). Disables every non-Dispatcher seat and
+ * every legacy event subscription and schedule row. Idempotent and run on
+ * every boot, so a re-enabled seat or subscription cannot creep back in.
+ * History (tasks, runs, handoffs) is kept; nothing is deleted.
+ */
+export async function retireLegacySeats(db: Db): Promise<void> {
+  try {
+    const dispatcherId = await getDispatcherAgentId(db);
+    const seats = await db
+      .update(aiAgents)
+      .set({ status: "disabled" })
+      .where(and(sql`${aiAgents.id} != ${dispatcherId}`, sql`${aiAgents.status} != 'disabled'`))
+      .returning({ id: aiAgents.id });
+    const subs = await db.execute(
+      sql`UPDATE ai_agent_event_subscriptions SET enabled = false WHERE enabled = true`,
+    );
+    const schedules = await db.execute(
+      sql`UPDATE ai_agent_schedules SET enabled = false WHERE enabled = true`,
+    );
+    if (seats.length > 0) {
+      console.log(
+        `[dispatcher] Retired ${seats.length} legacy seat(s); subscriptions and schedules disabled.`,
+      );
+    }
+    void subs;
+    void schedules;
+  } catch (err) {
+    console.warn("[dispatcher] retireLegacySeats failed (non-fatal):", err);
+  }
+}
+
 // ─── Per-SOP daily run limit ─────────────────────────────────────────────────
 
 export async function sopRunsLast24h(db: Db, sopPath: string): Promise<number> {

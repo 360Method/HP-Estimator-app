@@ -2072,56 +2072,29 @@ async function startServer() {
     console.log("[boot] Agent runtime OFF (AGENTS_ENABLED!=true or DISABLE_BACKGROUND_JOBS=true)");
   } else try {
     const { startScheduler } = await import("../lib/agentRuntime/scheduler");
-    const { startKpiCron } = await import("../lib/agentRuntime/kpiRollup");
-    const { auditRoster } = await import("../lib/agentRuntime/hierarchy");
-    const {
-      ensureOptimizationTasksTable,
-      startSystemIntegrityCron,
-    } = await import("../lib/agentRuntime/systemIntegrity");
-    const { ensureCronRunsTable } = await import("../lib/agentRuntime/cronRuns");
-    const { startIntegratorBriefCron } = await import(
-      "../lib/agentRuntime/integratorBrief"
-    );
     const { getDb } = await import("../db");
-    const { aiAgents } = await import("../../drizzle/schema");
-    // Phase 2: register all 15 tool wrappers. Import for side-effects.
+    // Register the tool wrappers the SOP registry can authorize. Import for
+    // side effects. (teamTools and the seat-era crons - KPI rollup, System
+    // Integrity, Integrator brief - were retired 2026-06-11 with the seat
+    // system; their modules stay in the repo, dormant.)
     await import("../lib/agentRuntime/phase2Tools");
-    // Phase 2 (Visionary): register team-coordination tools
-    // (writeArtifact / readArtifacts / sendDirectMessage / readMessages / markDone).
-    await import("../lib/agentRuntime/teamTools");
-    // Phase 5: ensure System Integrity table + start the hourly anomaly scan.
-    // Tables are idempotent CREATE IF NOT EXISTS so this is safe on every boot.
-    await ensureOptimizationTasksTable();
-    // cron_runs is the DB-backed dedupe store for time-of-day jobs (KPI
-    // rollups + integrator weekly brief). Survives Railway redeploys.
-    await ensureCronRunsTable();
     startScheduler();
-    startKpiCron();
-    startSystemIntegrityCron();
-    startIntegratorBriefCron();
     const db = await getDb();
     if (db) {
-      // SOP dispatcher: make sure the singleton Dispatcher seat exists. It is
-      // created PAUSED — flipping it autonomous is a human action in the hub,
-      // so a deploy can never silently start executing SOPs.
+      // SOP dispatcher: make sure the singleton Dispatcher seat exists
+      // (created PAUSED; turning it on is a human action in the hub) and
+      // keep the legacy seats, subscriptions, and schedules retired.
       try {
-        const { getDispatcherAgentId } = await import("../lib/agentRuntime/dispatcher/dispatcher");
+        const { getDispatcherAgentId, retireLegacySeats } = await import(
+          "../lib/agentRuntime/dispatcher/dispatcher"
+        );
         await getDispatcherAgentId(db);
+        await retireLegacySeats(db);
       } catch (err) {
         console.warn("[boot] dispatcher seed failed (non-fatal):", err);
       }
-      const roster = await db.select().from(aiAgents);
-      const violations = auditRoster(roster);
-      if (violations.length > 0) {
-        console.warn(
-          `[boot] ai_agents hierarchy audit: ${violations.length} violation(s):`,
-          violations.map((v) => `#${v.agentId}: ${v.v.code} — ${v.v.message}`)
-        );
-      }
     }
-    console.log(
-      "[boot] agent runtime scheduler + KPI cron + System Integrity sweep + Integrator weekly brief started",
-    );
+    console.log("[boot] agent runtime: SOP dispatcher + scheduler started");
   } catch (err) {
     console.warn("[boot] agent runtime failed to start (non-fatal):", err);
   }

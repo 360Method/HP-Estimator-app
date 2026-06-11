@@ -27,17 +27,12 @@ export async function tick(): Promise<{ ran: number; skipped: number; scheduled:
   const db = await getDb();
   if (!db) return { ran: 0, skipped: 0, scheduled: 0 };
 
-  // ── 1. Cron evaluation: enqueue tasks for any schedules due this minute ───
+  // ── 1. SOP cron evaluation (the dispatcher path). The legacy
+  // ai_agent_schedules evaluation (fireDueSchedules) was retired 2026-06-11
+  // with the seat system; SOP frontmatter is the only cron source now.
   let scheduled = 0;
   try {
-    scheduled = await fireDueSchedules();
-  } catch (err) {
-    console.warn("[agentScheduler] cron eval failed:", err);
-  }
-
-  // ── 1b. SOP cron evaluation (the dispatcher path) ─────────────────────────
-  try {
-    scheduled += await dispatchCron();
+    scheduled = await dispatchCron();
   } catch (err) {
     console.warn("[agentScheduler] SOP cron eval failed:", err);
   }

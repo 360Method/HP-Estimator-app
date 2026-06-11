@@ -71,20 +71,16 @@ export async function emitAgentEvent(
   if (process.env.AGENTS_ENABLED !== "true") {
     return { queuedTaskIds: [], matchedAgents: 0 };
   }
+  // Events route ONLY through the SOP dispatcher now. The legacy per-seat
+  // subscription fanout (triggerAgentsFor) was retired 2026-06-11 with the
+  // seat system; the function below is kept for diagnostics and the e2e
+  // script but the emit path no longer consults ai_agent_event_subscriptions.
+  // Lazy import avoids a circular triggerBus -> dispatcher -> runtime path.
+  if (opts.dryRun) return { queuedTaskIds: [], matchedAgents: 0 };
   try {
-    const legacy = await triggerAgentsFor(eventName, payload, opts);
-    // SOP-dispatcher path: route the same event through the SOP registry.
-    // Lazy import avoids a circular triggerBus → dispatcher → runtime path.
-    if (!opts.dryRun) {
-      try {
-        const { dispatchEvent } = await import("./dispatcher/dispatcher");
-        const sopResult = await dispatchEvent(String(eventName), payload);
-        legacy.queuedTaskIds.push(...sopResult.queuedTaskIds);
-      } catch (err) {
-        console.warn(`[triggerBus] SOP dispatch '${eventName}' failed (non-fatal):`, err);
-      }
-    }
-    return legacy;
+    const { dispatchEvent } = await import("./dispatcher/dispatcher");
+    const sopResult = await dispatchEvent(String(eventName), payload);
+    return { queuedTaskIds: sopResult.queuedTaskIds, matchedAgents: sopResult.queuedTaskIds.length };
   } catch (err) {
     console.warn(`[triggerBus] emit '${eventName}' failed (non-fatal):`, err);
     return { queuedTaskIds: [], matchedAgents: 0 };

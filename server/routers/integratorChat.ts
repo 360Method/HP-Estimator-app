@@ -45,13 +45,15 @@ async function db() {
 }
 
 async function getIntegratorAgent() {
+  // The Dispatcher seat shares department "integrator" but carries a
+  // placeholder prompt; the chat persona is the original Integrator row.
   const d = await db();
-  const [agent] = await d
+  const rows = await d
     .select()
     .from(aiAgents)
     .where(eq(aiAgents.department, "integrator"))
-    .limit(1);
-  return agent ?? null;
+    .limit(5);
+  return rows.find((a) => a.seatName !== "Dispatcher") ?? rows[0] ?? null;
 }
 
 export const integratorChatRouter = router({
