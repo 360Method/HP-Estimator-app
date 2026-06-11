@@ -15,11 +15,11 @@ const CustomerOpportunitiesTab = () => {
   ];
   return (
     <div className="space-y-5">
-      <div className="rounded-xl border bg-white p-4">
+      <div className="rounded-xl border border-[#e7e1d4] bg-white p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="text-base font-semibold">Customer Opportunities</h3>
-            <p className="text-xs text-muted-foreground">All revenue work for this customer, regardless of which desk owns the next action.</p>
+            <h3 className="hp-serif text-base text-[#1a2e1a]">Customer Opportunities</h3>
+            <p className="text-xs text-[#5b574f]">All revenue work for this customer, regardless of which desk owns the next action.</p>
           </div>
           <div className="flex gap-2">
             <Button size="sm" variant="outline" onClick={() => setIntakeModal('lead')}>New Lead</Button>
@@ -32,9 +32,9 @@ const CustomerOpportunitiesTab = () => {
       <ClientMirrorStatus section="estimates" />
       {groups.map(([label, opps]) => (
         <div key={label} className="space-y-3">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}s ({opps.length})</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-[#5b574f]">{label}s ({opps.length})</h3>
           {opps.length === 0 ? (
-            <p className="rounded-lg border border-dashed p-5 text-sm text-muted-foreground">No {label.toLowerCase()} opportunities.</p>
+            <p className="rounded-lg border border-dashed border-[#d9d2c1] bg-white/60 p-5 text-sm text-[#5b574f]">No {label.toLowerCase()} opportunities.</p>
           ) : (
             <div className="space-y-3">
               {opps.map(opp => <CustomerOpportunityCommandCard key={opp.id} opp={opp} />)}
