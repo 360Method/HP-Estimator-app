@@ -8,20 +8,21 @@ import React, { useMemo, useState } from 'react';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  LineChart, Line, CartesianGrid,
+  CartesianGrid,
 } from 'recharts';
 import {
-  TrendingUp, TrendingDown, Minus,
   Users, Briefcase, FileText, DollarSign, Star,
-  ArrowRight, Plus, Phone, Mail, MapPin,
-  Clock, CheckCircle2, AlertCircle, Circle,
-  ChevronRight, Activity, Zap, Target,
-  UserPlus, ClipboardList, Wrench, Receipt, Upload,
+  Phone, Mail,
+  CheckCircle2, AlertCircle,
+  ChevronRight, ChevronDown, Activity,
+  UserPlus, ClipboardList, Wrench, Upload,
+  CalendarDays, CalendarClock, Sun,
 } from 'lucide-react';
 import { Customer, Opportunity, Invoice } from '@/lib/types';
 import { trpc } from '@/lib/trpc';
 import { brandPhrases, greetingForNow } from '@/lib/brand';
 import VisionBanner from '@/components/VisionBanner';
+import SlaBadge from '@/components/SlaBadge';
 
 // ── Helpers ──────────────────────────────────────────────────
 const fmt$ = (n: number) =>
@@ -111,58 +112,6 @@ function timeAgo(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-// ── KPI Card ─────────────────────────────────────────────────
-interface KpiCardProps {
-  icon: React.ElementType;
-  iconColor: string;
-  label: string;
-  value: string;
-  sub?: string;
-  trend?: 'up' | 'down' | 'flat';
-  trendLabel?: string;
-  sparkData?: number[];
-  sparkColor?: string;
-  onClick?: () => void;
-}
-
-function KpiCard({ icon: Icon, iconColor, label, value, sub, trend, trendLabel, sparkData, sparkColor = '#3b82f6', onClick }: KpiCardProps) {
-  const TrendIcon = trend === 'up' ? TrendingUp : trend === 'down' ? TrendingDown : Minus;
-  const trendCls = trend === 'up' ? 'text-emerald-600' : trend === 'down' ? 'text-red-500' : 'text-gray-400';
-
-  return (
-    <div
-      className={`bg-white rounded-xl border border-border p-5 flex flex-col gap-3 shadow-sm hover:shadow-md transition-shadow ${onClick ? 'cursor-pointer' : ''}`}
-      onClick={onClick}
-    >
-      <div className="flex items-start justify-between">
-        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${iconColor}`}>
-          <Icon className="w-5 h-5" />
-        </div>
-        {trend && (
-          <div className={`flex items-center gap-1 text-xs font-medium ${trendCls}`}>
-            <TrendIcon className="w-3.5 h-3.5" />
-            {trendLabel}
-          </div>
-        )}
-      </div>
-      <div>
-        <div className="text-2xl font-bold text-foreground font-mono tracking-tight">{value}</div>
-        <div className="text-sm text-muted-foreground mt-0.5">{label}</div>
-        {sub && <div className="text-xs text-muted-foreground mt-1">{sub}</div>}
-      </div>
-      {sparkData && sparkData.length > 0 && (
-        <div className="h-10 -mx-1">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={sparkData.map((v, i) => ({ i, v }))}>
-              <Line type="monotone" dataKey="v" stroke={sparkColor} strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── Section header ────────────────────────────────────────────
 function SectionHeader({ title, sub, action, onAction }: { title: string; sub?: string; action?: string; onAction?: () => void }) {
   return (
@@ -201,6 +150,17 @@ export default function EstimatorDashboard() {
   const { data: revenueStats } = trpc.portal.getRevenueStats.useQuery(undefined, {
     staleTime: 60_000,
     refetchOnWindowFocus: true,
+  });
+
+  // ── "What needs you today" inputs ────────────────────────────
+  // Unscheduled baseline scans (new 360 enrollments, 48h SLA)
+  const { data: baselineQueue } = trpc.workOrders.listGlobal.useQuery(
+    { type: 'baseline_scan', status: 'open' },
+    { staleTime: 30_000, refetchOnWindowFocus: true },
+  );
+  // Active memberships past their renewal date
+  const { data: dashMemberships } = trpc.threeSixty.memberships.list.useQuery(undefined, {
+    staleTime: 60_000,
   });
 
   // ── Aggregate all data ──────────────────────────────────────
@@ -322,6 +282,23 @@ export default function EstimatorDashboard() {
       .slice(0, 5);
   }, [estimates]);
 
+  // ── "What needs you today" derivations ───────────────────────
+  const overdueRenewals = useMemo(() => {
+    return (dashMemberships ?? [])
+      .filter(m => m.status === 'active' && new Date(m.renewalDate).getTime() < Date.now())
+      .slice(0, 5);
+  }, [dashMemberships]);
+
+  const staleProposals = useMemo(() => {
+    return needsAttention.filter(e => daysSince(e.updatedAt) > 3).slice(0, 3);
+  }, [needsAttention]);
+
+  const needsYouCount =
+    (baselineQueue?.length ?? 0) +
+    (serviceRequests?.length ?? 0) +
+    overdueRenewals.length +
+    staleProposals.length;
+
   // ── Customer lookup ──────────────────────────────────────────
   const customerById = useMemo(() => {
     const map: Record<string, Customer> = {};
@@ -341,15 +318,14 @@ export default function EstimatorDashboard() {
     }
   };
 
-  // ── Quick actions ────────────────────────────────────────────
+  // ── Quick actions (kept to the three Marcin actually reaches for) ──
   const quickActions = [
-    { icon: UserPlus,    label: 'New Customer',  color: 'bg-sky-50 text-sky-600 border-sky-200',     action: () => setSection('customers') },
-    { icon: Star,        label: 'New Lead',       color: 'bg-amber-50 text-amber-600 border-amber-200', action: () => setSection('pipeline') },
-    { icon: FileText,    label: 'New Estimate',   color: 'bg-blue-50 text-blue-600 border-blue-200',  action: () => setSection('pipeline') },
-    { icon: Wrench,      label: 'New Job',        color: 'bg-violet-50 text-violet-600 border-violet-200', action: () => setSection('jobs') },
-    { icon: Receipt,     label: 'New Invoice',    color: 'bg-emerald-50 text-emerald-600 border-emerald-200', action: () => setSection('customers') },
-    { icon: Users,       label: 'All Customers',  color: 'bg-slate-50 text-slate-600 border-slate-200', action: () => setSection('customers') },
+    { icon: UserPlus,     label: 'New Customer', color: 'bg-sky-50 text-sky-600 border-sky-200',       action: () => setSection('customers') },
+    { icon: Star,         label: 'New Lead',     color: 'bg-amber-50 text-amber-600 border-amber-200', action: () => setSection('pipeline') },
+    { icon: CalendarDays, label: 'Schedule',     color: 'bg-violet-50 text-violet-600 border-violet-200', action: () => setSection('schedule') },
   ];
+
+  const [showOverview, setShowOverview] = useState(false);
 
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
@@ -429,62 +405,180 @@ export default function EstimatorDashboard() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-8">
 
-        {/* ── KPI Cards ─────────────────────────────────────── */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-          <KpiCard
-            icon={Target}
-            iconColor="bg-blue-100 text-blue-600"
-            label="Stewardship Value"
-            value={fmt$(pipelineValue)}
-            sub={`${leads.length + estimates.length + jobs.length} opportunities under care`}
-            trend="up"
-            trendLabel="active"
-            sparkData={revenueByMonth.map(m => m.invoiced)}
-            sparkColor="#3b82f6"
-            onClick={() => setSection('pipeline')}
-          />
-          <KpiCard
-            icon={Briefcase}
-            iconColor="bg-violet-100 text-violet-600"
-            label="Active Jobs"
-            value={String(activeJobsCount)}
-            sub={`${jobs.length} total jobs`}
-            trend={activeJobsCount > 0 ? 'up' : 'flat'}
-            trendLabel={activeJobsCount > 0 ? 'in pipeline' : 'none'}
-            onClick={() => setSection('jobs')}
-          />
-          <KpiCard
-            icon={FileText}
-            iconColor="bg-amber-100 text-amber-600"
-            label="Open Estimates"
-            value={String(openEstimatesCount)}
-            sub={`${estConvRate}% close rate`}
-            trend={openEstimatesCount > 0 ? 'up' : 'flat'}
-            trendLabel={`${approvedEsts} approved`}
-            onClick={() => setSection('pipeline')}
-          />
-          <KpiCard
-            icon={Users}
-            iconColor="bg-sky-100 text-sky-600"
-            label="Total Customers"
-            value={String(allCustomers.length)}
-            sub={`${leads.filter(l => isThisMonth(l.createdAt)).length} new leads this month`}
-            trend={leadsThisMonth > 0 ? 'up' : 'flat'}
-            trendLabel={`${leadsThisMonth} this month`}
-            onClick={() => setSection('customers')}
-          />
-          <KpiCard
-            icon={DollarSign}
-            iconColor="bg-emerald-100 text-emerald-600"
-            label="Revenue Collected"
-            value={fmt$(revenueCollected)}
-            sub={`${fmt$(outstandingBalance)} outstanding`}
-            trend={revenueCollected > 0 ? 'up' : 'flat'}
-            trendLabel="collected"
-            sparkData={revenueByMonth.map(m => m.revenue)}
-            sparkColor="#10b981"
-          />
+        {/* ── What needs you today ──────────────────────────── */}
+        <div className="hp-card-warm rounded-xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="hp-serif text-lg" style={{ color: 'var(--hp-ink)' }}>What needs you today</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Each item has one next step</p>
+            </div>
+            {needsYouCount > 0 && (
+              <span className="text-xs font-semibold px-2 py-1 rounded-full shrink-0" style={{ background: 'rgba(200,146,42,0.15)', color: 'var(--hp-gold-deep)' }}>
+                {needsYouCount} item{needsYouCount !== 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+          {needsYouCount === 0 ? (
+            <div className="text-center py-6">
+              <Sun className="w-8 h-8 mx-auto mb-2 opacity-50" style={{ color: 'var(--hp-gold-deep)' }} />
+              <p className="text-sm hp-serif italic" style={{ color: 'var(--hp-slate)' }}>Nothing needs you right now.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {/* Baseline scans awaiting scheduling (48h SLA) */}
+              {(baselineQueue ?? []).map(wo => (
+                <div key={`bl-${wo.id}`} className="flex items-center gap-3 bg-white rounded-lg border px-3 py-2.5" style={{ borderColor: 'var(--hp-hairline)' }}>
+                  <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center shrink-0">
+                    <CalendarClock className="w-4 h-4 text-emerald-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate">
+                      Schedule the baseline scan for {wo.membershipCustomerName ?? `member #${wo.membershipId}`}
+                    </div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {wo.membershipPropertyAddress ?? 'New 360 enrollment'} · enrolled {new Date(wo.createdAt).toLocaleDateString()}
+                    </div>
+                  </div>
+                  <SlaBadge createdAt={wo.createdAt} />
+                  <button
+                    onClick={() => setSection('three-sixty')}
+                    className="hp-button-gold text-xs shrink-0"
+                    style={{ padding: '6px 14px', minHeight: 0 }}
+                  >
+                    Schedule
+                  </button>
+                </div>
+              ))}
+
+              {/* Service requests from the portal */}
+              {(serviceRequests ?? []).map((req: any) => {
+                const age = Math.floor((Date.now() - new Date(req.createdAt).getTime()) / 3_600_000);
+                const urgency = age < 12 ? 'text-green-600 bg-green-50' : age < 24 ? 'text-amber-600 bg-amber-50' : 'text-red-600 bg-red-50';
+                return (
+                  <div key={`sr-${req.id}`} className="flex items-center gap-3 bg-white rounded-lg border px-3 py-2.5" style={{ borderColor: 'var(--hp-hairline)' }}>
+                    <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center shrink-0">
+                      <Wrench className="w-4 h-4 text-amber-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium truncate">
+                        {req.customerName ?? 'A homeowner'} requested service{req.requestType === 'off_cycle_visit' ? ' (360 extra visit)' : ''}
+                      </div>
+                      <div className="text-xs text-muted-foreground truncate">{req.description}</div>
+                    </div>
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0 ${urgency}`}>
+                      {age < 1 ? 'Just now' : age < 24 ? `${age}h ago` : `${Math.floor(age / 24)}d ago`}
+                    </span>
+                    <button
+                      onClick={() => {
+                        const customer = allCustomers.find(c => c.id === req.hpCustomerId);
+                        if (customer) setActiveCustomer(customer.id);
+                        reviewServiceReq.mutate({ id: req.id, status: 'reviewed' });
+                      }}
+                      className="hp-button-gold text-xs shrink-0"
+                      style={{ padding: '6px 14px', minHeight: 0 }}
+                    >
+                      Open
+                    </button>
+                    <button
+                      onClick={() => reviewServiceReq.mutate({ id: req.id, status: 'dismissed' })}
+                      className="text-xs px-2 py-1.5 rounded border border-border hover:bg-accent text-muted-foreground shrink-0"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                );
+              })}
+
+              {/* Overdue membership renewals */}
+              {overdueRenewals.map(m => (
+                <div key={`rn-${m.id}`} className="flex items-center gap-3 bg-white rounded-lg border px-3 py-2.5" style={{ borderColor: 'var(--hp-hairline)' }}>
+                  <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center shrink-0">
+                    <AlertCircle className="w-4 h-4 text-red-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate">
+                      {(m as any).customerName ?? `Member #${m.id}`}'s membership renewal is overdue
+                    </div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      Was due {new Date(m.renewalDate).toLocaleDateString()}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if ((m as any).hpCustomerId) {
+                        setActiveCustomer((m as any).hpCustomerId);
+                      } else {
+                        setSection('three-sixty');
+                      }
+                    }}
+                    className="hp-button-gold text-xs shrink-0"
+                    style={{ padding: '6px 14px', minHeight: 0 }}
+                  >
+                    Review
+                  </button>
+                </div>
+              ))}
+
+              {/* Proposals waiting on a follow-up */}
+              {staleProposals.map(est => {
+                const customer = oppCustomer(est);
+                return (
+                  <div key={`pr-${est.id}`} className="flex items-center gap-3 bg-white rounded-lg border px-3 py-2.5" style={{ borderColor: 'var(--hp-hairline)' }}>
+                    <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+                      <FileText className="w-4 h-4 text-blue-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium truncate">
+                        Follow up on "{est.title}"
+                      </div>
+                      <div className="text-xs text-muted-foreground truncate">
+                        {customer?.displayName || customer?.firstName || 'Customer'} · {fmtFull$(est.value)} · waiting {daysSince(est.updatedAt)}d
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => openOpp(est)}
+                      className="hp-button-gold text-xs shrink-0"
+                      style={{ padding: '6px 14px', minHeight: 0 }}
+                    >
+                      Open
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
+
+        {/* ── Slim stat strip ────────────────────────────────── */}
+        <div className="bg-white rounded-xl border border-border px-5 py-3 shadow-sm flex flex-wrap items-center gap-x-8 gap-y-2">
+          <button onClick={() => setSection('pipeline')} className="flex items-baseline gap-2 hover:opacity-70 transition-opacity">
+            <span className="text-lg font-bold font-mono">{fmt$(pipelineValue)}</span>
+            <span className="text-xs text-muted-foreground">under care</span>
+          </button>
+          <button onClick={() => setSection('customers')} className="flex items-baseline gap-2 hover:opacity-70 transition-opacity">
+            <span className="text-lg font-bold font-mono">{allCustomers.length}</span>
+            <span className="text-xs text-muted-foreground">customers</span>
+          </button>
+          <div className="flex items-baseline gap-2">
+            <span className="text-lg font-bold font-mono text-emerald-600">{fmt$(revenueCollected)}</span>
+            <span className="text-xs text-muted-foreground">collected</span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-lg font-bold font-mono">{estConvRate}%</span>
+            <span className="text-xs text-muted-foreground">close rate</span>
+          </div>
+          <div className="flex-1" />
+          <button
+            onClick={() => setShowOverview(v => !v)}
+            className="text-xs text-primary font-medium flex items-center gap-1 hover:underline"
+          >
+            Business overview <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showOverview ? 'rotate-180' : ''}`} />
+          </button>
+        </div>
+
+        {/* ── Business overview (collapsed by default) ──────── */}
+        {showOverview && (
+        <div className="space-y-8">
 
         {/* ── Revenue Chart + Pipeline Funnel ───────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
@@ -561,6 +655,49 @@ export default function EstimatorDashboard() {
             </div>
           </div>
         </div>
+
+        {/* ── Top Customers ─────────────────────────────────── */}
+        {allCustomers.length > 0 && (
+          <div className="bg-white rounded-xl border border-border p-5 shadow-sm">
+            <SectionHeader
+              title="Top Customers"
+              sub="By lifetime value"
+              action="All Customers"
+              onAction={() => setSection('customers')}
+            />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {[...allCustomers]
+                .sort((a, b) => (b.lifetimeValue || 0) - (a.lifetimeValue || 0))
+                .slice(0, 6)
+                .map(customer => {
+                  const custOpps = (customer.opportunities ?? []).filter(o => !o.archived);
+                  return (
+                    <button
+                      key={customer.id}
+                      onClick={() => setActiveCustomer(customer.id)}
+                      className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-accent transition-colors text-left group"
+                    >
+                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-primary font-bold text-sm">
+                        {(customer.firstName?.[0] || customer.displayName?.[0] || '?').toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm text-foreground truncate">
+                          {customer.displayName || `${customer.firstName} ${customer.lastName}`}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {custOpps.length} opp{custOpps.length !== 1 ? 's' : ''} · {fmtFull$(customer.lifetimeValue || 0)}
+                        </div>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0" />
+                    </button>
+                  );
+                })}
+            </div>
+          </div>
+        )}
+
+        </div>
+        )}
 
         {/* ── Active Jobs + Estimates Needing Attention ─────── */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -729,101 +866,6 @@ export default function EstimatorDashboard() {
             )}
           </div>
         </div>
-
-        {/* ── Top Customers ─────────────────────────────────── */}
-        {allCustomers.length > 0 && (
-          <div className="bg-white rounded-xl border border-border p-5 shadow-sm">
-            <SectionHeader
-              title="Top Customers"
-              sub="By lifetime value"
-              action="All Customers"
-              onAction={() => setSection('customers')}
-            />
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {[...allCustomers]
-                .sort((a, b) => (b.lifetimeValue || 0) - (a.lifetimeValue || 0))
-                .slice(0, 6)
-                .map(customer => {
-                  const custOpps = (customer.opportunities ?? []).filter(o => !o.archived);
-                  return (
-                    <button
-                      key={customer.id}
-                      onClick={() => setActiveCustomer(customer.id)}
-                      className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-accent transition-colors text-left group"
-                    >
-                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-primary font-bold text-sm">
-                        {(customer.firstName?.[0] || customer.displayName?.[0] || '?').toUpperCase()}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium text-sm text-foreground truncate">
-                          {customer.displayName || `${customer.firstName} ${customer.lastName}`}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {custOpps.length} opp{custOpps.length !== 1 ? 's' : ''} · {fmtFull$(customer.lifetimeValue || 0)}
-                        </div>
-                      </div>
-                      <ChevronRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0" />
-                    </button>
-                  );
-                })}
-            </div>
-          </div>
-        )}
-
-        {/* ── Service Requests from Portal ───────────────────── */}
-        {serviceRequests && serviceRequests.length > 0 && (
-          <div className="bg-white rounded-xl border border-amber-200 p-5 shadow-sm">
-            <SectionHeader
-              title={`Service Requests (${serviceRequests.length})`}
-              sub="Submitted via customer portal — needs action"
-            />
-            <div className="space-y-3 mt-3">
-              {serviceRequests.map((req: any) => {
-                const age = Math.floor((Date.now() - new Date(req.createdAt).getTime()) / 3_600_000);
-                const urgency = age < 12 ? 'text-green-600 bg-green-50' : age < 24 ? 'text-amber-600 bg-amber-50' : 'text-red-600 bg-red-50';
-                return (
-                  <div key={req.id} className="flex items-start gap-3 p-3 rounded-lg border border-border bg-amber-50/30">
-                    <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center shrink-0 text-amber-700 font-bold text-sm">
-                      {(req.customerName?.[0] ?? '?').toUpperCase()}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-sm text-foreground">{req.customerName ?? 'Unknown'}</span>
-                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${urgency}`}>
-                          {age < 1 ? 'Just now' : age < 24 ? `${age}h ago` : `${Math.floor(age / 24)}d ago`}
-                        </span>
-                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 capitalize">{req.timeline?.replace('_', ' ')}</span>
-                        {req.requestType === 'off_cycle_visit' && (
-                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-violet-100 text-violet-700">360° Extra Visit</span>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{req.description}</p>
-                      {req.address && <p className="text-xs text-muted-foreground mt-0.5">📍 {req.address}</p>}
-                    </div>
-                    <div className="flex flex-col gap-1.5 shrink-0">
-                      <button
-                        onClick={() => {
-                          const customer = allCustomers.find(c => c.id === req.hpCustomerId);
-                          if (customer) setActiveCustomer(customer.id);
-                          reviewServiceReq.mutate({ id: req.id, status: 'reviewed' });
-                        }}
-                        className="text-xs px-2 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
-                      >
-                        Open
-                      </button>
-                      <button
-                        onClick={() => reviewServiceReq.mutate({ id: req.id, status: 'dismissed' })}
-                        className="text-xs px-2 py-1 rounded border border-border hover:bg-accent text-muted-foreground"
-                      >
-                        Dismiss
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
 
       </div>
     </div>

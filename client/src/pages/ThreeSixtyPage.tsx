@@ -14,12 +14,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
-  RefreshCw, Users, Wallet, Crown, Shield, Star,
-  Search, CalendarClock, AlertCircle, CheckCircle2,
-  User, ExternalLink, MapPin, Clock, Calendar,
-  Inbox,
+  RefreshCw, Users, Crown, Shield, Star,
+  Search, CalendarClock, MapPin, Calendar,
+  Inbox, SlidersHorizontal, X, User,
 } from 'lucide-react';
+import SlaBadge from '@/components/SlaBadge';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import {
   TIER_DEFINITIONS,
@@ -46,33 +47,6 @@ const TIER_ICONS: Record<MemberTier, React.ElementType> = {
 type RenewalFilter = 'all' | 'overdue' | '30d' | '60d' | '90d';
 type TierFilter = 'all' | MemberTier;
 type StatusFilter = 'all' | 'active' | 'paused' | 'cancelled';
-
-/** SLA badge: red if >48h since createdAt, amber if 24-48h, green if <24h */
-function SlaBadge({ createdAt }: { createdAt: Date }) {
-  const hoursElapsed = (Date.now() - new Date(createdAt).getTime()) / 3_600_000;
-  if (hoursElapsed > 48) {
-    return (
-      <Badge variant="destructive" className="text-[10px] px-1.5 gap-1 shrink-0">
-        <AlertCircle className="w-3 h-3" />
-        {Math.round(hoursElapsed)}h — Overdue
-      </Badge>
-    );
-  }
-  if (hoursElapsed > 24) {
-    return (
-      <Badge className="text-[10px] px-1.5 gap-1 shrink-0 bg-amber-500 hover:bg-amber-500">
-        <Clock className="w-3 h-3" />
-        {Math.round(hoursElapsed)}h / 48h SLA
-      </Badge>
-    );
-  }
-  return (
-    <Badge className="text-[10px] px-1.5 gap-1 shrink-0 bg-emerald-500 hover:bg-emerald-500">
-      <Clock className="w-3 h-3" />
-      {Math.round(hoursElapsed)}h / 48h SLA
-    </Badge>
-  );
-}
 
 export default function ThreeSixtyPage() {
   const { setActiveCustomer, setSection } = useEstimator();
@@ -275,75 +249,62 @@ export default function ThreeSixtyPage() {
         </Card>
       )}
 
-      {/* KPI strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-        <Card className="border-0 shadow-sm bg-gradient-to-br from-emerald-50 to-white">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Active</span>
-            </div>
-            <div className="text-2xl font-bold text-emerald-700">{isLoading ? '—' : activeMemberships.length}</div>
-          </CardContent>
-        </Card>
-        <Card className="border-0 shadow-sm bg-gradient-to-br from-purple-50 to-white">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <Wallet className="w-4 h-4 text-purple-600" />
-              <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Labor Bank</span>
-            </div>
-            <div className="text-2xl font-bold text-purple-700">{isLoading ? '—' : formatDollars(totalLaborBank)}</div>
-          </CardContent>
-        </Card>
-        <Card className={`border-0 shadow-sm ${overdueCount > 0 ? 'bg-gradient-to-br from-red-50 to-white' : 'bg-gradient-to-br from-slate-50 to-white'}`}>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <AlertCircle className={`w-4 h-4 ${overdueCount > 0 ? 'text-red-500' : 'text-slate-400'}`} />
-              <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Overdue</span>
-            </div>
-            <div className={`text-2xl font-bold ${overdueCount > 0 ? 'text-red-600' : 'text-slate-500'}`}>{isLoading ? '—' : overdueCount}</div>
-          </CardContent>
-        </Card>
-        <Card className={`border-0 shadow-sm ${renewingSoon > 0 ? 'bg-gradient-to-br from-amber-50 to-white' : 'bg-gradient-to-br from-slate-50 to-white'}`}>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <CalendarClock className={`w-4 h-4 ${renewingSoon > 0 ? 'text-amber-600' : 'text-slate-400'}`} />
-              <span className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Renewing 30d</span>
-            </div>
-            <div className={`text-2xl font-bold ${renewingSoon > 0 ? 'text-amber-700' : 'text-slate-500'}`}>{isLoading ? '—' : renewingSoon}</div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Tier summary strip */}
-      <div className="grid grid-cols-3 gap-3 mb-6">
+      {/* Stat line — the four old KPI cards + three tier buttons, condensed */}
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mb-5 px-1">
+        <span className="text-sm whitespace-nowrap">
+          <span className="font-bold font-mono">{isLoading ? '—' : activeMemberships.length}</span>
+          <span className="text-muted-foreground text-xs"> active</span>
+        </span>
+        <span className="text-sm whitespace-nowrap">
+          <span className="font-bold font-mono text-purple-700">{isLoading ? '—' : formatDollars(totalLaborBank)}</span>
+          <span className="text-muted-foreground text-xs"> labor bank</span>
+        </span>
+        <button
+          onClick={() => setRenewalFilter(renewalFilter === 'overdue' ? 'all' : 'overdue')}
+          className={`text-xs px-2 py-1 rounded-full border transition-colors whitespace-nowrap ${
+            renewalFilter === 'overdue'
+              ? 'bg-red-100 text-red-700 border-red-300'
+              : overdueCount > 0
+                ? 'text-red-600 border-red-200 hover:bg-red-50'
+                : 'text-muted-foreground border-border hover:bg-muted/40'
+          }`}
+        >
+          {isLoading ? '—' : overdueCount} overdue
+        </button>
+        <button
+          onClick={() => setRenewalFilter(renewalFilter === '30d' ? 'all' : '30d')}
+          className={`text-xs px-2 py-1 rounded-full border transition-colors whitespace-nowrap ${
+            renewalFilter === '30d'
+              ? 'bg-amber-100 text-amber-700 border-amber-300'
+              : renewingSoon > 0
+                ? 'text-amber-600 border-amber-200 hover:bg-amber-50'
+                : 'text-muted-foreground border-border hover:bg-muted/40'
+          }`}
+        >
+          {isLoading ? '—' : renewingSoon} renewing in 30d
+        </button>
+        <div className="hidden sm:block flex-1" />
         {ALL_TIERS.map(tier => {
-          const def = TIER_DEFINITIONS[tier];
           const colors = TIER_COLORS[tier];
-          const TierIcon = TIER_ICONS[tier];
           const count = activeMemberships.filter(m => m.tier === tier).length;
           return (
             <button
               key={tier}
               onClick={() => setTierFilter(tierFilter === tier ? 'all' : tier)}
-              className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${
-                tierFilter === tier ? 'ring-2 ring-offset-1 ring-primary shadow-sm' : 'hover:bg-muted/40'
+              className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-full border transition-colors whitespace-nowrap ${
+                tierFilter === tier ? 'ring-1 ring-primary bg-muted/60' : 'hover:bg-muted/40'
               }`}
             >
-              <div className={`w-2 h-2 rounded-full ${colors.dot} shrink-0`} />
-              <TierIcon className="w-4 h-4 text-muted-foreground shrink-0" />
-              <div className="min-w-0">
-                <div className="text-xs font-semibold">{def.label}</div>
-                <div className="text-xs text-muted-foreground">{count} active</div>
-              </div>
+              <span className={`w-1.5 h-1.5 rounded-full ${colors.dot}`} />
+              {TIER_DEFINITIONS[tier].label} · {count}
             </button>
           );
         })}
       </div>
 
-      {/* Filters row */}
-      <div className="flex flex-wrap gap-2 mb-4">
-        <div className="relative flex-1 min-w-[180px]">
+      {/* Search + one Filter control */}
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <div className="relative flex-1 min-w-[180px] max-w-xs">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
           <Input
             value={search}
@@ -352,29 +313,60 @@ export default function ThreeSixtyPage() {
             className="pl-8 h-8 text-xs"
           />
         </div>
-        <Select value={statusFilter} onValueChange={v => setStatusFilter(v as StatusFilter)}>
-          <SelectTrigger className="h-8 text-xs w-[110px]">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="paused">Paused</SelectItem>
-            <SelectItem value="cancelled">Cancelled</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={renewalFilter} onValueChange={v => setRenewalFilter(v as RenewalFilter)}>
-          <SelectTrigger className="h-8 text-xs w-[140px]">
-            <SelectValue placeholder="Renewal" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All renewals</SelectItem>
-            <SelectItem value="overdue">Overdue</SelectItem>
-            <SelectItem value="30d">Renewing in 30d</SelectItem>
-            <SelectItem value="60d">Renewing in 60d</SelectItem>
-            <SelectItem value="90d">Renewing in 90d</SelectItem>
-          </SelectContent>
-        </Select>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
+              <SlidersHorizontal className="w-3.5 h-3.5" /> Filter
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-56 space-y-3">
+            <div>
+              <label className="text-xs font-medium block mb-1">Status</label>
+              <Select value={statusFilter} onValueChange={v => setStatusFilter(v as StatusFilter)}>
+                <SelectTrigger className="h-8 text-xs w-full">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All statuses</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="paused">Paused</SelectItem>
+                  <SelectItem value="cancelled">Cancelled</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs font-medium block mb-1">Renewal</label>
+              <Select value={renewalFilter} onValueChange={v => setRenewalFilter(v as RenewalFilter)}>
+                <SelectTrigger className="h-8 text-xs w-full">
+                  <SelectValue placeholder="Renewal" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All renewals</SelectItem>
+                  <SelectItem value="overdue">Overdue</SelectItem>
+                  <SelectItem value="30d">Renewing in 30d</SelectItem>
+                  <SelectItem value="60d">Renewing in 60d</SelectItem>
+                  <SelectItem value="90d">Renewing in 90d</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </PopoverContent>
+        </Popover>
+        {/* Active filter chips */}
+        {statusFilter !== 'active' && (
+          <button onClick={() => setStatusFilter('active')} className="flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-muted text-foreground hover:bg-muted/70">
+            Status: {statusFilter} <X className="w-3 h-3" />
+          </button>
+        )}
+        {renewalFilter !== 'all' && (
+          <button onClick={() => setRenewalFilter('all')} className="flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-muted text-foreground hover:bg-muted/70">
+            {renewalFilter === 'overdue' ? 'Overdue' : `Renewing in ${renewalFilter}`} <X className="w-3 h-3" />
+          </button>
+        )}
+        {tierFilter !== 'all' && (
+          <button onClick={() => setTierFilter('all')} className="flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-muted text-foreground hover:bg-muted/70">
+            {TIER_DEFINITIONS[tierFilter].label} <X className="w-3 h-3" />
+          </button>
+        )}
         {(tierFilter !== 'all' || statusFilter !== 'active' || renewalFilter !== 'all' || search) && (
           <Button
             variant="ghost"
@@ -382,7 +374,7 @@ export default function ThreeSixtyPage() {
             className="h-8 text-xs px-2"
             onClick={() => { setTierFilter('all'); setStatusFilter('active'); setRenewalFilter('all'); setSearch(''); }}
           >
-            Clear filters
+            Clear all
           </Button>
         )}
       </div>
@@ -452,23 +444,6 @@ export default function ThreeSixtyPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    {(m as any).hpCustomerId && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-xs gap-1 text-muted-foreground hover:text-foreground h-7 px-2"
-                        onClick={e => {
-                          e.stopPropagation();
-                          setActiveCustomer((m as any).hpCustomerId, 'direct');
-                          setSection('customer');
-                        }}
-                        title="Open customer profile"
-                      >
-                        <User className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Profile</span>
-                        <ExternalLink className="w-3 h-3" />
-                      </Button>
-                    )}
                     {isOverdue ? (
                       <Badge variant="destructive" className="text-[10px] px-1.5">Overdue</Badge>
                     ) : isRenewingSoon ? (
@@ -478,12 +453,11 @@ export default function ThreeSixtyPage() {
                         Renews {new Date(m.renewalDate).toLocaleDateString()}
                       </span>
                     )}
-                    <Badge
-                      variant={m.status === 'active' ? 'default' : 'secondary'}
-                      className="text-[10px] px-1.5"
-                    >
-                      {m.status}
-                    </Badge>
+                    {m.status !== 'active' && (
+                      <Badge variant="secondary" className="text-[10px] px-1.5">
+                        {m.status}
+                      </Badge>
+                    )}
                   </div>
                 </CardContent>
               </Card>
