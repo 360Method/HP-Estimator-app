@@ -54,6 +54,8 @@ import { getAnthropicToolDefinitions, getTool } from "./lib/agentRuntime/tools";
 import { priceRun } from "./lib/agentRuntime/pricing";
 // Side-effect: registers the agent-teams tools alongside the rest.
 import "./lib/agentRuntime/phase2Tools";
+// Side-effect: registers the HP-OS library/tasks/decisions tools.
+import "./lib/agentRuntime/osTools";
 
 const MAX_HISTORY_MSGS = 30;
 const MAX_TOKENS = 4096;

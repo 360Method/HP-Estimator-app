@@ -21,11 +21,16 @@ import { getDb } from "../../db";
 import { aiAgents, aiAgentTasks, aiAgentSchedules } from "../../../drizzle/schema";
 import { runAgent } from "./runtime";
 import { shouldFire } from "./cron";
-import { dispatchCron } from "./dispatcher/dispatcher";
+import { dispatchCron, dispatchHumanCron } from "./dispatcher/dispatcher";
+import { refreshDbSops } from "./dispatcher/sopRegistry";
 
 export async function tick(): Promise<{ ran: number; skipped: number; scheduled: number }> {
   const db = await getDb();
   if (!db) return { ran: 0, skipped: 0, scheduled: 0 };
+
+  // ── 0. Refresh the DB half of the SOP registry (cheap stamp check; reloads
+  // only when an HP-OS document was published/changed since the last tick).
+  await refreshDbSops();
 
   // ── 1. SOP cron evaluation (the dispatcher path). The legacy
   // ai_agent_schedules evaluation (fireDueSchedules) was retired 2026-06-11
@@ -35,6 +40,14 @@ export async function tick(): Promise<{ ran: number; skipped: number; scheduled:
     scheduled = await dispatchCron();
   } catch (err) {
     console.warn("[agentScheduler] SOP cron eval failed:", err);
+  }
+
+  // ── 1b. Human SOP cron: spawn os_tasks rows for people. Deterministic,
+  // independent of the Dispatcher kill switch (no model call, no send).
+  try {
+    await dispatchHumanCron();
+  } catch (err) {
+    console.warn("[agentScheduler] human SOP cron eval failed:", err);
   }
 
   // ── 2. Drain queued tasks ────────────────────────────────────────────────

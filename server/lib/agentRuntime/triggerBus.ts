@@ -63,6 +63,18 @@ export async function emitAgentEvent(
   payload: Record<string, unknown> = {},
   opts: EmitOptions = {}
 ): Promise<{ queuedTaskIds: number[]; matchedAgents: number }> {
+  // ── HP-OS human SOPs ──
+  // Deterministic task spawning (no model call, no send), so it sits in
+  // front of the AGENTS_ENABLED gate: the human work queue keeps flowing
+  // even when the AI engine is off. Governed per-SOP by enabled=true.
+  if (!opts.dryRun) {
+    try {
+      const { dispatchHumanSops } = await import("./dispatcher/dispatcher");
+      await dispatchHumanSops(String(eventName), payload);
+    } catch (err) {
+      console.warn(`[triggerBus] human SOP dispatch '${eventName}' failed (non-fatal):`, err);
+    }
+  }
   // ── Master kill-switch for the in-app AI-agent engine ──
   // OFF unless AGENTS_ENABLED=true. Disabled 2026-06-02: member fulfillment is now
   // deterministic (Stripe webhook + direct transactional emails); the agent

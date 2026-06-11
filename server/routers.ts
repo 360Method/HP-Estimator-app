@@ -56,6 +56,7 @@ import { techRouter } from "./routers/tech";
 import { aiBrainRouter } from "./routers/aiBrain";
 import { idsRouter } from "./routers/ids";
 import { scorecardRouter } from "./routers/scorecard";
+import { osRouter } from "./routers/os";
 import { requestPasswordReset, consumePasswordReset } from "./passwordReset";
 import {
   getAdminAllowlist,
@@ -122,6 +123,7 @@ export const appRouter = router({
   aiBrain: aiBrainRouter,
   ids: idsRouter,
   scorecard: scorecardRouter,
+  os: osRouter,
 
   auth: router({
     /**

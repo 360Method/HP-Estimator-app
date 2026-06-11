@@ -18,6 +18,7 @@ import { DISPATCHER_SEAT_NAME, getDispatcherAgentId } from "../lib/agentRuntime/
 // Side-effect imports: make sure the tool registry is fully populated before
 // the library view validates SOP tool lists.
 import "../lib/agentRuntime/phase2Tools";
+import "../lib/agentRuntime/osTools";
 import { getTool } from "../lib/agentRuntime/tools";
 
 async function db() {

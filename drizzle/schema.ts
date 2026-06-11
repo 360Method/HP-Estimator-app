@@ -2016,6 +2016,9 @@ export const integratorChatConversations = pgTable("integrator_chat_conversation
   title: varchar("title", { length: 200 }),
   lastMessageAt: timestamp("lastMessageAt"),
   archived: boolean("archived").notNull().default(false),
+  /** HP-OS chat scope: doc | folder | customer | opportunity. Columns added by ensureOsTables. */
+  scopeType: varchar("scopeType", { length: 30 }),
+  scopeId: varchar("scopeId", { length: 60 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
 });
@@ -2479,4 +2482,135 @@ export const cronRuns = pgTable("cron_runs", {
 }));
 export type CronRun = typeof cronRuns.$inferSelect;
 export type InsertCronRun = typeof cronRuns.$inferInsert;
+
+// ─── HP-OS: the in-app operating system ──────────────────────────────────────
+// The business's own folder tree, documents (SOPs, references, working docs),
+// human task queue, and decisions log. Created by ensureOsTables() boot helper
+// (server/osCore/ensure.ts), never by drizzle-kit push: prod state has drifted.
+
+// One row per business. Row id=1 is Handy Pioneers; every other os_* table
+// carries businessId DEFAULT 1. This is the seam that makes the OS shell
+// duplicable for the next business without a schema change.
+export const osBusiness = pgTable("os_business", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 200 }).notNull(),
+  slug: varchar("slug", { length: 60 }).notNull().unique(),
+  /** JSON: colors, logo url. Text-stored JSON per repo convention. */
+  branding: text("branding").notNull().default("{}"),
+  /** JSON: marginFloorStandard, marginFloorSmallJob, pricingMode, etc. */
+  guardrails: text("guardrails").notNull().default("{}"),
+  timezone: varchar("timezone", { length: 64 }).notNull().default("America/Los_Angeles"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type OsBusiness = typeof osBusiness.$inferSelect;
+
+export const osFolders = pgTable("os_folders", {
+  id: serial("id").primaryKey(),
+  businessId: integer("businessId").notNull().default(1),
+  /** Null = a root area (01 Operations ... Pioneers Compass). */
+  parentId: integer("parentId"),
+  slug: varchar("slug", { length: 120 }).notNull(),
+  name: varchar("name", { length: 200 }).notNull(),
+  /** Root areas only: OPS SUBS FIN MKT TECH CLI LEGAL COMPASS. */
+  areaCode: varchar("areaCode", { length: 20 }),
+  sortOrder: integer("sortOrder").notNull().default(0),
+  /** Area Context Contract markdown: Role, Jobs, Pull (L3), Working material (L4), Output. */
+  contextContract: text("contextContract"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
+});
+export type OsFolder = typeof osFolders.$inferSelect;
+
+export const osDocuments = pgTable("os_documents", {
+  id: serial("id").primaryKey(),
+  businessId: integer("businessId").notNull().default(1),
+  /** Universal id, HP-SOP-004 style. Doubles as the registry key for agent SOPs. */
+  docId: varchar("docId", { length: 40 }).notNull().unique(),
+  folderId: integer("folderId").notNull(),
+  title: varchar("title", { length: 300 }).notNull(),
+  type: text("type").$type<"SOP" | "WF" | "DOC" | "TPL" | "REF" | "DATA">().notNull().default("DOC"),
+  /** ICM context layer: L0 identity, L3 reference, L2 stage contract, etc. */
+  layer: varchar("layer", { length: 4 }),
+  status: text("status").$type<"draft" | "review" | "final" | "archived">().notNull().default("draft"),
+  /** human = spawns os_tasks on trigger; agent = executable by the dispatcher. */
+  kind: text("kind").$type<"human" | "agent">().notNull().default("human"),
+  body: text("body").notNull().default(""),
+  // Agent-SOP runtime frontmatter (mirrors sopRegistry SopDefinition).
+  events: text("events"),
+  cron: varchar("cron", { length: 100 }),
+  timezone: varchar("timezone", { length: 64 }),
+  tools: text("tools"),
+  approval: text("approval").$type<"default" | "always" | "never-send">().notNull().default("default"),
+  model: varchar("model", { length: 64 }),
+  maxTurns: integer("maxTurns").notNull().default(6),
+  runLimitDaily: integer("runLimitDaily").notNull().default(20),
+  enabled: boolean("enabled").notNull().default(false),
+  // Human-SOP task spawning.
+  taskTitleTemplate: varchar("taskTitleTemplate", { length: 300 }),
+  taskDueOffsetHours: integer("taskDueOffsetHours"),
+  defaultAssigneeUserId: integer("defaultAssigneeUserId"),
+  // Bookkeeping. internal=true means margin-sensitive: never portal-serialized.
+  internal: boolean("internal").notNull().default(true),
+  /** Micek-OS origin path; the seed script's idempotency key. */
+  sourcePath: varchar("sourcePath", { length: 400 }),
+  version: integer("version").notNull().default(1),
+  updatedByUserId: integer("updatedByUserId"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
+});
+export type OsDocument = typeof osDocuments.$inferSelect;
+export type InsertOsDocument = typeof osDocuments.$inferInsert;
+
+export const osDocumentVersions = pgTable("os_document_versions", {
+  id: serial("id").primaryKey(),
+  docId: varchar("docId", { length: 40 }).notNull(),
+  version: integer("version").notNull(),
+  body: text("body").notNull(),
+  /** JSON snapshot of the runtime frontmatter fields at save time. */
+  frontmatter: text("frontmatter").notNull().default("{}"),
+  editedByUserId: integer("editedByUserId"),
+  editedBy: text("editedBy").$type<"human" | "agent" | "seed">().notNull().default("human"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => ({
+  uniqDocVersion: uniqueIndex("os_document_versions_doc_version_uniq").on(t.docId, t.version),
+}));
+export type OsDocumentVersion = typeof osDocumentVersions.$inferSelect;
+
+// The human work queue. Distinct from ai_agent_tasks (the agent execution log):
+// these rows are things a PERSON does; SOPs, agents, chat, and humans create them.
+export const osTasks = pgTable("os_tasks", {
+  id: serial("id").primaryKey(),
+  businessId: integer("businessId").notNull().default(1),
+  title: varchar("title", { length: 300 }).notNull(),
+  detail: text("detail"),
+  status: text("status").$type<"open" | "in_progress" | "done" | "dismissed">().notNull().default("open"),
+  dueAt: timestamp("dueAt"),
+  assigneeUserId: integer("assigneeUserId"),
+  sourceType: text("sourceType").$type<"sop" | "agent" | "chat" | "manual" | "system">().notNull().default("manual"),
+  sourceDocId: varchar("sourceDocId", { length: 40 }),
+  sourceRunId: integer("sourceRunId"),
+  linkType: varchar("linkType", { length: 30 }),
+  linkId: varchar("linkId", { length: 60 }),
+  /** Where this sits in the client flow: top | pinch | bottom. */
+  hourglass: varchar("hourglass", { length: 10 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  completedAt: timestamp("completedAt"),
+  completedByUserId: integer("completedByUserId"),
+});
+export type OsTask = typeof osTasks.$inferSelect;
+export type InsertOsTask = typeof osTasks.$inferInsert;
+
+// Append-only. The API exposes create + list only; no update, no delete.
+export const osDecisions = pgTable("os_decisions", {
+  id: serial("id").primaryKey(),
+  businessId: integer("businessId").notNull().default(1),
+  decision: text("decision").notNull(),
+  why: text("why"),
+  alternatives: text("alternatives"),
+  owner: varchar("owner", { length: 120 }).notNull().default("Marcin"),
+  areaCode: varchar("areaCode", { length: 20 }),
+  linkDocId: varchar("linkDocId", { length: 40 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type OsDecision = typeof osDecisions.$inferSelect;
 

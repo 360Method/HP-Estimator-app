@@ -218,6 +218,162 @@ export async function dispatchCron(now: Date = new Date()): Promise<number> {
   return fired;
 }
 
+// ─── Human SOPs: the OS creates tasks, people execute ────────────────────────
+//
+// kind=human SOP documents never reach the LLM runtime. On a matching event
+// or cron they insert an os_tasks row (the human work queue) with a link back
+// to the customer/opportunity and the SOP that spawned it. Deterministic, no
+// model call, no external send, so it is governed by each SOP's enabled flag
+// rather than the Dispatcher kill switch (which stops AI runs).
+
+type HumanSopRow = {
+  docId: string;
+  title: string;
+  events: string | null;
+  cron: string | null;
+  timezone: string | null;
+  taskTitleTemplate: string | null;
+  taskDueOffsetHours: number | null;
+  defaultAssigneeUserId: number | null;
+};
+
+async function loadHumanSops(db: Db): Promise<HumanSopRow[]> {
+  const { osDocuments } = await import("../../../../drizzle/schema");
+  const rows = await db
+    .select({
+      docId: osDocuments.docId,
+      title: osDocuments.title,
+      events: osDocuments.events,
+      cron: osDocuments.cron,
+      timezone: osDocuments.timezone,
+      taskTitleTemplate: osDocuments.taskTitleTemplate,
+      taskDueOffsetHours: osDocuments.taskDueOffsetHours,
+      defaultAssigneeUserId: osDocuments.defaultAssigneeUserId,
+    })
+    .from(osDocuments)
+    .where(
+      and(
+        eq(osDocuments.type, "SOP"),
+        eq(osDocuments.kind, "human"),
+        eq(osDocuments.status, "final"),
+        eq(osDocuments.enabled, true),
+      ),
+    );
+  return rows;
+}
+
+function fillTemplate(template: string, payload: Record<string, unknown>): string {
+  return template.replace(/\{\{(\w+)\}\}/g, (_, key: string) => {
+    const v = payload[key];
+    return v === undefined || v === null ? `(${key})` : String(v);
+  });
+}
+
+function deriveTaskLink(payload: Record<string, unknown>): { linkType: string | null; linkId: string | null } {
+  if (payload.customerId) return { linkType: "customer", linkId: String(payload.customerId) };
+  if (payload.opportunityId) return { linkType: "opportunity", linkId: String(payload.opportunityId) };
+  if (payload.invoiceId) return { linkType: "invoice", linkId: String(payload.invoiceId) };
+  if (payload.vendorId) return { linkType: "vendor", linkId: String(payload.vendorId) };
+  return { linkType: null, linkId: null };
+}
+
+async function spawnHumanTask(
+  db: Db,
+  sop: HumanSopRow,
+  payload: Record<string, unknown>,
+): Promise<number | null> {
+  const { osTasks } = await import("../../../../drizzle/schema");
+  const { linkType, linkId } = deriveTaskLink(payload);
+
+  // Dedupe: one open task per SOP + link target. A still-open task from the
+  // last firing means the human has not caught up; do not pile on duplicates.
+  const existing = await db
+    .select({ id: osTasks.id })
+    .from(osTasks)
+    .where(
+      and(
+        eq(osTasks.sourceDocId, sop.docId),
+        linkId === null ? sql`${osTasks.linkId} IS NULL` : eq(osTasks.linkId, linkId),
+        sql`${osTasks.status} IN ('open', 'in_progress')`,
+      ),
+    )
+    .limit(1);
+  if (existing.length > 0) return null;
+
+  const title = sop.taskTitleTemplate ? fillTemplate(sop.taskTitleTemplate, payload) : sop.title;
+  const dueAt =
+    sop.taskDueOffsetHours !== null && sop.taskDueOffsetHours !== undefined
+      ? new Date(Date.now() + sop.taskDueOffsetHours * 60 * 60 * 1000)
+      : null;
+  const [inserted] = await db
+    .insert(osTasks)
+    .values({
+      title: title.slice(0, 300),
+      detail: `From SOP ${sop.docId} (${sop.title}).`,
+      status: "open",
+      dueAt,
+      assigneeUserId: sop.defaultAssigneeUserId ?? null,
+      sourceType: "sop",
+      sourceDocId: sop.docId,
+      linkType,
+      linkId,
+    })
+    .returning({ id: osTasks.id });
+  return Number(inserted?.id ?? 0) || null;
+}
+
+/** Event entry point for human SOPs — called alongside dispatchEvent. */
+export async function dispatchHumanSops(
+  eventName: string,
+  payload: Record<string, unknown> = {},
+): Promise<{ spawnedTaskIds: number[] }> {
+  const spawnedTaskIds: number[] = [];
+  try {
+    const db = await getDb();
+    if (!db) return { spawnedTaskIds };
+    const sops = await loadHumanSops(db);
+    for (const sop of sops) {
+      const events = (sop.events ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+      if (!events.includes(eventName)) continue;
+      try {
+        const id = await spawnHumanTask(db, sop, { event: eventName, ...payload });
+        if (id) spawnedTaskIds.push(id);
+      } catch (err) {
+        console.warn(`[dispatcher] human task spawn failed for ${sop.docId} on '${eventName}':`, err);
+      }
+    }
+  } catch (err) {
+    console.warn(`[dispatcher] dispatchHumanSops '${eventName}' failed (non-fatal):`, err);
+  }
+  return { spawnedTaskIds };
+}
+
+/** Cron entry point for human SOPs — called from the scheduler tick. */
+export async function dispatchHumanCron(now: Date = new Date()): Promise<number> {
+  let spawned = 0;
+  try {
+    const db = await getDb();
+    if (!db) return 0;
+    const sops = await loadHumanSops(db);
+    const minuteKey = now.toISOString().slice(0, 16);
+    for (const sop of sops) {
+      if (!sop.cron) continue;
+      if (!shouldFire(sop.cron, now, null, sop.timezone ?? "America/Los_Angeles")) continue;
+      const claimed = await claimCronRun(`hsop:${sop.docId}`, minuteKey);
+      if (!claimed) continue;
+      try {
+        const id = await spawnHumanTask(db, sop, { cron: sop.cron });
+        if (id) spawned++;
+      } catch (err) {
+        console.warn(`[dispatcher] human cron spawn failed for ${sop.docId}:`, err);
+      }
+    }
+  } catch (err) {
+    console.warn("[dispatcher] dispatchHumanCron failed (non-fatal):", err);
+  }
+  return spawned;
+}
+
 // ─── Subagents ───────────────────────────────────────────────────────────────
 
 export async function getTaskDepth(db: Db, taskId: number): Promise<number> {

@@ -197,6 +197,15 @@ async function ensureVendorTablesBoot() {
   }
 }
 
+async function ensureOsTablesBoot() {
+  try {
+    const { ensureOsTables } = await import("../osCore/ensure");
+    await ensureOsTables();
+  } catch (err) {
+    console.warn("[boot] ensureOsTablesBoot failed (non-fatal):", err);
+  }
+}
+
 async function ensurePasswordResetTokensTableBoot() {
   try {
     const { ensurePasswordResetTokensTable } = await import("../passwordReset");
@@ -301,6 +310,7 @@ async function startServer() {
   await ensureMagicLinkTokenHash();
   await ensureSchedulingTablesBoot();
   await ensureAgentPhase4Tables();
+  await ensureOsTablesBoot();
   await ensureVendorTablesBoot();
   await ensurePasswordResetTokensTableBoot();
   await ensureCharterTables();
