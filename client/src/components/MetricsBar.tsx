@@ -51,28 +51,21 @@ interface MetricsBarProps {
   totals: TotalsResult;
 }
 
+// Simplified flow (2026-06-11): the Command and Work Plan tabs are gone;
+// opening anything lands straight in Scope/Price, then Proposal (and
+// Billing for jobs). The OS rail owns navigation, so the old backend icon
+// row is gone too.
 const BUILDER_TABS: { id: AppSection; icon: string; label: string; shortLabel: string }[] = [
-  { id: 'opp-details', icon: 'ðŸ“Œ', label: 'Command',     shortLabel: 'Command' },
   { id: 'calculator',  icon: 'ðŸ§®', label: 'Scope/Price', shortLabel: 'Scope' },
   { id: 'estimate',    icon: 'ðŸ“„', label: 'Proposal',    shortLabel: 'Proposal' },
 ];
 
 const JOB_BUILDER_TABS: { id: AppSection; icon: string; label: string; shortLabel: string }[] = [
-  { id: 'opp-details', icon: 'ðŸ“Œ', label: 'Command',     shortLabel: 'Command' },
-  { id: 'job-details', icon: 'ðŸ“‹', label: 'Work Plan',   shortLabel: 'Plan' },
   { id: 'calculator',  icon: 'ðŸ§®', label: 'Scope/Price', shortLabel: 'Scope' },
   { id: 'invoice',     icon: 'ðŸ’³', label: 'Billing',     shortLabel: 'Billing' },
 ];
 
-const BACKEND_NAV: { icon: React.ElementType; label: string; section: AppSection | null }[] = [
-  { icon: LayoutDashboard, label: 'Command',    section: 'dashboard' as AppSection },
-  { icon: Users,           label: 'Customers',  section: 'customers' },
-  { icon: Star,            label: 'Leads',      section: 'leads' as AppSection },
-  { icon: Workflow,        label: 'Workflow',   section: 'workflow' as AppSection },
-  { icon: Inbox,           label: 'Inbox',      section: 'inbox' as AppSection },
-  { icon: CalendarDays,    label: 'Schedule',   section: 'schedule' as AppSection },
-  { icon: ShieldCheck,     label: 'Operations', section: 'operations' as AppSection },
-];
+const BACKEND_NAV: { icon: React.ElementType; label: string; section: AppSection | null }[] = [];
 
 export default function MetricsBar({ totals }: MetricsBarProps) {
   const { totalHard, totalPrice, totalGP, totalGM } = totals;

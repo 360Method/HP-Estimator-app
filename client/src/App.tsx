@@ -103,6 +103,7 @@ const OsChat = lazy(() => import("./os/pages/OsChat"));
 const OsApprovals = lazy(() => import("./os/pages/OsApprovals"));
 const OsRoom = lazy(() => import("./os/pages/OsRoom"));
 const OsDecisions = lazy(() => import("./os/pages/OsDecisions"));
+const OsSettings = lazy(() => import("./os/pages/OsSettings"));
 
 // Domains that should serve only the customer portal (no admin app).
 // On these hostnames any /admin or /onboarding URL is hidden behind a
@@ -240,6 +241,7 @@ function Router() {
       <Route path="/os/library" component={staffOnly(OsLibrary)} />
       <Route path="/os/d/:docId" component={staffOnly(OsDocument)} />
       <Route path="/os/decisions" component={staffOnly(OsDecisions)} />
+      <Route path="/os/settings" component={staffOnly(OsSettings)} />
       {/* Business rooms (Phase 2): pipeline, clients, money, schedule, inbox */}
       <Route path="/os/:room" component={staffOnly(OsRoom)} />
 

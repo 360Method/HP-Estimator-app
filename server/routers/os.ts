@@ -20,12 +20,17 @@ import { and, asc, desc, eq, like, or, sql } from "drizzle-orm";
 import { adminProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
 import {
+  agentDrafts,
+  notifications,
+  opportunities,
   osBusiness,
   osDecisions,
   osDocuments,
   osDocumentVersions,
   osFolders,
   osTasks,
+  pipelineEvents,
+  scheduleEvents,
 } from "../../drizzle/schema";
 import { invalidateDbSopCache } from "../lib/agentRuntime/dispatcher/sopRegistry";
 import { validateSopForPublish } from "../osCore/sopValidation";
@@ -548,6 +553,42 @@ export const osRouter = router({
           })
           .where(eq(osTasks.id, input.id));
         return { ok: true };
+      }),
+  }),
+
+  maintenance: router({
+    /**
+     * Fresh start (Marcin, 2026-06-11): wipe the WORK, keep the PEOPLE.
+     * Deletes every opportunity (leads, estimates, jobs), pipeline history,
+     * open OS tasks, notifications, schedule events, and pending agent
+     * drafts. Customers, memberships, billing, portal accounts, invoices,
+     * and conversation history stay untouched. Typed confirmation required;
+     * this is destructive and there is no undo.
+     */
+    freshStart: adminProcedure
+      .input(z.object({ confirm: z.literal("fresh start") }))
+      .mutation(async () => {
+        const d = await db();
+        const counts: Record<string, number> = {};
+        const wipe = async (label: string, fn: () => Promise<unknown>) => {
+          try {
+            const res: any = await fn();
+            counts[label] = Number(res?.rowCount ?? res?.count ?? 0);
+          } catch (err) {
+            console.warn(`[freshStart] ${label} wipe failed:`, err);
+            counts[label] = -1;
+          }
+        };
+        await wipe("opportunities", () => d.delete(opportunities));
+        await wipe("pipelineEvents", () => d.delete(pipelineEvents));
+        await wipe("osTasks", () => d.delete(osTasks));
+        await wipe("notifications", () => d.delete(notifications));
+        await wipe("scheduleEvents", () => d.delete(scheduleEvents));
+        await wipe("pendingDrafts", () =>
+          d.delete(agentDrafts).where(sql`${agentDrafts.status} IN ('pending', 'ready')`),
+        );
+        console.log("[freshStart] wiped:", JSON.stringify(counts));
+        return { ok: true, counts };
       }),
   }),
 

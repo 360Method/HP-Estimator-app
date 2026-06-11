@@ -23,17 +23,16 @@ import type { AppSection } from "@/lib/types";
 import { OsShell } from "../OsShell";
 import { consumeNavIntent } from "../navIntent";
 
-const CustomerSection = lazy(() => import("@/components/sections/CustomerSection"));
+const OsClientProfile = lazy(() => import("../OsClientProfile"));
+const OsPipelineList = lazy(() => import("../OsPipelineList"));
 const SalesSection = lazy(() => import("@/components/sections/SalesSection"));
 const CalculatorSection = lazy(() => import("@/components/sections/CalculatorSection"));
 const EstimateSection = lazy(() => import("@/components/sections/EstimateSection"));
 const JobDetailsSection = lazy(() => import("@/components/sections/JobDetailsSection"));
 const InvoiceSection = lazy(() => import("@/components/sections/InvoiceSection"));
 const PresentSection = lazy(() => import("@/components/sections/PresentSection"));
-const OpportunityDetailsTab = lazy(() => import("@/components/sections/OpportunityDetailsTab"));
 const CustomersListPage = lazy(() => import("@/pages/CustomersListPage"));
 const JobsListPage = lazy(() => import("@/pages/JobsListPage"));
-const PipelinePage = lazy(() => import("@/pages/PipelinePage"));
 const EstimatorDashboard = lazy(() => import("@/pages/EstimatorDashboard"));
 const SchedulePage = lazy(() => import("@/pages/SchedulePage"));
 const InboxPage = lazy(() => import("@/pages/InboxPage"));
@@ -112,7 +111,7 @@ export function Room({ room, roomSection }: { room: string; roomSection: AppSect
         ) : state.activeSection === "jobs" ? (
           <JobsListPage />
         ) : state.activeSection === "pipeline" ? (
-          <PipelinePage />
+          <OsPipelineList />
         ) : state.activeSection === "workflow" ? (
           <WorkflowPage />
         ) : state.activeSection === "operations" ? (
@@ -135,8 +134,10 @@ export function Room({ room, roomSection }: { room: string; roomSection: AppSect
           <QuickBooksPage />
         ) : (
           <div className="container py-6 max-w-4xl">
-            {state.activeSection === "customer" && <CustomerSection />}
-            {state.activeSection === "opp-details" && <OpportunityDetailsTab />}
+            {state.activeSection === "customer" && <OsClientProfile />}
+            {/* The simple flow: opening an opportunity lands straight in
+                Scope/Price; the old Command tab is gone. */}
+            {state.activeSection === "opp-details" && <CalculatorSection />}
             {state.activeSection === "sales" && <SalesSection />}
             {state.activeSection === "calculator" && <CalculatorSection />}
             {state.activeSection === "estimate" && <EstimateSection />}
