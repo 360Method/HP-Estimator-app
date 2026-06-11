@@ -187,7 +187,10 @@ function buildAgentSops() {
       layer: "L2",
       kind: "agent",
       status: "final",
-      enabled: fields.get("enabled") === "true",
+      // ALWAYS disabled: the file copies stay the live source until the
+      // filesystem loader is retired (Phase 5). Enabling both would make
+      // the dispatcher run the same SOP twice (file key + docId key).
+      enabled: false,
       body: m[2].trim(),
       events: fields.get("events") || null,
       cron: fields.get("cron") || null,

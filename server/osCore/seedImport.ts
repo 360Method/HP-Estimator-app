@@ -157,13 +157,34 @@ export async function importOsSeedBundle(): Promise<void> {
       }
 
       const existing = await db
-        .select({ docId: osDocuments.docId })
+        .select({
+          docId: osDocuments.docId,
+          body: osDocuments.body,
+          title: osDocuments.title,
+          enabled: osDocuments.enabled,
+          kind: osDocuments.kind,
+          cron: osDocuments.cron,
+          events: osDocuments.events,
+          tools: osDocuments.tools,
+          approval: osDocuments.approval,
+        })
         .from(osDocuments)
         .where(eq(osDocuments.sourcePath, doc.sourcePath))
         .limit(1);
 
       if (existing.length) {
-        const docId = existing[0].docId;
+        const row = existing[0];
+        const docId = row.docId;
+        const unchanged =
+          row.body === doc.body &&
+          row.title === doc.title &&
+          row.enabled === doc.enabled &&
+          row.kind === doc.kind &&
+          (row.cron ?? null) === (doc.cron ?? null) &&
+          (row.events ?? null) === (doc.events ?? null) &&
+          (row.tools ?? null) === (doc.tools ?? null) &&
+          row.approval === (doc.approval ?? "default");
+        if (unchanged) continue;
         const [latestVer] = await db
           .select({ version: osDocumentVersions.version, editedBy: osDocumentVersions.editedBy })
           .from(osDocumentVersions)
@@ -175,9 +196,28 @@ export async function importOsSeedBundle(): Promise<void> {
           report.kept++;
           continue;
         }
+        // Seed-owned: the bundle is authoritative for the whole row (body,
+        // frontmatter, AND the enabled flag), so a corrected bundle can heal
+        // a previously imported row on the next boot.
         await db
           .update(osDocuments)
-          .set({ body: doc.body, title: doc.title, updatedAt: new Date() })
+          .set({
+            body: doc.body,
+            title: doc.title,
+            type: doc.type,
+            layer: doc.layer,
+            kind: doc.kind,
+            events: doc.events ?? null,
+            cron: doc.cron ?? null,
+            timezone: doc.timezone ?? null,
+            tools: doc.tools ?? null,
+            approval: doc.approval ?? "default",
+            model: doc.model ?? null,
+            maxTurns: doc.maxTurns ?? 6,
+            runLimitDaily: doc.runLimitDaily ?? 20,
+            enabled: doc.enabled,
+            updatedAt: new Date(),
+          })
           .where(eq(osDocuments.docId, docId));
         await db
           .update(osDocumentVersions)
