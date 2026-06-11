@@ -1,7 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch, useLocation } from "wouter";
+import { Redirect, Route, Switch, useLocation } from "wouter";
 import { lazy, Suspense, useEffect } from "react";
 import type { ComponentType } from "react";
 
@@ -80,27 +80,18 @@ const TechDashboard = lazy(() => import("./pages/TechDashboard"));
 const TechJobDetail = lazy(() => import("./pages/TechJobDetail"));
 
 const Welcome360Page = lazy(() => import("./pages/Welcome360Page"));
-const AgentDraftsPage = lazy(() => import("./pages/admin/AgentDraftsPage"));
 const AgentPlaybooksPage = lazy(() => import("./pages/admin/AgentPlaybooksPage"));
 const ReengagementCampaignPage = lazy(() => import("./pages/admin/ReengagementCampaignPage"));
 
 // Admin pages (Phase 1 AI agent runtime + KPI dashboard)
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
-const AiAgentsList = lazy(() => import("./pages/admin/AiAgentsList"));
-const AiAgentDetail = lazy(() => import("./pages/admin/AiAgentDetail"));
-const AiAgentTasks = lazy(() => import("./pages/admin/AiAgentTasks"));
-const DepartmentDetail = lazy(() => import("./pages/admin/DepartmentDetail"));
+const AgentsHubPage = lazy(() => import("./pages/admin/AgentsHubPage"));
 const AdminSchedulingPage = lazy(() => import("./pages/admin/AdminSchedulingPage"));
 const IntegratorChat = lazy(() => import("./pages/admin/IntegratorChat"));
-const VisionaryConsole = lazy(() => import("./pages/admin/VisionaryConsole"));
-const AgentTeamsPage = lazy(() => import("./pages/admin/AgentTeamsPage"));
 const AdminVendorsList = lazy(() => import("./pages/admin/AdminVendorsList"));
 const AdminVendorDetail = lazy(() => import("./pages/admin/AdminVendorDetail"));
 const AdminVendorNew = lazy(() => import("./pages/admin/AdminVendorNew"));
-const AgentsControl = lazy(() => import("./pages/admin/AgentsControl"));
-const AgentsRuns = lazy(() => import("./pages/admin/AgentsRuns"));
 const ClientDetailPage = lazy(() => import("./pages/clients/ClientDetailPage"));
-const OrgChart = lazy(() => import("./pages/admin/OrgChart"));
 
 // Self-serve password reset (public)
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
@@ -208,16 +199,23 @@ function Router() {
       {/* Admin — AI agent runtime + KPI dashboard (Phase 1).
           All staff-only — wrapped to 404 on client.handypioneers.com. */}
       <Route path="/admin/dashboard" component={staffOnly(AdminDashboard)} />
-      <Route path="/admin/visionary" component={staffOnly(VisionaryConsole)} />
       <Route path="/admin/chat" component={staffOnly(IntegratorChat)} />
-      <Route path="/admin/agents/teams" component={staffOnly(AgentTeamsPage)} />
-      <Route path="/admin/org-chart" component={staffOnly(OrgChart)} />
-      <Route path="/admin/agents/control" component={staffOnly(AgentsControl)} />
-      <Route path="/admin/agents/runs" component={staffOnly(AgentsRuns)} />
-      <Route path="/admin/ai-agents/tasks" component={staffOnly(AiAgentTasks)} />
-      <Route path="/admin/ai-agents/:id" component={staffOnly(AiAgentDetail)} />
-      <Route path="/admin/ai-agents" component={staffOnly(AiAgentsList)} />
-      <Route path="/admin/departments/:slug" component={staffOnly(DepartmentDetail)} />
+
+      {/* The Agents Hub — replaces the old visionary/teams/org-chart/control/
+          runs/tasks/agents-list/departments/drafts page sprawl. Old URLs
+          redirect so existing notification links keep working. */}
+      <Route path="/admin/agents" component={staffOnly(AgentsHubPage)} />
+      <Route path="/admin/visionary">{() => <Redirect to="/admin/agents" />}</Route>
+      <Route path="/admin/agents/teams">{() => <Redirect to="/admin/agents" />}</Route>
+      <Route path="/admin/org-chart">{() => <Redirect to="/admin/agents" />}</Route>
+      <Route path="/admin/agents/control">{() => <Redirect to="/admin/agents" />}</Route>
+      <Route path="/admin/agents/runs">{() => <Redirect to="/admin/agents" />}</Route>
+      <Route path="/admin/agents/drafts">{() => <Redirect to="/admin/agents" />}</Route>
+      <Route path="/admin/ai-agents/tasks">{() => <Redirect to="/admin/agents" />}</Route>
+      <Route path="/admin/ai-agents/:id">{() => <Redirect to="/admin/agents" />}</Route>
+      <Route path="/admin/ai-agents">{() => <Redirect to="/admin/agents" />}</Route>
+      <Route path="/admin/departments/:slug">{() => <Redirect to="/admin/agents" />}</Route>
+
       <Route path="/admin/scheduling" component={staffOnly(AdminSchedulingPage)} />
       <Route path="/admin/vendors/new" component={staffOnly(AdminVendorNew)} />
       <Route path="/admin/vendors/:id" component={staffOnly(AdminVendorDetail)} />
@@ -226,8 +224,7 @@ function Router() {
       {/* Client umbrella — deep-linkable single-client view (Phase C shell) */}
       <Route path="/admin/clients/:id/:tab?" component={staffOnly(ClientDetailPage)} />
 
-      {/* Lead Nurturer admin — drafts inbox + playbook editor */}
-      <Route path="/admin/agents/drafts" component={AgentDraftsPage} />
+      {/* Lead Nurturer cadence editor (the drafts inbox lives in the Agents Hub) */}
       <Route path="/admin/agents/playbooks" component={AgentPlaybooksPage} />
 
       {/* Admin: re-engagement campaign console */}

@@ -539,7 +539,7 @@ registerTool({
       eventType: "agent_escalation",
       title: `↑ ${self?.seatName ?? `#${ctx.agentId}`} → Integrator`,
       body: String(input.summary),
-      linkUrl: (input.linkUrl as string | undefined) ?? `/admin/ai-agents/${integrator?.id ?? ctx.agentId}`,
+      linkUrl: (input.linkUrl as string | undefined) ?? "/admin/agents",
       priority: input.severity === "critical" ? "high" : "normal",
     });
     return { ok: true, integratorId: integrator?.id ?? null };
@@ -590,7 +590,7 @@ registerTool({
       eventType: "agent_delegation",
       title: `${self?.seatName ?? `#${ctx.agentId}`} → ${head.seatName}`,
       body: String(input.summary),
-      linkUrl: `/admin/ai-agents/${head.id}`,
+      linkUrl: "/admin/agents",
       priority: "normal",
     });
     return { ok: true, headId: head.id, headSeat: head.seatName };

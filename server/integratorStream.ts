@@ -90,7 +90,7 @@ back to you in the same conversation; you must use them to write the actual
 answer.
 
 If a tool requires approval (parked), that's fine — say so concisely
-("Drafted a Sales-team broadcast; parked for your tap in /admin/ai-agents/tasks")
+("Drafted a Sales-team broadcast; parked for your tap in the Agents Hub approvals inbox")
 and continue with whatever else you can deliver.
 
 When routing work to a department, use agentTeams_list to find the team,
@@ -431,11 +431,11 @@ export function registerIntegratorStreamRoutes(app: Express): void {
                 type: "tool_result",
                 tool_use_id: tu.id,
                 content:
-                  "[Parked for human approval — Marcin will review this draft in /admin/ai-agents/tasks. Mention that it's queued in your final response and continue with whatever else you can deliver in this turn.]",
+                  "[Parked for human approval — Marcin will review this draft in the Agents Hub (/admin/agents). Mention that it's queued in your final response and continue with whatever else you can deliver in this turn.]",
               });
               sse(res, "tool_result", {
                 key,
-                output: { parked: true, queue: "/admin/ai-agents/tasks" },
+                output: { parked: true, queue: "/admin/agents" },
                 turn: iteration,
               });
               continue;

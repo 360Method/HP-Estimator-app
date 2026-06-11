@@ -176,7 +176,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunResult> {
       db,
       `Agent paused: ${agent.seatName} hit its daily ceiling`,
       `Cost today ${costToday.toFixed(2)} / ${capUsd.toFixed(2)} USD, runs ${runsToday}/${agent.runLimitDaily}.`,
-      `/admin/ai-agents/${agent.id}`
+      "/admin/agents"
     );
     return { runId, taskId, status: "cost_exceeded", costUsd: 0, output: "", toolCalls: [] };
   }
@@ -426,7 +426,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunResult> {
       db,
       `${agent.seatName} needs approval`,
       output.slice(0, 280) || "Draft awaiting your review.",
-      `/admin/ai-agents/tasks?taskId=${taskId}`
+      `/admin/agents?taskId=${taskId}`
     );
   } else {
     await db

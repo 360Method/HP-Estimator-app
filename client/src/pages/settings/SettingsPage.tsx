@@ -99,8 +99,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'AI Agents',
     items: [
       { id: 'agent-charters', label: 'Charters & Playbooks', icon: Bot },
-      { id: 'agent-charters', label: 'Org Chart',           icon: Network, href: '/admin/org-chart' },
-      { id: 'agent-charters', label: 'Engine Control',      icon: Power,   href: '/admin/agents/control' },
+      { id: 'agent-charters', label: 'Agents Hub',          icon: Power,   href: '/admin/agents' },
     ],
   },
 ];

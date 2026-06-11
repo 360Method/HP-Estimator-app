@@ -272,7 +272,7 @@ export default function NotificationBell() {
     }
 
     if (eventType === 'ai_agent') {
-      navigate('/admin/ai-agents/tasks');
+      navigate('/admin/agents');
       return;
     }
 

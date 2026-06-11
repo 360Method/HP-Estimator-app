@@ -41,6 +41,7 @@ import { gbpRouter }           from "./routers/gbp";
 import { metaRouter }          from "./routers/meta";
 import { googleAdsRouter }     from "./routers/googleAds";
 import { aiAgentsRouter }      from "./routers/aiAgents";
+import { agentOpsRouter }      from "./routers/agentOps";
 import { agentTeamsRouter }    from "./routers/agentTeams";
 import { integratorChatRouter } from "./routers/integratorChat";
 import { kpisRouter }          from "./routers/kpis";
@@ -106,6 +107,7 @@ export const appRouter = router({
   meta: metaRouter,
   googleAds: googleAdsRouter,
   aiAgents: aiAgentsRouter,
+  agentOps: agentOpsRouter,
   agentTeams: agentTeamsRouter,
   integratorChat: integratorChatRouter,
   kpis: kpisRouter,

@@ -72,8 +72,8 @@ const OPS = [
     icon: GitBranch,
     owner: 'Owner-to-COO operating bridge',
     ai: 'Integrator Agent turns owner direction into accountable projects, department priorities, and follow-up tasks.',
-    actions: ['Visionary console', 'Department projects', 'AI agent queue'],
-    href: '/admin/visionary',
+    actions: ['Agents hub', 'Approvals inbox', 'SOP library'],
+    href: '/admin/agents',
   },
   {
     title: 'Systems / IT',
