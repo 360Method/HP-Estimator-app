@@ -1038,6 +1038,10 @@ async function startServer() {
   const { registerIntegratorStreamRoutes } = await import("../integratorStream");
   registerIntegratorStreamRoutes(app);
 
+  // ── HP-OS Library files (staff-only, served from os_file_blobs) ──────────────
+  const { registerOsFileRoute } = await import("../osCore/fileRoute");
+  registerOsFileRoute(app);
+
   // ── Health check ─────────────────────────────────────────────────────────────
   app.get("/api/health", async (req, res) => {
     const { getDb } = await import("../db");

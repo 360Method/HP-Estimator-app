@@ -12,7 +12,7 @@ import { Link, useRoute } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import {
-  ArrowLeft, Pencil, X, History, ShieldCheck, Zap, ZapOff, Clock,
+  ArrowLeft, Pencil, X, History, ShieldCheck, Zap, ZapOff, Clock, Download, Paperclip,
 } from "lucide-react";
 import { OsShell } from "../OsShell";
 import { Markdown } from "../Markdown";
@@ -84,7 +84,62 @@ export default function OsDocument() {
   }
 
   const isSop = doc.type === "SOP";
+  const isFile = doc.type === "FILE" && !!doc.fileUrl;
   const hasPending = !!doc.pendingVersion;
+
+  if (isFile) {
+    const sizeLabel =
+      doc.fileSize != null
+        ? doc.fileSize > 1024 * 1024
+          ? `${(doc.fileSize / (1024 * 1024)).toFixed(1)} MB`
+          : `${Math.max(1, Math.round(doc.fileSize / 1024))} KB`
+        : "";
+    const isImage = (doc.fileMime ?? "").startsWith("image/") && !(doc.fileMime ?? "").includes("heic");
+    return (
+      <OsShell active="/os/library">
+        <Link href="/os/library">
+          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground cursor-pointer hover:underline">
+            <ArrowLeft className="w-3.5 h-3.5" /> Library
+          </span>
+        </Link>
+        <div className="mt-2">
+          <div className="text-xs text-muted-foreground">{doc.docId}</div>
+          <h1 className="hp-serif text-xl leading-tight break-words" style={{ color: "var(--hp-ink)" }}>
+            {doc.title}
+          </h1>
+          <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-100 text-sky-800">FILE</span>
+            {doc.fileMime && <span className="text-[10px] text-muted-foreground">{doc.fileMime}</span>}
+            {sizeLabel && <span className="text-[10px] text-muted-foreground">{sizeLabel}</span>}
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-50 text-red-700 font-semibold">INTERNAL</span>
+          </div>
+        </div>
+        <div className="mt-4 bg-white rounded-xl border p-5" style={{ borderColor: "var(--hp-hairline)" }}>
+          {isImage ? (
+            <a href={doc.fileUrl!} target="_blank" rel="noreferrer">
+              <img src={doc.fileUrl!} alt={doc.title} className="max-h-[70vh] rounded-lg mx-auto" />
+            </a>
+          ) : (
+            <div className="text-center py-10">
+              <Paperclip className="w-9 h-9 mx-auto mb-3" style={{ color: "var(--hp-gold-soft)" }} />
+              <p className="text-sm text-muted-foreground mb-4">
+                This document is a hosted file. It opens in a new tab.
+              </p>
+              <a
+                href={doc.fileUrl!}
+                target="_blank"
+                rel="noreferrer"
+                className="hp-button-gold text-sm inline-flex items-center gap-2"
+                style={{ padding: "10px 22px", minHeight: 0 }}
+              >
+                <Download className="w-4 h-4" /> Open file
+              </a>
+            </div>
+          )}
+        </div>
+      </OsShell>
+    );
+  }
 
   return (
     <OsShell active="/os/library">

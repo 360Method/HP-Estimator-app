@@ -19,7 +19,7 @@ import fs from "fs";
 import path from "path";
 import { and, eq, isNull, sql as dsql } from "drizzle-orm";
 import { getDb } from "../db";
-import { osBusiness, osDocuments, osDocumentVersions, osFolders } from "../../drizzle/schema";
+import { osBusiness, osDocuments, osDocumentVersions, osFileBlobs, osFolders } from "../../drizzle/schema";
 
 type SeedDoc = {
   sourcePath: string;
@@ -57,10 +57,10 @@ type SeedBundle = {
   docs: SeedDoc[];
 };
 
-function findBundle(): string | null {
+function findSeedFile(name: string): string | null {
   const candidates = [
-    path.resolve(process.cwd(), "server/osCore/seed/hp-os-seed.json"),
-    path.resolve(import.meta.dirname ?? __dirname, "seed/hp-os-seed.json"),
+    path.resolve(process.cwd(), `server/osCore/seed/${name}`),
+    path.resolve(import.meta.dirname ?? __dirname, `seed/${name}`),
   ];
   for (const p of candidates) {
     try {
@@ -70,6 +70,25 @@ function findBundle(): string | null {
     }
   }
   return null;
+}
+
+function findBundle(): string | null {
+  return findSeedFile("hp-os-seed.json");
+}
+
+function slugify(name: string): string {
+  return (
+    name
+      .replace(/^\d+_/, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "")
+      .slice(0, 120) || "folder"
+  );
+}
+
+function displayName(dirName: string): string {
+  return dirName.replace(/^\d+_/, "").replace(/_/g, " ").trim();
 }
 
 export async function importOsSeedBundle(): Promise<void> {
@@ -291,5 +310,169 @@ export async function importOsSeedBundle(): Promise<void> {
     }
   } catch (err) {
     console.warn("[osSeed] import failed (non-fatal):", err);
+  }
+}
+
+// ─── Binary files manifest ────────────────────────────────────────────────────
+
+type SeedFile = {
+  sourcePath: string;
+  folderPath: string;
+  title: string;
+  mime: string;
+  size: number;
+  dataBase64: string;
+};
+
+/**
+ * Turns server/osCore/seed/hp-os-files.json (written by
+ * scripts/build-os-files-bundle.mjs) into os_file_blobs rows + FILE entries
+ * in the Library, served only via the authenticated /api/os/files route.
+ * Folders are resolved by slug chain and created when a folder held only
+ * binaries (the markdown seed never saw it). Idempotent: an existing
+ * sourcePath is re-stored only when the size changed.
+ */
+export async function importOsFilesManifest(): Promise<void> {
+  const manifestPath = findSeedFile("hp-os-files.json");
+  if (!manifestPath) return;
+  const db = await getDb();
+  if (!db) return;
+
+  let files: SeedFile[];
+  try {
+    files = (JSON.parse(fs.readFileSync(manifestPath, "utf-8")) as { files: SeedFile[] }).files ?? [];
+  } catch (err) {
+    console.warn("[osSeed] files manifest unreadable, skipping:", err);
+    return;
+  }
+  if (files.length === 0) return;
+
+  // Cheap short-circuit: when every manifest file is already stored, skip
+  // the per-file work (the manifest is ~7 MB of base64; parsing is fine,
+  // 314 queries every boot is not).
+  const [blobCount] = await db.select({ count: dsql<number>`COUNT(*)` }).from(osFileBlobs);
+  const allPresent = Number(blobCount?.count ?? 0) >= files.length;
+
+  const report = { folders: 0, created: 0, updated: 0 };
+  try {
+    // Folder resolution by slug chain, creating missing levels.
+    const cache = new Map<string, number>();
+    const resolveFolder = async (folderPath: string): Promise<number | null> => {
+      if (cache.has(folderPath)) return cache.get(folderPath)!;
+      let parentId: number | null = null;
+      let walked = "";
+      for (const part of folderPath.split("/")) {
+        walked = walked ? `${walked}/${part}` : part;
+        if (cache.has(walked)) {
+          parentId = cache.get(walked)!;
+          continue;
+        }
+        const slug = slugify(part);
+        const found: Array<{ id: number }> = await db
+          .select({ id: osFolders.id })
+          .from(osFolders)
+          .where(
+            and(
+              parentId === null ? isNull(osFolders.parentId) : eq(osFolders.parentId, parentId),
+              eq(osFolders.slug, slug),
+            ),
+          )
+          .limit(1);
+        if (found.length) {
+          parentId = found[0].id;
+        } else {
+          const insertedRows: Array<{ id: number }> = await db
+            .insert(osFolders)
+            .values({ parentId, slug, name: displayName(part), sortOrder: 99 })
+            .returning({ id: osFolders.id });
+          parentId = insertedRows[0].id;
+          report.folders++;
+        }
+        cache.set(walked, parentId as number);
+      }
+      return parentId;
+    };
+
+    // HP-FILE-NNN allocation from current DB state.
+    const [maxRow] = await db
+      .select({ max: dsql<string | null>`MAX("docId")` })
+      .from(osDocuments)
+      .where(dsql`"docId" LIKE 'HP-FILE-%'`);
+    let counter = maxRow?.max ? Number(String(maxRow.max).slice("HP-FILE-".length)) || 0 : 0;
+
+    for (const f of files) {
+      const existing = await db
+        .select({ docId: osDocuments.docId, fileSize: osDocuments.fileSize })
+        .from(osDocuments)
+        .where(eq(osDocuments.sourcePath, f.sourcePath))
+        .limit(1);
+
+      if (existing.length) {
+        const row = existing[0];
+        if (allPresent && row.fileSize === f.size) continue;
+        const blob = await db
+          .select({ id: osFileBlobs.id, size: osFileBlobs.size })
+          .from(osFileBlobs)
+          .where(eq(osFileBlobs.sourcePath, f.sourcePath))
+          .limit(1);
+        if (blob.length && blob[0].size === f.size) continue;
+        const data = Buffer.from(f.dataBase64, "base64");
+        if (blob.length) {
+          await db
+            .update(osFileBlobs)
+            .set({ mime: f.mime, size: f.size, data })
+            .where(eq(osFileBlobs.sourcePath, f.sourcePath));
+        } else {
+          await db.insert(osFileBlobs).values({ sourcePath: f.sourcePath, mime: f.mime, size: f.size, data });
+        }
+        await db
+          .update(osDocuments)
+          .set({ fileMime: f.mime, fileSize: f.size, updatedAt: new Date() })
+          .where(eq(osDocuments.docId, row.docId));
+        report.updated++;
+        continue;
+      }
+
+      const folderId = await resolveFolder(f.folderPath);
+      if (!folderId) {
+        console.warn(`[osSeed] no folder for file ${f.sourcePath} — skipped`);
+        continue;
+      }
+      counter++;
+      const docId = `HP-FILE-${String(counter).padStart(3, "0")}`;
+      await db
+        .insert(osFileBlobs)
+        .values({
+          sourcePath: f.sourcePath,
+          mime: f.mime,
+          size: f.size,
+          data: Buffer.from(f.dataBase64, "base64"),
+        })
+        .onConflictDoNothing();
+      await db.insert(osDocuments).values({
+        docId,
+        folderId,
+        title: f.title.slice(0, 300),
+        type: "FILE",
+        status: "final",
+        kind: "human",
+        body: "",
+        fileUrl: `/api/os/files/${docId}`,
+        fileMime: f.mime,
+        fileSize: f.size,
+        internal: true,
+        sourcePath: f.sourcePath,
+        version: 1,
+      });
+      report.created++;
+    }
+
+    if (report.folders || report.created || report.updated) {
+      console.log(
+        `[osSeed] files: +${report.created} created, ${report.updated} updated, folders +${report.folders}`,
+      );
+    }
+  } catch (err) {
+    console.warn("[osSeed] files import failed (non-fatal):", err);
   }
 }

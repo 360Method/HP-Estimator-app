@@ -27,6 +27,7 @@ const TYPE_BADGE: Record<string, string> = {
   WF: "bg-emerald-100 text-emerald-800",
   TPL: "bg-gray-100 text-gray-700",
   DOC: "bg-gray-100 text-gray-600",
+  FILE: "bg-sky-100 text-sky-800",
 };
 
 function FolderNode({

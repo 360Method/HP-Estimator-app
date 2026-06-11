@@ -1,6 +1,7 @@
 import {
   bigint,
   boolean,
+  customType,
   date,
   decimal,
   doublePrecision,
@@ -13,6 +14,13 @@ import {
   uniqueIndex,
   varchar,
 } from "drizzle-orm/pg-core";
+
+/** Postgres bytea, surfaced as a Node Buffer. */
+const bytea = customType<{ data: Buffer }>({
+  dataType() {
+    return "bytea";
+  },
+});
 
 /**
  * Core user table backing auth flow.
@@ -2528,7 +2536,7 @@ export const osDocuments = pgTable("os_documents", {
   docId: varchar("docId", { length: 40 }).notNull().unique(),
   folderId: integer("folderId").notNull(),
   title: varchar("title", { length: 300 }).notNull(),
-  type: text("type").$type<"SOP" | "WF" | "DOC" | "TPL" | "REF" | "DATA">().notNull().default("DOC"),
+  type: text("type").$type<"SOP" | "WF" | "DOC" | "TPL" | "REF" | "DATA" | "FILE">().notNull().default("DOC"),
   /** ICM context layer: L0 identity, L3 reference, L2 stage contract, etc. */
   layer: varchar("layer", { length: 4 }),
   status: text("status").$type<"draft" | "review" | "final" | "archived">().notNull().default("draft"),
@@ -2549,6 +2557,10 @@ export const osDocuments = pgTable("os_documents", {
   taskTitleTemplate: varchar("taskTitleTemplate", { length: 300 }),
   taskDueOffsetHours: integer("taskDueOffsetHours"),
   defaultAssigneeUserId: integer("defaultAssigneeUserId"),
+  // FILE documents: the hosted binary (Cloudinary) this entry points at.
+  fileUrl: text("fileUrl"),
+  fileMime: varchar("fileMime", { length: 120 }),
+  fileSize: integer("fileSize"),
   // Bookkeeping. internal=true means margin-sensitive: never portal-serialized.
   internal: boolean("internal").notNull().default(true),
   /** Micek-OS origin path; the seed script's idempotency key. */
@@ -2599,6 +2611,21 @@ export const osTasks = pgTable("os_tasks", {
 });
 export type OsTask = typeof osTasks.$inferSelect;
 export type InsertOsTask = typeof osTasks.$inferInsert;
+
+// The Library's binary files (licenses, agreements, photos, templates) live
+// IN the database and are served only through the authenticated
+// /api/os/files/:docId route. Deliberately not an external object store:
+// these include W9s and signed agreements, so access follows staff auth.
+export const osFileBlobs = pgTable("os_file_blobs", {
+  id: serial("id").primaryKey(),
+  /** Mirrors os_documents.sourcePath for the owning FILE document. */
+  sourcePath: varchar("sourcePath", { length: 400 }).notNull().unique(),
+  mime: varchar("mime", { length: 120 }).notNull(),
+  size: integer("size").notNull(),
+  data: bytea("data").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type OsFileBlob = typeof osFileBlobs.$inferSelect;
 
 // Append-only. The API exposes create + list only; no update, no delete.
 export const osDecisions = pgTable("os_decisions", {

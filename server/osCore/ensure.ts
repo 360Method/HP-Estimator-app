@@ -130,6 +130,25 @@ export async function ensureOsTables(): Promise<void> {
         "createdAt" timestamp DEFAULT now() NOT NULL
       )`);
 
+    // FILE documents: hosted binary pointer columns (added after first ship).
+    await db.execute(sql`
+      ALTER TABLE IF EXISTS os_documents ADD COLUMN IF NOT EXISTS "fileUrl" text`);
+    await db.execute(sql`
+      ALTER TABLE IF EXISTS os_documents ADD COLUMN IF NOT EXISTS "fileMime" varchar(120)`);
+    await db.execute(sql`
+      ALTER TABLE IF EXISTS os_documents ADD COLUMN IF NOT EXISTS "fileSize" integer`);
+
+    // Binary blobs live in the database, served via authenticated route only.
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS os_file_blobs (
+        id serial PRIMARY KEY,
+        "sourcePath" varchar(400) NOT NULL UNIQUE,
+        mime varchar(120) NOT NULL,
+        size integer NOT NULL,
+        data bytea NOT NULL,
+        "createdAt" timestamp DEFAULT now() NOT NULL
+      )`);
+
     // Chat scope: which doc/folder/customer/opportunity a conversation is about.
     await db.execute(sql`
       ALTER TABLE IF EXISTS integrator_chat_conversations
@@ -168,8 +187,9 @@ export async function ensureOsTables(): Promise<void> {
 
   // Apply the committed seed bundle (no-op when absent or fully applied).
   try {
-    const { importOsSeedBundle } = await import("./seedImport");
+    const { importOsSeedBundle, importOsFilesManifest } = await import("./seedImport");
     await importOsSeedBundle();
+    await importOsFilesManifest();
   } catch (err) {
     console.warn("[boot] importOsSeedBundle failed (non-fatal):", err);
   }
