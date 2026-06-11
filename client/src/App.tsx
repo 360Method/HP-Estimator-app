@@ -97,6 +97,14 @@ const ClientDetailPage = lazy(() => import("./pages/clients/ClientDetailPage"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 
+// HP-OS — the staff app rebuilt as the business's operating system.
+// Built alongside the old UI; old screens are deleted at the Phase 3 cutover.
+const OsToday = lazy(() => import("./os/pages/OsToday"));
+const OsLibrary = lazy(() => import("./os/pages/OsLibrary"));
+const OsDocument = lazy(() => import("./os/pages/OsDocument"));
+const OsChat = lazy(() => import("./os/pages/OsChat"));
+const OsApprovals = lazy(() => import("./os/pages/OsApprovals"));
+
 // Domains that should serve only the customer portal (no admin app).
 // On these hostnames any /admin or /onboarding URL is hidden behind a
 // NotFound — the SPA build is shared between subdomains so we can't
@@ -195,6 +203,14 @@ function Router() {
 
       {/* Data migration onboarding wizard (staff-only) */}
       <Route path="/onboarding" component={staffOnly(() => <DataMigrationPage />)} />
+
+      {/* HP-OS — the operating system shell (staff-only) */}
+      <Route path="/os" component={staffOnly(OsToday)} />
+      <Route path="/os/chat" component={staffOnly(OsChat)} />
+      <Route path="/os/approvals" component={staffOnly(OsApprovals)} />
+      <Route path="/os/library/f/:folderId" component={staffOnly(OsLibrary)} />
+      <Route path="/os/library" component={staffOnly(OsLibrary)} />
+      <Route path="/os/d/:docId" component={staffOnly(OsDocument)} />
 
       {/* Admin — AI agent runtime + KPI dashboard (Phase 1).
           All staff-only — wrapped to 404 on client.handypioneers.com. */}

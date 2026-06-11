@@ -27,6 +27,18 @@ type ToolCallEntry = {
 };
 
 export default function IntegratorChat() {
+  return (
+    <AdminShell>
+      <IntegratorChatInner />
+    </AdminShell>
+  );
+}
+
+/**
+ * The chat surface without page chrome — mounted by both the legacy
+ * /admin/chat (AdminShell) and the HP-OS /os/chat (OsShell).
+ */
+export function IntegratorChatInner() {
   const utils = trpc.useUtils();
   const [activeId, setActiveId] = useState<number | null>(() => {
     const raw = typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY) : null;
@@ -105,10 +117,9 @@ export default function IntegratorChat() {
   }
 
   return (
-    <AdminShell>
-      <div className="grid grid-cols-[260px_1fr] gap-4 h-[calc(100vh-8rem)]">
-        {/* ── Sidebar ─────────────────────────────────────────────────────── */}
-        <Card className="p-3 flex flex-col gap-2 overflow-hidden">
+      <div className="grid md:grid-cols-[260px_1fr] grid-cols-1 gap-4 h-[calc(100vh-10rem)]">
+        {/* ── Sidebar (desktop; on phones the latest chat auto-opens) ──────── */}
+        <Card className="p-3 hidden md:flex flex-col gap-2 overflow-hidden">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold">Conversations</h2>
             <Button size="sm" variant="outline" onClick={handleNew} disabled={createConv.isPending}>
@@ -160,18 +171,29 @@ export default function IntegratorChat() {
 
         {/* ── Main pane ────────────────────────────────────────────────────── */}
         <Card className="flex flex-col overflow-hidden">
-          <header className="px-4 py-3 border-b flex items-center justify-between">
+          <header className="px-4 py-3 border-b flex items-center justify-between gap-2">
             <div>
               <h1 className="text-base font-semibold">Integrator AI</h1>
               <p className="text-xs text-muted-foreground">
                 Strategy + ops liaison. Chat persists across sessions.
               </p>
             </div>
-            {pending && (
-              <Badge variant="secondary" className="animate-pulse">
-                Integrator is thinking…
-              </Badge>
-            )}
+            <div className="flex items-center gap-2">
+              {pending && (
+                <Badge variant="secondary" className="animate-pulse">
+                  Integrator is thinking…
+                </Badge>
+              )}
+              <Button
+                size="sm"
+                variant="outline"
+                className="md:hidden"
+                onClick={handleNew}
+                disabled={createConv.isPending}
+              >
+                + New
+              </Button>
+            </div>
           </header>
 
           <div ref={messagesRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
@@ -225,7 +247,6 @@ export default function IntegratorChat() {
           </form>
         </Card>
       </div>
-    </AdminShell>
   );
 }
 

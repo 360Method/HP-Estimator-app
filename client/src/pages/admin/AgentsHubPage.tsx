@@ -232,7 +232,8 @@ function TodayTab({ approvalsCount, onGoApprovals, sops }: { approvalsCount: num
 }
 
 // ─── Approvals (merged inbox) ─────────────────────────────────
-function ApprovalsTab({ awaitingTasks, readyDrafts }: { awaitingTasks: any[] | undefined; readyDrafts: any[] | undefined }) {
+// Exported: the HP-OS /os/approvals surface reuses this inbox as-is.
+export function ApprovalsTab({ awaitingTasks, readyDrafts }: { awaitingTasks: any[] | undefined; readyDrafts: any[] | undefined }) {
   const utils = trpc.useUtils();
   const [expanded, setExpanded] = useState<string | null>(null);
 
