@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { OsShell } from "../OsShell";
 import { SCORECARD_METRICS_BY_KEY } from "@shared/scorecard";
+import { useAuth } from "@/_core/hooks/useAuth";
 
 const fmtDue = (d: string | Date | null | undefined): { label: string; overdue: boolean } => {
   if (!d) return { label: "", overdue: false };
@@ -71,10 +72,12 @@ export default function OsToday() {
     onError: (e) => toast.error(e.message),
   });
 
+  const { user } = useAuth();
   const approvalsCount = (awaitingTasks?.length ?? 0) + (readyDrafts?.length ?? 0);
   const open = tasks ?? [];
   const hour = new Date().getHours();
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const firstName = (user?.name ?? "").split(" ")[0] || "there";
   const needs = approvalsCount + open.length;
 
   function submitNew(e: FormEvent) {
@@ -86,7 +89,7 @@ export default function OsToday() {
   return (
     <OsShell active="/os">
       <h1 className="hp-serif text-2xl" style={{ color: "var(--hp-ink)" }}>
-        {greeting}, Marcin.
+        {greeting}, {firstName}.
       </h1>
       <p className="text-sm text-muted-foreground mt-1">
         {needs === 0

@@ -100,6 +100,9 @@ export function OsShell({
   const [location] = useLocation();
   const [moreOpen, setMoreOpen] = useState(false);
   const { data: openTasks } = trpc.os.tasks.list.useQuery({}, { refetchInterval: 60_000, enabled: !!user });
+  // Template seam: the shell reads its identity from os_business, so the
+  // same code serves the next business with a different row.
+  const { data: business } = trpc.os.business.get.useQuery(undefined, { staleTime: 600_000, enabled: !!user });
 
   if (loading) return null;
   if (!user) return <AdminLogin />;
@@ -120,7 +123,7 @@ export function OsShell({
                 Operating System
               </span>
               <span className="hp-serif font-semibold" style={{ fontSize: "1.05rem" }}>
-                Handy Pioneers OS
+                {business?.name ?? "Handy Pioneers"} OS
               </span>
             </span>
           </Link>
