@@ -9,16 +9,12 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import AdminLogin from "@/pages/AdminLogin";
 import AdminAccessDenied from "@/pages/AdminAccessDenied";
 
+// Phase 3 cutover: the OS at /os is the staff front door. This shell only
+// chromes the surfaces that have not moved in yet (vendors, scheduling,
+// agents hub); everything else redirects.
 const NAV = [
-  { href: "/admin/visionary", label: "Visionary Console" },
-  { href: "/admin/org-chart", label: "Org Chart" },
-  { href: "/admin/dashboard", label: "Dashboard" },
-  { href: "/admin/chat", label: "Integrator Chat" },
-  { href: "/admin/agents/teams", label: "Teams" },
-  { href: "/admin/agents/control", label: "Engine Control" },
-  { href: "/admin/agents/runs", label: "Runs" },
-  { href: "/admin/ai-agents", label: "AI Agents" },
-  { href: "/admin/ai-agents/tasks", label: "Approval Queue" },
+  { href: "/os", label: "← Back to the OS" },
+  { href: "/admin/agents", label: "Agents" },
   { href: "/admin/scheduling", label: "Scheduling" },
   { href: "/admin/vendors", label: "Vendors" },
 ];

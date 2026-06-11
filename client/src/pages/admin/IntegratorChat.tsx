@@ -5,7 +5,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { AdminShell } from "./AdminShell";
 
 const STORAGE_KEY = "integrator.chat.activeConversationId";
 
@@ -26,17 +25,9 @@ type ToolCallEntry = {
   requiresApproval?: boolean;
 };
 
-export default function IntegratorChat() {
-  return (
-    <AdminShell>
-      <IntegratorChatInner />
-    </AdminShell>
-  );
-}
-
 /**
- * The chat surface without page chrome — mounted by both the legacy
- * /admin/chat (AdminShell) and the HP-OS /os/chat (OsShell).
+ * The chat surface without page chrome — mounted by the HP-OS /os/chat
+ * (OsShell). The old /admin/chat route redirects there (Phase 3 cutover).
  */
 export function IntegratorChatInner() {
   const utils = trpc.useUtils();
@@ -357,7 +348,7 @@ export function ShareToIntegratorButton(props: {
       } catch {
         // localStorage may be unavailable in some contexts; ignore.
       }
-      window.location.href = "/admin/chat";
+      window.location.href = "/os/chat";
     },
     onError: (err) => toast.error(err.message),
   });

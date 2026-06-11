@@ -90,7 +90,7 @@ export default function AgentsHubPage() {
           </div>
           <div className="flex items-center gap-3 flex-wrap">
             <Link
-              href="/admin/chat"
+              href="/os/chat"
               className="flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg border border-white/20 text-white/80 hover:bg-white/10 transition-colors"
             >
               <MessageSquareText className="w-3.5 h-3.5" /> Ask the OS

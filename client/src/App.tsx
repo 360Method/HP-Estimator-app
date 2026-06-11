@@ -38,7 +38,6 @@ const PageLoader = () => (
   </div>
 );
 
-const Home = lazy(() => import("./pages/Home"));
 const DataMigrationPage = lazy(() => import("./pages/DataMigrationPage"));
 
 // Booking wizard (public)
@@ -84,10 +83,8 @@ const AgentPlaybooksPage = lazy(() => import("./pages/admin/AgentPlaybooksPage")
 const ReengagementCampaignPage = lazy(() => import("./pages/admin/ReengagementCampaignPage"));
 
 // Admin pages (Phase 1 AI agent runtime + KPI dashboard)
-const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
 const AgentsHubPage = lazy(() => import("./pages/admin/AgentsHubPage"));
 const AdminSchedulingPage = lazy(() => import("./pages/admin/AdminSchedulingPage"));
-const IntegratorChat = lazy(() => import("./pages/admin/IntegratorChat"));
 const AdminVendorsList = lazy(() => import("./pages/admin/AdminVendorsList"));
 const AdminVendorDetail = lazy(() => import("./pages/admin/AdminVendorDetail"));
 const AdminVendorNew = lazy(() => import("./pages/admin/AdminVendorNew"));
@@ -143,6 +140,35 @@ function staffOnly<P extends object>(Component: ComponentType<P>) {
   };
 }
 
+/**
+ * Phase 3 cutover: the staff root lands on the OS. Old "?section=" deep
+ * links (notification emails, bookmarks) map to their room so they still
+ * land somewhere sensible.
+ */
+const ROOM_BY_SECTION: Record<string, string> = {
+  inbox: "/os/inbox",
+  pipeline: "/os/pipeline",
+  leads: "/os/pipeline",
+  requests: "/os/pipeline",
+  jobs: "/os/pipeline",
+  customers: "/os/clients",
+  customer: "/os/clients",
+  "three-sixty": "/os/clients",
+  financials: "/os/money",
+  quickbooks: "/os/money",
+  reporting: "/os/money",
+  schedule: "/os/schedule",
+};
+
+function StaffRootRedirect() {
+  const [, navigate] = useLocation();
+  useEffect(() => {
+    const section = new URLSearchParams(window.location.search).get("section");
+    navigate((section && ROOM_BY_SECTION[section]) || "/os", { replace: true });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return null;
+}
+
 function Router() {
   const [location] = useLocation();
   useEffect(() => {
@@ -151,8 +177,8 @@ function Router() {
 
   return (
     <Switch>
-      {/* Main app — on portal domains, root redirects to portal login */}
-      <Route path="/" component={isPortalDomain ? PortalDomainRoot : Home} />
+      {/* Root: customers to the portal, staff to the OS */}
+      <Route path="/" component={isPortalDomain ? PortalDomainRoot : StaffRootRedirect} />
 
         {/* Public booking wizard — no login required */}
       <Route path="/book" component={BookingWizard} />
@@ -219,8 +245,9 @@ function Router() {
 
       {/* Admin — AI agent runtime + KPI dashboard (Phase 1).
           All staff-only — wrapped to 404 on client.handypioneers.com. */}
-      <Route path="/admin/dashboard" component={staffOnly(AdminDashboard)} />
-      <Route path="/admin/chat" component={staffOnly(IntegratorChat)} />
+      {/* Phase 3 cutover: the OS replaced these surfaces */}
+      <Route path="/admin/dashboard">{() => <Redirect to="/os" />}</Route>
+      <Route path="/admin/chat">{() => <Redirect to="/os/chat" />}</Route>
 
       {/* The Agents Hub — replaces the old visionary/teams/org-chart/control/
           runs/tasks/agents-list/departments/drafts page sprawl. Old URLs

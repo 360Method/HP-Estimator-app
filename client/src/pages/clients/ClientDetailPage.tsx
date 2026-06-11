@@ -12,7 +12,7 @@ import { useEffect, useRef } from 'react';
 import { useRoute } from 'wouter';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import type { CustomerProfileTab } from '@/lib/types';
-import Home from '@/pages/Home';
+import { Room } from '@/os/pages/OsRoom';
 
 // Canonical tabs that may appear in the URL. Anything else is ignored and the
 // customer's last/default tab is used (CustomerSection also redirects legacy
@@ -48,5 +48,9 @@ export default function ClientDetailPage() {
     }
   }, [tab, state.activeCustomerTab, setCustomerTab]);
 
-  return <Home />;
+  // The Clients room inside the OS shell. Effect order makes this safe: the
+  // Room's own mount effect (reset to the customers list) runs before this
+  // page's effects above (child effects first), so the customer named in the
+  // URL wins and the umbrella opens focused.
+  return <Room room="clients" roomSection="customers" />;
 }

@@ -71,7 +71,11 @@ export default function OsRoom() {
   return <Room key={room} room={room} roomSection={roomSection} />;
 }
 
-function Room({ room, roomSection }: { room: string; roomSection: AppSection }) {
+/**
+ * Exported: ClientDetailPage (/admin/clients/:id) renders the Clients room
+ * directly after priming the active customer in context.
+ */
+export function Room({ room, roomSection }: { room: string; roomSection: AppSection }) {
   const { state, navigateToTopLevel } = useEstimator();
   useDbSync(true);
   useOpportunitySSE(true);
