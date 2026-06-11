@@ -165,4 +165,12 @@ export async function ensureOsTables(): Promise<void> {
   } catch (err) {
     console.warn("[boot] ensureOsTables failed (non-fatal):", err);
   }
+
+  // Apply the committed seed bundle (no-op when absent or fully applied).
+  try {
+    const { importOsSeedBundle } = await import("./seedImport");
+    await importOsSeedBundle();
+  } catch (err) {
+    console.warn("[boot] importOsSeedBundle failed (non-fatal):", err);
+  }
 }
