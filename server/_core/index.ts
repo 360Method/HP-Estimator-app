@@ -1648,10 +1648,14 @@ async function startServer() {
       console.error("[LeadNurturer] worker error:", err);
     }
   };
-  // Part of the AI-agent draft/approve layer — gated by the AGENTS_ENABLED kill-switch.
-  if (process.env.AGENTS_ENABLED === "true") {
+  // The Lead Nurturer is live revenue plumbing, independent of the agent
+  // engine — it gets its own gate (default ON) so a seat-system teardown or
+  // AGENTS_ENABLED flip can never silently stop follow-up drips.
+  // scheduleRoadmapFollowup writes pending drafts unconditionally; without
+  // this worker they would accumulate and never flip to ready.
+  if (process.env.NURTURER_ENABLED !== "false") {
     // Seed the default playbooks (roadmap_followup, roadmap_dropout) so the
-    // operator can edit them at /admin/agents/playbooks. Idempotent.
+    // operator can edit them in the playbook editor. Idempotent.
     import("../lib/leadNurturer/playbook")
       .then(({ ensureDefaultPlaybooks }) => ensureDefaultPlaybooks())
       .catch((err) => console.warn("[LeadNurturer] playbook seed failed (non-fatal):", err));
@@ -1659,7 +1663,7 @@ async function startServer() {
     setInterval(runLeadNurturerWorker, 5 * 60 * 1000);
     console.log("[LeadNurturer] Draft worker started (runs every 5 minutes)");
   } else {
-    console.log("[LeadNurturer] Draft worker OFF (AGENTS_ENABLED!=true)");
+    console.log("[LeadNurturer] Draft worker OFF (NURTURER_ENABLED=false)");
   }
 
   // ── Auto-archive Lost leads after 90 days (runs daily at 3 AM) ─────────────
