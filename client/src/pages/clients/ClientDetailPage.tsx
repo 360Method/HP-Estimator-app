@@ -8,7 +8,7 @@
 // is "customer". The old inline flow (clicking a row in the customers list) keeps
 // working unchanged; this just lets a client page survive a refresh, be
 // bookmarked, and be linked to directly.
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useRoute } from 'wouter';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import type { CustomerProfileTab } from '@/lib/types';
@@ -36,10 +36,15 @@ export default function ClientDetailPage() {
     }
   }, [id, state.activeCustomerId, setActiveCustomer]);
 
-  // Apply the tab from the URL when present and valid.
+  // Apply the tab from the URL when it changes — one-shot, URL → state only.
+  // Components inside the umbrella (quick actions, count tiles) may change the
+  // tab through context without touching the URL; re-applying the stale URL
+  // tab on every state change would snap those navigations straight back.
+  const appliedUrlTab = useRef<CustomerProfileTab | null>(null);
   useEffect(() => {
-    if (tab && URL_TABS.includes(tab) && state.activeCustomerTab !== tab) {
-      setCustomerTab(tab);
+    if (tab && URL_TABS.includes(tab) && tab !== appliedUrlTab.current) {
+      appliedUrlTab.current = tab;
+      if (state.activeCustomerTab !== tab) setCustomerTab(tab);
     }
   }, [tab, state.activeCustomerTab, setCustomerTab]);
 

@@ -26,6 +26,7 @@ import {
 import { trpc } from "@/lib/trpc";
 import { Customer, Opportunity } from "@/lib/types";
 import { useEstimator } from "@/contexts/EstimatorContext";
+import { useClientUmbrella } from "@/components/clients/ClientUmbrellaContext";
 import { Badge } from "@/components/ui/badge";
 import VoiceCallPanel from "@/components/VoiceCallPanel";
 
@@ -55,7 +56,8 @@ const ROADMAP_STATUS_COLOR: Record<string, string> = {
 };
 
 export default function ConciergeBrief({ customer, opportunities }: ConciergeBriefProps) {
-  const { state, setCustomerTab, setPendingFocus } = useEstimator();
+  const { state, setPendingFocus } = useEstimator();
+  const { handleTabClick, setQuickAction, setShowCallPanel } = useClientUmbrella();
   const focusToken = state.pendingFocus ?? null;
   // One-shot consumption: clear the focus token after rendering so a later
   // navigation away and back doesn't re-scroll surprisingly.
@@ -97,31 +99,32 @@ export default function ConciergeBrief({ customer, opportunities }: ConciergeBri
     .filter(Boolean)
     .join(", ");
 
-  // Quick actions deep-link into existing tabs in CustomerSection (Communication,
-  // Leads/Estimates/Jobs). Where possible they trigger the right modal directly.
+  // Quick actions. Email/SMS open the header compose panel directly; tab
+  // changes go through handleTabClick so the deep-link URL stays in sync
+  // (a bare setCustomerTab leaves a stale URL behind).
   const actions = [
     {
       label: "Email",
       icon: Mail,
-      onClick: () => setCustomerTab("communication"),
+      onClick: () => { setQuickAction("email"); setShowCallPanel(false); },
       enabled: !!customer.email,
     },
     {
       label: "SMS",
       icon: MessageSquare,
-      onClick: () => setCustomerTab("communication"),
+      onClick: () => { setQuickAction("sms"); setShowCallPanel(false); },
       enabled: !!customer.mobilePhone,
     },
     {
       label: "Schedule",
       icon: CalendarPlus,
-      onClick: () => setCustomerTab("jobs"),
+      onClick: () => handleTabClick("schedule"),
       enabled: true,
     },
     {
       label: "Estimate",
       icon: Plus,
-      onClick: () => setCustomerTab("estimates"),
+      onClick: () => handleTabClick("opportunities"),
       enabled: true,
     },
   ];
@@ -169,21 +172,21 @@ export default function ConciergeBrief({ customer, opportunities }: ConciergeBri
             value={counts.lead}
             icon={<Star className="w-3.5 h-3.5" />}
             tone="amber"
-            onClick={() => setCustomerTab("leads")}
+            onClick={() => handleTabClick("opportunities")}
           />
           <CountTile
             label="Estimates"
             value={counts.estimate}
             icon={<FileText className="w-3.5 h-3.5" />}
             tone="violet"
-            onClick={() => setCustomerTab("estimates")}
+            onClick={() => handleTabClick("opportunities")}
           />
           <CountTile
             label="Jobs"
             value={counts.job}
             icon={<Briefcase className="w-3.5 h-3.5" />}
             tone="blue"
-            onClick={() => setCustomerTab("jobs")}
+            onClick={() => handleTabClick("opportunities")}
           />
         </div>
       </div>
