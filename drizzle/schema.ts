@@ -1868,6 +1868,10 @@ export const aiAgentTasks = pgTable("ai_agent_tasks", {
   status: text("status").$type<"queued" | "running" | "awaiting_approval" | "approved" | "rejected" | "completed" | "failed">()
     .notNull()
     .default("queued"),
+  /** SOP-dispatcher tasks: registry key of the SOP that owns this task. Null for legacy seat tasks. */
+  sopPath: varchar("sopPath", { length: 255 }),
+  /** Subagent tasks: the task that spawned this one via agent.spawnSubtask. */
+  parentTaskId: integer("parentTaskId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   startedAt: timestamp("startedAt"),
   completedAt: timestamp("completedAt"),
@@ -1879,6 +1883,8 @@ export const aiAgentRuns = pgTable("ai_agent_runs", {
   id: serial("id").primaryKey(),
   taskId: integer("taskId").notNull(),
   agentId: integer("agentId").notNull(),
+  /** SOP-dispatcher runs: registry key of the SOP that produced this run. Null for legacy seat runs. */
+  sopPath: varchar("sopPath", { length: 255 }),
   input: text("input"),
   output: text("output"),
   toolCalls: text("toolCalls"),

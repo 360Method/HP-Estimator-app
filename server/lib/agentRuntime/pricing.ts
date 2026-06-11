@@ -3,7 +3,9 @@
  *
  * Per-1M-token USD pricing for the Anthropic models we allow agents to run on.
  * Kept local so cost enforcement doesn't reach out to a live price list mid-run.
- * Numbers here are list price as of 2026-04; update as Anthropic's catalog moves.
+ * Numbers here are list price as of 2026-06; update as Anthropic's catalog moves.
+ * Note: Opus dropped from $15/$75 to $5/$25 with the 4.5+ generation — the old
+ * numbers over-counted Opus runs 3x against the daily cost cap.
  */
 
 export type ModelPricing = {
@@ -18,8 +20,10 @@ const PRICING: Record<string, ModelPricing> = {
   "claude-haiku-4-5": { inputPerMillion: 1.0, outputPerMillion: 5.0 },
   "claude-sonnet-4-6": { inputPerMillion: 3.0, outputPerMillion: 15.0 },
   "claude-sonnet-4-5": { inputPerMillion: 3.0, outputPerMillion: 15.0 },
-  "claude-opus-4-7": { inputPerMillion: 15.0, outputPerMillion: 75.0 },
-  "claude-opus-4-6": { inputPerMillion: 15.0, outputPerMillion: 75.0 },
+  "claude-opus-4-8": { inputPerMillion: 5.0, outputPerMillion: 25.0 },
+  "claude-opus-4-7": { inputPerMillion: 5.0, outputPerMillion: 25.0 },
+  "claude-opus-4-6": { inputPerMillion: 5.0, outputPerMillion: 25.0 },
+  "claude-fable-5": { inputPerMillion: 10.0, outputPerMillion: 50.0 },
 };
 
 const FALLBACK: ModelPricing = { inputPerMillion: 3.0, outputPerMillion: 15.0 };

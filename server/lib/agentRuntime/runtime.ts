@@ -20,7 +20,6 @@
  * section is cached across turns AND across runs (5-minute TTL on Anthropic).
  */
 
-import Anthropic from "@anthropic-ai/sdk";
 import { eq, and, gte, sql } from "drizzle-orm";
 import { getDb } from "../../db";
 import {
@@ -34,6 +33,14 @@ import {
 import { getTool, getAnthropicToolDefinitions } from "./tools";
 import { evaluateToolApproval, type ApprovalPolicyResult } from "./approvalPolicy";
 import { priceRun } from "./pricing";
+import {
+  getLlmProvider,
+  type LlmMessage,
+  type LlmToolDef,
+  type LlmToolResultBlock,
+} from "./llm";
+import { getSop, DEFAULT_SOP_MODEL, type SopDefinition } from "./dispatcher/sopRegistry";
+import { sopRunsLast24h } from "./dispatcher/dispatcher";
 
 const DEFAULT_MAX_TOKENS = 2048;
 /**
@@ -59,6 +66,13 @@ export type RunAgentInput = {
   triggerPayload: Record<string, unknown>;
   /** If provided, reuse the task row (e.g. approval re-run) instead of creating one. */
   existingTaskId?: number;
+  /**
+   * SOP-dispatcher mode: when set, the run takes its system prompt, tools,
+   * model, maxTurns, run limit, and approval posture from this SOP file
+   * instead of the agent row. The agent row (the Dispatcher seat) still
+   * carries the GLOBAL daily cost/run ceilings and the kill-switch status.
+   */
+  sopPath?: string;
 };
 
 type ToolCallLog = {
@@ -82,6 +96,52 @@ export async function runAgent(input: RunAgentInput): Promise<RunResult> {
     throw new Error(`Agent ${agent.seatName} is ${agent.status} — cannot run.`);
   }
 
+  // ── SOP resolution (dispatcher mode) ────────────────────────────────────────
+  let sop: SopDefinition | null = null;
+  if (input.sopPath) {
+    sop = getSop(input.sopPath) ?? null;
+    if (!sop || !sop.enabled || sop.kind !== "agent") {
+      const taskId = await ensureTask(db, input);
+      const runId = await insertRun(db, {
+        taskId,
+        agentId: agent.id,
+        sopPath: input.sopPath,
+        input: input.triggerPayload,
+        output: null,
+        toolCalls: [],
+        inputTokens: 0,
+        outputTokens: 0,
+        costUsd: 0,
+        durationMs: 0,
+        status: "failed",
+        errorMessage: `SOP '${input.sopPath}' is missing or disabled.`,
+      });
+      await db.update(aiAgentTasks).set({ status: "failed", completedAt: new Date() }).where(eq(aiAgentTasks.id, taskId));
+      return { runId, taskId, status: "failed", costUsd: 0, output: "", toolCalls: [] };
+    }
+    // Per-SOP daily run limit — fails just this SOP, never pauses the dispatcher.
+    const sopRuns = await sopRunsLast24h(db, sop.sopPath);
+    if (sopRuns >= sop.runLimitDaily) {
+      const taskId = await ensureTask(db, input);
+      const runId = await insertRun(db, {
+        taskId,
+        agentId: agent.id,
+        sopPath: sop.sopPath,
+        input: input.triggerPayload,
+        output: null,
+        toolCalls: [],
+        inputTokens: 0,
+        outputTokens: 0,
+        costUsd: 0,
+        durationMs: 0,
+        status: "cost_exceeded",
+        errorMessage: `SOP daily run limit hit: ${sopRuns}/${sop.runLimitDaily} in the last 24h.`,
+      });
+      await db.update(aiAgentTasks).set({ status: "failed", completedAt: new Date() }).where(eq(aiAgentTasks.id, taskId));
+      return { runId, taskId, status: "cost_exceeded", costUsd: 0, output: "", toolCalls: [] };
+    }
+  }
+
   // ── Cost + run-count ceiling ────────────────────────────────────────────────
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const todayRuns = await db
@@ -100,6 +160,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunResult> {
     const runId = await insertRun(db, {
       taskId,
       agentId: agent.id,
+      sopPath: sop?.sopPath ?? null,
       input: input.triggerPayload,
       output: null,
       toolCalls: [],
@@ -120,13 +181,24 @@ export async function runAgent(input: RunAgentInput): Promise<RunResult> {
     return { runId, taskId, status: "cost_exceeded", costUsd: 0, output: "", toolCalls: [] };
   }
 
-  // ── Load authorized tools ───────────────────────────────────────────────────
-  const authorized = await db
-    .select()
-    .from(aiAgentTools)
-    .where(and(eq(aiAgentTools.agentId, agent.id), eq(aiAgentTools.authorized, true)));
-  const toolKeys = authorized.map((t) => t.toolKey);
-  const toolDefs = getAnthropicToolDefinitions(toolKeys);
+  // ── Load tools ──────────────────────────────────────────────────────────────
+  // SOP mode: the frontmatter's tool list IS the authorization (narrower per
+  // SOP, no per-agent rows). Legacy mode: the ai_agent_tools authorization rows.
+  let toolKeys: string[];
+  if (sop) {
+    toolKeys = sop.tools.filter((k) => {
+      if (getTool(k)) return true;
+      console.warn(`[agentRuntime] SOP ${sop!.sopPath} lists unknown tool '${k}' — skipped.`);
+      return false;
+    });
+  } else {
+    const authorized = await db
+      .select()
+      .from(aiAgentTools)
+      .where(and(eq(aiAgentTools.agentId, agent.id), eq(aiAgentTools.authorized, true)));
+    toolKeys = authorized.map((t) => t.toolKey);
+  }
+  const toolDefs = getAnthropicToolDefinitions(toolKeys) as unknown as LlmToolDef[];
   // Anthropic tool names are sanitized (underscores), our keys use dots — keep
   // a name → key map handy so we can hand the right handler to the dispatcher.
   const nameToKey = new Map<string, string>();
@@ -143,9 +215,10 @@ export async function runAgent(input: RunAgentInput): Promise<RunResult> {
     .where(eq(aiAgentTasks.id, taskId));
 
   // ── Multi-turn loop ─────────────────────────────────────────────────────────
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error("ANTHROPIC_API_KEY not set");
-  const client = new Anthropic({ apiKey });
+  const provider = getLlmProvider();
+  const runModel = sop ? (sop.model ?? DEFAULT_SOP_MODEL) : agent.model;
+  const runSystemPrompt = sop ? sop.body : agent.systemPrompt;
+  const runMaxTurns = sop ? Math.max(1, sop.maxTurns) : MAX_TOOL_TURNS;
 
   const started = Date.now();
   let totalInputTokens = 0;
@@ -154,7 +227,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunResult> {
   const collectedToolCalls: ToolCallLog[] = [];
   const textParts: string[] = [];
   // Conversation accumulator. We seed with the trigger as the first user turn.
-  const messages: Anthropic.MessageParam[] = [
+  const messages: LlmMessage[] = [
     {
       role: "user",
       content: JSON.stringify({
@@ -168,15 +241,13 @@ export async function runAgent(input: RunAgentInput): Promise<RunResult> {
   let toolError: string | null = null;
   let parkedForApproval = false;
 
-  for (let turn = 0; turn < MAX_TOOL_TURNS; turn++) {
-    let response: Anthropic.Message;
+  for (let turn = 0; turn < runMaxTurns; turn++) {
+    let response: Awaited<ReturnType<typeof provider.complete>>;
     try {
-      response = await client.messages.create({
-        model: agent.model,
-        max_tokens: DEFAULT_MAX_TOKENS,
-        system: [
-          { type: "text", text: agent.systemPrompt, cache_control: { type: "ephemeral" } },
-        ],
+      response = await provider.complete({
+        model: runModel,
+        maxTokens: DEFAULT_MAX_TOKENS,
+        system: runSystemPrompt,
         tools: toolDefs.length > 0 ? toolDefs : undefined,
         messages,
       });
@@ -186,12 +257,12 @@ export async function runAgent(input: RunAgentInput): Promise<RunResult> {
       break;
     }
 
-    totalInputTokens += response.usage.input_tokens;
-    totalOutputTokens += response.usage.output_tokens;
+    totalInputTokens += response.usage.inputTokens;
+    totalOutputTokens += response.usage.outputTokens;
     totalCostUsd += priceRun({
-      model: agent.model,
-      inputTokens: response.usage.input_tokens,
-      outputTokens: response.usage.output_tokens,
+      model: runModel,
+      inputTokens: response.usage.inputTokens,
+      outputTokens: response.usage.outputTokens,
     });
 
     // Collect text + tool_use blocks from this assistant turn.
@@ -211,17 +282,26 @@ export async function runAgent(input: RunAgentInput): Promise<RunResult> {
 
     // No tool calls this turn → conversation is done. Or stop_reason isn't
     // tool_use (end_turn / max_tokens / stop_sequence) → exit cleanly.
-    if (turnToolUses.length === 0 || response.stop_reason !== "tool_use") {
+    if (turnToolUses.length === 0 || response.stopReason !== "tool_use") {
       finalStatus = "success";
       break;
     }
 
     // Approval policy: only risky calls park. Safe internal/basic follow-up
     // calls execute inline; blocked calls return policy errors to the model.
+    // The SOP's approval posture tightens (never loosens) the per-tool policy:
+    //   always      → every allowed call parks for human approval
+    //   never-send  → calls that would need approval (send-class) are blocked
     const policyByToolUse = new Map<string, ApprovalPolicyResult>();
     for (const u of turnToolUses) {
       const key = nameToKey.get(u.name) ?? u.name;
-      policyByToolUse.set(u.id, evaluateToolApproval(key, getTool(key), u.input));
+      let policy = evaluateToolApproval(key, getTool(key), u.input);
+      if (sop?.approval === "always" && policy.approvalDecision === "auto_execute") {
+        policy = { ...policy, approvalDecision: "requires_approval", approvalReason: "SOP requires approval on every action." };
+      } else if (sop?.approval === "never-send" && policy.approvalDecision === "requires_approval") {
+        policy = { ...policy, approvalDecision: "blocked", approvalReason: "SOP forbids send-class tools." };
+      }
+      policyByToolUse.set(u.id, policy);
     }
     const approvalNeeded = Array.from(policyByToolUse.values()).some(
       (policy) => policy.approvalDecision === "requires_approval"
@@ -242,7 +322,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunResult> {
     // Append the assistant's full content to the conversation, then dispatch
     // each non-approval tool call and feed results back as tool_result blocks.
     messages.push({ role: "assistant", content: response.content });
-    const toolResultBlocks: Anthropic.ToolResultBlockParam[] = [];
+    const toolResultBlocks: LlmToolResultBlock[] = [];
     for (const u of turnToolUses) {
       const key = nameToKey.get(u.name) ?? u.name;
       const tool = getTool(key);
@@ -325,6 +405,7 @@ export async function runAgent(input: RunAgentInput): Promise<RunResult> {
   const runId = await insertRun(db, {
     taskId,
     agentId: agent.id,
+    sopPath: sop?.sopPath ?? null,
     input: input.triggerPayload,
     output,
     toolCalls: collectedToolCalls,
@@ -406,6 +487,7 @@ async function ensureTask(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, in
     triggerType: input.triggerType,
     triggerPayload: JSON.stringify(input.triggerPayload ?? {}),
     status: "running",
+    sopPath: input.sopPath ?? null,
     startedAt: new Date(),
   }).returning({ id: aiAgentTasks.id });
   return Number(inserted?.id ?? 0);
@@ -414,6 +496,7 @@ async function ensureTask(db: NonNullable<Awaited<ReturnType<typeof getDb>>>, in
 type RunInsert = {
   taskId: number;
   agentId: number;
+  sopPath?: string | null;
   input: unknown;
   output: string | null;
   toolCalls: unknown;
@@ -432,6 +515,7 @@ async function insertRun(
   const [inserted] = await db.insert(aiAgentRuns).values({
     taskId: r.taskId,
     agentId: r.agentId,
+    sopPath: r.sopPath ?? null,
     input: JSON.stringify(r.input ?? null),
     output: r.output,
     toolCalls: JSON.stringify(r.toolCalls ?? []),

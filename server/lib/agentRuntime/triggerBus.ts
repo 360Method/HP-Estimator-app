@@ -72,7 +72,19 @@ export async function emitAgentEvent(
     return { queuedTaskIds: [], matchedAgents: 0 };
   }
   try {
-    return await triggerAgentsFor(eventName, payload, opts);
+    const legacy = await triggerAgentsFor(eventName, payload, opts);
+    // SOP-dispatcher path: route the same event through the SOP registry.
+    // Lazy import avoids a circular triggerBus → dispatcher → runtime path.
+    if (!opts.dryRun) {
+      try {
+        const { dispatchEvent } = await import("./dispatcher/dispatcher");
+        const sopResult = await dispatchEvent(String(eventName), payload);
+        legacy.queuedTaskIds.push(...sopResult.queuedTaskIds);
+      } catch (err) {
+        console.warn(`[triggerBus] SOP dispatch '${eventName}' failed (non-fatal):`, err);
+      }
+    }
+    return legacy;
   } catch (err) {
     console.warn(`[triggerBus] emit '${eventName}' failed (non-fatal):`, err);
     return { queuedTaskIds: [], matchedAgents: 0 };

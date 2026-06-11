@@ -21,6 +21,7 @@ import { getDb } from "../../db";
 import { aiAgents, aiAgentTasks, aiAgentSchedules } from "../../../drizzle/schema";
 import { runAgent } from "./runtime";
 import { shouldFire } from "./cron";
+import { dispatchCron } from "./dispatcher/dispatcher";
 
 export async function tick(): Promise<{ ran: number; skipped: number; scheduled: number }> {
   const db = await getDb();
@@ -32,6 +33,13 @@ export async function tick(): Promise<{ ran: number; skipped: number; scheduled:
     scheduled = await fireDueSchedules();
   } catch (err) {
     console.warn("[agentScheduler] cron eval failed:", err);
+  }
+
+  // ── 1b. SOP cron evaluation (the dispatcher path) ─────────────────────────
+  try {
+    scheduled += await dispatchCron();
+  } catch (err) {
+    console.warn("[agentScheduler] SOP cron eval failed:", err);
   }
 
   // ── 2. Drain queued tasks ────────────────────────────────────────────────
@@ -66,6 +74,7 @@ export async function tick(): Promise<{ ran: number; skipped: number; scheduled:
         triggerType: task.triggerType,
         triggerPayload: payload,
         existingTaskId: task.id,
+        sopPath: task.sopPath ?? undefined,
       });
       ran++;
     } catch (err) {

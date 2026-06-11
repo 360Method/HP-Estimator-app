@@ -175,8 +175,17 @@ async function ensureSchedulingTablesBoot() {
 }
 
 async function ensureAgentPhase4Tables() {
-  // boot-time MySQL DDL removed; tables now created by drizzle Postgres migrations
-  return;
+  // Legacy MySQL DDL removed; base agent tables come from drizzle migrations.
+  // The SOP dispatcher's additive columns (ai_agent_tasks.sopPath/parentTaskId,
+  // ai_agent_runs.sopPath) are ensured here, idempotently, on every boot — prod
+  // drizzle state has drifted before, and admin queries select these columns
+  // even when the agent engine is off.
+  try {
+    const { ensureDispatcherColumns } = await import("../lib/agentRuntime/dispatcher/dispatcher");
+    await ensureDispatcherColumns();
+  } catch (err) {
+    console.warn("[boot] ensureDispatcherColumns failed (non-fatal):", err);
+  }
 }
 
 async function ensureVendorTablesBoot() {
@@ -2088,6 +2097,15 @@ async function startServer() {
     startIntegratorBriefCron();
     const db = await getDb();
     if (db) {
+      // SOP dispatcher: make sure the singleton Dispatcher seat exists. It is
+      // created PAUSED — flipping it autonomous is a human action in the hub,
+      // so a deploy can never silently start executing SOPs.
+      try {
+        const { getDispatcherAgentId } = await import("../lib/agentRuntime/dispatcher/dispatcher");
+        await getDispatcherAgentId(db);
+      } catch (err) {
+        console.warn("[boot] dispatcher seed failed (non-fatal):", err);
+      }
       const roster = await db.select().from(aiAgents);
       const violations = auditRoster(roster);
       if (violations.length > 0) {
