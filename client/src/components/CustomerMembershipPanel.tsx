@@ -12,7 +12,7 @@ import { trpc } from '@/lib/trpc';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Separator } from '@/components/ui/separator';
 import {
   RefreshCw, Shield, Star, Crown, Wallet, CalendarCheck,
@@ -218,6 +218,15 @@ function MembershipFullDetail({ membershipId, membership }: { membershipId: numb
       ? 'completed'
       : (membership.status ?? 'active');
 
+  // The single most urgent item for this membership: an unscheduled work order
+  // (baseline scan first), else the next scheduled one, else all caught up.
+  const unscheduledWo = openWOs
+    .filter(wo => !wo.scheduledDate)
+    .sort((a, b) => (a.type === 'baseline_scan' ? 0 : 1) - (b.type === 'baseline_scan' ? 0 : 1))[0] ?? null;
+  const upcomingWo = openWOs
+    .filter(wo => wo.scheduledDate)
+    .sort((a, b) => new Date(a.scheduledDate!).getTime() - new Date(b.scheduledDate!).getTime())[0] ?? null;
+
   return (
     <Card className="border shadow-sm">
       {/* ── Membership header ── */}
@@ -302,48 +311,9 @@ function MembershipFullDetail({ membershipId, membership }: { membershipId: numb
 
       <Separator />
 
-      {/* ── Full tab set ── */}
+      {/* ── One scrolling page: next action, then collapsible sections ── */}
       <CardContent className="pt-4 pb-4">
-        <Tabs defaultValue="work-orders">
-          <TabsList className="mb-4 flex flex-wrap h-auto gap-1">
-            <TabsTrigger value="work-orders" className="text-xs">
-              <Wrench className="w-3 h-3 mr-1" />Work Orders
-              {openWOs.length > 0 && (
-                <span className="ml-1 bg-amber-100 text-amber-700 rounded-full px-1.5 text-[10px]">
-                  {openWOs.length}
-                </span>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="visits" className="text-xs">
-              <CalendarCheck className="w-3 h-3 mr-1" />Visits
-            </TabsTrigger>
-            <TabsTrigger value="jobs" className="text-xs">
-              <Briefcase className="w-3 h-3 mr-1" />Jobs
-              {(linkedJobs ?? []).length > 0 && (
-                <span className="ml-1 bg-blue-100 text-blue-700 rounded-full px-1.5 text-[10px]">
-                  {(linkedJobs ?? []).length}
-                </span>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="labor-bank" className="text-xs">
-              <Wallet className="w-3 h-3 mr-1" />Labor Bank
-            </TabsTrigger>
-            <TabsTrigger value="property-systems" className="text-xs">
-              <ClipboardList className="w-3 h-3 mr-1" />Systems
-            </TabsTrigger>
-            <TabsTrigger value="scans" className="text-xs">
-              <CheckCircle2 className="w-3 h-3 mr-1" />Scans
-            </TabsTrigger>
-            <TabsTrigger value="discounts" className="text-xs">Discounts</TabsTrigger>
-          </TabsList>
-
-          {/* ── WORK ORDERS ── */}
-          <TabsContent value="work-orders">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold">Work Orders</h3>
-              <p className="text-xs text-muted-foreground">Auto-created on enrollment & after each visit</p>
-            </div>
-            {/* Schedule Visit Modal */}
+        {/* Schedule Visit Modal — shared by the next-action header and work orders */}
             {scheduleModalWoId !== null && (() => {
               const wo = (workOrders ?? []).find(w => w.id === scheduleModalWoId);
               if (!wo) return null;
@@ -412,6 +382,67 @@ function MembershipFullDetail({ membershipId, membership }: { membershipId: numb
               );
             })()}
 
+        {/* ── Next action ── */}
+        <div className="hp-card-warm rounded-lg px-4 py-3 mb-4 flex items-center gap-3">
+          {unscheduledWo ? (
+            <>
+              <CalendarClock className="w-4 h-4 shrink-0" style={{ color: 'var(--hp-gold-deep)' }} />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium truncate">
+                  {WO_TYPE_LABEL[unscheduledWo.type] ?? unscheduledWo.type} needs a date
+                </div>
+                <div className="text-xs text-muted-foreground">The next step for this membership.</div>
+              </div>
+              <button
+                className="hp-button-gold text-xs shrink-0"
+                style={{ padding: '6px 14px', minHeight: 0 }}
+                onClick={() => { setScheduleModalWoId(unscheduledWo.id); setScheduleDate(''); }}
+              >
+                Schedule
+              </button>
+            </>
+          ) : upcomingWo ? (
+            <>
+              <CalendarCheck className="w-4 h-4 shrink-0 text-blue-600" />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium truncate">
+                  Next: {WO_TYPE_LABEL[upcomingWo.type] ?? upcomingWo.type} on {new Date(upcomingWo.scheduledDate!).toLocaleDateString()}
+                </div>
+                <div className="text-xs text-muted-foreground">Nothing else needs you here right now.</div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs h-7 shrink-0"
+                onClick={() => navigate(`/360/work-orders/${upcomingWo.id}`)}
+              >
+                View
+              </Button>
+            </>
+          ) : (
+            <>
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+              <div className="text-sm">All caught up. No open work orders.</div>
+            </>
+          )}
+        </div>
+
+        <Accordion type="multiple" defaultValue={['work-orders']} className="space-y-2">
+
+          {/* ── WORK ORDERS ── */}
+          <AccordionItem value="work-orders" className="border rounded-lg px-3">
+            <AccordionTrigger className="text-sm font-semibold py-3 hover:no-underline">
+              <span className="flex items-center gap-2">
+                <Wrench className="w-3.5 h-3.5" /> Work orders
+                {openWOs.length > 0 && (
+                  <span className="bg-amber-100 text-amber-700 rounded-full px-1.5 text-[10px]">
+                    {openWOs.length} open
+                  </span>
+                )}
+              </span>
+            </AccordionTrigger>
+            <AccordionContent>
+            <p className="text-xs text-muted-foreground mb-3">Auto-created on enrollment & after each visit</p>
             {(workOrders ?? []).length === 0 ? (
               <div className="text-center py-10">
                 <Wrench className="w-8 h-8 text-muted-foreground mx-auto mb-2 opacity-30" />
@@ -477,13 +508,17 @@ function MembershipFullDetail({ membershipId, membership }: { membershipId: numb
                 })}
               </div>
             )}
-          </TabsContent>
+            </AccordionContent>
+          </AccordionItem>
 
           {/* ── VISITS ── */}
-          <TabsContent value="visits">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold">{currentYear} Seasonal Visits</h3>
-            </div>
+          <AccordionItem value="visits" className="border rounded-lg px-3">
+            <AccordionTrigger className="text-sm font-semibold py-3 hover:no-underline">
+              <span className="flex items-center gap-2">
+                <CalendarCheck className="w-3.5 h-3.5" /> {currentYear} seasonal visits
+              </span>
+            </AccordionTrigger>
+            <AccordionContent>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
               {seasons.map(season => {
                 const visit = (visits ?? []).find(v => v.season === season && v.visitYear === currentYear);
@@ -553,14 +588,23 @@ function MembershipFullDetail({ membershipId, membership }: { membershipId: numb
                 </div>
               </>
             )}
-          </TabsContent>
+            </AccordionContent>
+          </AccordionItem>
 
           {/* ── JOBS & ESTIMATES ── */}
-          <TabsContent value="jobs">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold">Linked Jobs & Estimates</h3>
-              <p className="text-xs text-muted-foreground">Created from flagged repair items</p>
-            </div>
+          <AccordionItem value="jobs" className="border rounded-lg px-3">
+            <AccordionTrigger className="text-sm font-semibold py-3 hover:no-underline">
+              <span className="flex items-center gap-2">
+                <Briefcase className="w-3.5 h-3.5" /> Linked jobs & estimates
+                {(linkedJobs ?? []).length > 0 && (
+                  <span className="bg-blue-100 text-blue-700 rounded-full px-1.5 text-[10px]">
+                    {(linkedJobs ?? []).length}
+                  </span>
+                )}
+              </span>
+            </AccordionTrigger>
+            <AccordionContent>
+            <p className="text-xs text-muted-foreground mb-3">Created from flagged repair items</p>
             {(linkedJobs ?? []).length === 0 ? (
               <div className="text-center py-10">
                 <Briefcase className="w-8 h-8 text-muted-foreground mx-auto mb-2 opacity-30" />
@@ -606,53 +650,23 @@ function MembershipFullDetail({ membershipId, membership }: { membershipId: numb
                 ))}
               </div>
             )}
-          </TabsContent>
-
-          {/* ── LABOR BANK ── */}
-          <TabsContent value="labor-bank">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold">Labor Bank Ledger</h3>
-              <div className="text-sm font-bold text-emerald-700">
-                Balance: {formatDollars(membership.laborBankBalance ?? 0)}
-              </div>
-            </div>
-            {(ledger ?? []).length === 0 ? (
-              <div className="text-sm text-muted-foreground py-8 text-center">No transactions yet.</div>
-            ) : (
-              <div className="space-y-2">
-                {(ledger ?? []).map(tx => (
-                  <Card key={tx.id} className="border shadow-sm">
-                    <CardContent className="py-3 px-4 flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
-                        tx.type === 'credit' ? 'bg-emerald-100' :
-                        tx.type === 'debit' ? 'bg-red-100' : 'bg-gray-100'
-                      }`}>
-                        {tx.type === 'credit' ? <Plus className="w-4 h-4 text-emerald-600" /> :
-                         tx.type === 'debit' ? <Clock className="w-4 h-4 text-red-500" /> :
-                         <SkipForward className="w-4 h-4 text-gray-500" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium truncate">{tx.description}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {new Date(tx.createdAt).toLocaleDateString()}
-                        </div>
-                      </div>
-                      <div className={`text-sm font-bold shrink-0 ${
-                        tx.type === 'credit' ? 'text-emerald-600' : 'text-red-500'
-                      }`}>
-                        {tx.type === 'credit' ? '+' : '-'}{formatDollars(tx.amountCents)}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </TabsContent>
+            </AccordionContent>
+          </AccordionItem>
 
           {/* ── PROPERTY SYSTEMS ── */}
-          <TabsContent value="property-systems">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold">Property System Baselines</h3>
+          <AccordionItem value="property-systems" className="border rounded-lg px-3">
+            <AccordionTrigger className="text-sm font-semibold py-3 hover:no-underline">
+              <span className="flex items-center gap-2">
+                <ClipboardList className="w-3.5 h-3.5" /> Property systems
+                {(propertySystems ?? []).length > 0 && (
+                  <span className="bg-muted text-muted-foreground rounded-full px-1.5 text-[10px]">
+                    {(propertySystems ?? []).length} documented
+                  </span>
+                )}
+              </span>
+            </AccordionTrigger>
+            <AccordionContent>
+            <div className="flex items-center justify-end mb-3">
               <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => setShowBaselineWizard(true)}>
                 <Plus className="w-3.5 h-3.5 mr-1" />
                 {(propertySystems ?? []).length > 0 ? 'Update' : 'Document'}
@@ -710,12 +724,23 @@ function MembershipFullDetail({ membershipId, membership }: { membershipId: numb
                 })}
               </div>
             )}
-          </TabsContent>
+            </AccordionContent>
+          </AccordionItem>
 
           {/* ── SCANS ── */}
-          <TabsContent value="scans">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold">Annual 360 Home Scans</h3>
+          <AccordionItem value="scans" className="border rounded-lg px-3">
+            <AccordionTrigger className="text-sm font-semibold py-3 hover:no-underline">
+              <span className="flex items-center gap-2">
+                <CheckCircle2 className="w-3.5 h-3.5" /> Annual 360 home scans
+                {(scans ?? []).length > 0 && (
+                  <span className="bg-muted text-muted-foreground rounded-full px-1.5 text-[10px]">
+                    {(scans ?? []).length}
+                  </span>
+                )}
+              </span>
+            </AccordionTrigger>
+            <AccordionContent>
+            <div className="flex items-center justify-end mb-3">
               <Button size="sm" onClick={handleNewScan} disabled={createScan.isPending}>
                 <Plus className="w-3.5 h-3.5 mr-1" />
                 {createScan.isPending ? 'Creating…' : 'New Scan'}
@@ -764,11 +789,65 @@ function MembershipFullDetail({ membershipId, membership }: { membershipId: numb
                 ))}
               </div>
             )}
-          </TabsContent>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+
+        {/* ── Reference (look-up material, collapsed by default) ── */}
+        <p className="text-[10px] uppercase tracking-widest text-muted-foreground mt-5 mb-2 px-1">Reference</p>
+        <Accordion type="multiple" className="space-y-2">
+
+          {/* ── LABOR BANK ── */}
+          <AccordionItem value="labor-bank" className="border rounded-lg px-3">
+            <AccordionTrigger className="text-sm font-semibold py-3 hover:no-underline">
+              <span className="flex items-center gap-2">
+                <Wallet className="w-3.5 h-3.5" /> Labor bank ledger
+                <span className="text-emerald-700 font-bold text-xs">{formatDollars(membership.laborBankBalance ?? 0)}</span>
+              </span>
+            </AccordionTrigger>
+            <AccordionContent>
+            {(ledger ?? []).length === 0 ? (
+              <div className="text-sm text-muted-foreground py-8 text-center">No transactions yet.</div>
+            ) : (
+              <div className="space-y-2">
+                {(ledger ?? []).map(tx => (
+                  <Card key={tx.id} className="border shadow-sm">
+                    <CardContent className="py-3 px-4 flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                        tx.type === 'credit' ? 'bg-emerald-100' :
+                        tx.type === 'debit' ? 'bg-red-100' : 'bg-gray-100'
+                      }`}>
+                        {tx.type === 'credit' ? <Plus className="w-4 h-4 text-emerald-600" /> :
+                         tx.type === 'debit' ? <Clock className="w-4 h-4 text-red-500" /> :
+                         <SkipForward className="w-4 h-4 text-gray-500" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium truncate">{tx.description}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {new Date(tx.createdAt).toLocaleDateString()}
+                        </div>
+                      </div>
+                      <div className={`text-sm font-bold shrink-0 ${
+                        tx.type === 'credit' ? 'text-emerald-600' : 'text-red-500'
+                      }`}>
+                        {tx.type === 'credit' ? '+' : '-'}{formatDollars(tx.amountCents)}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+            </AccordionContent>
+          </AccordionItem>
 
           {/* ── DISCOUNTS ── */}
-          <TabsContent value="discounts">
-            <h3 className="text-sm font-semibold mb-3">Member Discount Schedule — {tierDef?.label}</h3>
+          <AccordionItem value="discounts" className="border rounded-lg px-3">
+            <AccordionTrigger className="text-sm font-semibold py-3 hover:no-underline">
+              <span className="flex items-center gap-2">
+                Member discount schedule — {tierDef?.label}
+              </span>
+            </AccordionTrigger>
+            <AccordionContent>
             <Card className="border shadow-sm">
               <CardContent className="p-4 overflow-x-auto">
                 <table className="w-full text-sm min-w-[280px]">
@@ -807,8 +886,9 @@ function MembershipFullDetail({ membershipId, membership }: { membershipId: numb
                 </p>
               </CardContent>
             </Card>
-          </TabsContent>
-        </Tabs>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
       </CardContent>
     </Card>
   );
