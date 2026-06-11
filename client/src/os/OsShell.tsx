@@ -12,7 +12,7 @@ import { ReactNode, useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
   Sun, MessageSquareText, Inbox, BookOpen, GitBranch, Users, Wallet,
-  CalendarDays, HardHat, Bot, MoreHorizontal, X,
+  CalendarDays, HardHat, Bot, MoreHorizontal, X, MessageCircle,
 } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
@@ -35,14 +35,23 @@ const CORE_NAV: NavItem[] = [
 ];
 
 const ROOM_NAV: NavItem[] = [
-  { href: "/?section=pipeline", label: "Pipeline", icon: GitBranch, legacy: true },
-  { href: "/?section=customers", label: "Clients", icon: Users, legacy: true },
-  { href: "/?section=financials", label: "Money", icon: Wallet, legacy: true },
-  { href: "/?section=schedule", label: "Schedule", icon: CalendarDays, legacy: true },
+  { href: "/os/pipeline", label: "Pipeline", icon: GitBranch },
+  { href: "/os/clients", label: "Clients", icon: Users },
+  { href: "/os/money", label: "Money", icon: Wallet },
+  { href: "/os/schedule", label: "Schedule", icon: CalendarDays },
+  { href: "/os/inbox", label: "Inbox", icon: MessageCircle },
   { href: "/admin/vendors", label: "Team", icon: HardHat, legacy: true },
 ];
 
 const SYSTEM_NAV: NavItem[] = [{ href: "/admin/agents", label: "Agents", icon: Bot, legacy: true }];
+
+/** Phone bottom bar: the four most-used surfaces; everything else under More. */
+const MOBILE_TABS: NavItem[] = [
+  { href: "/os", label: "Today", icon: Sun },
+  { href: "/os/chat", label: "Chat", icon: MessageSquareText },
+  { href: "/os/pipeline", label: "Pipeline", icon: GitBranch },
+  { href: "/os/clients", label: "Clients", icon: Users },
+];
 
 function isActive(location: string, href: string): boolean {
   if (href === "/os") return location === "/os";
@@ -71,7 +80,19 @@ function RailLink({ item, location, onNavigate }: { item: NavItem; location: str
   );
 }
 
-export function OsShell({ active, children }: { active?: string; children: ReactNode }) {
+export function OsShell({
+  active,
+  wide,
+  flush,
+  children,
+}: {
+  active?: string;
+  /** Full-width content (the business rooms need it for boards and tables). */
+  wide?: boolean;
+  /** No content padding; the room's own header (MetricsBar) spans the area. */
+  flush?: boolean;
+  children: ReactNode;
+}) {
   const { user, loading } = useAuth();
   const [location] = useLocation();
   const [moreOpen, setMoreOpen] = useState(false);
@@ -140,7 +161,15 @@ export function OsShell({ active, children }: { active?: string; children: React
         </aside>
 
         {/* ── Content ──────────────────────────────────────────── */}
-        <main className="flex-1 min-w-0 px-4 py-5 pb-24 md:pb-8 max-w-4xl">{children}</main>
+        <main
+          className={
+            "flex-1 min-w-0 pb-24 md:pb-8 " +
+            (flush ? "" : "px-4 py-5 ") +
+            (wide ? "" : "max-w-4xl")
+          }
+        >
+          {children}
+        </main>
       </div>
 
       {/* ── Mobile bottom tabs ─────────────────────────────────── */}
@@ -149,7 +178,7 @@ export function OsShell({ active, children }: { active?: string; children: React
         style={{ borderColor: "var(--hp-hairline)", paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         <div className="grid grid-cols-5">
-          {[...CORE_NAV.slice(0, 4)].map((item) => {
+          {MOBILE_TABS.map((item) => {
             const activeTab = isActive(active ?? location, item.href);
             const Icon = item.icon;
             const badge = item.href === "/os" && taskCount > 0 ? taskCount : null;
@@ -196,7 +225,7 @@ export function OsShell({ active, children }: { active?: string; children: React
               </button>
             </div>
             <nav className="space-y-1">
-              {[...ROOM_NAV, ...SYSTEM_NAV].map((item) => (
+              {[...CORE_NAV.filter((i) => !MOBILE_TABS.some((t) => t.href === i.href)), ...ROOM_NAV.filter((i) => !MOBILE_TABS.some((t) => t.href === i.href)), ...SYSTEM_NAV].map((item) => (
                 <RailLink key={item.href} item={item} location={active ?? location} onNavigate={() => setMoreOpen(false)} />
               ))}
             </nav>

@@ -33,7 +33,7 @@ function taskLink(t: { linkType: string | null; linkId: string | null }): string
     case "customer":
       return `/admin/clients/${t.linkId}`;
     case "opportunity":
-      return `/?section=pipeline`;
+      return `/os/pipeline`;
     case "doc":
       return `/os/d/${t.linkId}`;
     case "vendor":
