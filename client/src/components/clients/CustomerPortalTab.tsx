@@ -160,9 +160,9 @@ import { fmtDate, fmtDollar, fmtRelative } from '@/components/clients/formatters
   return (
     <div className="space-y-5">
       {/* Portal customer header */}
-      <div className="rounded-xl border bg-card p-4 flex items-center gap-4">
-        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-          <User size={18} className="text-primary" />
+      <div className="rounded-xl border border-[#e7e1d4] bg-white p-4 flex items-center gap-4">
+        <div className="w-10 h-10 rounded-full bg-[#1a2e1a] flex items-center justify-center shrink-0">
+          <User size={18} className="text-[#e2b96a]" />
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-sm truncate">{customer.name}</p>
@@ -178,7 +178,7 @@ import { fmtDate, fmtDollar, fmtRelative } from '@/components/clients/formatters
           href={`${portalBase}/portal/home`}
           target="_blank"
           rel="noreferrer"
-          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-semibold hover:bg-primary/90 transition-colors"
+          className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 bg-[#1a2e1a] text-white rounded-lg text-xs font-semibold hover:bg-[#243c24] transition-colors"
         >
           <ExternalLink size={12} /> View in Portal
         </a>
@@ -186,7 +186,7 @@ import { fmtDate, fmtDollar, fmtRelative } from '@/components/clients/formatters
 
       {/* Estimates */}
       <div>
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+        <h3 className="text-xs font-semibold text-[#5b574f] uppercase tracking-wider mb-2">
           Estimates ({estimates.length})
         </h3>
         {estimates.length === 0 ? (
@@ -194,7 +194,7 @@ import { fmtDate, fmtDollar, fmtRelative } from '@/components/clients/formatters
         ) : (
           <div className="space-y-2">
             {estimates.map((est: any) => (
-              <div key={est.id} className="rounded-xl border bg-card p-3 flex flex-col gap-2">
+              <div key={est.id} className="rounded-xl border border-[#e7e1d4] bg-white p-3 flex flex-col gap-2">
                 <div className="flex items-start gap-3">
                   <FileText size={16} className="text-muted-foreground shrink-0 mt-0.5" />
                   <div className="flex-1 min-w-0">
@@ -282,7 +282,7 @@ import { fmtDate, fmtDollar, fmtRelative } from '@/components/clients/formatters
 
       {/* Invoices */}
       <div>
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+        <h3 className="text-xs font-semibold text-[#5b574f] uppercase tracking-wider mb-2">
           Invoices ({invoices.length})
         </h3>
         {invoices.length === 0 ? (
@@ -290,7 +290,7 @@ import { fmtDate, fmtDollar, fmtRelative } from '@/components/clients/formatters
         ) : (
           <div className="space-y-2">
             {invoices.map((inv: any) => (
-              <div key={inv.id} className="rounded-xl border bg-card p-3 flex flex-col gap-2">
+              <div key={inv.id} className="rounded-xl border border-[#e7e1d4] bg-white p-3 flex flex-col gap-2">
                 <div className="flex items-start gap-3">
                   <DollarSign size={16} className="text-muted-foreground shrink-0 mt-0.5" />
                   <div className="flex-1 min-w-0">
@@ -356,12 +356,12 @@ import { fmtDate, fmtDollar, fmtRelative } from '@/components/clients/formatters
       {/* Appointments */}
       {appointments.length > 0 && (
         <div>
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+          <h3 className="text-xs font-semibold text-[#5b574f] uppercase tracking-wider mb-2">
             Appointments ({appointments.length})
           </h3>
           <div className="space-y-2">
             {appointments.map((apt: any) => (
-              <div key={apt.id} className="rounded-xl border bg-card p-3 flex items-center gap-3">
+              <div key={apt.id} className="rounded-xl border border-[#e7e1d4] bg-white p-3 flex items-center gap-3">
                 <Calendar size={16} className="text-muted-foreground shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{apt.title}</p>
@@ -378,12 +378,12 @@ import { fmtDate, fmtDollar, fmtRelative } from '@/components/clients/formatters
       {/* Service Requests (Booking) */}
       {customerServiceReqs.length > 0 && (
         <div>
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+          <h3 className="text-xs font-semibold text-[#5b574f] uppercase tracking-wider mb-2">
             Service Requests ({customerServiceReqs.length})
           </h3>
           <div className="space-y-2">
             {customerServiceReqs.map((req: any) => (
-              <div key={req.id} className="rounded-xl border bg-card p-3 space-y-2">
+              <div key={req.id} className="rounded-xl border border-[#e7e1d4] bg-white p-3 space-y-2">
                 <div className="flex items-start gap-3">
                   <Wrench size={15} className="text-muted-foreground shrink-0 mt-0.5" />
                   <div className="flex-1 min-w-0">
@@ -426,7 +426,7 @@ import { fmtDate, fmtDollar, fmtRelative } from '@/components/clients/formatters
 
       {/* HP Action Buttons */}
       <div>
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+        <h3 className="text-xs font-semibold text-[#5b574f] uppercase tracking-wider mb-2">
           Push to Portal
         </h3>
         <div className="flex flex-wrap gap-2">
@@ -626,7 +626,7 @@ import { fmtDate, fmtDollar, fmtRelative } from '@/components/clients/formatters
       {/* Portal Messages Preview */}
       {customerMsgs.length > 0 && (
         <div>
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+          <h3 className="text-xs font-semibold text-[#5b574f] uppercase tracking-wider mb-2">
             Portal Messages ({customerMsgs.length})
           </h3>
           <div className="space-y-1.5">
