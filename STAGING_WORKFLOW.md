@@ -1,7 +1,16 @@
 # Staging Workflow
 
-`staging-pro.handypioneers.com` is the preview environment for HP-Estimator-app. Use it
-to verify backend changes against a realistic DB before promoting to prod.
+The HP-Estimator-app staging service serves both faces of the app on two
+subdomains, so portal changes can be verified off-prod the same way staff changes are:
+
+- `staging-pro.handypioneers.com` — staff app (estimator / CRM / admin).
+- `staging-client.handypioneers.com` — customer portal (renders portal-only mode;
+  `/admin` and `/onboarding` 404 here, same as `client.handypioneers.com`).
+
+Both hostnames point at the one `hp-estimator-staging` service — the SPA build is
+shared and decides which face to show by hostname (`client/src/App.tsx`
+`PORTAL_HOSTNAMES`). Only the portal hostnames go in `PORTAL_HOSTNAMES`; the staff
+domain is anything else pointed at the service.
 
 ## Infrastructure
 
@@ -11,12 +20,27 @@ to verify backend changes against a realistic DB before promoting to prod.
 | Railway env | `production` (`0e57bbed-d422-42c5-9661-c1c931800379`) |
 | App service | `hp-estimator-staging` (`3baf5e9c-8bb1-4718-b81e-33fa6ed621a8`) |
 | DB service | `MySQL-Staging` (`1ebcffab-00d8-40ae-ac2d-19b652b8cfc6`) |
-| Domain | `staging-pro.handypioneers.com` → Railway `2s9pfewr.up.railway.app` |
+| Staff domain | `staging-pro.handypioneers.com` → `hp-estimator-staging` |
+| Portal domain | `staging-client.handypioneers.com` → `hp-estimator-staging` |
 | Branch | `staging` (tracked by the Railway service; autodeploys on push) |
 
 The staging service has its own DATABASE_URL pointing at MySQL-Staging. All other
 env vars (Stripe test keys, Resend, Anthropic, Twilio, Google, Cloudinary, PayPal,
 QuickBooks) are the same values as prod, so staging talks to the same sandbox APIs.
+
+Set `PORTAL_BASE_URL=https://staging-client.handypioneers.com` on the staging service
+so magic-link and booking URLs in emails point at staging, not prod.
+
+### Email safety on staging
+
+Staging runs with `NODE_ENV=production` (Railway env is "production"), so outbound
+email can't be gated on `NODE_ENV`. Instead `server/lib/email/resend.ts` keys off the
+auto-injected `RAILWAY_SERVICE_NAME` (any service whose name contains "staging" is
+treated as safe-mode). In safe mode, any recipient (to/cc/bcc) not already on
+`@handypioneers.com` is redirected to `staging-sink@handypioneers.com` and the subject
+is prefixed `[STAGING → original@addr]`, so a prod-copied DB can never email a real
+customer. Override with `EMAIL_SAFE_MODE=1` (force on) or `EMAIL_SAFE_MODE=0` (force
+off). The seed script's PII scrub (`staging+<id>@handypioneers.com`) is a second layer.
 
 ## Promote code: staging → main
 

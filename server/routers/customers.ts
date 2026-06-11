@@ -40,11 +40,19 @@ import {
   getPortalInvoicesByCustomer,
   getPortalInvoicesByHpOpportunityId,
   getPortalMessagesByCustomer,
+  getPortalServiceRequestsByCustomer,
+  updatePortalCustomerProfile,
   getMilestonesByJob,
   getUpdatesByJob,
   getJobSignOff,
 } from "../portalDb";
 import { threeSixtyMemberships, threeSixtyWorkOrders } from "../../drizzle/schema";
+import {
+  portalAccounts,
+  portalProperties,
+  priorityTranslations,
+  homeHealthRecords,
+} from "../../drizzle/schema.priorityTranslation";
 import { desc, eq, inArray, or } from "drizzle-orm";
 import { nanoid } from "nanoid";
 
@@ -186,22 +194,45 @@ export const customersRouter = router({
             messages: await getPortalMessagesByCustomer(portalCustomer.id),
             changeOrders: await getPortalChangeOrdersByCustomer(portalCustomer.id),
             documents: await getPortalDocumentsByCustomer(portalCustomer.id),
+            serviceRequests: await getPortalServiceRequestsByCustomer(portalCustomer.id).catch(() => []),
           }
         : null;
 
       const db = await getDb();
+      // Membership match (Phase F #6): direct hpCustomerId/customerId links
+      // first, plus a fallback through the portal customer's Stripe ID for
+      // memberships created before the CRM link existed. Anything reached
+      // only via Stripe gets its hpCustomerId stamped on read (lazy backfill)
+      // so the next lookup is direct.
+      const membershipConditions = [
+        eq(threeSixtyMemberships.customerId, input.id),
+        eq(threeSixtyMemberships.hpCustomerId, input.id),
+      ];
+      if (portalCustomer?.stripeCustomerId) {
+        membershipConditions.push(
+          eq(threeSixtyMemberships.stripeCustomerId, portalCustomer.stripeCustomerId),
+        );
+      }
       const memberships = db
         ? await db
             .select()
             .from(threeSixtyMemberships)
-            .where(
-              or(
-                eq(threeSixtyMemberships.customerId, input.id),
-                eq(threeSixtyMemberships.hpCustomerId, input.id),
-              ),
-            )
+            .where(or(...membershipConditions))
             .orderBy(desc(threeSixtyMemberships.createdAt))
         : [];
+      for (const m of memberships) {
+        if (db && !m.hpCustomerId) {
+          try {
+            await db
+              .update(threeSixtyMemberships)
+              .set({ hpCustomerId: input.id })
+              .where(eq(threeSixtyMemberships.id, m.id));
+            m.hpCustomerId = input.id;
+          } catch {
+            /* the read path never fails on the backfill */
+          }
+        }
+      }
       const membershipIds = memberships.map((m) => m.id);
       const workOrders = db && membershipIds.length
         ? await db
@@ -210,6 +241,73 @@ export const customersRouter = router({
             .where(inArray(threeSixtyWorkOrders.membershipId, membershipIds))
             .orderBy(desc(threeSixtyWorkOrders.createdAt))
         : [];
+
+      // Roadmap bundle (Phase E): the customer's portal-side Home Roadmap —
+      // priority-translation reports + the living home-health findings.
+      // Linked by email: portalAccounts is the roadmap-side identity, separate
+      // from portalCustomers. Everything here is customer-deliverable content
+      // (the customer already sees it in their portal), so it is safe to
+      // surface internally. Read-only; null when there is no account.
+      const roadmapEmail = (customer.email ?? "").trim().toLowerCase();
+      let roadmap: {
+        accountId: string;
+        properties: (typeof portalProperties.$inferSelect)[];
+        reports: Array<{
+          id: string;
+          propertyId: string;
+          status: string;
+          hasReport: boolean;
+          reportUrl: string | null;
+          summary: string | null;
+          findings: unknown[];
+          deliveredAt: Date | null;
+          createdAt: Date;
+        }>;
+        healthRecords: (typeof homeHealthRecords.$inferSelect)[];
+      } | null = null;
+      if (db && roadmapEmail) {
+        try {
+          const accountRows = await db
+            .select()
+            .from(portalAccounts)
+            .where(eq(portalAccounts.email, roadmapEmail))
+            .limit(1);
+          const account = accountRows[0];
+          if (account) {
+            const [properties, reportRows, healthRecords] = await Promise.all([
+              db.select().from(portalProperties).where(eq(portalProperties.portalAccountId, account.id)),
+              db
+                .select()
+                .from(priorityTranslations)
+                .where(eq(priorityTranslations.portalAccountId, account.id))
+                .orderBy(desc(priorityTranslations.createdAt)),
+              db
+                .select()
+                .from(homeHealthRecords)
+                .where(eq(homeHealthRecords.portalAccountId, account.id))
+                .orderBy(desc(homeHealthRecords.updatedAt)),
+            ]);
+            roadmap = {
+              accountId: account.id,
+              properties,
+              reports: reportRows.map((r) => ({
+                id: r.id,
+                propertyId: r.propertyId,
+                status: r.status,
+                hasReport: !!(r.outputPdfPath || r.pdfStoragePath || r.reportUrl),
+                reportUrl: r.reportUrl,
+                summary: r.claudeResponse?.summary_1_paragraph ?? null,
+                findings: r.claudeResponse?.findings ?? [],
+                deliveredAt: r.deliveredAt,
+                createdAt: r.createdAt,
+              })),
+              healthRecords,
+            };
+          }
+        } catch {
+          roadmap = null;
+        }
+      }
 
       const opportunitySummaries = await Promise.all(
         opportunities.map(async (opportunity) => ({
@@ -237,6 +335,7 @@ export const customersRouter = router({
         portal,
         memberships,
         workOrders,
+        roadmap,
       };
     }),
 
@@ -338,7 +437,24 @@ export const customersRouter = router({
         ...(tags !== undefined ? { tags: JSON.stringify(tags) } : {}),
         ...(rest.email ? { email: rest.email.toLowerCase().trim() } : {}),
       });
-      return getCustomerById(id);
+      const fresh = await getCustomerById(id);
+      // Phase F #5 (auto direction): the CRM is the source of truth for
+      // identity — staff edits flow to the linked portal profile. The reverse
+      // (portal→CRM) stays review-gated on the client Overview.
+      try {
+        const portalCustomer = await findPortalCustomerByHpId(id).catch(() => null);
+        if (fresh && portalCustomer) {
+          const { buildPortalProfilePatch } = await import("../lib/profileSync");
+          const patch = buildPortalProfilePatch(rest, fresh, portalCustomer);
+          if (patch) {
+            await updatePortalCustomerProfile(portalCustomer.id, patch);
+            console.log(`[customers.update] Portal profile synced for ${id}:`, Object.keys(patch).join(", "));
+          }
+        }
+      } catch (e) {
+        console.warn("[customers.update] portal profile sync failed:", e);
+      }
+      return fresh;
     }),
 
   /** Delete a customer (only if no linked opportunities) */

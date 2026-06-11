@@ -6,6 +6,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { randomBytes } from "crypto";
 import { router, publicProcedure, protectedProcedure } from "../_core/trpc";
+import { portalLeakGuard } from "../_core/portalLeakGuard";
 import {
   findPortalCustomerByEmail,
   findPortalCustomerById,
@@ -20,6 +21,7 @@ import {
   deletePortalSession,
   getPortalEstimateById,
   getPortalEstimatesByCustomer,
+  getAllPortalEstimatesByHpOpportunityId,
   getPortalEstimateByOpportunityId,
   updatePortalEstimateStatus,
   markPortalEstimateViewed,
@@ -87,6 +89,7 @@ import { createNotification } from "../leadRouting";
 import { notifyOwner } from "../_core/notification";
 import { storagePut } from "../storage";
 import { broadcastOpportunityUpdate, broadcastPortalMessage } from "../sse";
+import { declinedOpportunityStage, planEstimateResend } from "../lib/estimateSync";
 import Stripe from "stripe";
 import { ENV } from "../_core/env";
 import { runAutomationsForTrigger } from "../automationEngine";
@@ -259,11 +262,12 @@ async function getPortalCustomerFromRequest(req: any) {
   return findPortalCustomerById(session.customerId);
 }
 
-// Public procedure that also resolves portal customer
-const portalPublicProcedure = publicProcedure;
+// Public procedure that also resolves portal customer. Still customer-facing, so
+// it carries the leak guard even though it's unauthenticated.
+const portalPublicProcedure = publicProcedure.use(portalLeakGuard);
 
 // Portal-authenticated procedure
-const portalProcedure = publicProcedure.use(async ({ ctx, next }) => {
+const portalProcedure = publicProcedure.use(portalLeakGuard).use(async ({ ctx, next }) => {
   const customer = await getPortalCustomerFromRequest(ctx.req);
   if (!customer) {
     throw new TRPCError({ code: "UNAUTHORIZED", message: "Portal session required" });
@@ -570,9 +574,29 @@ export const portalRouter = router({
         declinedAt: new Date(),
         declineReason: input.reason ?? "",
       });
+
+      // Mirror the decline to the pro side (the reverse of approveEstimate's
+      // Won update): estimate-area → Rejected, lead-area → Lost, converted
+      // jobs left alone.
+      let opportunityStage: string | null = null;
+      if (est.hpOpportunityId) {
+        try {
+          const opp = await getOpportunityById(est.hpOpportunityId);
+          const stage = declinedOpportunityStage(opp?.area, opp?.stage);
+          if (opp && stage) {
+            const now = new Date().toISOString();
+            await updateOpportunity(est.hpOpportunityId, { stage });
+            broadcastOpportunityUpdate(est.hpOpportunityId, { stage, updatedAt: now });
+            opportunityStage = stage;
+          }
+        } catch (e) {
+          console.warn('[portal.declineEstimate] Could not mark opportunity declined:', e);
+        }
+      }
+
       await notifyOwner({
         title: `Estimate Declined: ${est.estimateNumber}`,
-        content: `${ctx.portalCustomer.name} declined estimate ${est.estimateNumber}. Reason: ${input.reason ?? "none"}`,
+        content: `${ctx.portalCustomer.name} declined estimate ${est.estimateNumber}. Reason: ${input.reason ?? "none"}${opportunityStage ? ` Opportunity ${est.hpOpportunityId} marked ${opportunityStage}.` : ''}`,
       }).catch(() => null);
       return { ok: true };
     }),
@@ -660,6 +684,17 @@ export const portalRouter = router({
         input.amountPaid,
         input.stripePaymentIntentId
       );
+      // Phase F #3: reflect the payment onto the internal invoice.
+      try {
+        const { reflectPortalInvoicePaymentToInternal } = await import("../lib/invoiceSync");
+        await reflectPortalInvoicePaymentToInternal(
+          inv,
+          input.amountPaid,
+          input.stripePaymentIntentId ?? `portal-manual-${input.invoiceId}`,
+        );
+      } catch (syncErr) {
+        console.warn("[portal.markInvoicePaid] internal invoice reflection failed:", syncErr);
+      }
       await notifyOwner({
         title: `Invoice Paid: ${inv.invoiceNumber}`,
         content: `${ctx.portalCustomer.name} paid invoice ${inv.invoiceNumber} — $${(input.amountPaid / 100).toFixed(2)}`,
@@ -951,6 +986,24 @@ export const portalRouter = router({
       });
 
       if (!customer) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+
+      // Phase F #1 (estimate mirror): re-sending for the same opportunity
+      // refreshes the portal copy instead of stacking duplicates. An approved
+      // copy is never overwritten, and still-live siblings under old numbers
+      // are expired so the customer only ever sees one live estimate per job.
+      if (input.hpOpportunityId) {
+        const siblings = await getAllPortalEstimatesByHpOpportunityId(input.hpOpportunityId);
+        const plan = planEstimateResend(siblings, input.estimateNumber);
+        if (plan.blockedBy) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `Estimate ${plan.blockedBy.estimateNumber} was already approved by the customer. Send the revision under a new estimate number, or use a change order — an approved estimate is never overwritten.`,
+          });
+        }
+        for (const id of plan.supersedeIds) {
+          await updatePortalEstimateStatus(id, "expired");
+        }
+      }
 
       const depositAmount = Math.round(
         (input.totalAmount * input.depositPercent) / 100

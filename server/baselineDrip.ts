@@ -30,6 +30,9 @@ export const BASELINE_SOURCE_MARKER = "Source: baseline-funnel-step1";
 const OUT_OF_AREA_MARKER = "OUT OF AREA — waitlist";
 const MEMBERSHIP_URL = "https://www.handypioneers.com/membership";
 const HP_PHONE = "(360) 838-6731";
+const HP_LOGO_URL =
+  "https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/PMFhFJDf55eBmmtmS9ai7o/hp-full-logo_4f724ec4.jpg";
+const logoHeader = `<p><img src="${HP_LOGO_URL}" alt="Handy Pioneers" width="170" style="display:block;width:170px;max-width:70%;height:auto;"></p>`;
 
 const H24 = 24 * 60 * 60 * 1000;
 const H72 = 72 * 60 * 60 * 1000;
@@ -87,7 +90,7 @@ export function buildBaselineDripEmail(step: 1 | 2 | 3, firstName: string): { su
   if (step === 1) {
     return {
       subject: `Pick up where you left off, ${name}?`,
-      html: `<p>Hi ${name},</p>
+      html: `${logoHeader}<p>Hi ${name},</p>
 <p>You started telling us about your home but didn't get to finish. No problem, your information is saved and the rest takes about two minutes.</p>
 <p>The next step is a few quick details about your home, then we schedule your Baseline Walkthrough. That first visit is where we learn your home top to bottom and build your maintenance plan around it.</p>
 ${ctaButton("Finish My Enrollment")}
@@ -98,7 +101,7 @@ ${ctaButton("Finish My Enrollment")}
   if (step === 2) {
     return {
       subject: `Small fixes stay small when someone is watching`,
-      html: `<p>Hi ${name},</p>
+      html: `${logoHeader}<p>Hi ${name},</p>
 <p>Most expensive home repairs start as something small that nobody caught. A slow drip, a clogged gutter, a furnace filter past its date.</p>
 <p>That's what the Proactive Path is for: a Baseline Walkthrough of your whole home, seasonal check-ins through the year, and member pricing whenever work does come up. You handle life, we watch the house.</p>
 ${ctaButton("Continue My Enrollment")}
@@ -108,7 +111,7 @@ ${ctaButton("Continue My Enrollment")}
   }
   return {
     subject: `We'll leave the door open, ${name}`,
-    html: `<p>Hi ${name},</p>
+    html: `${logoHeader}<p>Hi ${name},</p>
 <p>We won't keep filling your inbox. If now isn't the right time to set up your home's maintenance plan, that's completely fine. We'll be here when you're ready.</p>
 <p>If you do want to finish what you started, it takes about two minutes:</p>
 ${ctaButton("Finish My Enrollment")}

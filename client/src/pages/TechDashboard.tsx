@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { Sun, Clock, MapPin, ChevronRight, CheckCircle2, Loader2, RefreshCw, LogOut } from 'lucide-react';
 
 const STORAGE_KEY = 'hp_tech_name';
+const HP_LOGO = 'https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg';
 
 function fmtMins(mins: number) {
   if (mins < 60) return `${mins}m`;
@@ -81,7 +82,15 @@ export default function TechDashboard() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="px-5 pt-10 pb-5" style={{ background: '#7A5D12' }}>
+      <div className="px-5 pt-8 pb-5" style={{ background: '#7A5D12' }}>
+        <div className="mb-4 inline-flex bg-white rounded-lg px-3 py-1.5 shadow-sm">
+          <img
+            src={HP_LOGO}
+            alt="Handy Pioneers"
+            className="h-7 w-auto object-contain"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+          />
+        </div>
         <div className="flex items-start justify-between">
           <div>
             <p className="text-yellow-200 text-sm font-medium">{dateLabel}</p>

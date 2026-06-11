@@ -2,9 +2,9 @@ name: Security Scan (Snyk)
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, staging]
   push:
-    branches: [main]
+    branches: [main, staging]
   schedule:
     # Monday 4 AM UTC
     - cron: '0 4 * * 1'
@@ -45,3 +45,25 @@ jobs:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
           command: monitor
+
+  portal-leak-guard:
+    name: Portal leak guard (no internal economics in customer code)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Source check — no internal fields in portal code
+        run: node scripts/check-portal-leaks.mjs
+
+      - name: Runtime guard + scanner tests
+        run: pnpm vitest run shared/portalSerializers.test.ts server/portalLeakGuard.test.ts

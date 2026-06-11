@@ -45,6 +45,25 @@ const BRAND = {
   white: rgb(1, 1, 1),
 } as const;
 
+// Hosted HP full logo (CloudFront) — same asset the site + portals use.
+// Fetched once per process and cached; a failed fetch falls back to the
+// typed wordmark so PDF generation never depends on the network being up.
+const HP_LOGO_URL =
+  "https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/PMFhFJDf55eBmmtmS9ai7o/hp-full-logo_4f724ec4.jpg";
+let logoBytesCache: Uint8Array | null | undefined;
+async function loadLogoBytes(): Promise<Uint8Array | null> {
+  if (logoBytesCache !== undefined) return logoBytesCache;
+  try {
+    const res = await fetch(HP_LOGO_URL);
+    if (!res.ok) throw new Error(`status ${res.status}`);
+    logoBytesCache = new Uint8Array(await res.arrayBuffer());
+  } catch (err) {
+    console.warn("[roadmap-pdf] logo fetch failed, falling back to wordmark", err);
+    logoBytesCache = null;
+  }
+  return logoBytesCache;
+}
+
 const PAGE_W = 612;
 const PAGE_H = 792;
 const MARGIN = 64;
@@ -179,11 +198,23 @@ export async function renderPriorityTranslationPdf(input: RenderInput): Promise<
   const photosLabel = input.photosLabel ?? "FROM THE WALKTHROUGH";
   const homeScore = computeProvisionalHomeScore(input.claudeResponse.findings);
 
+  // Brand logo for the cover (cached fetch; undefined → text wordmark fallback).
+  let logoImage: PDFImage | undefined;
+  const logoBytes = await loadLogoBytes();
+  if (logoBytes) {
+    try {
+      logoImage = await doc.embedJpg(logoBytes);
+    } catch {
+      console.warn("[roadmap-pdf] logo embed failed, using wordmark");
+    }
+  }
+
   // ─── Page 1: Cover ────────────────────────────────────────────────────────
   drawCoverPage(doc, fonts, {
     firstName: input.firstName || "the homeowner",
     propertyAddress: input.propertyAddress,
     editionLabel,
+    logo: logoImage,
   });
 
   // ─── Page 2: Standard of Care letter ──────────────────────────────────────
@@ -246,7 +277,7 @@ export async function renderPriorityTranslationPdf(input: RenderInput): Promise<
 function drawCoverPage(
   doc: PDFDocument,
   fonts: Fonts,
-  args: { firstName: string; propertyAddress: string; editionLabel: string },
+  args: { firstName: string; propertyAddress: string; editionLabel: string; logo?: PDFImage },
 ): PDFPage {
   const page = doc.addPage([PAGE_W, PAGE_H]);
 
@@ -256,10 +287,22 @@ function drawCoverPage(
   // Top amber hairline
   page.drawRectangle({ x: 0, y: PAGE_H - 6, width: PAGE_W, height: 2, color: BRAND.amber });
 
-  // Top wordmark band (tracked small caps)
-  drawTracked(page, fonts.sansBold, "HANDY PIONEERS  ·  360°  METHOD", {
-    x: MARGIN, y: PAGE_H - MARGIN, size: 9, tracking: 3.2, color: BRAND.amberLight,
-  });
+  // Brand lockup — the logo plate sits centered at the top; if the logo asset
+  // is unavailable, fall back to the tracked small-caps wordmark.
+  if (args.logo) {
+    const lw = 150;
+    const lh = (lw * args.logo.height) / args.logo.width;
+    page.drawImage(args.logo, {
+      x: (PAGE_W - lw) / 2,
+      y: PAGE_H - 46 - lh,
+      width: lw,
+      height: lh,
+    });
+  } else {
+    drawTracked(page, fonts.sansBold, "HANDY PIONEERS  ·  360°  METHOD", {
+      x: MARGIN, y: PAGE_H - MARGIN, size: 9, tracking: 3.2, color: BRAND.amberLight,
+    });
+  }
 
   // Vertical amber accent rule on left margin
   page.drawRectangle({

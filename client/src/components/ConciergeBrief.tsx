@@ -26,6 +26,7 @@ import {
 import { trpc } from "@/lib/trpc";
 import { Customer, Opportunity } from "@/lib/types";
 import { useEstimator } from "@/contexts/EstimatorContext";
+import { useClientUmbrella } from "@/components/clients/ClientUmbrellaContext";
 import { Badge } from "@/components/ui/badge";
 import VoiceCallPanel from "@/components/VoiceCallPanel";
 
@@ -55,7 +56,8 @@ const ROADMAP_STATUS_COLOR: Record<string, string> = {
 };
 
 export default function ConciergeBrief({ customer, opportunities }: ConciergeBriefProps) {
-  const { state, setCustomerTab, setPendingFocus } = useEstimator();
+  const { state, setPendingFocus } = useEstimator();
+  const { handleTabClick, setQuickAction, setShowCallPanel } = useClientUmbrella();
   const focusToken = state.pendingFocus ?? null;
   // One-shot consumption: clear the focus token after rendering so a later
   // navigation away and back doesn't re-scroll surprisingly.
@@ -97,31 +99,32 @@ export default function ConciergeBrief({ customer, opportunities }: ConciergeBri
     .filter(Boolean)
     .join(", ");
 
-  // Quick actions deep-link into existing tabs in CustomerSection (Communication,
-  // Leads/Estimates/Jobs). Where possible they trigger the right modal directly.
+  // Quick actions. Email/SMS open the header compose panel directly; tab
+  // changes go through handleTabClick so the deep-link URL stays in sync
+  // (a bare setCustomerTab leaves a stale URL behind).
   const actions = [
     {
       label: "Email",
       icon: Mail,
-      onClick: () => setCustomerTab("communication"),
+      onClick: () => { setQuickAction("email"); setShowCallPanel(false); },
       enabled: !!customer.email,
     },
     {
       label: "SMS",
       icon: MessageSquare,
-      onClick: () => setCustomerTab("communication"),
+      onClick: () => { setQuickAction("sms"); setShowCallPanel(false); },
       enabled: !!customer.mobilePhone,
     },
     {
       label: "Schedule",
       icon: CalendarPlus,
-      onClick: () => setCustomerTab("jobs"),
+      onClick: () => handleTabClick("schedule"),
       enabled: true,
     },
     {
       label: "Estimate",
       icon: Plus,
-      onClick: () => setCustomerTab("estimates"),
+      onClick: () => handleTabClick("opportunities"),
       enabled: true,
     },
   ];
@@ -132,11 +135,11 @@ export default function ConciergeBrief({ customer, opportunities }: ConciergeBri
   return (
     <>
       {/* ── Pending Review (drafts grouped by opportunity) ──── */}
-      <div className="rounded-2xl border border-border bg-gradient-to-br from-slate-50 via-white to-amber-50/30 shadow-sm overflow-hidden mb-6">
+      <div className="rounded-2xl border border-[#e7e1d4] bg-gradient-to-br from-[#fdfaf3] via-white to-[#f7ecd6]/40 shadow-sm overflow-hidden mb-6">
       {/* ── Header strip ─────────────────────────────────────── */}
-      <div className="px-4 sm:px-6 pt-4 pb-3 border-b border-border/60">
+      <div className="px-4 sm:px-6 pt-4 pb-3 border-b border-[#e7e1d4]">
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="text-[10px] font-bold text-amber-700 uppercase tracking-widest flex items-center gap-1.5">
+          <div className="text-[10px] font-bold text-[#c8922a] uppercase tracking-[0.18em] flex items-center gap-1.5">
             <Sparkles className="w-3 h-3" /> Concierge brief
           </div>
           <div className="text-[10px] text-muted-foreground inline-flex items-center gap-1">
@@ -169,30 +172,30 @@ export default function ConciergeBrief({ customer, opportunities }: ConciergeBri
             value={counts.lead}
             icon={<Star className="w-3.5 h-3.5" />}
             tone="amber"
-            onClick={() => setCustomerTab("leads")}
+            onClick={() => handleTabClick("opportunities")}
           />
           <CountTile
             label="Estimates"
             value={counts.estimate}
             icon={<FileText className="w-3.5 h-3.5" />}
             tone="violet"
-            onClick={() => setCustomerTab("estimates")}
+            onClick={() => handleTabClick("opportunities")}
           />
           <CountTile
             label="Jobs"
             value={counts.job}
             icon={<Briefcase className="w-3.5 h-3.5" />}
             tone="blue"
-            onClick={() => setCustomerTab("jobs")}
+            onClick={() => handleTabClick("opportunities")}
           />
         </div>
       </div>
 
       {/* ── Roadmap section ──────────────────────────────────── */}
-      <div className="px-4 sm:px-6 py-3 border-b border-border/60">
+      <div className="px-4 sm:px-6 py-3 border-b border-[#e7e1d4]">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-xs font-bold text-foreground inline-flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-violet-600" /> Home Health Roadmap
+            <Sparkles className="w-3.5 h-3.5 text-[#c8922a]" /> Home Health Roadmap
           </h3>
           {roadmaps.length > 0 && (
             <span className="text-[10px] text-muted-foreground">{roadmaps.length} on file</span>
@@ -244,7 +247,7 @@ export default function ConciergeBrief({ customer, opportunities }: ConciergeBri
       </div>
 
       {/* ── AI activity ──────────────────────────────────────── */}
-      <div className="px-4 sm:px-6 py-3 border-b border-border/60">
+      <div className="px-4 sm:px-6 py-3 border-b border-[#e7e1d4]">
         <h3 className="text-xs font-bold text-foreground inline-flex items-center gap-1.5 mb-2">
           <Bot className="w-3.5 h-3.5 text-emerald-600" /> AI activity
         </h3>
@@ -294,7 +297,7 @@ export default function ConciergeBrief({ customer, opportunities }: ConciergeBri
               disabled={!enabled}
               className={`flex flex-col items-center justify-center gap-0.5 py-2 rounded-lg text-[10px] font-semibold transition-colors ${
                 enabled
-                  ? "text-muted-foreground hover:text-primary hover:bg-primary/5"
+                  ? "text-[#5b574f] hover:text-[#1a2e1a] hover:bg-[#1a2e1a]/5"
                   : "text-muted-foreground/30 cursor-not-allowed"
               }`}
               style={{ minHeight: 44 }}

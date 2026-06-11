@@ -24,6 +24,7 @@ import { TRPCError } from "@trpc/server";
 import { and, asc, desc, eq, gte } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { router, publicProcedure } from "../_core/trpc";
+import { portalLeakGuard } from "../_core/portalLeakGuard";
 import { getDb, createOpportunity, createScheduleEvent, findCustomerByEmail, createCustomer } from "../db";
 import {
   findPortalCustomerById,
@@ -56,7 +57,7 @@ async function getPortalCustomerFromRequest(req: any) {
   return findPortalCustomerById(session.customerId);
 }
 
-const portalProcedure = publicProcedure.use(async ({ ctx, next }) => {
+const portalProcedure = publicProcedure.use(portalLeakGuard).use(async ({ ctx, next }) => {
   const customer = await getPortalCustomerFromRequest(ctx.req);
   if (!customer) {
     throw new TRPCError({ code: "UNAUTHORIZED", message: "Portal session required" });
