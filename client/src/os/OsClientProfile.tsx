@@ -29,10 +29,10 @@ const fmtDate = (d: string | Date | null | undefined) =>
 /** The simple flow: every opportunity is one of four states. */
 function flowState(o: { area: string | null; stage: string | null }): { label: string; cls: string } {
   const stage = (o.stage ?? "").toLowerCase();
-  if (stage.includes("done") || stage.includes("complete") || stage.includes("closed won") || stage.includes("paid")) {
+  if (stage.includes("done") || stage.includes("complete") || stage.includes("paid")) {
     return { label: "Done", cls: "bg-emerald-100 text-emerald-800" };
   }
-  if (o.area === "job") return { label: "Won", cls: "bg-blue-100 text-blue-800" };
+  if (o.area === "job" || stage.includes("won")) return { label: "Won", cls: "bg-blue-100 text-blue-800" };
   if (o.area === "estimate") return { label: "Quote sent", cls: "bg-amber-100 text-amber-800" };
   return { label: "Lead", cls: "bg-gray-100 text-gray-600" };
 }

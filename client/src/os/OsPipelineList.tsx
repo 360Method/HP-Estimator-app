@@ -19,8 +19,10 @@ type GroupKey = (typeof GROUPS)[number]["key"];
 
 function groupOf(o: { area: string | null; stage: string | null; archived?: boolean | null }): GroupKey {
   const stage = (o.stage ?? "").toLowerCase();
-  if (stage.includes("done") || stage.includes("complete") || stage.includes("closed won") || stage.includes("paid")) return "done";
-  if (o.area === "job") return "won";
+  if (stage.includes("done") || stage.includes("complete") || stage.includes("paid")) return "done";
+  // Portal approval marks the internal opportunity stage "Won" even while
+  // its area is still "estimate"; both count as won here.
+  if (o.area === "job" || stage.includes("won")) return "won";
   if (o.area === "estimate") return "quote";
   return "lead";
 }
