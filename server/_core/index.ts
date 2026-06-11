@@ -1097,14 +1097,14 @@ async function startServer() {
       const email = await exchangeGmailCode(code, redirectUri);
       console.log(`[Gmail] Connected account: ${email}`);
       process.env.GMAIL_CONNECTED_EMAIL = email;
-      res.redirect(`${origin}/?gmail=connected`);
+      res.redirect(`${origin}/os/settings?gmail=connected`);
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       const errDetail = (err as any)?.response?.data ? JSON.stringify((err as any).response.data) : '';
       console.error("[Gmail] OAuth callback error:", errMsg, errDetail);
       // Store error for diagnostic endpoint
       process.env.GMAIL_LAST_ERROR = `${errMsg} ${errDetail}`.trim();
-      res.redirect(`${origin}/?gmail=error&reason=${encodeURIComponent(errMsg.slice(0, 100))}`);
+      res.redirect(`${origin}/os/settings?gmail=error&reason=${encodeURIComponent(errMsg.slice(0, 100))}`);
     }
   });
 

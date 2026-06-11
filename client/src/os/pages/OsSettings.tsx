@@ -2,17 +2,45 @@
  * OsSettings — the OS about itself: business identity, links to the agent
  * controls, and the Fresh Start card (wipe the work, keep the people).
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Bot, Eraser, ExternalLink } from "lucide-react";
+import { Bot, Eraser, ExternalLink, Mail } from "lucide-react";
 import { OsShell } from "../OsShell";
 
 export default function OsSettings() {
   const utils = trpc.useUtils();
   const { data: business } = trpc.os.business.get.useQuery();
+  const { data: gmail } = trpc.gmail.status.useQuery();
   const [confirmText, setConfirmText] = useState("");
+  const [connecting, setConnecting] = useState(false);
+
+  // The Gmail OAuth callback redirects back here with ?gmail=connected|error.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const result = params.get("gmail");
+    if (!result) return;
+    if (result === "connected") {
+      toast.success("Gmail connected. Inbound email is flowing again.");
+    } else {
+      toast.error(`Gmail connect failed: ${params.get("reason") || "unknown error"}`);
+    }
+    window.history.replaceState({}, "", window.location.pathname);
+    utils.gmail.status.invalidate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const connectGmail = async () => {
+    setConnecting(true);
+    try {
+      const { url } = await utils.gmail.getAuthUrl.fetch({ origin: window.location.origin });
+      window.location.href = url;
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not start the Gmail connect flow");
+      setConnecting(false);
+    }
+  };
 
   const freshStart = trpc.os.maintenance.freshStart.useMutation({
     onSuccess: (res) => {
@@ -57,6 +85,38 @@ export default function OsSettings() {
           <ExternalLink className="w-4 h-4 text-muted-foreground" />
         </div>
       </Link>
+
+      {/* ── Email inbox (Gmail inbound) ─────────────────────────── */}
+      <div className="mt-3 bg-white rounded-xl border px-4 py-3" style={{ borderColor: "var(--hp-hairline)" }}>
+        <div className="flex items-center gap-3">
+          <Mail className="w-4 h-4" style={{ color: "var(--hp-gold-deep)" }} />
+          <div className="flex-1">
+            <div className="text-sm font-medium" style={{ color: "var(--hp-ink)" }}>
+              Email inbox
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {gmail == null
+                ? "Checking..."
+                : !gmail.configured
+                  ? "Gmail OAuth is not configured on the server."
+                  : gmail.connected
+                    ? `Connected as ${gmail.email}${gmail.lastSyncedAt ? ` · last sync ${new Date(gmail.lastSyncedAt).toLocaleString()}` : ""}`
+                    : "Not connected. Customer email replies are not reaching the inbox."}
+            </div>
+          </div>
+          {gmail?.configured && (
+            <button
+              type="button"
+              disabled={connecting}
+              onClick={connectGmail}
+              className="text-xs px-3 py-2 rounded-lg font-semibold border hover:shadow-sm disabled:opacity-40 disabled:cursor-not-allowed transition-shadow"
+              style={{ borderColor: "var(--hp-hairline)", color: "var(--hp-ink)" }}
+            >
+              {connecting ? "Opening..." : gmail.connected ? "Reconnect" : "Connect Gmail"}
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* ── Fresh start ─────────────────────────────────────────── */}
       <div className="mt-6 bg-white rounded-xl border p-4" style={{ borderColor: "#f3c7c7" }}>

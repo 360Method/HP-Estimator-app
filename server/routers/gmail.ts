@@ -11,7 +11,7 @@ import {
   countPendingEmailDrafts,
   updateGmailMessageLink,
 } from "../db";
-import { getGmailAuthUrl, isGmailConfigured, sendEmail, getOAuth2Client } from "../gmail";
+import { getGmailAuthUrl, isGmailConfigured, isEmailSenderReady, sendEmail, getOAuth2Client } from "../gmail";
 import { insertMessage, updateConversationLastMessage } from "../db";
 import { randomBytes } from "crypto";
 import { upsertPortalCustomer, createPortalInvoice, createPortalToken, generateReferralCode } from "../portalDb";
@@ -234,8 +234,8 @@ export const gmailRouter = router({
     }))
     .mutation(async ({ input }) => {
       const fromEmail = process.env.GMAIL_CONNECTED_EMAIL || "help@handypioneers.com";
-      const gmailToken = await getGmailToken(fromEmail);
-      if (!gmailToken) throw new Error("Gmail not connected. Please connect your Gmail account in Settings → Integrations.");
+      // Invoices send via Resend; the Gmail token is only for inbound polling.
+      if (!isEmailSenderReady()) throw new Error("Email sending is not configured (Resend API key missing).");
 
       let portalUrl: string | undefined;
       try {
