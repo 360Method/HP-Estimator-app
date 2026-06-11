@@ -18,13 +18,12 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import AdminLogin from "@/pages/AdminLogin";
 import AdminAccessDenied from "@/pages/AdminAccessDenied";
+import NotificationBell from "@/components/NotificationBell";
 
 type NavItem = {
   href: string;
   label: string;
   icon: React.ElementType;
-  /** Marks links that still open the old screens (until Phase 2). */
-  legacy?: boolean;
 };
 
 const CORE_NAV: NavItem[] = [
@@ -40,12 +39,13 @@ const ROOM_NAV: NavItem[] = [
   { href: "/os/money", label: "Money", icon: Wallet },
   { href: "/os/schedule", label: "Schedule", icon: CalendarDays },
   { href: "/os/inbox", label: "Inbox", icon: MessageCircle },
-  { href: "/admin/vendors", label: "Team", icon: HardHat, legacy: true },
+  { href: "/admin/vendors", label: "Team", icon: HardHat },
 ];
 
 const SYSTEM_NAV: NavItem[] = [
   { href: "/os/decisions", label: "Decisions", icon: ScrollText },
-  { href: "/admin/agents", label: "Agents", icon: Bot, legacy: true },
+  { href: "/admin/agents", label: "Agents", icon: Bot },
+  { href: "/admin/scheduling", label: "Booking slots", icon: CalendarDays },
 ];
 
 /** Phone bottom bar: the four most-used surfaces; everything else under More. */
@@ -131,6 +131,7 @@ export function OsShell({
             <span className="hidden sm:inline">
               {new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
             </span>
+            <NotificationBell darkSurface />
             <Link href="/os/chat">
               <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/20 text-white/85 hover:bg-white/10 cursor-pointer transition-colors">
                 <MessageSquareText className="w-3.5 h-3.5" /> Chat

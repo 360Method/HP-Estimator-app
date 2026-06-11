@@ -21,6 +21,7 @@ import MetricsBar from "@/components/MetricsBar";
 import NewLeadBanner from "@/components/NewLeadBanner";
 import type { AppSection } from "@/lib/types";
 import { OsShell } from "../OsShell";
+import { consumeNavIntent } from "../navIntent";
 
 const CustomerSection = lazy(() => import("@/components/sections/CustomerSection"));
 const SalesSection = lazy(() => import("@/components/sections/SalesSection"));
@@ -82,7 +83,10 @@ export function Room({ room, roomSection }: { room: string; roomSection: AppSect
 
   // Entering a room (or switching rooms) lands on its top-level section.
   // After that the user roams freely; the section machinery drives itself.
+  // Deep links (the notification bell) mark nav intent after dispatching
+  // their own context state; honoring it means skipping the reset once.
   useEffect(() => {
+    if (consumeNavIntent()) return;
     navigateToTopLevel(roomSection);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room]);

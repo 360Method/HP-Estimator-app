@@ -25,7 +25,30 @@ import {
 } from '@/components/ui/sheet';
 import { trpc } from '@/lib/trpc';
 import { useEstimator } from '@/contexts/EstimatorContext';
+import { markNavIntent } from '@/os/navIntent';
 import type { AppSection, CustomerProfileTab } from '@/lib/types';
+
+// Which OS room renders each section. The bell dispatches estimator-context
+// state first, then navigates to the room URL with nav intent marked so
+// OsRoom's mount reset does not clobber the deep link.
+const ROOM_BY_SECTION: Partial<Record<AppSection, string>> = {
+  inbox: '/os/inbox',
+  customer: '/os/clients',
+  customers: '/os/clients',
+  'three-sixty': '/os/clients',
+  financials: '/os/money',
+  quickbooks: '/os/money',
+  reporting: '/os/money',
+  schedule: '/os/schedule',
+  pipeline: '/os/pipeline',
+  leads: '/os/pipeline',
+  requests: '/os/pipeline',
+  jobs: '/os/pipeline',
+  dashboard: '/os/pipeline',
+  workflow: '/os/pipeline',
+  operations: '/os/pipeline',
+  marketing: '/os/pipeline',
+};
 
 function formatRelative(date: Date | string | null | undefined): string {
   if (!date) return '';
@@ -145,9 +168,17 @@ function sectionFromParam(section: string | null): AppSection | null {
   return section && known.includes(section as AppSection) ? (section as AppSection) : null;
 }
 
-export default function NotificationBell() {
+export default function NotificationBell({ darkSurface = false }: { darkSurface?: boolean }) {
   const [open, setOpen] = useState(false);
   const [, navigate] = useLocation();
+
+  /** Land in the room that renders `section` (no-op when already there). */
+  const goRoom = (section: AppSection | null) => {
+    const url = (section && ROOM_BY_SECTION[section]) || '/os/pipeline';
+    if (window.location.pathname === url) return; // context dispatch already did the work
+    markNavIntent();
+    navigate(url);
+  };
   const {
     setActiveCustomer,
     setActiveOpportunity,
@@ -236,6 +267,7 @@ export default function NotificationBell() {
           );
         }
         navigateToTopLevel('inbox');
+        goRoom('inbox');
         return;
       }
 
@@ -246,12 +278,14 @@ export default function NotificationBell() {
           setCustomerTab(tab);
           if (linkedOpportunityId) setActiveOpportunity(linkedOpportunityId);
         }, 0);
+        goRoom('customer');
         return;
       }
 
       if (section) {
         if (linkedOpportunityId) setPendingFocus(`opportunity:${linkedOpportunityId}`);
         navigateToTopLevel(section);
+        goRoom(section);
         return;
       }
 
@@ -260,6 +294,7 @@ export default function NotificationBell() {
         const { tab } = navigationFromEvent(eventType);
         setActiveCustomer(decodeURIComponent(customerPathMatch[1]), 'direct', focus);
         window.setTimeout(() => setCustomerTab(tab), 0);
+        goRoom('customer');
         return;
       }
 
@@ -267,6 +302,7 @@ export default function NotificationBell() {
       if (jobPathMatch) {
         setPendingFocus(`opportunity:${decodeURIComponent(jobPathMatch[1])}`);
         navigateToTopLevel('pipeline');
+        goRoom('pipeline');
         return;
       }
     }
@@ -289,11 +325,14 @@ export default function NotificationBell() {
         setCustomerTab(tab);
         if (opportunityId) setActiveOpportunity(opportunityId);
       }, 0);
+      goRoom('customer');
       return;
     }
 
     // No customer FK — fall back to the generic top-level surface.
-    navigateToTopLevel(eventType.includes('lead') ? 'leads' : 'workflow');
+    const fallback: AppSection = eventType.includes('lead') ? 'leads' : 'workflow';
+    navigateToTopLevel(fallback);
+    goRoom(fallback);
   };
 
   return (
@@ -301,7 +340,11 @@ export default function NotificationBell() {
       <button
         onClick={() => setOpen(true)}
         title="Notifications"
-        className="relative p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+        className={
+          darkSurface
+            ? 'relative p-2 rounded-lg text-white/75 hover:text-white hover:bg-white/10 transition-colors'
+            : 'relative p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors'
+        }
       >
         <Bell className="w-4 h-4" />
         {unreadCount > 0 && (
