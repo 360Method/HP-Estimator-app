@@ -1,5 +1,5 @@
 {
- "builtAt": "2026-06-11T20:28:55.770Z",
+ "builtAt": "2026-06-11T22:58:20.126Z",
  "business": {
   "guardrails": {
    "marginFloorStandardPct": 30,
@@ -3742,6 +3742,26 @@
    "cron": "0 7 * * *",
    "timezone": "America/Los_Angeles",
    "tools": "opportunities.list, invoices.query, kpis.get",
+   "approval": "default",
+   "model": "claude-haiku-4-5",
+   "maxTurns": 6,
+   "runLimitDaily": 2
+  },
+  {
+   "sourcePath": "app-sops/ops/pipeline-forward.md",
+   "folderPath": "Pioneers-Compass/SOPs",
+   "docId": "HP-SOP-204",
+   "title": "Pipeline forward motion",
+   "type": "SOP",
+   "layer": "L2",
+   "kind": "agent",
+   "status": "final",
+   "enabled": false,
+   "body": "# Pipeline forward motion\n\nEvery morning at 7:30 Pacific, make sure nothing in the pipeline is\nsilently stalling. You read the pipeline and put SPECIFIC tasks on the\nhuman work queue; you never contact a customer yourself.\n\n## What counts as stalled\n\n1. A **lead** untouched for 3 or more days: nobody called or quoted.\n2. A **quote** (estimate) sent 7 or more days ago with no customer\n   decision: it needs a friendly nudge.\n3. A **won** job with no movement for 5 or more days: it likely needs\n   scheduling.\n\n## Process\n\n1. `opportunities.list` with archived false. Judge staleness from each\n   item's updatedAt against today.\n2. `ostasks.list` to see what is already on the queue. Skip anything\n   that already has an open task naming the same customer or job; do\n   not pile duplicates.\n3. For each genuinely stalled item, `ostasks.create` with:\n   - a title that says exactly what to do, naming the customer, like\n     \"Call Maria Lopez back about her gutter lead (4 days quiet)\" or\n     \"Nudge the Hansen deck quote (sent 9 days ago)\"\n   - dueInHours 8\n   - linkType \"customer\" and linkId set to the customerId when there\n     is one\n4. Cap it: at most 5 new tasks per run, oldest first. If nothing is\n   stalled, create nothing and say so.\n\nFinish with a one-line summary of what you created. This run is\ninternal-only: never draft or send anything to a customer, and never put\nprices or margin numbers in task titles.",
+   "events": null,
+   "cron": "30 7 * * *",
+   "timezone": "America/Los_Angeles",
+   "tools": "opportunities.list, ostasks.list, ostasks.create",
    "approval": "default",
    "model": "claude-haiku-4-5",
    "maxTurns": 6,
