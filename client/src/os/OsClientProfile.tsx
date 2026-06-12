@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import CommunicationTab from "@/components/clients/CommunicationTab";
 import EditContactDialog from "./EditContactDialog";
+import PropertyStrip from "./PropertyStrip";
 import CustomerMembershipPanel from "@/components/CustomerMembershipPanel";
 import { MethodStepBoard } from "@/components/threeSixty/MethodStepBoard";
 import { getThreeSixtyStepByKey } from "@shared/threeSixtyMethod";
@@ -49,6 +50,7 @@ export default function OsClientProfile() {
   const customerId = state.activeCustomerId ?? "";
   const [tab, setTab] = useState<Tab>("overview");
   const [editingContact, setEditingContact] = useState(false);
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(null);
 
   const { data: ctx, isLoading } = trpc.customers.getFullContext.useQuery(
     { id: customerId },
@@ -59,6 +61,11 @@ export default function OsClientProfile() {
     { enabled: !!customerId },
   );
   const { data: memberJourney } = trpc.threeSixty.journey.forCustomer.useQuery(
+    { customerId },
+    { enabled: !!customerId },
+  );
+  // Shares the react-query cache with PropertyStrip's identical query.
+  const { data: propertyRows } = trpc.properties.listByCustomer.useQuery(
     { customerId },
     { enabled: !!customerId },
   );
@@ -76,6 +83,13 @@ export default function OsClientProfile() {
   );
   const invoices = ctx.invoices ?? [];
   const outstanding = invoices.reduce((s: number, i: any) => s + (Number(i.balance) || 0), 0);
+
+  // Selection defaults to the primary property (the list comes back
+  // primary-first), and survives only while it still exists.
+  const activeProperty =
+    (propertyRows ?? []).find((p: any) => p.id === selectedPropertyId) ??
+    (propertyRows ?? [])[0] ??
+    null;
 
   return (
     <div className="container max-w-3xl py-5">
@@ -133,6 +147,14 @@ export default function OsClientProfile() {
           </span>
         )}
       </div>
+
+      {/* ── Properties (membership and the nine steps live here) ── */}
+      <PropertyStrip
+        customerId={customerId}
+        addressSeed={{ street: c.street, unit: c.unit, city: c.city, state: c.state, zip: c.zip }}
+        selectedPropertyId={activeProperty?.id ?? null}
+        onSelect={setSelectedPropertyId}
+      />
 
       {/* ── Tabs ───────────────────────────────────────────────── */}
       <div className="mt-4 flex gap-1 border-b" style={{ borderColor: "var(--hp-hairline)" }}>
