@@ -638,6 +638,11 @@ export const properties = pgTable("properties", {
   lng: text("lng"),
   /** FK to threeSixtyMemberships — null means no active membership */
   membershipId: integer("membershipId"),
+  /** Step 9 scoreboard inputs — manual whole dollars, staff-entered */
+  marketValueEstimate: integer("marketValueEstimate"),
+  mortgageBalance: integer("mortgageBalance"),
+  valueNotes: text("valueNotes"),
+  valuesUpdatedAt: timestamp("valuesUpdatedAt"),
   /** Source of this record: manual | auto-migrated (from flat address fields) */
   source: varchar("source", { length: 32 }).default("manual"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -1134,6 +1139,8 @@ export const threeSixtyPropertySystems = pgTable("threeSixtyPropertySystems", {
   id: serial("id").primaryKey(),
   membershipId: integer("membershipId").notNull(),
   customerId: varchar("customerId", { length: 64 }).notNull(),
+  /** CRM properties.id — nullable forward-compat link; membershipId stays the authority */
+  propertyId: varchar("propertyId", { length: 64 }),
   /** 10-system 360 baseline categories used by the Home Score. */
   systemType: text("systemType").$type<"hvac" | "roof" | "plumbing" | "electrical" | "foundation" | "exterior_siding" | "landscaping_drainage" | "interior" | "appliances" | "safety_security">().notNull(),
   brandModel: varchar("brandModel", { length: 255 }),

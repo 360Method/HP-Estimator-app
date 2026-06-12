@@ -184,6 +184,11 @@ export const priorityTranslations = pgTable(
       .$type<PriorityTranslationSource>(),
     /** Direct CRM link for staff-created rows (funnel rows use the email bridge). */
     hpCustomerId: varchar("hpCustomerId", { length: 64 }),
+    /**
+     * CRM properties.id this spot inspection belongs to. Distinct from
+     * propertyId above, which is PORTAL-namespace and NOT NULL.
+     */
+    crmPropertyId: varchar("crmPropertyId", { length: 64 }),
     /** JSON SpotInspectionPhoto[] — on-site photos (Cloudinary). */
     capturedPhotosJson: json("capturedPhotosJson").$type<SpotInspectionPhoto[]>(),
     /** The consultant's on-site narration; `notes` stays homeowner-facing. */

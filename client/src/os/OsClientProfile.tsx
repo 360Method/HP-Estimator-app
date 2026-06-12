@@ -60,15 +60,26 @@ export default function OsClientProfile() {
     { linkType: "customer", linkId: customerId },
     { enabled: !!customerId },
   );
-  const { data: memberJourney } = trpc.threeSixty.journey.forCustomer.useQuery(
-    { customerId },
-    { enabled: !!customerId },
-  );
   // Shares the react-query cache with PropertyStrip's identical query.
-  const { data: propertyRows } = trpc.properties.listByCustomer.useQuery(
+  const { data: propertyRows, isLoading: propertiesLoading } = trpc.properties.listByCustomer.useQuery(
     { customerId },
     { enabled: !!customerId },
   );
+  const scopedPropertyId =
+    (propertyRows ?? []).find((p: any) => p.id === selectedPropertyId)?.id ??
+    (propertyRows ?? [])[0]?.id ??
+    null;
+  // Property selected → that property's view; no property rows yet → the
+  // legacy whole-customer view.
+  const { data: propertyJourney } = trpc.threeSixty.journey.forProperty.useQuery(
+    { customerId, propertyId: scopedPropertyId ?? "" },
+    { enabled: !!customerId && !!scopedPropertyId },
+  );
+  const { data: customerJourney } = trpc.threeSixty.journey.forCustomer.useQuery(
+    { customerId },
+    { enabled: !!customerId && !propertiesLoading && !scopedPropertyId },
+  );
+  const memberJourney = scopedPropertyId ? propertyJourney : customerJourney;
 
   if (!customerId) return null;
   if (isLoading || !ctx) {
@@ -86,10 +97,7 @@ export default function OsClientProfile() {
 
   // Selection defaults to the primary property (the list comes back
   // primary-first), and survives only while it still exists.
-  const activeProperty =
-    (propertyRows ?? []).find((p: any) => p.id === selectedPropertyId) ??
-    (propertyRows ?? [])[0] ??
-    null;
+  const activeProperty = (propertyRows ?? []).find((p: any) => p.id === scopedPropertyId) ?? null;
 
   return (
     <div className="container max-w-3xl py-5">
@@ -205,7 +213,9 @@ export default function OsClientProfile() {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <h2 className="hp-eyebrow text-xs" style={{ color: "var(--hp-gold-deep)" }}>
-                  The nine steps for {c.displayName.split(" ")[0]}
+                  {(propertyRows ?? []).length > 1 && activeProperty
+                    ? `The nine steps at ${activeProperty.label}`
+                    : `The nine steps for ${c.displayName.split(" ")[0]}`}
                 </h2>
                 <Link href="/os/method">
                   <span className="text-[11px] text-muted-foreground hover:underline cursor-pointer">How the method works</span>

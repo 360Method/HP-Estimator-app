@@ -248,6 +248,22 @@ export async function ensureOsTables(): Promise<void> {
       await db.execute(ddl);
     }
 
+    // Property-scoped nine steps. priorityTranslations.propertyId is
+    // PORTAL-namespace and NOT NULL, so the CRM link gets its own column
+    // (crmPropertyId). Systems gain a nullable CRM propertyId for
+    // forward-compat (membershipId stays the authority). Step 9 scoreboard
+    // inputs are manual whole dollars Marcin's team types in.
+    for (const ddl of [
+      sql`ALTER TABLE IF EXISTS "priorityTranslations" ADD COLUMN IF NOT EXISTS "crmPropertyId" varchar(64)`,
+      sql`ALTER TABLE IF EXISTS "threeSixtyPropertySystems" ADD COLUMN IF NOT EXISTS "propertyId" varchar(64)`,
+      sql`ALTER TABLE IF EXISTS "properties" ADD COLUMN IF NOT EXISTS "marketValueEstimate" integer`,
+      sql`ALTER TABLE IF EXISTS "properties" ADD COLUMN IF NOT EXISTS "mortgageBalance" integer`,
+      sql`ALTER TABLE IF EXISTS "properties" ADD COLUMN IF NOT EXISTS "valueNotes" text`,
+      sql`ALTER TABLE IF EXISTS "properties" ADD COLUMN IF NOT EXISTS "valuesUpdatedAt" timestamp`,
+    ]) {
+      await db.execute(ddl);
+    }
+
     // Remodel quick-quote presets (Step 8 on-site value consultation).
     // RETAIL room-rate ranges, margins baked in; kept apart from the
     // internal-cost price book on purpose.

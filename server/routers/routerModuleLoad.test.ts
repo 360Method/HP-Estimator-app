@@ -30,4 +30,17 @@ describe("router modules load", () => {
     const mod = await import("./commissions");
     expect(mod.commissionsRouter).toBeDefined();
   });
+
+  it("threeSixtyJourney router exposes forCustomer and forProperty", async () => {
+    const mod = await import("./threeSixtyJourney");
+    expect(mod.journeyRouter).toBeDefined();
+    const procs = mod.journeyRouter._def.procedures as Record<string, unknown>;
+    expect(procs.forCustomer).toBeDefined();
+    expect(procs.forProperty).toBeDefined();
+  });
+
+  it("properties router module imports cleanly", async () => {
+    const mod = await import("./properties");
+    expect(mod.propertiesRouter).toBeDefined();
+  });
 });

@@ -32,6 +32,13 @@ import { and, desc, eq, inArray, like, or, sql } from "drizzle-orm";
 import { deriveJourney, type JourneyInput, type JourneyState } from "../../shared/threeSixtyJourney";
 import { SEASON_LABELS, type ThreeSixtyStepKey } from "../../shared/threeSixtyMethod";
 import { TIER_DEFINITIONS, type MemberTier } from "../../shared/threeSixtyTiers";
+import { buildPropertyScope, customerLevelInScope, recordInScope, type PropertyScope } from "../lib/propertyScope";
+import type { DbProperty } from "../../drizzle/schema";
+
+/** Scope for the shared journey loader: the whole umbrella, or one property. */
+type JourneyScopeArg =
+  | { kind: "customer" }
+  | { kind: "property"; property: DbProperty; scope: PropertyScope };
 
 type Db = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 type MembershipRow = typeof threeSixtyMemberships.$inferSelect;
@@ -227,43 +234,52 @@ async function deriveJourneys(db: Db, memberships: MembershipRow[]): Promise<Mem
   });
 }
 
-export const journeyRouter = router({
-  /**
-   * Journey for one customer, member or not. The nine steps are the
-   * framework for every customer; this also returns what sits inside each
-   * step (the records) so the profile can open any step and show its
-   * contents or its empty state.
-   */
-  forCustomer: protectedProcedure
-    .input(z.object({ customerId: z.string() }))
-    .query(async ({ input }) => {
-      const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+/**
+ * Shared loader behind forCustomer and forProperty. Loads the journey plus
+ * what sits inside each step. When scoped to a property, applies the scope
+ * rules documented in server/lib/propertyScope.ts: membership only through
+ * property.membershipId, and NULL-linked opportunities/spots fall back to
+ * the property treated as primary.
+ */
+async function loadCustomerJourney(db: Db, customerId: string, scopeArg: JourneyScopeArg) {
+      const scope = scopeArg.kind === "property" ? scopeArg.scope : null;
 
-      const membershipRows = await db.select().from(threeSixtyMemberships)
-        .where(or(
-          eq(threeSixtyMemberships.hpCustomerId, input.customerId),
-          eq(threeSixtyMemberships.customerId, input.customerId),
-        ));
-      // Prefer the active membership when a customer has history.
-      const membership = [...membershipRows].sort((a, b) =>
-        (a.status === "active" ? 0 : 1) - (b.status === "active" ? 0 : 1) || b.startDate - a.startDate,
-      )[0] ?? null;
+      let membership: MembershipRow | null = null;
+      if (scopeArg.kind === "property") {
+        // Scope rule 2: membership attaches only through the property link.
+        if (scopeArg.property.membershipId != null) {
+          const [m] = await db.select().from(threeSixtyMemberships)
+            .where(eq(threeSixtyMemberships.id, scopeArg.property.membershipId))
+            .limit(1);
+          membership = m ?? null;
+        }
+      } else {
+        const membershipRows = await db.select().from(threeSixtyMemberships)
+          .where(or(
+            eq(threeSixtyMemberships.hpCustomerId, customerId),
+            eq(threeSixtyMemberships.customerId, customerId),
+          ));
+        // Prefer the active membership when a customer has history.
+        membership = [...membershipRows].sort((a, b) =>
+          (a.status === "active" ? 0 : 1) - (b.status === "active" ? 0 : 1) || b.startDate - a.startDate,
+        )[0] ?? null;
+      }
 
       const [customer] = await db
         .select({ id: customers.id, displayName: customers.displayName, firstName: customers.firstName, lastName: customers.lastName })
         .from(customers)
-        .where(eq(customers.id, input.customerId))
+        .where(eq(customers.id, customerId))
         .limit(1);
 
-      const [spotRows, oppRows] = await Promise.all([
+      const [allSpotRows, allOppRows] = await Promise.all([
         db.select({
           id: priorityTranslations.id,
           status: priorityTranslations.status,
           createdAt: priorityTranslations.createdAt,
+          crmPropertyId: priorityTranslations.crmPropertyId,
         }).from(priorityTranslations)
           .where(and(
-            eq(priorityTranslations.hpCustomerId, input.customerId),
+            eq(priorityTranslations.hpCustomerId, customerId),
             eq(priorityTranslations.source, "spot_inspection"),
           ))
           .orderBy(desc(priorityTranslations.createdAt)),
@@ -276,8 +292,14 @@ export const journeyRouter = router({
           scheduledDate: opportunities.scheduledDate,
           archived: opportunities.archived,
           createdAt: opportunities.createdAt,
-        }).from(opportunities).where(eq(opportunities.customerId, input.customerId)),
+          propertyId: opportunities.propertyId,
+        }).from(opportunities).where(eq(opportunities.customerId, customerId)),
       ]);
+
+      // Scope rules 3 + 4: explicit property link wins; NULL links fall back
+      // to the property treated as primary.
+      const spotRows = scope ? allSpotRows.filter(s => recordInScope(s.crmPropertyId, scope)) : allSpotRows;
+      const oppRows = scope ? allOppRows.filter(o => recordInScope(o.propertyId, scope)) : allOppRows;
 
       // Membership-bound records only exist for members.
       const mid = membership?.id;
@@ -294,17 +316,20 @@ export const journeyRouter = router({
         : [[], [], [], 0, 0] as const;
 
       // Remodel consultations already filed in their portal (Step 8 artifacts).
+      // Scope rule 6: customer-level docs show under the primary only.
       let consultationDocs: { id: number; name: string; uploadedAt: Date | null }[] = [];
-      try {
-        const [pc] = await db.select({ id: portalCustomers.id }).from(portalCustomers)
-          .where(eq(portalCustomers.hpCustomerId, input.customerId)).limit(1);
-        if (pc) {
-          consultationDocs = await db
-            .select({ id: portalDocuments.id, name: portalDocuments.name, uploadedAt: portalDocuments.uploadedAt })
-            .from(portalDocuments)
-            .where(and(eq(portalDocuments.portalCustomerId, pc.id), like(portalDocuments.name, "Remodel options%")));
-        }
-      } catch { /* contents enrichment only */ }
+      if (!scope || customerLevelInScope(scope)) {
+        try {
+          const [pc] = await db.select({ id: portalCustomers.id }).from(portalCustomers)
+            .where(eq(portalCustomers.hpCustomerId, customerId)).limit(1);
+          if (pc) {
+            consultationDocs = await db
+              .select({ id: portalDocuments.id, name: portalDocuments.name, uploadedAt: portalDocuments.uploadedAt })
+              .from(portalDocuments)
+              .where(and(eq(portalDocuments.portalCustomerId, pc.id), like(portalDocuments.name, "Remodel options%")));
+          }
+        } catch { /* contents enrichment only */ }
+      }
 
       const journeyInput: JourneyInput = {
         membership: membership
@@ -450,7 +475,7 @@ export const journeyRouter = router({
       const tier = (membership?.tier ?? null) as MemberTier | null;
       return {
         membershipId: membership?.id ?? null,
-        customerId: input.customerId,
+        customerId,
         customerName: customer ? customer.displayName || `${customer.firstName} ${customer.lastName}`.trim() : "",
         tierLabel: tier ? TIER_DEFINITIONS[tier]?.label ?? "" : "",
         tier,
@@ -458,6 +483,53 @@ export const journeyRouter = router({
         memberSince: membership?.startDate ?? null,
         journey,
         stepContents,
+      };
+}
+
+export const journeyRouter = router({
+  /**
+   * Journey for one customer, member or not. The nine steps are the
+   * framework for every customer; this also returns what sits inside each
+   * step (the records) so the profile can open any step and show its
+   * contents or its empty state.
+   */
+  forCustomer: protectedProcedure
+    .input(z.object({ customerId: z.string() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      return loadCustomerJourney(db, input.customerId, { kind: "customer" });
+    }),
+
+  /**
+   * Same shape as forCustomer, scoped to one property under the umbrella,
+   * plus a property summary. Scope rules live in server/lib/propertyScope.ts.
+   */
+  forProperty: protectedProcedure
+    .input(z.object({ customerId: z.string(), propertyId: z.string() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+      const propertyRows = await db.select().from(properties)
+        .where(eq(properties.customerId, input.customerId));
+      const property = propertyRows.find(p => p.id === input.propertyId);
+      // Scope rule 1: the property must belong to this customer.
+      if (!property) throw new TRPCError({ code: "NOT_FOUND", message: "Property not found for this customer" });
+
+      const scope = buildPropertyScope(property, propertyRows.length);
+      const result = await loadCustomerJourney(db, input.customerId, { kind: "property", property, scope });
+      return {
+        ...result,
+        property: {
+          id: property.id,
+          label: property.label,
+          street: property.street,
+          city: property.city,
+          isPrimary: property.isPrimary,
+          membershipId: property.membershipId ?? null,
+          treatAsPrimary: scope.treatAsPrimary,
+        },
       };
     }),
 
