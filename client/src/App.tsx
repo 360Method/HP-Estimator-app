@@ -111,6 +111,7 @@ const OsQuickQuote = lazy(() => import("./os/pages/OsQuickQuote"));
 const OsSpotInspection = lazy(() => import("./os/pages/OsSpotInspection"));
 const OsEstimateWizard = lazy(() => import("./os/estimate/OsEstimateWizard"));
 const OsPropertyStep = lazy(() => import("./os/pages/OsPropertyStep"));
+const CloseFlowPage = lazy(() => import("./os/close/CloseFlowPage"));
 
 // Domains that should serve only the customer portal (no admin app).
 // On these hostnames any /admin or /onboarding URL is hidden behind a
@@ -257,6 +258,7 @@ function Router() {
       <Route path="/os/spot/:id" component={staffOnly(OsSpotInspection)} />
       <Route path="/os/estimate/new" component={staffOnly(OsEstimateWizard)} />
       <Route path="/os/property/:propertyId/step/:stepKey" component={staffOnly(OsPropertyStep)} />
+      <Route path="/os/close/:customerId" component={staffOnly(CloseFlowPage)} />
       {/* Business rooms (Phase 2): pipeline, clients, money, schedule, inbox */}
       <Route path="/os/:room" component={staffOnly(OsRoom)} />
 

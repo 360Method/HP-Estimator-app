@@ -17,6 +17,9 @@ import { portalLeakGuard } from "../_core/portalLeakGuard";
 import {
   getPortalEstimateById,
   findPortalCustomerById,
+  findPortalCustomerByHpId,
+  getPortalEstimatesByCustomer,
+  getPortalInvoicesByCustomer,
   getPortalInvoiceById,
   updatePortalInvoicePaid,
   updatePortalInvoiceCheckoutSessionId,
@@ -24,6 +27,16 @@ import {
 import { approvePortalEstimate } from "../lib/estimateApproval";
 import { notifyOwner } from "../_core/notification";
 import { runAutomationsForTrigger } from "../automationEngine";
+import { getDb, getCustomerById } from "../db";
+import {
+  properties,
+  threeSixtyMemberships,
+  threeSixtyScans,
+} from "../../drizzle/schema";
+import { priorityTranslations } from "../../drizzle/schema.priorityTranslation";
+import { eq, and, desc } from "drizzle-orm";
+import { buildPropertyScope, recordInScope } from "../lib/propertyScope";
+import { TIER_DEFINITIONS, type MemberTier } from "../../shared/threeSixtyTiers";
 import { ENV } from "../_core/env";
 import Stripe from "stripe";
 
@@ -36,6 +49,196 @@ function getStripe() {
 const closeProcedure = protectedProcedure.use(portalLeakGuard);
 
 export const closeFlowRouter = router({
+  /**
+   * One customer-safe bundle for the guided close: who the client is, the
+   * property being presented, the roadmap deliverables, the latest
+   * presentable estimate with its deposit invoice, and readiness flags for
+   * the pre-flight checklist. Every field is serialized via an explicit
+   * allowlist; the leak guard backstops it mechanically.
+   */
+  getContext: closeProcedure
+    .input(z.object({ customerId: z.string(), propertyId: z.string().optional() }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      const customer = await getCustomerById(input.customerId);
+      if (!customer) throw new TRPCError({ code: "NOT_FOUND", message: "Customer not found" });
+
+      // ── Property + membership state ──────────────────────────────────────
+      const propertyRows = await db
+        .select()
+        .from(properties)
+        .where(eq(properties.customerId, input.customerId));
+      const property =
+        (input.propertyId ? propertyRows.find((p) => p.id === input.propertyId) : undefined) ??
+        propertyRows.find((p) => p.isPrimary) ??
+        propertyRows[0] ??
+        null;
+
+      let membershipTierLabel: string | null = null;
+      if (property?.membershipId) {
+        const [m] = await db
+          .select({ tier: threeSixtyMemberships.tier, status: threeSixtyMemberships.status })
+          .from(threeSixtyMemberships)
+          .where(eq(threeSixtyMemberships.id, property.membershipId))
+          .limit(1);
+        if (m?.status === "active") {
+          membershipTierLabel = TIER_DEFINITIONS[m.tier as MemberTier]?.label ?? null;
+        }
+      }
+
+      // ── Roadmap deliverables (same shape family as journey stepDetail
+      //    'prioritize'): spot mini-roadmap PDFs + 360 scan report PDFs,
+      //    scoped to the presented property. ─────────────────────────────────
+      const scope = property ? buildPropertyScope(property, propertyRows.length) : null;
+      const spots = await db
+        .select({
+          id: priorityTranslations.id,
+          status: priorityTranslations.status,
+          createdAt: priorityTranslations.createdAt,
+          outputPdfPath: priorityTranslations.outputPdfPath,
+          crmPropertyId: priorityTranslations.crmPropertyId,
+        })
+        .from(priorityTranslations)
+        .where(and(
+          eq(priorityTranslations.hpCustomerId, input.customerId),
+          eq(priorityTranslations.source, "spot_inspection"),
+        ))
+        .orderBy(desc(priorityTranslations.createdAt));
+      const scans = property?.membershipId
+        ? await db
+            .select({
+              id: threeSixtyScans.id,
+              scanDate: threeSixtyScans.scanDate,
+              reportUrl: threeSixtyScans.reportUrl,
+            })
+            .from(threeSixtyScans)
+            .where(eq(threeSixtyScans.membershipId, property.membershipId))
+        : [];
+      const roadmaps = [
+        ...scans
+          .filter((s) => !!s.reportUrl)
+          .map((s) => ({
+            id: `scan-${s.id}`,
+            title: "360 scan roadmap",
+            dateMs: (s.scanDate as number | null) ?? null,
+            pdfUrl: s.reportUrl as string,
+          })),
+        ...spots
+          .filter((s) => !!s.outputPdfPath && (!scope || recordInScope(s.crmPropertyId, scope)))
+          .map((s) => ({
+            id: `spot-${s.id}`,
+            title: "Spot inspection mini roadmap",
+            dateMs: s.createdAt ? new Date(s.createdAt as unknown as string | Date).getTime() : null,
+            pdfUrl: s.outputPdfPath as string,
+          })),
+      ].sort((a, b) => (b.dateMs ?? 0) - (a.dateMs ?? 0));
+
+      // ── Latest presentable estimate + deposit invoice ────────────────────
+      const portalCustomer = await findPortalCustomerByHpId(input.customerId);
+      let estimate: {
+        id: number;
+        estimateNumber: string;
+        title: string | null;
+        status: string;
+        hpOpportunityId: string | null;
+        totalAmount: number;
+        depositAmount: number;
+        depositPercent: number;
+        lineItemsJson: string | null;
+        scopeOfWork: string | null;
+        taxEnabled: number;
+        taxRateCode: string;
+        customTaxPct: number;
+        taxAmount: number;
+        sentAt: Date | null;
+        expiresAt: Date | null;
+        approvedAt: Date | null;
+        signerName: string | null;
+      } | null = null;
+      let depositInvoice: {
+        id: number;
+        invoiceNumber: string;
+        status: string;
+        amountDue: number;
+        amountPaid: number;
+      } | null = null;
+
+      if (portalCustomer) {
+        const ests = await getPortalEstimatesByCustomer(portalCustomer.id);
+        // Newest presentable first; fall back to the newest approved one so a
+        // re-entered flow can collapse the sign step to a banner.
+        const chosen =
+          ests.find((e) => e.status === "sent" || e.status === "viewed") ??
+          ests.find((e) => e.status === "approved") ??
+          null;
+        if (chosen) {
+          estimate = {
+            id: chosen.id,
+            estimateNumber: chosen.estimateNumber,
+            title: chosen.title,
+            status: chosen.status,
+            hpOpportunityId: chosen.hpOpportunityId,
+            totalAmount: chosen.totalAmount,
+            depositAmount: chosen.depositAmount,
+            depositPercent: chosen.depositPercent,
+            lineItemsJson: chosen.lineItemsJson,
+            scopeOfWork: chosen.scopeOfWork,
+            taxEnabled: chosen.taxEnabled,
+            taxRateCode: chosen.taxRateCode,
+            customTaxPct: chosen.customTaxPct,
+            taxAmount: chosen.taxAmount,
+            sentAt: chosen.sentAt,
+            expiresAt: chosen.expiresAt,
+            approvedAt: chosen.approvedAt,
+            signerName: chosen.signerName,
+          };
+          const invoices = await getPortalInvoicesByCustomer(portalCustomer.id);
+          const dep = invoices.find((i) => i.estimateId === chosen.id && i.type === "deposit") ?? null;
+          if (dep) {
+            depositInvoice = {
+              id: dep.id,
+              invoiceNumber: dep.invoiceNumber,
+              status: dep.status,
+              amountDue: dep.amountDue,
+              amountPaid: dep.amountPaid,
+            };
+          }
+        }
+      }
+
+      return {
+        customer: {
+          id: customer.id,
+          name: customer.displayName || `${customer.firstName} ${customer.lastName}`.trim(),
+          email: customer.email || null,
+          phone: customer.mobilePhone || null,
+        },
+        property: property
+          ? {
+              id: property.id,
+              label: property.label,
+              street: property.street,
+              city: property.city,
+              state: property.state,
+              zip: property.zip,
+              membershipTierLabel,
+            }
+          : null,
+        roadmaps,
+        estimate,
+        depositInvoice,
+        readiness: {
+          hasRoadmap: roadmaps.length > 0,
+          estimateSynced: !!estimate,
+          customerEmailPresent: !!customer.email,
+          alreadyMember: !!membershipTierLabel,
+          portalAccountPresent: !!portalCustomer,
+          depositInvoiceStatus: depositInvoice?.status ?? null,
+        },
+      };
+    }),
+
   approveEstimateInPerson: closeProcedure
     .input(
       z.object({

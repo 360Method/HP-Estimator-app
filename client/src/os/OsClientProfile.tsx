@@ -144,16 +144,28 @@ export default function OsClientProfile() {
             )}
           </div>
         </div>
-        {membership && (
-          <span className="text-[11px] px-2.5 py-1 rounded-full font-semibold" style={{ background: "rgba(200,146,42,0.14)", color: "var(--hp-gold-deep)" }}>
-            {memberJourney
-              ? (() => {
-                  const step = getThreeSixtyStepByKey(memberJourney.journey.currentStepKey);
-                  return step ? `360 Member · Step ${step.number} ${step.name}` : "360 Member";
-                })()
-              : "360 Member"}
-          </span>
-        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          {membership && (
+            <span className="text-[11px] px-2.5 py-1 rounded-full font-semibold" style={{ background: "rgba(200,146,42,0.14)", color: "var(--hp-gold-deep)" }}>
+              {memberJourney
+                ? (() => {
+                    const step = getThreeSixtyStepByKey(memberJourney.journey.currentStepKey);
+                    return step ? `360 Member · Step ${step.number} ${step.name}` : "360 Member";
+                  })()
+                : "360 Member"}
+            </span>
+          )}
+          <button
+            type="button"
+            disabled={!activeProperty}
+            title={activeProperty ? "Open the guided on-site close" : "Select a property first"}
+            onClick={() => activeProperty && navigate(`/os/close/${customerId}?propertyId=${activeProperty.id}`)}
+            className="text-[11px] px-3 py-1.5 rounded-full font-semibold border transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ borderColor: "var(--hp-gold-deep)", color: "var(--hp-gold-deep)" }}
+          >
+            Start close
+          </button>
+        </div>
       </div>
 
       {/* ── Properties (membership and the nine steps live here) ── */}
