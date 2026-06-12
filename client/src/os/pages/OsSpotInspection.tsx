@@ -61,8 +61,19 @@ export default function OsSpotInspection() {
 
   // ── New-inspection state ──────────────────────────────────────
   const [clientQuery, setClientQuery] = useState("");
+  // Multi-property client: which home is this visit about?
+  const [propertyChoice, setPropertyChoice] = useState<null | {
+    customerId: string;
+    customerName: string;
+    properties: { id: string; label: string; street: string; city: string; isPrimary: boolean }[];
+  }>(null);
   const urlCustomerId = useMemo(
     () => new URLSearchParams(window.location.search).get("customerId"),
+    [],
+  );
+  // Deep links from a property-scoped profile pin the visit to that home.
+  const urlPropertyId = useMemo(
+    () => new URLSearchParams(window.location.search).get("propertyId"),
     [],
   );
 
@@ -84,6 +95,32 @@ export default function OsSpotInspection() {
     onSuccess: (r) => navigate(`/os/spot/${r.id}`, { replace: true }),
     onError: (e) => toast.error(e.message),
   });
+
+  // One property (or none) starts the visit straight away; more than one
+  // asks which home this is about first.
+  async function startVisit(customerId: string, customerName: string) {
+    if (urlPropertyId && customerId === urlCustomerId) {
+      createM.mutate({ customerId, propertyId: urlPropertyId });
+      return;
+    }
+    try {
+      const props = await utils.properties.listByCustomer.fetch({ customerId });
+      if ((props?.length ?? 0) > 1) {
+        setPropertyChoice({
+          customerId,
+          customerName,
+          properties: props.map((p: any) => ({
+            id: p.id, label: p.label, street: p.street, city: p.city, isPrimary: p.isPrimary,
+          })),
+        });
+        return;
+      }
+      createM.mutate({ customerId, propertyId: props?.[0]?.id });
+    } catch {
+      // Property lookup is enrichment; the visit still starts.
+      createM.mutate({ customerId });
+    }
+  }
   const uploadM = trpc.uploads.uploadFile.useMutation();
   const addPhotoM = trpc.spotInspection.addPhoto.useMutation({
     onSuccess: () => utils.spotInspection.get.invalidate({ id: inspectionId ?? "" }),
@@ -237,12 +274,43 @@ export default function OsSpotInspection() {
         </div>
         <section className="mt-5 max-w-lg">
           <h2 className="hp-eyebrow text-xs mb-2" style={{ color: "var(--hp-gold-deep)" }}>Who is this visit for</h2>
-          {preselected ? (
+          {propertyChoice ? (
+            <div className="bg-white rounded-xl border p-3" style={inputStyle}>
+              <div className="text-sm font-semibold mb-2" style={{ color: "var(--hp-ink)" }}>
+                Which home is this visit for {propertyChoice.customerName}?
+              </div>
+              <div className="space-y-1">
+                {propertyChoice.properties.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    disabled={createM.isPending}
+                    onClick={() => createM.mutate({ customerId: propertyChoice.customerId, propertyId: p.id })}
+                    className="w-full text-left text-sm px-3 py-2 rounded-lg hover:bg-black/[0.03]"
+                    style={{ color: "var(--hp-ink)" }}
+                  >
+                    <span className="font-semibold">{p.label}</span>
+                    {p.isPrimary && <span className="ml-1.5 text-[10px] text-amber-600">primary</span>}
+                    <span className="block text-xs text-muted-foreground">
+                      {[p.street, p.city].filter(Boolean).join(", ")}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => setPropertyChoice(null)}
+                className="mt-2 text-xs text-muted-foreground hover:underline"
+              >
+                Back
+              </button>
+            </div>
+          ) : preselected ? (
             <button
               type="button"
               className="w-full text-left bg-white rounded-xl border px-4 py-3 text-sm font-semibold"
               style={inputStyle}
-              onClick={() => createM.mutate({ customerId: preselected.id })}
+              onClick={() => startVisit(preselected.id, preselected.displayName)}
               disabled={createM.isPending}
             >
               Start for {preselected.displayName} <ChevronRight className="w-4 h-4 inline" />
@@ -256,7 +324,7 @@ export default function OsSpotInspection() {
                     key={c.id}
                     type="button"
                     disabled={createM.isPending}
-                    onClick={() => createM.mutate({ customerId: c.id })}
+                    onClick={() => startVisit(c.id, c.displayName)}
                     className="w-full text-left text-sm px-3 py-2 rounded-lg hover:bg-black/[0.03]"
                     style={{ color: "var(--hp-ink)" }}
                   >

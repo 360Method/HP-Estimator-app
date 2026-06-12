@@ -19,6 +19,7 @@ import {
   type ClaudePriorityTranslationResponse,
   type SpotInspectionPhoto,
 } from "../../drizzle/schema.priorityTranslation";
+import { properties } from "../../drizzle/schema";
 import {
   createSpotInspection,
   generateMiniRoadmap,
@@ -58,7 +59,11 @@ const findingSchema = z.object({
 export const spotInspectionRouter = router({
   /** Start a spot inspection for a CRM customer (email required for delivery). */
   create: protectedProcedure
-    .input(z.object({ customerId: z.string().min(1) }))
+    .input(z.object({
+      customerId: z.string().min(1),
+      /** CRM properties.id — which home this visit is about. */
+      propertyId: z.string().optional(),
+    }))
     .mutation(async ({ input }) => {
       const customer = await getCustomerById(input.customerId);
       if (!customer) throw new TRPCError({ code: "NOT_FOUND", message: "Customer not found" });
@@ -68,17 +73,31 @@ export const spotInspectionRouter = router({
           message: "Add an email to this customer first so the mini roadmap can reach them.",
         });
       }
+      // When the visit is pinned to a property, its address (not the
+      // customer's flat fields) becomes the portal property.
+      let crmProperty = null;
+      if (input.propertyId) {
+        const d = await db();
+        const [p] = await d
+          .select()
+          .from(properties)
+          .where(and(eq(properties.id, input.propertyId), eq(properties.customerId, input.customerId)))
+          .limit(1);
+        if (!p) throw new TRPCError({ code: "NOT_FOUND", message: "Property not found for this customer" });
+        crmProperty = p;
+      }
       try {
         return await createSpotInspection({
           hpCustomerId: customer.id,
+          crmPropertyId: crmProperty?.id ?? null,
           email: customer.email,
           firstName: customer.firstName ?? "",
           lastName: customer.lastName ?? "",
           phone: customer.mobilePhone ?? "",
-          street: customer.street || "Address on file",
-          city: customer.city ?? "",
-          state: customer.state ?? "",
-          zip: customer.zip ?? "",
+          street: crmProperty?.street || customer.street || "Address on file",
+          city: crmProperty?.city ?? customer.city ?? "",
+          state: crmProperty?.state ?? customer.state ?? "",
+          zip: crmProperty?.zip ?? customer.zip ?? "",
         });
       } catch (err) {
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: (err as Error).message });

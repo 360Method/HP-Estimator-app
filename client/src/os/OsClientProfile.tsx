@@ -247,7 +247,7 @@ export default function OsClientProfile() {
                 <Plus className="w-3.5 h-3.5" /> New estimate
               </span>
             </Link>
-            <Link href={`/os/spot/new?customerId=${encodeURIComponent(customerId)}`}>
+            <Link href={`/os/spot/new?customerId=${encodeURIComponent(customerId)}${activeProperty ? `&propertyId=${encodeURIComponent(activeProperty.id)}` : ""}`}>
               <span className="inline-flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg font-semibold cursor-pointer border" style={{ borderColor: "var(--hp-gold-deep)", color: "var(--hp-gold-deep)" }}>
                 Spot inspection
               </span>

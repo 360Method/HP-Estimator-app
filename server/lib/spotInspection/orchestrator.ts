@@ -44,6 +44,8 @@ import { addPortalDocument } from "../../portalDb";
 
 export type CreateSpotInspectionInput = {
   hpCustomerId: string;
+  /** CRM properties.id this visit belongs to (the portal property is separate). */
+  crmPropertyId?: string | null;
   email: string;
   firstName?: string;
   lastName?: string;
@@ -92,6 +94,7 @@ export async function createSpotInspection(input: CreateSpotInspectionInput): Pr
     homeHealthRecordId: healthRecord.id,
     source: "spot_inspection",
     hpCustomerId: input.hpCustomerId,
+    crmPropertyId: input.crmPropertyId ?? null,
     capturedPhotosJson: [],
     status: "submitted",
   });
