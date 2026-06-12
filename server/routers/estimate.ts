@@ -205,10 +205,47 @@ const AI_ESTIMATE_SCHEMA = {
   },
 };
 
+/**
+ * The estimable-item catalog: the DB price book when populated (editable at
+ * /os/pricebook, includes maintenance items), the hard-coded CATALOG above as
+ * fallback so aiParse keeps working if the table is empty or the DB hiccups.
+ */
+export async function getCatalog(): Promise<Array<{ id: string; phase: number; phaseName: string; name: string; unit: string }>> {
+  try {
+    const { getDb } = await import("../db");
+    const { osPriceItems } = await import("../../drizzle/schema");
+    const { eq } = await import("drizzle-orm");
+    const d = await getDb();
+    if (!d) return CATALOG;
+    const rows = await d
+      .select({
+        itemKey: osPriceItems.itemKey,
+        phase: osPriceItems.phase,
+        category: osPriceItems.category,
+        name: osPriceItems.name,
+        unitType: osPriceItems.unitType,
+      })
+      .from(osPriceItems)
+      .where(eq(osPriceItems.active, true))
+      .orderBy(osPriceItems.sortOrder);
+    if (rows.length === 0) return CATALOG;
+    return rows.map((r) => ({
+      id: r.itemKey,
+      phase: r.phase ?? 0,
+      phaseName: r.category,
+      name: r.name,
+      unit: r.unitType,
+    }));
+  } catch {
+    return CATALOG;
+  }
+}
+
 // ─── Prompt builder ─────────────────────────────────────────────────────────
-function buildPrompt(notes: string): string {
-  const catalogText = CATALOG.map(
-    (item) => `  ${item.id} | Phase ${item.phase}: ${item.phaseName} | "${item.name}" | unit: ${item.unit}`
+async function buildPrompt(notes: string): Promise<string> {
+  const catalog = await getCatalog();
+  const catalogText = catalog.map(
+    (item) => `  ${item.id} | ${item.phase > 0 ? `Phase ${item.phase}: ` : ""}${item.phaseName} | "${item.name}" | unit: ${item.unit}`
   ).join("\n");
 
   return `You are an expert general contractor estimator for Handy Pioneers, a residential remodeling company in Vancouver, WA / Portland metro.
@@ -305,7 +342,7 @@ export const estimateRouter = router({
   aiParse: publicProcedure
     .input(z.object({ notes: z.string().min(10).max(8000) }))
     .mutation(async ({ input }) => {
-      const prompt = buildPrompt(input.notes);
+      const prompt = await buildPrompt(input.notes);
 
       const response = await invokeLLM({
         messages: [

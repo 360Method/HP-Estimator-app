@@ -180,6 +180,39 @@ export async function ensureOsTables(): Promise<void> {
           WHERE x."agentId" = a.id AND x."toolKey" = t.key
         )`);
 
+    // The price book — estimable items, editable in-app (B1 of the
+    // estimating revamp). Money columns are internal cost figures.
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS os_price_items (
+        id serial PRIMARY KEY,
+        "businessId" integer NOT NULL DEFAULT 1,
+        "itemKey" varchar(40) NOT NULL UNIQUE,
+        kind text NOT NULL,
+        phase integer,
+        category varchar(120) NOT NULL,
+        name varchar(200) NOT NULL,
+        "shortName" varchar(80) NOT NULL DEFAULT '',
+        "unitType" varchar(20) NOT NULL DEFAULT 'unit',
+        "laborMode" varchar(10) NOT NULL DEFAULT 'hr',
+        "laborRate" numeric(10,2) NOT NULL DEFAULT 0,
+        "hrsPerUnit" numeric(10,3) NOT NULL DEFAULT 0,
+        "flatRatePerUnit" numeric(10,2) NOT NULL DEFAULT 0,
+        "hasTiers" boolean NOT NULL DEFAULT false,
+        "tiersJson" text,
+        "wastePct" numeric(5,2) NOT NULL DEFAULT 0,
+        "hasPaintPrep" boolean NOT NULL DEFAULT false,
+        "defaultQty" numeric(10,2) NOT NULL DEFAULT 0,
+        "salesDesc" text,
+        "sowTemplate" text,
+        active boolean NOT NULL DEFAULT true,
+        "sortOrder" integer NOT NULL DEFAULT 0,
+        source text NOT NULL DEFAULT 'seed',
+        "createdAt" timestamp DEFAULT now() NOT NULL,
+        "updatedAt" timestamp DEFAULT now() NOT NULL
+      )`);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS os_price_items_kind_idx ON os_price_items (kind, active)`);
+
     console.log("[boot] ensureOsTables OK");
   } catch (err) {
     console.warn("[boot] ensureOsTables failed (non-fatal):", err);
@@ -192,5 +225,13 @@ export async function ensureOsTables(): Promise<void> {
     await importOsFilesManifest();
   } catch (err) {
     console.warn("[boot] importOsSeedBundle failed (non-fatal):", err);
+  }
+
+  // Price book seed (same never-clobber contract as the doc bundle).
+  try {
+    const { importPriceBookSeed } = await import("./priceBookSeed");
+    await importPriceBookSeed();
+  } catch (err) {
+    console.warn("[boot] importPriceBookSeed failed (non-fatal):", err);
   }
 }

@@ -6,6 +6,7 @@ import {
   decimal,
   doublePrecision,
   integer,
+  numeric,
   pgTable,
   serial,
   smallint,
@@ -2640,4 +2641,49 @@ export const osDecisions = pgTable("os_decisions", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type OsDecision = typeof osDecisions.$inferSelect;
+
+/**
+ * The price book — every estimable item, DB-backed and editable in the app.
+ * Remodel items are seeded from the hard-coded catalog (client/src/lib/
+ * phases.ts stays the seed source of truth until cutover); maintenance items
+ * are the new standing services list. All money columns are INTERNAL COST
+ * figures (sub/tech rates) — margin is applied downstream by the calc engine
+ * and never exposed to clients.
+ */
+export const osPriceItems = pgTable("os_price_items", {
+  id: serial("id").primaryKey(),
+  businessId: integer("businessId").notNull().default(1),
+  /** Stable key: existing catalog ids (p11-bb) and new maint-* ids. */
+  itemKey: varchar("itemKey", { length: 40 }).notNull().unique(),
+  kind: text("kind").$type<"remodel_stage" | "maintenance">().notNull(),
+  /** 1-17 for remodel phases; null for maintenance. */
+  phase: integer("phase"),
+  /** Phase name for remodel; service group for maintenance. */
+  category: varchar("category", { length: 120 }).notNull(),
+  name: varchar("name", { length: 200 }).notNull(),
+  shortName: varchar("shortName", { length: 80 }).notNull().default(""),
+  unitType: varchar("unitType", { length: 20 }).notNull().default("unit"),
+  laborMode: varchar("laborMode", { length: 10 }).$type<"hr" | "flat">().notNull().default("hr"),
+  /** Internal cost $/hr when laborMode=hr. */
+  laborRate: numeric("laborRate", { precision: 10, scale: 2 }).notNull().default("0"),
+  hrsPerUnit: numeric("hrsPerUnit", { precision: 10, scale: 3 }).notNull().default("0"),
+  /** Internal cost per unit when laborMode=flat. */
+  flatRatePerUnit: numeric("flatRatePerUnit", { precision: 10, scale: 2 }).notNull().default("0"),
+  hasTiers: boolean("hasTiers").notNull().default(false),
+  /** JSON {good:{rate,name,desc},better:...,best:...} — material cost tiers. */
+  tiersJson: text("tiersJson"),
+  wastePct: numeric("wastePct", { precision: 5, scale: 2 }).notNull().default("0"),
+  hasPaintPrep: boolean("hasPaintPrep").notNull().default(false),
+  defaultQty: numeric("defaultQty", { precision: 10, scale: 2 }).notNull().default("0"),
+  salesDesc: text("salesDesc"),
+  sowTemplate: text("sowTemplate"),
+  active: boolean("active").notNull().default(true),
+  sortOrder: integer("sortOrder").notNull().default(0),
+  /** Never-clobber key: seed rows refresh on deploy, human rows never do. */
+  source: text("source").$type<"seed" | "human">().notNull().default("seed"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
+});
+export type OsPriceItem = typeof osPriceItems.$inferSelect;
+export type InsertOsPriceItem = typeof osPriceItems.$inferInsert;
 
