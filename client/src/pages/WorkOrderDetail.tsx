@@ -38,6 +38,7 @@ import {
   SkipForward,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { MethodContextBanner } from '@/components/threeSixty/MethodContextBanner';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -334,6 +335,13 @@ export default function WorkOrderDetail() {
             <Play className="w-3.5 h-3.5" /> Start
           </Button>
         ) : null}
+      </div>
+
+      {/* Which method step this work is */}
+      <div className="mb-3">
+        <MethodContextBanner
+          stepKey={isBaseline ? 'baseline' : (wo as any).hpOpportunityId ? 'execute' : 'inspect'}
+        />
       </div>
 
       {/* Baseline info banner */}

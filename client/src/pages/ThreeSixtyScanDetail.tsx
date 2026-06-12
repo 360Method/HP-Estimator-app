@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useLocation } from 'wouter';
+import { MethodContextBanner } from '@/components/threeSixty/MethodContextBanner';
 
 interface Recommendation {
   priority: 'Critical' | 'High' | 'Medium' | 'Low';
@@ -202,6 +203,14 @@ export default function ThreeSixtyScanDetail({ scanId, membershipId, onBack }: P
         )}
       </div>
 
+      {/* Which method step this work is */}
+      <div className="mb-4">
+        <MethodContextBanner
+          stepKey="baseline"
+          note="This report is the member's permanent health record in the making. Complete it the same day as the walkthrough."
+        />
+      </div>
+
       {/* Health Score + KPIs */}
       <Card className="border shadow-sm mb-4">
         <CardContent className="p-4">
@@ -285,6 +294,12 @@ export default function ThreeSixtyScanDetail({ scanId, membershipId, onBack }: P
       {/* Priority Repair List */}
       {recommendations.length > 0 && (
         <div className="mb-4">
+          <div className="mb-3">
+            <MethodContextBanner
+              stepKey="prioritize"
+              note="Bucket every finding as NOW, SOON, or WAIT before this goes to the member. A sorted roadmap is the product."
+            />
+          </div>
           <h2 className="text-sm font-semibold mb-3 flex items-center gap-1.5">
             <Wrench className="w-4 h-4" /> Priority Repair List
             <span className="text-xs text-muted-foreground font-normal">

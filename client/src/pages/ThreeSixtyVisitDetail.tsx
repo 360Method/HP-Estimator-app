@@ -25,6 +25,7 @@ import {
   ClipboardList,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { MethodContextBanner } from '@/components/threeSixty/MethodContextBanner';
 
 const SEASON_LABELS: Record<string, string> = {
   spring: '🌸 Spring',
@@ -200,6 +201,14 @@ export default function ThreeSixtyVisitDetail({ visitId, membershipId, onBack }:
             360° Inspection · {inspectItems.length} inspect · {serviceItems.length} service tasks
           </p>
         </div>
+      </div>
+
+      {/* Which method step this work is */}
+      <div className="mb-3">
+        <MethodContextBanner
+          stepKey="inspect"
+          note="Walk the season checklist, photograph what changed since the baseline, and log every finding before you leave."
+        />
       </div>
 
       {/* Summary banners */}
