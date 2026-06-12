@@ -234,6 +234,28 @@ export async function ensureOsTables(): Promise<void> {
       ALTER TABLE IF EXISTS opportunities
       ADD COLUMN IF NOT EXISTS "commissionPaidAt" timestamp`);
 
+    // Remodel quick-quote presets (Step 8 on-site value consultation).
+    // RETAIL room-rate ranges, margins baked in; kept apart from the
+    // internal-cost price book on purpose.
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS os_remodel_quote_presets (
+        id serial PRIMARY KEY,
+        "presetKey" varchar(40) NOT NULL UNIQUE,
+        label varchar(120) NOT NULL,
+        description text,
+        "unitType" varchar(10) NOT NULL DEFAULT 'sqft',
+        "tiersJson" text NOT NULL,
+        "lfAddonsJson" text,
+        "baseFeeLow" numeric(10,2) NOT NULL DEFAULT 0,
+        "baseFeeHigh" numeric(10,2) NOT NULL DEFAULT 0,
+        "minSqft" numeric(10,2) NOT NULL DEFAULT 0,
+        active boolean NOT NULL DEFAULT true,
+        "sortOrder" integer NOT NULL DEFAULT 0,
+        source text NOT NULL DEFAULT 'seed',
+        "createdAt" timestamp DEFAULT now() NOT NULL,
+        "updatedAt" timestamp DEFAULT now() NOT NULL
+      )`);
+
     console.log("[boot] ensureOsTables OK");
   } catch (err) {
     console.warn("[boot] ensureOsTables failed (non-fatal):", err);
@@ -254,5 +276,13 @@ export async function ensureOsTables(): Promise<void> {
     await importPriceBookSeed();
   } catch (err) {
     console.warn("[boot] importPriceBookSeed failed (non-fatal):", err);
+  }
+
+  // Remodel quick-quote presets seed (same never-clobber contract).
+  try {
+    const { importQuickQuoteSeed } = await import("./quickQuoteSeed");
+    await importQuickQuoteSeed();
+  } catch (err) {
+    console.warn("[boot] importQuickQuoteSeed failed (non-fatal):", err);
   }
 }

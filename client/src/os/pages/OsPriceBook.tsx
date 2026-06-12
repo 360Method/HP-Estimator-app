@@ -11,8 +11,10 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { BookOpenCheck, ChevronDown, ChevronRight, Plus, Search, X } from "lucide-react";
 import { OsShell } from "../OsShell";
+import OsQuickQuotePresetsPanel from "./OsQuickQuotePresetsPanel";
 
 type Kind = "remodel_stage" | "maintenance";
+type Tab = Kind | "quickquote";
 
 type Row = {
   id: number;
@@ -138,13 +140,17 @@ function newItemEditor(kind: Kind, category: string): EditorState {
 
 export default function OsPriceBook() {
   const utils = trpc.useUtils();
-  const [kind, setKind] = useState<Kind>("maintenance");
+  const [tab, setTab] = useState<Tab>("maintenance");
+  const kind: Kind = tab === "quickquote" ? "maintenance" : tab;
   const [query, setQuery] = useState("");
   const [showRetired, setShowRetired] = useState(false);
   const [openCats, setOpenCats] = useState<Record<string, boolean>>({});
   const [editor, setEditor] = useState<EditorState | null>(null);
 
-  const listQ = trpc.priceBook.list.useQuery({ kind, includeInactive: true });
+  const listQ = trpc.priceBook.list.useQuery(
+    { kind, includeInactive: true },
+    { enabled: tab !== "quickquote" },
+  );
 
   const onDone = {
     onSuccess: () => {
@@ -227,51 +233,62 @@ export default function OsPriceBook() {
             Price book
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            The services and rates estimates are built from. Costs only — clients never see this.
+            {tab === "quickquote"
+              ? "Retail remodel ranges for the on-site quick quote. Margins are already inside these numbers."
+              : "The services and rates estimates are built from. Costs only — clients never see this."}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setEditor(newItemEditor(kind, ""))}
-          className="shrink-0 flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg font-semibold text-white"
-          style={{ background: "var(--hp-ink)" }}
-        >
-          <Plus className="w-3.5 h-3.5" /> Add item
-        </button>
+        {tab !== "quickquote" && (
+          <button
+            type="button"
+            onClick={() => setEditor(newItemEditor(kind, ""))}
+            className="shrink-0 flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg font-semibold text-white"
+            style={{ background: "var(--hp-ink)" }}
+          >
+            <Plus className="w-3.5 h-3.5" /> Add item
+          </button>
+        )}
       </div>
 
       {/* Kind toggle + search */}
       <div className="mt-4 flex flex-col sm:flex-row gap-2">
         <div className="flex rounded-lg border overflow-hidden w-fit" style={inputStyle}>
-          {(["maintenance", "remodel_stage"] as Kind[]).map((k) => (
+          {(["maintenance", "remodel_stage", "quickquote"] as Tab[]).map((k) => (
             <button
               key={k}
               type="button"
-              onClick={() => setKind(k)}
-              className={"text-xs px-4 py-2 font-semibold transition-colors " + (kind === k ? "text-white" : "bg-white text-muted-foreground")}
-              style={kind === k ? { background: "var(--hp-gold-deep)" } : undefined}
+              onClick={() => setTab(k)}
+              className={"text-xs px-4 py-2 font-semibold transition-colors " + (tab === k ? "text-white" : "bg-white text-muted-foreground")}
+              style={tab === k ? { background: "var(--hp-gold-deep)" } : undefined}
             >
-              {k === "maintenance" ? "Maintenance" : "Remodel stages"}
+              {k === "maintenance" ? "Maintenance" : k === "remodel_stage" ? "Remodel stages" : "Quick quotes"}
             </button>
           ))}
         </div>
-        <div className="relative flex-1">
-          <Search className="w-4 h-4 absolute left-3 top-2.5 text-muted-foreground" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search items…"
-            className={inputCls + " pl-9 bg-white"}
-            style={inputStyle}
-          />
-        </div>
-        <label className="flex items-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap px-1">
-          <input type="checkbox" checked={showRetired} onChange={(e) => setShowRetired(e.target.checked)} />
-          Show retired
-        </label>
+        {tab !== "quickquote" && (
+          <>
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 absolute left-3 top-2.5 text-muted-foreground" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search items…"
+                className={inputCls + " pl-9 bg-white"}
+                style={inputStyle}
+              />
+            </div>
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground whitespace-nowrap px-1">
+              <input type="checkbox" checked={showRetired} onChange={(e) => setShowRetired(e.target.checked)} />
+              Show retired
+            </label>
+          </>
+        )}
       </div>
 
+      {tab === "quickquote" && <OsQuickQuotePresetsPanel />}
+
       {/* Groups */}
+      {tab !== "quickquote" && (
       <div className="mt-4 space-y-2">
         {listQ.isLoading ? (
           <p className="text-sm text-muted-foreground py-8 text-center">Loading…</p>
@@ -330,6 +347,7 @@ export default function OsPriceBook() {
           })
         )}
       </div>
+      )}
 
       {/* Bottom-sheet editor */}
       {editor && (

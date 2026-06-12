@@ -2693,6 +2693,39 @@ export type OsPriceItem = typeof osPriceItems.$inferSelect;
 export type InsertOsPriceItem = typeof osPriceItems.$inferInsert;
 
 /**
+ * Remodel quick-quote presets (360 Method Step 8). RETAIL room-rate ranges
+ * the on-site value consultation is built from: dollars per sqft by quality
+ * tier with margins already baked in. Deliberately separate from
+ * os_price_items, which stores internal costs and feeds the AI catalog;
+ * mixing retail and cost rows in one table invites a leak or a
+ * margin-on-margin bug. Edited at /os/pricebook; seed rows refresh on boot,
+ * human-edited rows never do (same never-clobber rule as the price book).
+ */
+export const osRemodelQuotePresets = pgTable("os_remodel_quote_presets", {
+  id: serial("id").primaryKey(),
+  /** Stable key, e.g. bath-full, kitchen-full, flooring. */
+  presetKey: varchar("presetKey", { length: 40 }).notNull().unique(),
+  label: varchar("label", { length: 120 }).notNull(),
+  description: text("description"),
+  unitType: varchar("unitType", { length: 10 }).notNull().default("sqft"),
+  /** JSON {good|better|best: {rateLow, rateHigh, name, desc}} — retail $/unit. */
+  tiersJson: text("tiersJson").notNull(),
+  /** JSON [{key, label, rateLow, rateHigh}] — retail $/lineal foot add-ons. */
+  lfAddonsJson: text("lfAddonsJson"),
+  /** Fixed retail floor so tiny rooms never price absurdly low. */
+  baseFeeLow: numeric("baseFeeLow", { precision: 10, scale: 2 }).notNull().default("0"),
+  baseFeeHigh: numeric("baseFeeHigh", { precision: 10, scale: 2 }).notNull().default("0"),
+  minSqft: numeric("minSqft", { precision: 10, scale: 2 }).notNull().default("0"),
+  active: boolean("active").notNull().default(true),
+  sortOrder: integer("sortOrder").notNull().default(0),
+  source: text("source").$type<"seed" | "human">().notNull().default("seed"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
+});
+export type OsRemodelQuotePreset = typeof osRemodelQuotePresets.$inferSelect;
+export type InsertOsRemodelQuotePreset = typeof osRemodelQuotePresets.$inferInsert;
+
+/**
  * The Consultant registry, the sales seat (HP-SOP-205). Each consultant
  * carries a personal commission rate in basis points (always < 1000 = 10% of
  * job price). Consultants are deactivated, never deleted, so old jobs keep
