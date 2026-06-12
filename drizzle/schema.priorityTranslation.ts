@@ -82,7 +82,7 @@ export type InsertDbPortalProperty = typeof portalProperties.$inferInsert;
 
 // ─── homeHealthRecords ─────────────────────────────────────────────────────
 export type HealthRecordFinding = {
-  source: "priority_translation" | "baseline_assessment" | "manual";
+  source: "priority_translation" | "baseline_assessment" | "manual" | "spot_inspection";
   source_id: string;
   category: string;
   finding: string;
@@ -121,8 +121,22 @@ export type InsertDbHomeHealthRecord = typeof homeHealthRecords.$inferInsert;
 export type PriorityTranslationStatus =
   | "submitted"
   | "processing"
+  /** Spot inspections only: AI draft is on the consultant's device, not customer-visible. */
+  | "awaiting_review"
   | "completed"
   | "failed";
+
+/** Where the row came from: the public funnel or a staff-run spot inspection. */
+export type PriorityTranslationSource = "roadmap_funnel" | "spot_inspection";
+
+/** A photo captured on-site during a spot inspection (Cloudinary). */
+export type SpotInspectionPhoto = {
+  url: string;
+  fileKey: string;
+  caption?: string;
+  /** 0-based index of the finding this photo belongs under in the PDF. */
+  findingIndex?: number;
+};
 
 export type ClaudePriorityTranslationResponse = {
   /** Back-compat: first paragraph of executive_summary. Older readers fall back here. */
@@ -163,6 +177,20 @@ export const priorityTranslations = pgTable(
     pdfSha256: varchar("pdfSha256", { length: 64 }),
     /** Submitter IP (X-Forwarded-For aware) — per-IP daily cap guardrail. */
     submitIp: varchar("submitIp", { length: 45 }),
+    /** roadmap_funnel (public) | spot_inspection (staff-run on-site). */
+    source: varchar("source", { length: 32 })
+      .notNull()
+      .default("roadmap_funnel")
+      .$type<PriorityTranslationSource>(),
+    /** Direct CRM link for staff-created rows (funnel rows use the email bridge). */
+    hpCustomerId: varchar("hpCustomerId", { length: 64 }),
+    /** JSON SpotInspectionPhoto[] — on-site photos (Cloudinary). */
+    capturedPhotosJson: json("capturedPhotosJson").$type<SpotInspectionPhoto[]>(),
+    /** The consultant's on-site narration; `notes` stays homeowner-facing. */
+    techNotes: text("techNotes"),
+    /** Staff user id who approved the mini roadmap for delivery. */
+    approvedBy: varchar("approvedBy", { length: 64 }),
+    approvedAt: timestamp("approvedAt"),
     status: varchar("status", { length: 32 })
       .notNull()
       .default("submitted")

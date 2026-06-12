@@ -268,6 +268,19 @@ function assertVoice(s: string) {
   }
 }
 
+/**
+ * Whether a priorityTranslations row may appear in the customer's portal.
+ * Funnel rows keep their historical behavior (every status shows, the page
+ * renders "still preparing" states). Staff-run spot inspections are AI drafts
+ * until a consultant approves them, so only completed ones are ever visible.
+ */
+export function roadmapRowVisibleToPortal(row: { source?: string | null; status: string }): boolean {
+  if ((row.source ?? "roadmap_funnel") === "spot_inspection") {
+    return row.status === "completed";
+  }
+  return true;
+}
+
 // ─── Router ──────────────────────────────────────────────────────────────────
 
 export const portalRoadmapRouter = router({
@@ -288,9 +301,10 @@ export const portalRoadmapRouter = router({
       .where(eq(priorityTranslations.portalAccountId, account.id))
       .orderBy(desc(priorityTranslations.createdAt));
 
-    return rows.map((r) => ({
+    return rows.filter(roadmapRowVisibleToPortal).map((r) => ({
       id: r.id,
       status: r.status,
+      kind: (r.source ?? "roadmap_funnel") as "roadmap_funnel" | "spot_inspection",
       pdfUrl: r.outputPdfPath || r.pdfStoragePath || r.reportUrl || null,
       reportUrl: r.reportUrl,
       summary: r.claudeResponse?.summary_1_paragraph ?? null,

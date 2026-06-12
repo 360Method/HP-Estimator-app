@@ -234,6 +234,20 @@ export async function ensureOsTables(): Promise<void> {
       ALTER TABLE IF EXISTS opportunities
       ADD COLUMN IF NOT EXISTS "commissionPaidAt" timestamp`);
 
+    // Spot inspection columns on priorityTranslations (Step 2 doctor-style
+    // visit reuses the Roadmap Generator pipeline). Idempotent: prod drizzle
+    // state has drifted before, so boot DDL is the safe path.
+    for (const ddl of [
+      sql`ALTER TABLE IF EXISTS "priorityTranslations" ADD COLUMN IF NOT EXISTS "source" varchar(32) NOT NULL DEFAULT 'roadmap_funnel'`,
+      sql`ALTER TABLE IF EXISTS "priorityTranslations" ADD COLUMN IF NOT EXISTS "hpCustomerId" varchar(64)`,
+      sql`ALTER TABLE IF EXISTS "priorityTranslations" ADD COLUMN IF NOT EXISTS "capturedPhotosJson" json`,
+      sql`ALTER TABLE IF EXISTS "priorityTranslations" ADD COLUMN IF NOT EXISTS "techNotes" text`,
+      sql`ALTER TABLE IF EXISTS "priorityTranslations" ADD COLUMN IF NOT EXISTS "approvedBy" varchar(64)`,
+      sql`ALTER TABLE IF EXISTS "priorityTranslations" ADD COLUMN IF NOT EXISTS "approvedAt" timestamp`,
+    ]) {
+      await db.execute(ddl);
+    }
+
     // Remodel quick-quote presets (Step 8 on-site value consultation).
     // RETAIL room-rate ranges, margins baked in; kept apart from the
     // internal-cost price book on purpose.

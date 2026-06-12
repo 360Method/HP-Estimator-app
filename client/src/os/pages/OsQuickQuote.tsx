@@ -88,7 +88,7 @@ export default function OsQuickQuote() {
     const tier = chosenTier ?? "better";
     const tierResult = quote.tiers.find((t) => t.tier === tier)!;
     const id = nanoid(8);
-    const title = `${preset.label} — ${customer.displayName}`;
+    const title = `${preset.label} for ${customer.displayName}`;
     const lfLines = preset.lfAddons
       .filter((a) => (parseFloat(lfByAddon[a.key] ?? "") || 0) > 0)
       .map((a) => `${a.label}: ${lfByAddon[a.key]} lf`);

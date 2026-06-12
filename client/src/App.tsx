@@ -108,6 +108,7 @@ const OsPriceBook = lazy(() => import("./os/pages/OsPriceBook"));
 const OsCommissions = lazy(() => import("./os/pages/OsCommissions"));
 const OsMethod = lazy(() => import("./os/pages/OsMethod"));
 const OsQuickQuote = lazy(() => import("./os/pages/OsQuickQuote"));
+const OsSpotInspection = lazy(() => import("./os/pages/OsSpotInspection"));
 const OsEstimateWizard = lazy(() => import("./os/estimate/OsEstimateWizard"));
 
 // Domains that should serve only the customer portal (no admin app).
@@ -251,6 +252,8 @@ function Router() {
       <Route path="/os/commissions" component={staffOnly(OsCommissions)} />
       <Route path="/os/method" component={staffOnly(OsMethod)} />
       <Route path="/os/quickquote" component={staffOnly(OsQuickQuote)} />
+      <Route path="/os/spot/new" component={staffOnly(OsSpotInspection)} />
+      <Route path="/os/spot/:id" component={staffOnly(OsSpotInspection)} />
       <Route path="/os/estimate/new" component={staffOnly(OsEstimateWizard)} />
       {/* Business rooms (Phase 2): pipeline, clients, money, schedule, inbox */}
       <Route path="/os/:room" component={staffOnly(OsRoom)} />

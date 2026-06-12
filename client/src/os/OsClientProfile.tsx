@@ -172,11 +172,18 @@ export default function OsClientProfile() {
       {/* ── Work ───────────────────────────────────────────────── */}
       {tab === "work" && (
         <div className="mt-4 space-y-2">
-          <Link href="/os/estimate/new">
-            <span className="inline-flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg font-semibold text-white cursor-pointer" style={{ background: "var(--hp-ink)" }}>
-              <Plus className="w-3.5 h-3.5" /> New estimate
-            </span>
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link href="/os/estimate/new">
+              <span className="inline-flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg font-semibold text-white cursor-pointer" style={{ background: "var(--hp-ink)" }}>
+                <Plus className="w-3.5 h-3.5" /> New estimate
+              </span>
+            </Link>
+            <Link href={`/os/spot/new?customerId=${encodeURIComponent(customerId)}`}>
+              <span className="inline-flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg font-semibold cursor-pointer border" style={{ borderColor: "var(--hp-gold-deep)", color: "var(--hp-gold-deep)" }}>
+                Spot inspection
+              </span>
+            </Link>
+          </div>
           {opps.length === 0 ? (
             <p className="text-sm text-muted-foreground py-8 text-center">
               Nothing in flight. Tap New estimate to start a quote.

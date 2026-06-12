@@ -126,6 +126,7 @@ export async function submitRoadmap(
 
   // Per-email cap: at most 2 roadmap runs per account per 24 h. Each run costs
   // a full Claude pass + an email — a polite ceiling, not a punishment.
+  // Scoped to funnel rows: staff-run spot inspections never count against it.
   {
     const { gte, and: andOp, eq: eqOp } = await import("drizzle-orm");
     const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -135,6 +136,7 @@ export async function submitRoadmap(
       .where(
         andOp(
           eqOp(priorityTranslations.portalAccountId, account.id),
+          eqOp(priorityTranslations.source, "roadmap_funnel"),
           gte(priorityTranslations.createdAt, dayAgo),
         ),
       );
@@ -165,6 +167,7 @@ export async function submitRoadmap(
         .where(
           andOp(
             eqOp(priorityTranslations.submitIp, input.submitIp),
+            eqOp(priorityTranslations.source, "roadmap_funnel"),
             gte(priorityTranslations.createdAt, dayAgo),
           ),
         );
@@ -570,12 +573,18 @@ async function processRoadmap(args: ProcessArgs): Promise<void> {
     // a real homeowner.
     try {
       const cap = Number(process.env.ROADMAP_DAILY_CAP || 25);
-      const { gte } = await import("drizzle-orm");
+      const { gte, and: andOp, eq: eqOp } = await import("drizzle-orm");
       const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      // Funnel rows only: staff-run spot inspections never consume the cap.
       const todays = await db
         .select({ id: priorityTranslations.id })
         .from(priorityTranslations)
-        .where(gte(priorityTranslations.createdAt, dayAgo));
+        .where(
+          andOp(
+            eqOp(priorityTranslations.source, "roadmap_funnel"),
+            gte(priorityTranslations.createdAt, dayAgo),
+          ),
+        );
       if (todays.length > cap) {
         await db
           .update(priorityTranslations)
