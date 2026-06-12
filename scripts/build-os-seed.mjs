@@ -183,7 +183,17 @@ function buildAgentSops() {
   walkSops(APP_SOPS);
   files.sort();
 
+  // Positional numbering must never reuse a docId an explicit human SOP
+  // already claimed (HP-SOP-204 "How to Estimate a Job" collided with the
+  // 4th agent SOP before this guard). Skip claimed numbers.
+  const claimed = new Set(docs.map((d) => d.docId));
   let n = 201;
+  const nextDocId = () => {
+    while (claimed.has(`HP-SOP-${n}`)) n++;
+    const id = `HP-SOP-${n}`;
+    claimed.add(id);
+    return id;
+  };
   for (const file of files) {
     const raw = fs.readFileSync(file, "utf-8").replace(/\r\n/g, "\n");
     const m = raw.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
@@ -196,7 +206,7 @@ function buildAgentSops() {
     docs.push({
       sourcePath: `app-sops/${path.relative(APP_SOPS, file).replace(/\\/g, "/")}`,
       folderPath: "Pioneers-Compass/SOPs",
-      docId: `HP-SOP-${n}`,
+      docId: nextDocId(),
       title: fields.get("title") || path.basename(file, ".md"),
       type: "SOP",
       layer: "L2",
