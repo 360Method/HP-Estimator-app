@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Bot, Eraser, ExternalLink, Mail } from "lucide-react";
+import { BookOpenCheck, Bot, Eraser, ExternalLink, Mail } from "lucide-react";
 import { OsShell } from "../OsShell";
 
 export default function OsSettings() {
@@ -81,6 +81,22 @@ export default function OsSettings() {
               Agents
             </div>
             <div className="text-xs text-muted-foreground">Kill switch, runs, approvals, SOP library health.</div>
+          </div>
+          <ExternalLink className="w-4 h-4 text-muted-foreground" />
+        </div>
+      </Link>
+
+      <Link href="/os/pricebook">
+        <div
+          className="mt-3 bg-white rounded-xl border px-4 py-3 flex items-center gap-3 cursor-pointer hover:shadow-sm transition-shadow"
+          style={{ borderColor: "var(--hp-hairline)" }}
+        >
+          <BookOpenCheck className="w-4 h-4" style={{ color: "var(--hp-gold-deep)" }} />
+          <div className="flex-1">
+            <div className="text-sm font-medium" style={{ color: "var(--hp-ink)" }}>
+              Price book
+            </div>
+            <div className="text-xs text-muted-foreground">The services and rates estimates are built from.</div>
           </div>
           <ExternalLink className="w-4 h-4 text-muted-foreground" />
         </div>

@@ -11,7 +11,7 @@
 import { ReactNode, useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
-  Sun, MessageSquareText, Inbox, BookOpen, GitBranch, Users, Wallet,
+  Sun, MessageSquareText, Inbox, BookOpen, BookOpenCheck, GitBranch, Users, Wallet,
   CalendarDays, HardHat, Bot, MoreHorizontal, X, MessageCircle, ScrollText, Settings,
 } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -44,6 +44,7 @@ const ROOM_NAV: NavItem[] = [
 
 const SYSTEM_NAV: NavItem[] = [
   { href: "/os/decisions", label: "Decisions", icon: ScrollText },
+  { href: "/os/pricebook", label: "Price book", icon: BookOpenCheck },
   { href: "/admin/agents", label: "Agents", icon: Bot },
   { href: "/admin/scheduling", label: "Booking slots", icon: CalendarDays },
   { href: "/os/settings", label: "Settings", icon: Settings },
