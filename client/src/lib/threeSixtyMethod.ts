@@ -1,167 +1,17 @@
-export type ThreeSixtyPhaseId = 'aware' | 'act' | 'advance';
+// The phase/step canon lives in shared/threeSixtyMethod.ts so the server can
+// derive journeys from the same definitions. This file re-exports it and keeps
+// the client-only operator extras (roles, SOP gates, flywheel, status heuristics).
+import {
+  THREE_SIXTY_METHOD_STEPS,
+  THREE_SIXTY_METHOD_PHASES,
+  getThreeSixtyStepByKey,
+  type ThreeSixtyMethodStep,
+  type ThreeSixtyOperatorRole,
+  type ThreeSixtyPhaseId,
+  type ThreeSixtyStepKey,
+} from '@shared/threeSixtyMethod';
 
-export type ThreeSixtyOperatorRole =
-  | 'Lead Desk'
-  | 'Consultant Desk'
-  | 'PM Desk'
-  | 'Field Desk'
-  | 'Closeout Desk'
-  | 'Retainment Desk'
-  | 'Integrator'
-  | 'CFO Intelligence';
-
-export interface ThreeSixtyMethodStep {
-  number: number;
-  key: ThreeSixtyStepKey;
-  phase: ThreeSixtyPhaseId;
-  name: string;
-  customerLabel: string;
-  operatorOutcome: string;
-  customerOutcome: string;
-  owner: ThreeSixtyOperatorRole;
-  aiSupport: string;
-}
-
-export type ThreeSixtyStepKey =
-  | 'baseline'
-  | 'inspect'
-  | 'track'
-  | 'prioritize'
-  | 'schedule'
-  | 'execute'
-  | 'preserve'
-  | 'upgrade'
-  | 'scale';
-
-export interface ThreeSixtyPhase {
-  id: ThreeSixtyPhaseId;
-  name: string;
-  promise: string;
-  steps: ThreeSixtyMethodStep[];
-}
-
-export const THREE_SIXTY_METHOD_STEPS: ThreeSixtyMethodStep[] = [
-  {
-    number: 1,
-    key: 'baseline',
-    phase: 'aware',
-    name: 'Baseline',
-    customerLabel: 'Home Baseline',
-    operatorOutcome: 'Document systems, property condition, risk areas, photos, and homeowner goals.',
-    customerOutcome: 'They understand what exists in the home and what needs attention.',
-    owner: 'Consultant Desk',
-    aiSupport: 'Pre-fill inspection prompts, detect missing systems, summarize property risks.',
-  },
-  {
-    number: 2,
-    key: 'inspect',
-    phase: 'aware',
-    name: 'Inspect',
-    customerLabel: 'Seasonal Walkthrough',
-    operatorOutcome: 'Run guided room, exterior, and system walkthroughs on a seasonal cadence.',
-    customerOutcome: 'They get consistent eyes on the home before small issues become expensive.',
-    owner: 'Field Desk',
-    aiSupport: 'Generate seasonal checklists and flag abnormal findings by region and season.',
-  },
-  {
-    number: 3,
-    key: 'track',
-    phase: 'aware',
-    name: 'Track',
-    customerLabel: 'Home Health Record',
-    operatorOutcome: 'Maintain a living log of every repair, visit, contractor, and dollar spent so the property history is complete and patterns are visible.',
-    customerOutcome: 'They have one place that holds the full history of the home and what it has needed.',
-    owner: 'Consultant Desk',
-    aiSupport: 'Organize history into a clean timeline, surface spending patterns, and flag recurring issues.',
-  },
-  {
-    number: 4,
-    key: 'prioritize',
-    phase: 'act',
-    name: 'Prioritize',
-    customerLabel: 'Priority Roadmap',
-    operatorOutcome: 'Convert the baseline and condition log into NOW, SOON, and WAIT priorities with investment ranges, then scope, price, and secure approval before scheduling.',
-    customerOutcome: 'They know what matters now, what can wait, and exactly what each next step involves.',
-    owner: 'Consultant Desk',
-    aiSupport: 'Rank findings, draft red/yellow/green priorities, prepare the roadmap, and audit scope and proposal language.',
-  },
-  {
-    number: 5,
-    key: 'schedule',
-    phase: 'act',
-    name: 'Schedule',
-    customerLabel: 'Care Calendar',
-    operatorOutcome: 'Turn priorities into appointments, work orders, parts lists, and labor assignments.',
-    customerOutcome: 'They see what is happening next with minimal coordination effort.',
-    owner: 'PM Desk',
-    aiSupport: 'Suggest appointment windows, bundle tasks, and prepare crew notes.',
-  },
-  {
-    number: 6,
-    key: 'execute',
-    phase: 'act',
-    name: 'Execute',
-    customerLabel: 'Work Completed',
-    operatorOutcome: 'Complete the work, capture proof, update labor bank, and close the work order.',
-    customerOutcome: 'They receive finished work with clear proof and no mystery.',
-    owner: 'Field Desk',
-    aiSupport: 'Create completion summaries, photo captions, and follow-up recommendations.',
-  },
-  {
-    number: 7,
-    key: 'preserve',
-    phase: 'advance',
-    name: 'Preserve',
-    customerLabel: 'Preventive Care',
-    operatorOutcome: 'Maintain recurring tasks that extend system life and reduce emergency repairs.',
-    customerOutcome: 'They feel the home is being actively protected.',
-    owner: 'Retainment Desk',
-    aiSupport: 'Watch due dates, seasonal needs, and skipped care patterns.',
-  },
-  {
-    number: 8,
-    key: 'upgrade',
-    phase: 'advance',
-    name: 'Upgrade',
-    customerLabel: 'Smart Improvements',
-    operatorOutcome: 'Identify larger improvements, ROI opportunities, and bundled project plans.',
-    customerOutcome: 'They see a thoughtful path from maintenance into better living and asset value.',
-    owner: 'Consultant Desk',
-    aiSupport: 'Draft option sets, ROI notes, and proposal outlines for human review.',
-  },
-  {
-    number: 9,
-    key: 'scale',
-    phase: 'advance',
-    name: 'Scale',
-    customerLabel: 'Property Value Intelligence',
-    operatorOutcome: 'Track maintenance history, investment, risk reduction, condition trends, and value-supporting documentation for this property.',
-    customerOutcome: 'They have a practical ownership record that can support refinance, sale, insurance, planning, or wealth-building conversations with licensed professionals.',
-    owner: 'CFO Intelligence',
-    aiSupport: 'Summarize maintenance investment, avoided-risk notes, property health trends, documentation gaps, and non-advisory equity intelligence disclaimers.',
-  },
-];
-
-export const THREE_SIXTY_METHOD_PHASES: ThreeSixtyPhase[] = [
-  {
-    id: 'aware',
-    name: 'Aware',
-    promise: 'Know the home before selling work.',
-    steps: THREE_SIXTY_METHOD_STEPS.filter(step => step.phase === 'aware'),
-  },
-  {
-    id: 'act',
-    name: 'Act',
-    promise: 'Turn findings into the right next action.',
-    steps: THREE_SIXTY_METHOD_STEPS.filter(step => step.phase === 'act'),
-  },
-  {
-    id: 'advance',
-    name: 'Advance',
-    promise: 'Preserve value and create the next opportunity.',
-    steps: THREE_SIXTY_METHOD_STEPS.filter(step => step.phase === 'advance'),
-  },
-];
+export * from '@shared/threeSixtyMethod';
 
 export const VANCOUVER_PNW_SEASONAL_FOCUS = [
   {
@@ -189,15 +39,6 @@ export const THREE_SIXTY_OPERATOR_LADDER = [
   'Completed work feeds the property history, score, labor bank, documents, and next recommendation.',
   'Retainment keeps the property inside the recurring care flywheel while CFO Intelligence tracks value-supporting history.',
 ];
-
-export function getThreeSixtyStepByKey(key?: string | null) {
-  const normalizedKey =
-    key === 'cfo_intelligence' ? 'scale'
-    : key === 'scope_price_approve' ? 'prioritize'
-    : key === 'roadmap_execution' ? 'prioritize'
-    : key;
-  return THREE_SIXTY_METHOD_STEPS.find(step => step.key === normalizedKey) ?? null;
-}
 
 export interface ThreeSixtyRoleResponsibility {
   role: ThreeSixtyOperatorRole;
