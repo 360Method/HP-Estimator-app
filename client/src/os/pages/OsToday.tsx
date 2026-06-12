@@ -97,6 +97,15 @@ export default function OsToday() {
           : `The OS needs ${needs} thing${needs === 1 ? "" : "s"} from you today.`}
       </p>
 
+      <Link href="/os/estimate/new">
+        <span
+          className="mt-3 inline-flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg font-semibold text-white cursor-pointer"
+          style={{ background: "var(--hp-ink)" }}
+        >
+          <Plus className="w-3.5 h-3.5" /> New estimate
+        </span>
+      </Link>
+
       {/* ── Approvals strip ─────────────────────────────────────── */}
       {approvalsCount > 0 && (
         <Link href="/os/approvals">

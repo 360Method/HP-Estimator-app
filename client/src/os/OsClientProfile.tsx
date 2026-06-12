@@ -11,10 +11,11 @@
  * comes from the proposal/portal, never from here.
  */
 import { useState } from "react";
+import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useEstimator } from "@/contexts/EstimatorContext";
 import {
-  ArrowLeft, Phone, Mail, MapPin, FileText, CircleDollarSign, Circle,
+  ArrowLeft, Phone, Mail, MapPin, FileText, CircleDollarSign, Circle, Plus,
 } from "lucide-react";
 import CustomerMembershipPanel from "@/components/CustomerMembershipPanel";
 
@@ -157,9 +158,14 @@ export default function OsClientProfile() {
       {/* ── Work ───────────────────────────────────────────────── */}
       {tab === "work" && (
         <div className="mt-4 space-y-2">
+          <Link href="/os/estimate/new">
+            <span className="inline-flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg font-semibold text-white cursor-pointer" style={{ background: "var(--hp-ink)" }}>
+              <Plus className="w-3.5 h-3.5" /> New estimate
+            </span>
+          </Link>
           {opps.length === 0 ? (
             <p className="text-sm text-muted-foreground py-8 text-center">
-              Nothing in flight. Use + New up top to start a quote.
+              Nothing in flight. Tap New estimate to start a quote.
             </p>
           ) : (
             opps.map((o: any) => {

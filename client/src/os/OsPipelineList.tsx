@@ -4,9 +4,10 @@
  * open the client; tap a quote to price it. Internal values only; nothing
  * here is customer-facing.
  */
+import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useEstimator } from "@/contexts/EstimatorContext";
-import { FileText, User } from "lucide-react";
+import { FileText, Plus, User } from "lucide-react";
 
 const GROUPS = [
   { key: "lead", label: "Leads", hint: "New interest; call them." },
@@ -56,12 +57,21 @@ export default function OsPipelineList() {
 
   return (
     <div className="container max-w-3xl py-5">
-      <h1 className="hp-serif text-2xl" style={{ color: "var(--hp-ink)" }}>
-        Pipeline
-      </h1>
-      <p className="text-sm text-muted-foreground mt-1">
-        Lead, quote, won, done. Use + New up top to start anything.
-      </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="hp-serif text-2xl" style={{ color: "var(--hp-ink)" }}>
+            Pipeline
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Lead, quote, won, done. Use + New up top to start anything.
+          </p>
+        </div>
+        <Link href="/os/estimate/new">
+          <span className="shrink-0 inline-flex items-center gap-1.5 text-xs px-3 py-2 rounded-lg font-semibold text-white cursor-pointer" style={{ background: "var(--hp-ink)" }}>
+            <Plus className="w-3.5 h-3.5" /> New estimate
+          </span>
+        </Link>
+      </div>
 
       {isLoading ? (
         <div className="mt-5 h-32 rounded-xl bg-white border animate-pulse" style={{ borderColor: "var(--hp-hairline)" }} />

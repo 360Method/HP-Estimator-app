@@ -106,51 +106,8 @@ const TC_SECTIONS = [
 ];
 
 // ─── SOW bullet generator ─────────────────────────────────────
-function buildSowBullets(phase: PhaseGroup, activeItems: LineItem[]): string[] {
-  const bullets: string[] = [];
-  for (const item of activeItems) {
-    const tierData = item.hasTiers ? item.tiers[item.tier] : null;
-    const tierName = tierData?.name ?? '';
-    const qty = item.qty;
-    const u = item.unitType;
-    const qtyLabel = (n: number, unit: string): string => {
-      const map: Record<string, string> = {
-        lf: `${n} linear ft`, sqft: `${n} sq ft`, unit: `${n} unit${n !== 1 ? 's' : ''}`,
-        hr: `${n} hr${n !== 1 ? 's' : ''}`, opening: `${n} opening${n !== 1 ? 's' : ''}`,
-        load: `${n} load${n !== 1 ? 's' : ''}`, patch: `${n} patch${n !== 1 ? 'es' : ''}`,
-        step: `${n} step${n !== 1 ? 's' : ''}`, closet: `${n} closet${n !== 1 ? 's' : ''}`,
-        fixture: `${n} fixture${n !== 1 ? 's' : ''}`, circuit: `${n} circuit${n !== 1 ? 's' : ''}`,
-        can: `${n} can${n !== 1 ? 's' : ''}`, door: `${n} door${n !== 1 ? 's' : ''}`,
-        box: `${n} box${n !== 1 ? 'es' : ''}`, window: `${n} window${n !== 1 ? 's' : ''}`,
-        fan: `${n} fan${n !== 1 ? 's' : ''}`, device: `${n} device${n !== 1 ? 's' : ''}`,
-      };
-      return map[unit] ?? `${n} ${unit}`;
-    };
-    let bullet = '';
-    if (item.hasTiers && tierName) {
-      bullet = `Supply and install ${qtyLabel(qty, u)} of ${tierName}`;
-      if (item.wastePct > 0) bullet += ` (includes ${item.wastePct}% waste allowance)`;
-    } else {
-      bullet = `${item.name} — ${qtyLabel(qty, u)}`;
-    }
-    if (item.salesDesc) {
-      const desc = item.salesDesc.replace(/\.$/, '');
-      bullet += `. ${desc}.`;
-    }
-    if (item.hasPaintPrep && item.paintPrep !== 'none') {
-      const prepLabel = item.paintPrep === 'caulk' ? 'caulk and touch-up' : 'full paint prep (caulk, prime, and paint)';
-      bullet += ` Includes ${prepLabel}.`;
-    }
-    if (item.flagged && item.flagNote) bullet += ` (${item.flagNote})`;
-    bullets.push(bullet);
-  }
-  if (bullets.length > 8) {
-    const shown = bullets.slice(0, 7);
-    shown.push(`Plus ${bullets.length - 7} additional items — see detailed breakdown below.`);
-    return shown;
-  }
-  return bullets;
-}
+// Shared with the guided wizard — lives in @/lib/sow.
+import { buildSowBullets, buildPortalPhases } from '@/lib/sow';
 
 // ─── T&C Modal ────────────────────────────────────────────────
 function TCModal({ onClose }: { onClose: () => void }) {
@@ -609,24 +566,9 @@ export default function EstimateSection() {
           scopeSummary={state.jobInfo.scope}
           lineItemsText={generatePlainText()}
           lineItemsJson={JSON.stringify(
-            activePhaseData.map(({ phase, result, activeItems, bullets }) => ({
-              phaseName: phase.name,
-              phaseDescription: (phase as any).description ?? '',
-              items: activeItems.map((item, idx) => {
-                const itemResult = result.items.find((r: any) => r.id === item.id);
-                const price = itemResult?.price ?? 0;
-                const unitPrice = item.qty > 0 ? price / item.qty : 0;
-                return {
-                  name: item.name,
-                  scopeOfWork: bullets[idx] ?? '',
-                  qty: item.qty,
-                  unitType: item.unitType,
-                  unitPrice: Math.round(unitPrice * 100) / 100,
-                  amount: Math.round(price * 100) / 100,
-                };
-              }),
-              phaseTotal: Math.round(result.price * 100) / 100,
-            }))
+            // Custom/maintenance items ship as their own group so the portal
+            // line items always sum to the total.
+            buildPortalPhases(activePhaseData, state.customItems, customResults)
           )}
           hpCustomerId={activeCustomer?.id}
           hpOpportunityId={state.activeOpportunityId ?? undefined}

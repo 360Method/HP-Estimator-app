@@ -1,5 +1,5 @@
 {
- "builtAt": "2026-06-11T22:58:20.126Z",
+ "builtAt": "2026-06-12T05:32:04.076Z",
  "business": {
   "guardrails": {
    "marginFloorStandardPct": 30,
@@ -863,6 +863,18 @@
    "type": "DOC",
    "layer": null,
    "title": "Proactive Path Membership — Pre-Launch Checklist"
+  },
+  {
+   "sourcePath": "01_Operations/SOPs/HP-SOP-204-how-to-estimate-a-job.md",
+   "folderPath": "01_Operations/SOPs",
+   "kind": "human",
+   "status": "final",
+   "enabled": false,
+   "body": "---\nid: HP-SOP-204\ntype: SOP\narea: Handy Pioneers\ntitle: How to Estimate a Job (Guided Flow)\nstatus: final\ncreated: 2026-06-11\nupdated: 2026-06-11\n---\n\n# How to Estimate a Job (Guided Flow)\n\nAnyone with staff access can quote a job from a phone. The guided flow lives\nat **pro.handypioneers.com/os/estimate/new** (\"New estimate\" on Today, the\nPipeline, or a client's Work tab). Six screens, in order:\n\n## The six steps\n\n1. **Client.** Search for the client. No match? Type their name and continue —\n   the system creates them.\n2. **Kind of work.** Remodel project, maintenance and repairs, or both. This\n   just filters the menu; nothing is locked in.\n3. **Pick the work.** Check every stage and service the job includes. Remodel\n   stages run in build order (demo through closeout). Maintenance services come\n   from the Price book. Use search if you know the item name.\n4. **Quantities.** Enter how much of each: linear feet, square feet, count.\n   Where a material choice exists, pick the tier (the names are real products,\n   not good/better/best labels for the customer).\n5. **Price check (internal only).** The system prices everything and shows the\n   margin meter. **Green means send. Red means stop** — the price is below the\n   company floor and sending is blocked. Raise the price or trim scope; do not\n   discount below the floor, ever. If you need line-by-line control, \"Open full\n   calculator\" carries everything over.\n6. **Review and send.** This is exactly what the customer sees: plain wording,\n   prices, total. \"Improve wording\" tightens the language. Send delivers it by\n   email or text with a portal link where they approve and sign.\n\n## Rules that never bend\n\n- **Never show or discuss our costs, hours, markup, or margin with a\n  customer.** The price is the price. Everything on the internal price-check\n  screen stays internal.\n- **The margin floor is not a suggestion.** If the meter is red, the fix is\n  scope or price, not an override. Overrides are Marcin's call only.\n- **Quote the project, not the hours.** Customer-facing output never mentions\n  time-on-site.\n\n## Where prices come from\n\n- **Maintenance services** price from the **Price book** (Settings → Price\n  book). Edit a rate there and every future estimate uses it.\n- **Remodel stages** price from the calculator catalog (rates maintained in\n  the app's code for now; the Price book copy is reference).\n- When something isn't in the menu, use \"Open full calculator\" and add it as a\n  custom line with a labor estimate.\n\n## After it sends\n\nThe estimate lands in the customer's portal; they approve and sign there.\nApproval flips the job to **Won** on the Pipeline automatically. Follow-ups on\nquiet quotes are the system's job (the pipeline-forward routine), not yours.\n",
+   "docId": "HP-SOP-204",
+   "type": "SOP",
+   "layer": null,
+   "title": "How to Estimate a Job (Guided Flow)"
   },
   {
    "sourcePath": "01_Operations/STATUS.md",
