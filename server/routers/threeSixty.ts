@@ -951,6 +951,8 @@ const propertySystemsRouter = router({
         id: z.number().optional(),
         membershipId: z.number(),
         customerId: z.string(),
+        /** CRM properties.id — written on create for property-scoped views */
+        propertyId: z.string().optional(),
         systemType: z.enum([
           "hvac",
           "roof",

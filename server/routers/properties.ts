@@ -577,6 +577,37 @@ export const propertiesRouter = router({
       return created!;
     }),
 
+  /**
+   * Step 9 scoreboard inputs: market value and mortgage are numbers staff
+   * typed in (whole dollars), never a valuation we computed. The scoreboard
+   * UI must keep its not-financial-advice disclaimer wherever they render.
+   */
+  updateValueInputs: protectedProcedure
+    .input(
+      z.object({
+        propertyId: z.string(),
+        marketValueEstimate: z.number().int().min(0).max(2_000_000_000).nullable().optional(),
+        mortgageBalance: z.number().int().min(0).max(2_000_000_000).nullable().optional(),
+        valueNotes: z.string().max(2000).optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
+      const [prop] = await db.select().from(properties).where(eq(properties.id, input.propertyId)).limit(1);
+      if (!prop) throw new TRPCError({ code: "NOT_FOUND" });
+      await db
+        .update(properties)
+        .set({
+          ...(input.marketValueEstimate !== undefined ? { marketValueEstimate: input.marketValueEstimate } : {}),
+          ...(input.mortgageBalance !== undefined ? { mortgageBalance: input.mortgageBalance } : {}),
+          ...(input.valueNotes !== undefined ? { valueNotes: input.valueNotes } : {}),
+          valuesUpdatedAt: new Date(),
+        })
+        .where(eq(properties.id, input.propertyId));
+      return { success: true };
+    }),
+
   /** Adjust (add or deduct) labor bank balance for a membership */
   adjustLaborBank: protectedProcedure
     .input(

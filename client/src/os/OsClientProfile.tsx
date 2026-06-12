@@ -225,6 +225,7 @@ export default function OsClientProfile() {
                 journey={memberJourney.journey}
                 stepContents={memberJourney.stepContents}
                 customerId={customerId}
+                propertyId={activeProperty?.id ?? null}
                 onOpenOpportunity={(id) => setActiveOpportunity(id)}
                 onOpenSpot={(id) => navigate(`/os/spot/${id}`)}
               />

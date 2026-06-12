@@ -131,7 +131,7 @@ export function OsShell({
       style={{ background: "var(--hp-cream)" }}
     >
       {/* ── Top bar ───────────────────────────────────────────── */}
-      <header className="sticky top-0 z-40 px-4 py-3" style={{ background: "var(--hp-ink)", color: "white" }}>
+      <header className="sticky top-0 z-40 px-4 py-3 no-print" style={{ background: "var(--hp-ink)", color: "white" }}>
         <div className="flex items-center justify-between gap-3">
           <Link href="/os">
             <span className="cursor-pointer">
@@ -160,7 +160,7 @@ export function OsShell({
 
       <div className={"flex" + (fill ? " flex-1 min-h-0" : "")}>
         {/* ── Desktop rail ─────────────────────────────────────── */}
-        <aside className="hidden md:block w-52 shrink-0 px-3 py-4 sticky top-[57px] self-start h-[calc(100vh-57px)] overflow-y-auto">
+        <aside className="hidden md:block w-52 shrink-0 px-3 py-4 sticky top-[57px] self-start h-[calc(100vh-57px)] overflow-y-auto no-print">
           <nav className="space-y-1">
             {CORE_NAV.map((item) => (
               <RailLink key={item.href} item={item} location={active ?? location} />
@@ -199,7 +199,7 @@ export function OsShell({
 
       {/* ── Mobile bottom tabs ─────────────────────────────────── */}
       <nav
-        className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t bg-white"
+        className="md:hidden fixed bottom-0 inset-x-0 z-40 border-t bg-white no-print"
         style={{ borderColor: "var(--hp-hairline)", paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         <div className="grid grid-cols-5">

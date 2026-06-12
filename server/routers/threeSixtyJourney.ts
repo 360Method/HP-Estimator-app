@@ -19,7 +19,10 @@ import {
   opportunities,
   portalCustomers,
   portalDocuments,
+  portalJobMilestones,
+  portalJobUpdates,
   properties,
+  scheduleEvents,
   threeSixtyLaborBankTransactions,
   threeSixtyMemberships,
   threeSixtyPropertySystems,
@@ -27,7 +30,8 @@ import {
   threeSixtyVisits,
   threeSixtyWorkOrders,
 } from "../../drizzle/schema";
-import { priorityTranslations } from "../../drizzle/schema.priorityTranslation";
+import { homeHealthRecords, priorityTranslations } from "../../drizzle/schema.priorityTranslation";
+import { computeScoreboard } from "../lib/scoreboard";
 import { and, desc, eq, inArray, like, or, sql } from "drizzle-orm";
 import { deriveJourney, type JourneyInput, type JourneyState } from "../../shared/threeSixtyJourney";
 import { SEASON_LABELS, type ThreeSixtyStepKey } from "../../shared/threeSixtyMethod";
@@ -530,6 +534,201 @@ export const journeyRouter = router({
           membershipId: property.membershipId ?? null,
           treatAsPrimary: scope.treatAsPrimary,
         },
+      };
+    }),
+
+  /**
+   * Per-step enrichment beyond what the board's stepContents carry —
+   * the deep data the step subpages need (S4 roadmap PDFs, S5 schedule,
+   * S6 execution detail, S9 scoreboard). Same property scope rules.
+   */
+  stepDetail: protectedProcedure
+    .input(z.object({
+      customerId: z.string(),
+      propertyId: z.string(),
+      stepKey: z.enum(["prioritize", "schedule", "execute", "scale"]),
+    }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+      const propertyRows = await db.select().from(properties)
+        .where(eq(properties.customerId, input.customerId));
+      const property = propertyRows.find(p => p.id === input.propertyId);
+      if (!property) throw new TRPCError({ code: "NOT_FOUND", message: "Property not found for this customer" });
+      const scope = buildPropertyScope(property, propertyRows.length);
+      const mid = property.membershipId ?? null;
+
+      const allOpps = await db.select({
+        id: opportunities.id,
+        title: opportunities.title,
+        area: opportunities.area,
+        stage: opportunities.stage,
+        value: opportunities.value,
+        scheduledDate: opportunities.scheduledDate,
+        scheduledEndDate: opportunities.scheduledEndDate,
+        assignedTo: opportunities.assignedTo,
+        archived: opportunities.archived,
+        propertyId: opportunities.propertyId,
+      }).from(opportunities).where(eq(opportunities.customerId, input.customerId));
+      const opps = allOpps.filter(o => !o.archived && recordInScope(o.propertyId, scope));
+      const jobDone = (stage: string | null) =>
+        ["completed", "invoice sent", "invoice paid"].includes(String(stage ?? "").toLowerCase());
+
+      if (input.stepKey === "prioritize") {
+        const allSpots = await db.select({
+          id: priorityTranslations.id,
+          status: priorityTranslations.status,
+          createdAt: priorityTranslations.createdAt,
+          outputPdfPath: priorityTranslations.outputPdfPath,
+          crmPropertyId: priorityTranslations.crmPropertyId,
+        }).from(priorityTranslations)
+          .where(and(
+            eq(priorityTranslations.hpCustomerId, input.customerId),
+            eq(priorityTranslations.source, "spot_inspection"),
+          ))
+          .orderBy(desc(priorityTranslations.createdAt));
+        const scans = mid
+          ? await db.select({
+              id: threeSixtyScans.id,
+              scanDate: threeSixtyScans.scanDate,
+              status: threeSixtyScans.status,
+              sentToPortalAt: threeSixtyScans.sentToPortalAt,
+              reportUrl: threeSixtyScans.reportUrl,
+              healthScore: threeSixtyScans.healthScore,
+            }).from(threeSixtyScans).where(eq(threeSixtyScans.membershipId, mid))
+          : [];
+        return {
+          kind: "prioritize" as const,
+          spots: allSpots.filter(s => recordInScope(s.crmPropertyId, scope)),
+          scans,
+        };
+      }
+
+      if (input.stepKey === "schedule") {
+        const workOrders = mid
+          ? await db.select({
+              id: threeSixtyWorkOrders.id,
+              type: threeSixtyWorkOrders.type,
+              status: threeSixtyWorkOrders.status,
+              visitYear: threeSixtyWorkOrders.visitYear,
+              scheduledDate: threeSixtyWorkOrders.scheduledDate,
+            }).from(threeSixtyWorkOrders).where(eq(threeSixtyWorkOrders.membershipId, mid))
+          : [];
+        const scheduledOpps = opps.filter(o => o.scheduledDate);
+        const oppIds = new Set(opps.map(o => o.id));
+        const allEvents = await db.select({
+          id: scheduleEvents.id,
+          type: scheduleEvents.type,
+          title: scheduleEvents.title,
+          start: scheduleEvents.start,
+          end: scheduleEvents.end,
+          opportunityId: scheduleEvents.opportunityId,
+        }).from(scheduleEvents).where(eq(scheduleEvents.customerId, input.customerId));
+        // Events scope through their linked opportunity; unlinked events are
+        // customer-level and follow the primary (scope rule 6).
+        const events = allEvents.filter(e =>
+          e.opportunityId ? oppIds.has(e.opportunityId) : customerLevelInScope(scope),
+        );
+        return {
+          kind: "schedule" as const,
+          workOrders: workOrders.filter(w => !["completed", "skipped"].includes(w.status)),
+          opportunities: scheduledOpps.map(o => ({
+            id: o.id, title: o.title, area: o.area, stage: o.stage,
+            scheduledDate: o.scheduledDate, scheduledEndDate: o.scheduledEndDate,
+          })),
+          events,
+        };
+      }
+
+      if (input.stepKey === "execute") {
+        const jobs = opps.filter(o => String(o.area) === "job" && !jobDone(o.stage));
+        const jobIds = jobs.map(j => j.id);
+        const [milestones, updates] = jobIds.length
+          ? await Promise.all([
+              db.select({
+                hpOpportunityId: portalJobMilestones.hpOpportunityId,
+                status: portalJobMilestones.status,
+              }).from(portalJobMilestones).where(inArray(portalJobMilestones.hpOpportunityId, jobIds)),
+              db.select({
+                hpOpportunityId: portalJobUpdates.hpOpportunityId,
+                message: portalJobUpdates.message,
+                postedBy: portalJobUpdates.postedBy,
+                createdAt: portalJobUpdates.createdAt,
+              }).from(portalJobUpdates).where(inArray(portalJobUpdates.hpOpportunityId, jobIds))
+                .orderBy(desc(portalJobUpdates.createdAt)),
+            ])
+          : [[], []];
+        return {
+          kind: "execute" as const,
+          jobs: jobs.map(j => {
+            const ms = milestones.filter(m => m.hpOpportunityId === j.id);
+            const latest = updates.find(u => u.hpOpportunityId === j.id) ?? null;
+            return {
+              id: j.id,
+              title: j.title,
+              stage: j.stage,
+              assignedTo: j.assignedTo,
+              scheduledDate: j.scheduledDate,
+              milestonesDone: ms.filter(m => m.status === "complete").length,
+              milestonesTotal: ms.length,
+              latestUpdate: latest
+                ? { message: latest.message, postedBy: latest.postedBy, createdAt: latest.createdAt }
+                : null,
+            };
+          }),
+        };
+      }
+
+      // ── scale: the equity scoreboard ─────────────────────────────
+      const completedJobValues = opps
+        .filter(o => String(o.area) === "job" && jobDone(o.stage))
+        .map(o => Number(o.value ?? 0));
+
+      const ptRows = await db.select({
+        homeHealthRecordId: priorityTranslations.homeHealthRecordId,
+        crmPropertyId: priorityTranslations.crmPropertyId,
+      }).from(priorityTranslations)
+        .where(eq(priorityTranslations.hpCustomerId, input.customerId));
+      const hhrIds = Array.from(new Set(
+        ptRows
+          .filter(r => recordInScope(r.crmPropertyId, scope))
+          .map(r => r.homeHealthRecordId)
+          .filter((v): v is string => !!v),
+      ));
+      const hhrs = hhrIds.length
+        ? await db.select({ findings: homeHealthRecords.findings })
+            .from(homeHealthRecords).where(inArray(homeHealthRecords.id, hhrIds))
+        : [];
+      const findingsResolved = hhrs.reduce(
+        (n, r) => n + (r.findings ?? []).filter(f => f.status === "resolved").length,
+        0,
+      );
+
+      const scoreScans = mid
+        ? await db.select({
+            scanDate: threeSixtyScans.scanDate,
+            healthScore: threeSixtyScans.healthScore,
+          }).from(threeSixtyScans).where(eq(threeSixtyScans.membershipId, mid))
+        : [];
+
+      const scoreboard = computeScoreboard({
+        marketValueEstimate: property.marketValueEstimate ?? null,
+        mortgageBalance: property.mortgageBalance ?? null,
+        completedJobValues,
+        findingsResolved,
+        scoreReadings: scoreScans.map(s => ({ dateMs: s.scanDate, score: s.healthScore })),
+      });
+
+      return {
+        kind: "scale" as const,
+        inputs: {
+          marketValueEstimate: property.marketValueEstimate ?? null,
+          mortgageBalance: property.mortgageBalance ?? null,
+          valueNotes: property.valueNotes ?? "",
+          valuesUpdatedAt: property.valuesUpdatedAt ?? null,
+        },
+        ...scoreboard,
       };
     }),
 

@@ -68,12 +68,15 @@ export function MethodStepBoard({
   journey,
   stepContents,
   customerId,
+  propertyId,
   onOpenOpportunity,
   onOpenSpot,
 }: {
   journey: JourneyState;
   stepContents: Record<ThreeSixtyStepKey, StepContentItem[]>;
   customerId: string;
+  /** When set, each step row links to its full page at this property. */
+  propertyId?: string | null;
   onOpenOpportunity?: (opportunityId: string) => void;
   onOpenSpot?: (spotId: string) => void;
 }) {
@@ -99,10 +102,11 @@ export function MethodStepBoard({
               const action = stepAction(step.key, customerId);
               return (
                 <div key={step.key}>
+                  <div className="flex items-center hover:bg-black/[0.02]">
                   <button
                     type="button"
                     onClick={() => setOpen((o) => ({ ...o, [step.key]: !o[step.key] }))}
-                    className="w-full px-4 py-2.5 flex items-center gap-3 text-left hover:bg-black/[0.02]"
+                    className="flex-1 min-w-0 px-4 py-2.5 flex items-center gap-3 text-left"
                   >
                     <span
                       className={`inline-flex items-center justify-center w-6 h-6 rounded-full border text-[11px] font-semibold shrink-0 ${STATUS_CHIP[state.status]}`}
@@ -135,6 +139,17 @@ export function MethodStepBoard({
                       <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
                     )}
                   </button>
+                  {propertyId && (
+                    <Link href={`/os/property/${propertyId}/step/${step.key}`}>
+                      <span
+                        className="text-[10px] px-2 py-0.5 mr-4 rounded-full border font-semibold shrink-0 cursor-pointer hover:bg-black/[0.03]"
+                        style={{ borderColor: "var(--hp-gold-deep)", color: "var(--hp-gold-deep)" }}
+                      >
+                        Open
+                      </span>
+                    </Link>
+                  )}
+                  </div>
 
                   {isOpen && (
                     <div className="px-4 pb-3 pl-[52px]">
