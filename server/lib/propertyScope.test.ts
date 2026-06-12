@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPropertyScope, customerLevelInScope, recordInScope } from "./propertyScope";
+import { buildPropertyScope, customerLevelInScope, recordInScope, scheduledItemInScope } from "./propertyScope";
 
 describe("propertyScope", () => {
   const primary = buildPropertyScope({ id: "prop-a", isPrimary: true }, 2);
@@ -33,5 +33,24 @@ describe("propertyScope", () => {
   it("customer-level artifacts show under the primary only", () => {
     expect(customerLevelInScope(primary)).toBe(true);
     expect(customerLevelInScope(secondary)).toBe(false);
+  });
+
+  describe("calendar items", () => {
+    const oppsAtB = new Set(["opp-1"]);
+
+    it("an explicit property pin wins over everything", () => {
+      expect(scheduledItemInScope({ propertyId: "prop-b", opportunityId: null }, oppsAtB, secondary)).toBe(true);
+      expect(scheduledItemInScope({ propertyId: "prop-a", opportunityId: "opp-1" }, oppsAtB, secondary)).toBe(false);
+    });
+
+    it("unpinned items follow their linked opportunity", () => {
+      expect(scheduledItemInScope({ propertyId: null, opportunityId: "opp-1" }, oppsAtB, secondary)).toBe(true);
+      expect(scheduledItemInScope({ propertyId: null, opportunityId: "opp-other" }, oppsAtB, secondary)).toBe(false);
+    });
+
+    it("items with no links are customer-level and follow the primary", () => {
+      expect(scheduledItemInScope({ propertyId: null, opportunityId: null }, oppsAtB, primary)).toBe(true);
+      expect(scheduledItemInScope({ propertyId: null, opportunityId: null }, oppsAtB, secondary)).toBe(false);
+    });
   });
 });

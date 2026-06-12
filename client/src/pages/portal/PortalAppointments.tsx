@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import PortalLayout from "@/components/PortalLayout";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, ClipboardList, RefreshCw, CalendarDays } from "lucide-react";
+import { Loader2, ClipboardList, RefreshCw, CalendarDays, Home, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -22,8 +22,12 @@ function formatTime(ts: number | Date | null | undefined) {
 export default function PortalAppointments() {
   const [, navigate] = useLocation();
   const [tab, setTab] = useState<"upcoming" | "past">("upcoming");
+  const [homePropertyId, setHomePropertyId] = useState<string | null>(null);
   const { data, isLoading } = trpc.portal.getAppointments.useQuery();
   const { data: membershipData } = trpc.portal.getMembership360.useQuery(undefined, {
+    refetchOnWindowFocus: false,
+  });
+  const { data: homeSchedule } = trpc.portal.getHomeSchedule.useQuery(undefined, {
     refetchOnWindowFocus: false,
   });
 
@@ -152,6 +156,67 @@ export default function PortalAppointments() {
             </p>
           </TabsContent>
         </Tabs>
+
+        {/* ── At your home: the property-scoped schedule ──────────── */}
+        {homeSchedule && homeSchedule.properties.length > 0 && (() => {
+          const props = homeSchedule.properties;
+          const selectedId =
+            props.find((p) => p.id === homePropertyId)?.id ??
+            (props.find((p) => p.isPrimary) ?? props[0]).id;
+          const selected = props.find((p) => p.id === selectedId)!;
+          const upcomingItems = homeSchedule.items
+            .filter((i) => i.propertyId === selectedId && (i.endMs ?? i.startMs) >= Date.now() - 86_400_000)
+            .slice(0, 10);
+          return (
+            <div className="mt-10">
+              <h2 className="text-xl font-light text-gray-900 mb-1">At your home</h2>
+              <p className="text-sm text-gray-500 mb-4">
+                Everything scheduled at {props.length > 1 ? "each of your properties" : "your property"}.
+              </p>
+              {props.length > 1 && (
+                <div className="flex gap-2 flex-wrap mb-4">
+                  {props.map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => setHomePropertyId(p.id)}
+                      className={`inline-flex items-center gap-1.5 text-sm rounded-md border px-3 py-1.5 transition ${
+                        p.id === selectedId
+                          ? "border-amber-500 bg-amber-50 text-gray-900"
+                          : "border-gray-200 text-gray-600 hover:border-gray-400"
+                      }`}
+                    >
+                      <Home className="w-3.5 h-3.5" />
+                      {p.label}
+                      {p.isPrimary && <Star className="w-3 h-3 fill-amber-400 text-amber-400" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {upcomingItems.length === 0 ? (
+                <div className="border border-gray-200 rounded-md p-6 text-center text-sm text-gray-500">
+                  Nothing scheduled at {selected.label} right now.
+                </div>
+              ) : (
+                <div className="border border-gray-200 rounded-md overflow-hidden">
+                  {upcomingItems.map((i, idx) => (
+                    <div
+                      key={`${i.propertyId}-${idx}`}
+                      className="grid grid-cols-[1fr_auto] gap-2 px-4 py-3 border-b border-gray-100 last:border-0 text-sm items-center"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-gray-800 truncate">{i.title}</p>
+                        <p className="text-xs text-gray-400 capitalize">
+                          {i.kind === "work" ? "Scheduled work" : i.kind === "visit" ? "Seasonal visit" : "Appointment"}
+                        </p>
+                      </div>
+                      <span className="text-gray-500 whitespace-nowrap">{formatDate(i.startMs)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Reschedule Request Modal */}

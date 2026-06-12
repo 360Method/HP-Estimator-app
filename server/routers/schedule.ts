@@ -40,6 +40,8 @@ const ScheduleEventInput = z.object({
   allDay: z.boolean().default(false),
   opportunityId: z.string().optional(),
   customerId: z.string().optional(),
+  /** CRM properties.id — pin the event to one home; the main calendar still sees it */
+  propertyId: z.string().optional(),
   assignedTo: z.string().optional(),   // JSON string[]
   notes: z.string().optional(),
   color: z.string().optional(),

@@ -36,7 +36,7 @@ import { and, desc, eq, inArray, like, or, sql } from "drizzle-orm";
 import { deriveJourney, type JourneyInput, type JourneyState } from "../../shared/threeSixtyJourney";
 import { SEASON_LABELS, type ThreeSixtyStepKey } from "../../shared/threeSixtyMethod";
 import { TIER_DEFINITIONS, type MemberTier } from "../../shared/threeSixtyTiers";
-import { buildPropertyScope, customerLevelInScope, recordInScope, type PropertyScope } from "../lib/propertyScope";
+import { buildPropertyScope, customerLevelInScope, recordInScope, scheduledItemInScope, type PropertyScope } from "../lib/propertyScope";
 import type { DbProperty } from "../../drizzle/schema";
 
 /** Scope for the shared journey loader: the whole umbrella, or one property. */
@@ -623,13 +623,14 @@ export const journeyRouter = router({
           title: scheduleEvents.title,
           start: scheduleEvents.start,
           end: scheduleEvents.end,
+          allDay: scheduleEvents.allDay,
+          completed: scheduleEvents.completed,
           opportunityId: scheduleEvents.opportunityId,
+          propertyId: scheduleEvents.propertyId,
         }).from(scheduleEvents).where(eq(scheduleEvents.customerId, input.customerId));
-        // Events scope through their linked opportunity; unlinked events are
-        // customer-level and follow the primary (scope rule 6).
-        const events = allEvents.filter(e =>
-          e.opportunityId ? oppIds.has(e.opportunityId) : customerLevelInScope(scope),
-        );
+        // Explicit property pin wins; else the linked opportunity decides;
+        // unlinked events are customer-level and follow the primary.
+        const events = allEvents.filter(e => scheduledItemInScope(e, oppIds, scope));
         return {
           kind: "schedule" as const,
           workOrders: workOrders.filter(w => !["completed", "skipped"].includes(w.status)),

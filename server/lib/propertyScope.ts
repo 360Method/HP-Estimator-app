@@ -45,3 +45,19 @@ export function recordInScope(linkedPropertyId: string | null | undefined, scope
 export function customerLevelInScope(scope: PropertyScope): boolean {
   return scope.treatAsPrimary;
 }
+
+/**
+ * Calendar items (scheduleEvents) can be pinned to a property directly or
+ * reach one through their linked opportunity. Precedence: an explicit
+ * propertyId pin wins; otherwise the linked opportunity's scope decides;
+ * an item with neither link is customer-level and follows the primary.
+ */
+export function scheduledItemInScope(
+  item: { propertyId?: string | null; opportunityId?: string | null },
+  opportunityIdsInScope: ReadonlySet<string>,
+  scope: PropertyScope,
+): boolean {
+  if (item.propertyId != null) return item.propertyId === scope.propertyId;
+  if (item.opportunityId != null) return opportunityIdsInScope.has(item.opportunityId);
+  return scope.treatAsPrimary;
+}

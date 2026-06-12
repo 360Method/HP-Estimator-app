@@ -260,6 +260,7 @@ export async function ensureOsTables(): Promise<void> {
       sql`ALTER TABLE IF EXISTS "properties" ADD COLUMN IF NOT EXISTS "mortgageBalance" integer`,
       sql`ALTER TABLE IF EXISTS "properties" ADD COLUMN IF NOT EXISTS "valueNotes" text`,
       sql`ALTER TABLE IF EXISTS "properties" ADD COLUMN IF NOT EXISTS "valuesUpdatedAt" timestamp`,
+      sql`ALTER TABLE IF EXISTS "scheduleEvents" ADD COLUMN IF NOT EXISTS "propertyId" varchar(64)`,
     ]) {
       await db.execute(ddl);
     }

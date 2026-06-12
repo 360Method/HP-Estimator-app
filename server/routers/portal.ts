@@ -83,7 +83,17 @@ import {
   listMessagesByOpportunity,
   getCustomerById,
   getOpportunityById,
+  getDb,
 } from "../db";
+import { eq, inArray } from "drizzle-orm";
+import {
+  properties as crmProperties,
+  opportunities as crmOpportunities,
+  scheduleEvents as crmScheduleEvents,
+  threeSixtyWorkOrders as crmWorkOrders,
+} from "../../drizzle/schema";
+import { buildPropertyScope, recordInScope, scheduledItemInScope } from "../lib/propertyScope";
+import { SEASON_LABELS } from "../../shared/threeSixtyMethod";
 import { decodeReplyToken } from "../replyToken";
 import { createNotification } from "../leadRouting";
 import { notifyOwner } from "../_core/notification";
@@ -717,6 +727,128 @@ export const portalRouter = router({
 
   getAppointments: portalProcedure.query(async ({ ctx }) => {
     return getPortalAppointmentsByCustomer(ctx.portalCustomer.id);
+  }),
+
+  /**
+   * The property-scoped schedule for the logged-in homeowner: what is
+   * booked at each of their homes (scheduled work, seasonal visits, and
+   * property-pinned calendar items). Titles and dates only — no cost,
+   * markup, or margin data ever crosses this boundary. Same scope rules
+   * as the staff side (server/lib/propertyScope.ts).
+   */
+  getHomeSchedule: portalProcedure.query(async ({ ctx }) => {
+    const hpCustomerId = ctx.portalCustomer.hpCustomerId;
+    const empty = { properties: [] as { id: string; label: string; street: string; city: string; isPrimary: boolean }[], items: [] as { propertyId: string; kind: "work" | "visit" | "event"; title: string; startMs: number; endMs: number | null }[] };
+    if (!hpCustomerId) return empty;
+    const db = await getDb();
+    if (!db) return empty;
+
+    const propRows = await db.select().from(crmProperties)
+      .where(eq(crmProperties.customerId, hpCustomerId));
+    if (propRows.length === 0) return empty;
+
+    const [oppRows, eventRows] = await Promise.all([
+      db.select({
+        id: crmOpportunities.id,
+        title: crmOpportunities.title,
+        scheduledDate: crmOpportunities.scheduledDate,
+        scheduledEndDate: crmOpportunities.scheduledEndDate,
+        archived: crmOpportunities.archived,
+        propertyId: crmOpportunities.propertyId,
+      }).from(crmOpportunities).where(eq(crmOpportunities.customerId, hpCustomerId)),
+      db.select({
+        id: crmScheduleEvents.id,
+        type: crmScheduleEvents.type,
+        title: crmScheduleEvents.title,
+        start: crmScheduleEvents.start,
+        end: crmScheduleEvents.end,
+        completed: crmScheduleEvents.completed,
+        opportunityId: crmScheduleEvents.opportunityId,
+        propertyId: crmScheduleEvents.propertyId,
+      }).from(crmScheduleEvents).where(eq(crmScheduleEvents.customerId, hpCustomerId)),
+    ]);
+    const liveOpps = oppRows.filter(o => !o.archived);
+
+    const membershipIds = propRows
+      .map(p => p.membershipId)
+      .filter((v): v is number => v != null);
+    const woRows = membershipIds.length
+      ? await db.select({
+          id: crmWorkOrders.id,
+          type: crmWorkOrders.type,
+          status: crmWorkOrders.status,
+          visitYear: crmWorkOrders.visitYear,
+          scheduledDate: crmWorkOrders.scheduledDate,
+          membershipId: crmWorkOrders.membershipId,
+        }).from(crmWorkOrders).where(inArray(crmWorkOrders.membershipId, membershipIds))
+      : [];
+
+    const parseMs = (v: string | null): number | null => {
+      if (!v) return null;
+      const ms = Date.parse(v);
+      return Number.isFinite(ms) ? ms : null;
+    };
+
+    const items: typeof empty.items = [];
+    for (const p of propRows) {
+      const scope = buildPropertyScope(p, propRows.length);
+      const scopedOpps = liveOpps.filter(o => recordInScope(o.propertyId, scope));
+      const scopedOppIds = new Set(scopedOpps.map(o => o.id));
+
+      for (const o of scopedOpps) {
+        const startMs = parseMs(o.scheduledDate);
+        if (startMs == null) continue;
+        items.push({
+          propertyId: p.id,
+          kind: "work",
+          title: o.title || "Scheduled work",
+          startMs,
+          endMs: parseMs(o.scheduledEndDate),
+        });
+      }
+
+      // Seasonal visits attach through this property's membership only.
+      for (const w of woRows) {
+        if (w.membershipId !== p.membershipId) continue;
+        if (w.scheduledDate == null || ["completed", "skipped"].includes(w.status)) continue;
+        items.push({
+          propertyId: p.id,
+          kind: "visit",
+          title: `${SEASON_LABELS[w.type as keyof typeof SEASON_LABELS] ?? w.type} visit ${w.visitYear}`,
+          startMs: w.scheduledDate,
+          endMs: null,
+        });
+      }
+
+      // Calendar items: only ones pinned to a property or linked to work the
+      // portal already shows. Unlinked staff events stay internal.
+      for (const e of eventRows) {
+        if (e.completed) continue;
+        if (e.propertyId == null && e.opportunityId == null) continue;
+        if (!scheduledItemInScope(e, scopedOppIds, scope)) continue;
+        const startMs = parseMs(e.start);
+        if (startMs == null) continue;
+        items.push({
+          propertyId: p.id,
+          kind: "event",
+          title: e.title,
+          startMs,
+          endMs: parseMs(e.end),
+        });
+      }
+    }
+    items.sort((a, b) => a.startMs - b.startMs);
+
+    return {
+      properties: propRows.map(p => ({
+        id: p.id,
+        label: p.label,
+        street: p.street,
+        city: p.city,
+        isPrimary: p.isPrimary,
+      })),
+      items,
+    };
   }),
 
   // ── MESSAGES ──────────────────────────────────────────────────────────────

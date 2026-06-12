@@ -1277,6 +1277,8 @@ export const scheduleEvents = pgTable("scheduleEvents", {
   // Links
   opportunityId: varchar("opportunityId", { length: 64 }),
   customerId: varchar("customerId", { length: 64 }),
+  /** CRM properties.id — the sub-calendar pin; rolls up to the main calendar */
+  propertyId: varchar("propertyId", { length: 64 }),
   // People — JSON string[]
   assignedTo: text("assignedTo"),
   // Content

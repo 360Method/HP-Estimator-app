@@ -43,17 +43,29 @@ const STATUS_CHIP: Record<JourneyStepStatus, string> = {
   not_included: "bg-gray-50 text-gray-400 border-gray-200",
 };
 
-/** The action that fills a step, when one exists. */
-function stepAction(key: ThreeSixtyStepKey, customerId: string): { label: string; href: string } | null {
+/**
+ * The action that fills a step, when one exists. With a property in
+ * context the action stays at that property (its own schedule, its own
+ * jobs) instead of zooming out to the company-wide surfaces.
+ */
+function stepAction(key: ThreeSixtyStepKey, customerId: string, propertyId?: string | null): { label: string; href: string } | null {
+  const stepHref = (k: ThreeSixtyStepKey) => `/os/property/${propertyId}/step/${k}`;
   switch (key) {
     case "inspect":
-      return { label: "Start a spot inspection", href: `/os/spot/new?customerId=${encodeURIComponent(customerId)}` };
+      return {
+        label: "Start a spot inspection",
+        href: `/os/spot/new?customerId=${encodeURIComponent(customerId)}${propertyId ? `&propertyId=${encodeURIComponent(propertyId)}` : ""}`,
+      };
     case "prioritize":
-      return { label: "Quote the work", href: "/os/estimate/new" };
+      return { label: "Quote the work", href: `/os/estimate/new?customerId=${encodeURIComponent(customerId)}` };
     case "schedule":
-      return { label: "Open the schedule", href: "/os/schedule" };
+      return propertyId
+        ? { label: "This home's calendar", href: stepHref("schedule") }
+        : { label: "Open the schedule", href: "/os/schedule" };
     case "execute":
-      return { label: "Open the pipeline", href: "/os/pipeline" };
+      return propertyId
+        ? { label: "Work at this home", href: stepHref("execute") }
+        : { label: "Open the pipeline", href: "/os/pipeline" };
     case "upgrade":
       return { label: "Remodel options", href: `/os/quickquote?customerId=${encodeURIComponent(customerId)}` };
     default:
@@ -99,7 +111,7 @@ export function MethodStepBoard({
               const items = stepContents[step.key] ?? [];
               const isCurrent = step.key === journey.currentStepKey;
               const isOpen = !!open[step.key];
-              const action = stepAction(step.key, customerId);
+              const action = stepAction(step.key, customerId, propertyId);
               return (
                 <div key={step.key}>
                   <div className="flex items-center hover:bg-black/[0.02]">
