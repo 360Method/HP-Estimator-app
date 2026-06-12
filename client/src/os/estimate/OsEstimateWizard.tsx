@@ -344,11 +344,14 @@ export default function OsEstimateWizard() {
 
   function openSend() {
     // The review screen IS the approval gate for the wizard flow.
-    setEstimateProposal({ status: "ready_for_customer", approvedAt: new Date().toISOString() });
+    const approvedAt = new Date().toISOString();
+    const readyProposal = { ...state.estimateProposal, status: "ready_for_customer" as const, approvedAt };
+    setEstimateProposal({ status: "ready_for_customer", approvedAt });
     if (oppId) {
       updateOpportunity(oppId, { value: Math.round(totals.totalPrice) });
       // Persist value + snapshot to the DB row so the server records the
       // authoritative margin audit (Rec 1) and commissions can read GP at sale.
+      // Proposal + deposit ride along so readiness survives a reload.
       updateOpp.mutate({
         id: oppId,
         value: Math.round(totals.totalPrice),
@@ -357,6 +360,9 @@ export default function OsEstimateWizard() {
           global: state.global,
           phases: state.phases,
           customItems: state.customItems,
+          depositType: state.depositType,
+          depositValue: state.depositValue,
+          proposal: readyProposal,
           totals,
         }),
       });

@@ -573,6 +573,18 @@ export const estimateRouter = router({
       if (results.errors.length > 0 && !results.email && !results.sms) {
         throw new Error(results.errors.join("; "));
       }
+      // ── Pipeline: every successful send path moves the opportunity to Sent ──
+      if (input.hpOpportunityId) {
+        try {
+          const { updateOpportunity } = await import("../db");
+          await updateOpportunity(input.hpOpportunityId, {
+            stage: 'Sent',
+            sentAt: new Date().toISOString(),
+          });
+        } catch (e) {
+          console.warn('[estimate.send] Failed to move opportunity to Sent (non-fatal):', e);
+        }
+      }
       // ── Fire automations (non-blocking) ─────────────────────────────────────
       runAutomationsForTrigger('estimate_sent', {
         customerName: input.customerName,

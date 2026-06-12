@@ -15,6 +15,7 @@ import { ChevronDown, AlertTriangle, CheckCircle2, XCircle, Sparkles, Plus, Tras
 import { toast } from 'sonner';
 import { ALL_PHASES } from '@/lib/phases';
 import { getProductionAudit, summarizeRateBookAudit } from '@/lib/productionRateAudit';
+import { buildEstimateSnapshotForDb } from '@/lib/estimateSnapshot';
 import { trpc, trpcClient } from '@/lib/trpc';
 import { calcMemberDiscount, type MemberTier } from '../../../../shared/threeSixtyTiers';
 
@@ -1501,7 +1502,10 @@ function GuidedEstimatorWorkflow({
   totals: ReturnType<typeof calcTotals>;
   selectedCount: number;
 }) {
-  const { state, setConsultantWorkflow, setEstimateAudit, setEstimateProposal, setClientNote } = useEstimator();
+  const { state, setConsultantWorkflow, setEstimateAudit, setEstimateProposal, setClientNote, updateOpportunity } = useEstimator();
+  const updateOppDb = trpc.opportunities.update.useMutation({
+    onError: err => console.warn('[approve] DB opportunity update failed (local state preserved):', err.message),
+  });
   const activeOpportunity = state.opportunities.find(o => o.id === state.activeOpportunityId);
   const activeCustomer = state.customers.find(c => c.id === state.activeCustomerId);
   const photoAttachments = useMemo(() => {
@@ -1640,13 +1644,14 @@ function GuidedEstimatorWorkflow({
     }
     const now = new Date().toISOString();
     const approvedBy = state.userProfile.firstName || state.userProfile.email || 'Consultant';
-    setEstimateAudit({
+    const readyAudit = {
+      ...audit,
       approvedAt: now,
       approvedBy,
       history: [
         {
           id: newWorkflowEventId(),
-          type: 'proposal_ready',
+          type: 'proposal_ready' as const,
           title: 'Proposal marked ready',
           summary: 'Consultant approved the customer-facing estimate package.',
           createdAt: now,
@@ -1654,15 +1659,40 @@ function GuidedEstimatorWorkflow({
         },
         ...audit.history,
       ],
-    });
-    setEstimateProposal({
-      status: 'ready_for_customer',
+    };
+    const readyProposal = {
+      ...proposal,
+      status: 'ready_for_customer' as const,
       approvedAt: now,
       approvedBy,
       nextStep: proposal.nextStep || 'Approve the proposal, place the deposit, and we will schedule materials and field work.',
-    });
+    };
+    const readyWorkflow = { ...workflow, currentStep: 'proposal' as const, completedSteps: Array.from(new Set([...workflow.completedSteps, 'audit' as const, 'proposal' as const])) };
+    setEstimateAudit(readyAudit);
+    setEstimateProposal(readyProposal);
     setClientNote(proposal.customerSummary);
-    setConsultantWorkflow({ currentStep: 'proposal', completedSteps: Array.from(new Set([...workflow.completedSteps, 'audit', 'proposal'])) });
+    setConsultantWorkflow(readyWorkflow);
+    // Couple the pipeline to the proposal: an approved estimate is Ready to Send,
+    // and the DB row carries the snapshot so the server margin audit (Rec 1) is
+    // authoritative for old-builder estimates too.
+    if (state.activeOpportunityId) {
+      updateOpportunity(state.activeOpportunityId, { stage: 'Ready to Send' });
+      updateOppDb.mutate({
+        id: state.activeOpportunityId,
+        stage: 'Ready to Send',
+        value: Math.round(totals.totalPrice),
+        estimateSnapshot: JSON.stringify({
+          ...buildEstimateSnapshotForDb({
+            ...state,
+            estimateAudit: readyAudit,
+            estimateProposal: readyProposal,
+            consultantWorkflow: readyWorkflow,
+            clientNote: proposal.customerSummary,
+          }),
+          totals,
+        }),
+      });
+    }
     toast.success('Proposal marked ready for customer review');
   };
 

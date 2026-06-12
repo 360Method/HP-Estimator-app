@@ -259,6 +259,9 @@ function EstimateDetailsPanelInner({
   // Stage
   const [stageSaving, setStageSaving] = useState(false);
   const moveStage = trpc.opportunities.moveStage.useMutation();
+  // Working-state proposal for the loaded (active) opportunity — kept in sync
+  // with the pipeline stage so an estimate can't be Sent while still 'draft'.
+  const { state: estimatorState, setEstimateProposal, setEstimateAudit } = useEstimator();
 
   // Scope editing
   const [editingScope, setEditingScope] = useState(false);
@@ -299,6 +302,31 @@ function EstimateDetailsPanelInner({
     try {
       await moveStage.mutateAsync({ id: activeOpp.id, stage });
       updateOpportunity(activeOpp.id, { stage: stage as Opportunity['stage'] });
+      // Couple the proposal to the pipeline: moving a draft estimate to
+      // Ready to Send / Sent marks the proposal ready so SendEstimateDialog
+      // and the wizard agree with the stage.
+      if (
+        (stage === 'Ready to Send' || stage === 'Sent') &&
+        activeOpp.area === 'estimate' &&
+        estimatorState.estimateProposal.status === 'draft'
+      ) {
+        const now = new Date().toISOString();
+        const actor = estimatorState.userProfile.firstName || estimatorState.userProfile.email || 'Consultant';
+        setEstimateProposal({ status: 'ready_for_customer', approvedAt: now, approvedBy: actor });
+        setEstimateAudit({
+          history: [
+            {
+              id: nanoid(8),
+              type: 'proposal_ready',
+              title: 'Proposal marked ready',
+              summary: `Marked ready via pipeline (stage moved to ${stage}).`,
+              createdAt: now,
+              actor,
+            },
+            ...estimatorState.estimateAudit.history,
+          ],
+        });
+      }
     } catch {
       toast.error('Failed to update stage');
     } finally {
