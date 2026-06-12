@@ -53,6 +53,7 @@ function dbOppToLocal(o: any): Opportunity {
     scheduledDuration: o.scheduledDuration ?? undefined,
     assignedTo: o.assignedTo ?? undefined,
     scheduleNotes: o.scheduleNotes ?? undefined,
+    estimateSnapshot: (() => { try { return JSON.parse(o.estimateSnapshot ?? "null") ?? undefined; } catch { return undefined; } })(),
     tasks: (() => { try { return JSON.parse(o.tasks ?? "null") ?? undefined; } catch { return undefined; } })(),
     attachments: (() => { try { return JSON.parse(o.attachments ?? "null") ?? undefined; } catch { return undefined; } })(),
     jobActivity: (() => { try { return JSON.parse(o.jobActivity ?? "null") ?? undefined; } catch { return undefined; } })(),

@@ -16,7 +16,7 @@
  * `pricebook:<itemKey>` so the wizard can re-sync them when picks change.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useRoute } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { nanoid } from "nanoid";
@@ -95,8 +95,15 @@ export default function OsEstimateWizard() {
   } = useEstimator();
   useDbSync(true);
 
+  // /os/estimate/:oppId resumes an existing estimate in the wizard
+  // (/os/estimate/new keeps minting fresh ones).
+  const [resumeMatch, resumeParams] = useRoute("/os/estimate/:oppId");
+  const resumeOppId = resumeMatch && resumeParams.oppId !== "new" ? resumeParams.oppId : null;
+
   const [step, setStep] = useState(0);
   const [oppId, setOppId] = useState<string | null>(null);
+  /** Reference notes from the loaded opportunity (e.g. spot-inspection findings). */
+  const [loadedNotes, setLoadedNotes] = useState("");
 
   // Step 1 — client
   const [clientQuery, setClientQuery] = useState("");
@@ -168,6 +175,74 @@ export default function OsEstimateWizard() {
     setStep(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.customers]);
+
+  // ── Resume an existing estimate (/os/estimate/:oppId) ────────
+  // Phase A: once the DB row + synced customer are available, activate the
+  // customer and opportunity — the reducer restores the estimate snapshot
+  // into working state. Phase B: rebuild the wizard's picks from that state.
+  const resumeQuery = trpc.opportunities.get.useQuery(
+    { id: resumeOppId ?? "" },
+    { enabled: !!resumeOppId, retry: false },
+  );
+  const resumePhase = useRef<"activate" | "reconstruct" | "done">("activate");
+  useEffect(() => {
+    if (!resumeOppId || resumePhase.current !== "activate") return;
+    const dbOpp = resumeQuery.data;
+    if (!dbOpp) return;
+    const customerId = (dbOpp as { customerId?: string }).customerId ?? "";
+    // Wait for the once-per-session DB sync to land the customer (and its
+    // opportunities, snapshots included) in local state.
+    if (!state.customers.some((c) => c.id === customerId)) return;
+    resumePhase.current = "reconstruct";
+    setClientId(customerId);
+    setOppId(resumeOppId);
+    setJobTitle(dbOpp.title || "");
+    setLoadedNotes(dbOpp.notes ?? "");
+    setActiveCustomer(customerId);
+    setActiveOpportunity(resumeOppId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeOppId, resumeQuery.data, state.customers]);
+
+  useEffect(() => {
+    if (!resumeOppId || resumePhase.current !== "reconstruct") return;
+    if (state.activeOpportunityId !== resumeOppId) return;
+    resumePhase.current = "done";
+    // Rebuild the wizard selection from the hydrated estimator state.
+    const sel: Record<string, Sel> = {};
+    let hasCatalog = false;
+    let hasPricebook = false;
+    for (const p of state.phases) {
+      for (const i of p.items) {
+        if (!i.enabled || i.qty <= 0) continue;
+        sel[i.id] = { qty: i.qty, tier: (i.tier as TierKey) ?? "good" };
+        appliedRemodel.current.add(i.id);
+        hasCatalog = true;
+      }
+    }
+    for (const ci of state.customItems) {
+      if (!ci.notes?.startsWith("pricebook:")) continue;
+      const key = ci.notes.slice("pricebook:".length);
+      // Best-effort tier recovery: match the saved material cost to a tier rate.
+      let tier: TierKey = "good";
+      const row = pbByKey.get(key);
+      if (row?.hasTiers && row.tiersJson) {
+        try {
+          const tiers = JSON.parse(row.tiersJson);
+          for (const t of ["good", "better", "best"] as TierKey[]) {
+            if (Number(tiers?.[t]?.rate ?? NaN) === ci.matCostPerUnit) { tier = t; break; }
+          }
+        } catch { /* keep good */ }
+      }
+      sel[key] = { qty: ci.qty, tier };
+      hasPricebook = true;
+    }
+    setSelection(sel);
+    setWorkType(hasCatalog && hasPricebook ? "both" : hasPricebook ? "maintenance" : "remodel");
+    // Priced estimates land on the price check; blank (spot-born) drafts
+    // start at the work-type step with the findings shown for reference.
+    setStep(Object.keys(sel).length > 0 ? 4 : 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeOppId, state.activeOpportunityId, state.phases, state.customItems]);
 
   // ── Customer step ───────────────────────────────────────────
   const matches = useMemo(() => {
@@ -418,6 +493,16 @@ export default function OsEstimateWizard() {
           <div key={i} className="h-1 flex-1 rounded-full" style={{ background: i <= step ? "var(--hp-gold-deep)" : "var(--hp-hairline)" }} />
         ))}
       </div>
+
+      {/* Reference notes from the source opportunity (spot-inspection findings, scope) */}
+      {loadedNotes.trim() !== "" && step >= 1 && step <= 4 && (
+        <details open={step <= 2} className="bg-white rounded-xl border mb-4 max-w-lg overflow-hidden" style={inputStyle}>
+          <summary className="px-4 py-2.5 text-xs font-semibold cursor-pointer select-none" style={{ color: "var(--hp-gold-deep)" }}>
+            What we found on site
+          </summary>
+          <p className="px-4 pb-3 text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed">{loadedNotes}</p>
+        </details>
+      )}
 
       {/* ── Step 1: client ─────────────────────────────────────── */}
       {step === 0 && (

@@ -4,10 +4,11 @@
  * open the client; tap a quote to price it. Internal values only; nothing
  * here is customer-facing.
  */
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useEstimator } from "@/contexts/EstimatorContext";
 import { FileText, Plus, User } from "lucide-react";
+import { wizardPathFor } from "./estimate/openEstimate";
 
 const GROUPS = [
   { key: "lead", label: "Leads", hint: "New interest; call them." },
@@ -40,6 +41,7 @@ const fmtAge = (d: string | Date | null | undefined) => {
 };
 
 export default function OsPipelineList() {
+  const [, navigate] = useLocation();
   const { setActiveOpportunity, setActiveCustomer } = useEstimator();
   const { data: opps, isLoading } = trpc.opportunities.list.useQuery(
     { archived: false, limit: 500 },
@@ -99,7 +101,12 @@ export default function OsPipelineList() {
                       <button
                         type="button"
                         className="flex-1 min-w-0 text-left"
-                        onClick={() => setActiveOpportunity(o.id)}
+                        onClick={() => {
+                          // Wizard-first: unsent estimates resume in the guided flow.
+                          const wizardPath = wizardPathFor(o);
+                          if (wizardPath) navigate(wizardPath);
+                          else setActiveOpportunity(o.id);
+                        }}
                         title="Open and price it"
                       >
                         <div className="text-sm font-medium truncate flex items-center gap-1.5" style={{ color: "var(--hp-ink)" }}>

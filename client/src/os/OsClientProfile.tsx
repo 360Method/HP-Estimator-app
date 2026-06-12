@@ -24,6 +24,7 @@ import CustomerMembershipPanel from "@/components/CustomerMembershipPanel";
 import { MethodStepBoard } from "@/components/threeSixty/MethodStepBoard";
 import { getThreeSixtyStepByKey } from "@shared/threeSixtyMethod";
 import { useLocation } from "wouter";
+import { wizardPathFor } from "./estimate/openEstimate";
 
 type Tab = "overview" | "work" | "money" | "comms";
 
@@ -98,6 +99,19 @@ export default function OsClientProfile() {
   // Selection defaults to the primary property (the list comes back
   // primary-first), and survives only while it still exists.
   const activeProperty = (propertyRows ?? []).find((p: any) => p.id === scopedPropertyId) ?? null;
+
+  // Wizard-first: unsent estimates resume in the guided wizard; everything
+  // else (sent estimates, jobs, leads) opens the classic detail panel.
+  const openOpportunity = (id: string) => {
+    const o = opps.find((x: any) => x.id === id);
+    const wizardPath = o ? wizardPathFor(o) : null;
+    if (wizardPath) {
+      navigate(wizardPath);
+      return;
+    }
+    setActiveOpportunity(id);
+    setSection("opp-details");
+  };
 
   return (
     <div className="container max-w-3xl py-5">
@@ -238,7 +252,7 @@ export default function OsClientProfile() {
                 stepContents={memberJourney.stepContents}
                 customerId={customerId}
                 propertyId={activeProperty?.id ?? null}
-                onOpenOpportunity={(id) => { setActiveOpportunity(id); setSection("opp-details"); }}
+                onOpenOpportunity={openOpportunity}
                 onOpenSpot={(id) => navigate(`/os/spot/${id}`)}
               />
             </div>
@@ -277,7 +291,7 @@ export default function OsClientProfile() {
                 <button
                   key={o.id}
                   type="button"
-                  onClick={() => { setActiveOpportunity(o.id); setSection("opp-details"); }}
+                  onClick={() => openOpportunity(o.id)}
                   className="w-full text-left bg-white rounded-xl border px-4 py-3 flex items-center gap-3 hover:shadow-sm transition-shadow"
                   style={{ borderColor: "var(--hp-hairline)" }}
                 >

@@ -1703,6 +1703,9 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
             wonAt: dbOpp.wonAt ?? o.wonAt,
             portalApprovedAt: dbOpp.portalApprovedAt ?? o.portalApprovedAt,
             updatedAt: dbOpp.updatedAt ?? o.updatedAt,
+            // Fill the snapshot from the DB only when local has none —
+            // never clobber in-progress local edits.
+            estimateSnapshot: o.estimateSnapshot ?? (dbOpp as Opportunity).estimateSnapshot,
           };
         });
         const dbOnly = (dbCust.opportunities ?? [])
@@ -1738,6 +1741,8 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
             wonAt: dbOpp.wonAt ?? o.wonAt,
             portalApprovedAt: dbOpp.portalApprovedAt ?? o.portalApprovedAt,
             updatedAt: dbOpp.updatedAt ?? o.updatedAt,
+            // Fill from DB only when local has no snapshot (no clobbering).
+            estimateSnapshot: o.estimateSnapshot ?? dbOpp.estimateSnapshot,
           };
         });
         const dbOnly = incoming.filter(o => !localIds.has(o.id));

@@ -14,8 +14,6 @@ import { useParams, useLocation } from "wouter";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "../../../../server/routers";
 import { trpc } from "@/lib/trpc";
-import { useEstimator } from "@/contexts/EstimatorContext";
-import { markNavIntent } from "../navIntent";
 import { toast } from "sonner";
 import {
   ArrowLeft, ArrowRight, CalendarCheck, Check, CheckCircle2, Eye, FileText,
@@ -182,18 +180,11 @@ function ReadinessRow({ ok, label, fix }: { ok: boolean; label: string; fix?: st
 function PreflightStep({ ctx, onBegin, onExit }: { ctx: CloseContext; onBegin: () => void; onExit: () => void }) {
   const r = ctx.readiness;
   const [, navigate] = useLocation();
-  const { setActiveCustomer, setActiveOpportunity, setSection } = useEstimator();
 
-  // Jump straight into the builder for an internal estimate so the
-  // consultant can price it and sync it quietly (Send → Sync to Portal),
-  // then come back to Start close. Same deep-link handshake the
-  // notification bell uses.
+  // Resume the estimate in the guided wizard so the consultant can price it
+  // and sync it quietly (Send → Sync to Portal), then come back to Start close.
   const openInBuilder = (opportunityId: string) => {
-    setActiveCustomer(ctx.customer.id, "direct");
-    setActiveOpportunity(opportunityId);
-    setSection("opp-details");
-    markNavIntent();
-    navigate("/os/clients");
+    navigate(`/os/estimate/${opportunityId}`);
   };
 
   const fmtDollars = (n: number) => `$${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;

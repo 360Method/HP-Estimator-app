@@ -257,6 +257,7 @@ function Router() {
       <Route path="/os/spot/new" component={staffOnly(OsSpotInspection)} />
       <Route path="/os/spot/:id" component={staffOnly(OsSpotInspection)} />
       <Route path="/os/estimate/new" component={staffOnly(OsEstimateWizard)} />
+      <Route path="/os/estimate/:oppId" component={staffOnly(OsEstimateWizard)} />
       <Route path="/os/property/:propertyId/step/:stepKey" component={staffOnly(OsPropertyStep)} />
       <Route path="/os/close/:customerId" component={staffOnly(CloseFlowPage)} />
       {/* Business rooms (Phase 2): pipeline, clients, money, schedule, inbox */}
