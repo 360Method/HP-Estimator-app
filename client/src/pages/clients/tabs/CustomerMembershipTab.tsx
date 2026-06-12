@@ -8,11 +8,20 @@ import {
   VANCOUVER_PNW_SEASONAL_FOCUS,
 } from '@/lib/threeSixtyMethod';
 import { useClientUmbrella } from '@/components/clients/ClientUmbrellaContext';
+import { MethodJourneyStrip } from '@/components/threeSixty/MethodJourneyStrip';
+import { trpc } from '@/lib/trpc';
 
 const CustomerMembershipTab = () => {
   const { activeCustomerId } = useClientUmbrella();
+  const { data: memberJourney } = trpc.threeSixty.journey.forCustomer.useQuery(
+    { customerId: activeCustomerId ?? '' },
+    { enabled: !!activeCustomerId },
+  );
   return (
     <div className="space-y-5">
+      {memberJourney && (
+        <MethodJourneyStrip journey={memberJourney.journey} tierLabel={memberJourney.tierLabel} />
+      )}
       <div className="rounded-xl border border-[#cfdec9] bg-[#e9f0e6] p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>

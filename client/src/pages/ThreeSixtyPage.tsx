@@ -31,6 +31,7 @@ import {
 import ThreeSixtyMemberList from './ThreeSixtyMemberList';
 import ThreeSixtyChecklists from './ThreeSixtyChecklists';
 import { toast } from 'sonner';
+import { MethodStepChip } from '@/components/threeSixty/MethodJourneyStrip';
 
 const TIER_COLORS: Record<MemberTier, { badge: string; dot: string }> = {
   bronze: { badge: 'bg-amber-100 text-amber-800 border-amber-300', dot: 'bg-amber-500' },
@@ -85,6 +86,11 @@ export default function ThreeSixtyPage() {
   });
 
   const { data: memberships, isLoading } = trpc.threeSixty.memberships.list.useQuery();
+  const { data: journeyRoster } = trpc.threeSixty.journey.roster.useQuery();
+  const journeyByMembership = useMemo(
+    () => new Map((journeyRoster ?? []).map(j => [j.membershipId, j])),
+    [journeyRoster],
+  );
 
   const now = Date.now();
 
@@ -444,6 +450,9 @@ export default function ThreeSixtyPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
+                    {journeyByMembership.get(m.id) && (
+                      <MethodStepChip journey={journeyByMembership.get(m.id)!.journey} />
+                    )}
                     {isOverdue ? (
                       <Badge variant="destructive" className="text-[10px] px-1.5">Overdue</Badge>
                     ) : isRenewingSoon ? (

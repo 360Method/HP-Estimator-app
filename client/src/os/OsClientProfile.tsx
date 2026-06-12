@@ -18,6 +18,8 @@ import {
   ArrowLeft, Phone, Mail, MapPin, FileText, CircleDollarSign, Circle, Plus,
 } from "lucide-react";
 import CustomerMembershipPanel from "@/components/CustomerMembershipPanel";
+import { MethodJourneyStrip } from "@/components/threeSixty/MethodJourneyStrip";
+import { getThreeSixtyStepByKey } from "@shared/threeSixtyMethod";
 
 type Tab = "overview" | "work" | "money";
 
@@ -49,6 +51,10 @@ export default function OsClientProfile() {
   );
   const { data: openTasks } = trpc.os.tasks.list.useQuery(
     { linkType: "customer", linkId: customerId },
+    { enabled: !!customerId },
+  );
+  const { data: memberJourney } = trpc.threeSixty.journey.forCustomer.useQuery(
+    { customerId },
     { enabled: !!customerId },
   );
 
@@ -102,7 +108,12 @@ export default function OsClientProfile() {
         </div>
         {membership && (
           <span className="text-[11px] px-2.5 py-1 rounded-full font-semibold" style={{ background: "rgba(200,146,42,0.14)", color: "var(--hp-gold-deep)" }}>
-            360 Member
+            {memberJourney
+              ? (() => {
+                  const step = getThreeSixtyStepByKey(memberJourney.journey.currentStepKey);
+                  return step ? `360 Member · Step ${step.number} ${step.name}` : "360 Member";
+                })()
+              : "360 Member"}
           </span>
         )}
       </div>
@@ -145,6 +156,9 @@ export default function OsClientProfile() {
                 </div>
               ))}
             </div>
+          )}
+          {memberJourney && (
+            <MethodJourneyStrip journey={memberJourney.journey} tierLabel={memberJourney.tierLabel} />
           )}
           <CustomerMembershipPanel customerId={customerId} />
           {!membership && (ctx as any).portal == null && (
