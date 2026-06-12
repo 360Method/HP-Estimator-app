@@ -413,8 +413,12 @@ export default function OsSpotInspection() {
                       <Trash2 className="w-4 h-4 text-muted-foreground" />
                     </button>
                   </div>
-                  <textarea className={inputCls} style={inputStyle} rows={2} value={f.finding}
+                  <textarea className={inputCls} style={inputStyle} rows={2} value={f.finding} placeholder="What we observed"
                     onChange={(e) => setDraft({ ...draft, findings: draft.findings.map((x, j) => (j === i ? { ...x, finding: e.target.value } : x)) })} />
+                  <textarea className={inputCls} style={inputStyle} rows={2} value={f.interpretation ?? ""} placeholder="What it means for the home"
+                    onChange={(e) => setDraft({ ...draft, findings: draft.findings.map((x, j) => (j === i ? { ...x, interpretation: e.target.value } : x)) })} />
+                  <textarea className={inputCls} style={inputStyle} rows={2} value={f.recommended_approach ?? ""} placeholder="How we would approach it"
+                    onChange={(e) => setDraft({ ...draft, findings: draft.findings.map((x, j) => (j === i ? { ...x, recommended_approach: e.target.value } : x)) })} />
                   <div className="flex gap-2 items-center">
                     <span className="text-xs text-muted-foreground">Range</span>
                     <input className={inputCls + " w-28"} style={inputStyle} inputMode="numeric" value={f.investment_range_low_usd}
@@ -442,8 +446,20 @@ export default function OsSpotInspection() {
                       <span className="text-sm font-semibold" style={{ color: "var(--hp-ink)" }}>{f.category}</span>
                       <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${URGENCY_STYLE[f.urgency as Urgency]}`}>{f.urgency}</span>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-1">{f.finding}</p>
-                    <p className="text-xs font-medium mt-1" style={{ color: "var(--hp-ink)" }}>
+                    <p className="text-xs mt-1" style={{ color: "var(--hp-ink)" }}>{f.finding}</p>
+                    {f.interpretation && (
+                      <p className="text-xs text-muted-foreground mt-1.5">
+                        <span className="font-medium" style={{ color: "var(--hp-ink)" }}>What it means: </span>
+                        {f.interpretation}
+                      </p>
+                    )}
+                    {f.recommended_approach && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        <span className="font-medium" style={{ color: "var(--hp-ink)" }}>How we would approach it: </span>
+                        {f.recommended_approach}
+                      </p>
+                    )}
+                    <p className="text-xs font-medium mt-1.5" style={{ color: "var(--hp-ink)" }}>
                       {money(f.investment_range_low_usd)} to {money(f.investment_range_high_usd)}
                     </p>
                   </div>

@@ -60,6 +60,7 @@ import { osRouter } from "./routers/os";
 import { priceBookRouter } from "./routers/priceBook";
 import { commissionsRouter } from "./routers/commissions";
 import { spotInspectionRouter } from "./routers/spotInspection";
+import { quickQuoteRouter } from "./routers/quickQuote";
 import { requestPasswordReset, consumePasswordReset } from "./passwordReset";
 import {
   getAdminAllowlist,
@@ -130,6 +131,7 @@ export const appRouter = router({
   priceBook: priceBookRouter,
   commissions: commissionsRouter,
   spotInspection: spotInspectionRouter,
+  quickQuote: quickQuoteRouter,
 
   auth: router({
     /**

@@ -39,7 +39,10 @@ export default function OsQuickQuote() {
   useDbSync(true);
 
   const [clientQuery, setClientQuery] = useState("");
-  const [clientId, setClientId] = useState<string | null>(null);
+  // The customer is the umbrella: arriving from a client profile preselects them.
+  const [clientId, setClientId] = useState<string | null>(
+    () => new URLSearchParams(window.location.search).get("customerId"),
+  );
   const [presetKey, setPresetKey] = useState<string | null>(null);
   const [sqft, setSqft] = useState("");
   const [lfByAddon, setLfByAddon] = useState<Record<string, string>>({});
@@ -54,12 +57,20 @@ export default function OsQuickQuote() {
   const createOpp = trpc.opportunities.create.useMutation({
     onError: (err) => console.warn("[quickquote] DB opportunity create failed (local state preserved):", err.message),
   });
+  const sendConsultM = trpc.quickQuote.sendConsultationToPortal.useMutation({
+    onSuccess: () => toast.success("In their portal. They can read it tonight."),
+    onError: (e) => toast.error(e.message),
+  });
 
   const presets: QuotePreset[] = useMemo(
     () =>
       ((presetsQ.data ?? []) as Parameters<typeof presetFromRow>[0][])
         .map(presetFromRow)
         .filter((p): p is QuotePreset => p !== null),
+    [presetsQ.data],
+  );
+  const presetIdByKey = useMemo(
+    () => new Map(((presetsQ.data ?? []) as { id: number; presetKey: string }[]).map((r) => [r.presetKey, r.id])),
     [presetsQ.data],
   );
   const preset = presets.find((p) => p.presetKey === presetKey) ?? null;
@@ -267,7 +278,22 @@ export default function OsQuickQuote() {
             the written scope.
           </p>
 
-          <div className="mt-4 flex justify-end">
+          <div className="mt-4 flex justify-end gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => {
+                const presetId = preset ? presetIdByKey.get(preset.presetKey) : undefined;
+                if (!clientId || !presetId) return;
+                const lf: Record<string, number> = {};
+                for (const [k, v] of Object.entries(lfByAddon)) lf[k] = parseFloat(v) || 0;
+                sendConsultM.mutate({ customerId: clientId, presetId, sqft: sqftNum, lfByAddon: lf });
+              }}
+              disabled={!clientId || sendConsultM.isPending}
+              className="flex items-center gap-1.5 text-sm px-4 py-3 rounded-xl font-semibold border disabled:opacity-40"
+              style={{ borderColor: "var(--hp-gold-deep)", color: "var(--hp-gold-deep)" }}
+            >
+              {sendConsultM.isPending ? "Sending…" : "Put this in their portal"}
+            </button>
             <button
               type="button"
               onClick={firmUp}
@@ -281,6 +307,10 @@ export default function OsQuickQuote() {
           {!clientId && (
             <p className="text-xs text-muted-foreground text-right mt-1">Pick the client above to continue.</p>
           )}
+          <p className="text-[11px] text-muted-foreground text-right mt-1">
+            "Put this in their portal" files a one-page summary of these options, what we are doing,
+            why, how we approach it, and the ranges, under their documents.
+          </p>
         </section>
       )}
     </OsShell>

@@ -20,6 +20,12 @@ describe("router modules load", () => {
     expect(mod.spotInspectionRouter).toBeDefined();
   });
 
+
+  it("quickQuote router module imports cleanly", async () => {
+    const mod = await import("./quickQuote");
+    expect(mod.quickQuoteRouter).toBeDefined();
+  });
+
   it("commissions router module imports cleanly", async () => {
     const mod = await import("./commissions");
     expect(mod.commissionsRouter).toBeDefined();
