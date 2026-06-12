@@ -44,10 +44,12 @@ describe("router modules load", () => {
     expect(mod.propertiesRouter).toBeDefined();
   });
 
-  it("closeFlow router exposes the in-person approval", async () => {
+  it("closeFlow router exposes the in-person approval and deposit procs", async () => {
     const mod = await import("./closeFlow");
     expect(mod.closeFlowRouter).toBeDefined();
     const procs = mod.closeFlowRouter._def.procedures as Record<string, unknown>;
     expect(procs.approveEstimateInPerson).toBeDefined();
+    expect(procs.createDepositCheckoutSession).toBeDefined();
+    expect(procs.recordDepositCheckPayment).toBeDefined();
   });
 });

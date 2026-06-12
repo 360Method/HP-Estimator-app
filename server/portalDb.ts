@@ -439,7 +439,9 @@ export async function getPortalInvoiceById(id: number) {
 export async function updatePortalInvoicePaid(
   id: number,
   amountPaid: number,
-  stripePaymentIntentId?: string
+  stripePaymentIntentId?: string,
+  /** Extra columns to set, e.g. paymentMethod/paymentRef for offline payments */
+  extra?: Partial<typeof portalInvoices.$inferInsert>,
 ) {
   const db = await d();
   await db
@@ -449,6 +451,7 @@ export async function updatePortalInvoicePaid(
       amountPaid,
       paidAt: new Date(),
       ...(stripePaymentIntentId ? { stripePaymentIntentId } : {}),
+      ...(extra ?? {}),
     })
     .where(eq(portalInvoices.id, id));
 }
