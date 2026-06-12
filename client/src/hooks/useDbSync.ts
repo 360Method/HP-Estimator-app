@@ -61,7 +61,7 @@ function dbOppToLocal(o: any): Opportunity {
 }
 
 /** Convert a DB customer row (with embedded opportunities) to the in-memory Customer shape */
-function dbCustomerToLocal(dbCust: any): Customer {
+export function dbCustomerToLocal(dbCust: any): Customer {
   let tags: string[] = [];
   try { tags = JSON.parse(dbCust.tags ?? "[]"); } catch { tags = []; }
 

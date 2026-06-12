@@ -20,6 +20,7 @@ import { trpc } from "@/lib/trpc";
 import AdminLogin from "@/pages/AdminLogin";
 import AdminAccessDenied from "@/pages/AdminAccessDenied";
 import NotificationBell from "@/components/NotificationBell";
+import OsQuickActions from "./OsQuickActions";
 
 type NavItem = {
   href: string;
@@ -98,7 +99,7 @@ export function OsShell({
   active?: string;
   /** Full-width content (the business rooms need it for boards and tables). */
   wide?: boolean;
-  /** No content padding; the room's own header (MetricsBar) spans the area. */
+  /** No content padding; the room's own strips (OsBuilderBar) span the area. */
   flush?: boolean;
   /**
    * Content fills the viewport exactly (no page scroll) — for surfaces that
@@ -146,6 +147,7 @@ export function OsShell({
             <span className="hidden sm:inline">
               {new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
             </span>
+            <OsQuickActions />
             <NotificationBell darkSurface />
             <Link href="/os/chat">
               <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/20 text-white/85 hover:bg-white/10 cursor-pointer transition-colors">

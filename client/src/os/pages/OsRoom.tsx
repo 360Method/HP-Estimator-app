@@ -7,8 +7,9 @@
  * critical is reimplemented; only the chrome changes. The room in the URL
  * picks the rail highlight and the section the room opens on; everything the
  * user does after that drives the estimator context exactly like the old
- * shell. MetricsBar stays: it carries global search, the New menu, the
- * builder tabs, and the margin totals.
+ * shell. The old app header (MetricsBar) is gone: search and the New menu
+ * live in the OS shell top bar (OsQuickActions), and the builder tab strip
+ * with margin pills (OsBuilderBar) appears only inside an opportunity.
  */
 import { lazy, Suspense, useEffect, useMemo } from "react";
 import { useRoute } from "wouter";
@@ -17,9 +18,9 @@ import { useEstimator } from "@/contexts/EstimatorContext";
 import { useDbSync } from "@/hooks/useDbSync";
 import { useOpportunitySSE } from "@/hooks/useOpportunitySSE";
 import { calcPhase, calcTotals } from "@/lib/calc";
-import MetricsBar from "@/components/MetricsBar";
 import NewLeadBanner from "@/components/NewLeadBanner";
 import type { AppSection } from "@/lib/types";
+import OsBuilderBar from "../OsBuilderBar";
 import { OsShell } from "../OsShell";
 import { consumeNavIntent } from "../navIntent";
 
@@ -98,11 +99,7 @@ export function Room({ room, roomSection }: { room: string; roomSection: AppSect
   return (
     <OsShell active={`/os/${room}`} wide flush>
       <NewLeadBanner />
-      {/* MetricsBar ships sticky top-0; below the OS header it must stick at
-          the header's height instead or it slides underneath it. */}
-      <div className="[&>div]:!top-[57px]">
-        <MetricsBar totals={totals} />
-      </div>
+      {state.activeOpportunityId && <OsBuilderBar totals={totals} />}
       <Suspense fallback={<SectionLoader />}>
         {state.activeSection === "dashboard" ? (
           <EstimatorDashboard />
