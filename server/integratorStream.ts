@@ -51,6 +51,7 @@ import {
   integratorChatMessages,
 } from "../drizzle/schema";
 import { getAnthropicToolDefinitions, getTool } from "./lib/agentRuntime/tools";
+import { classifyAiError } from "./lib/aiProviderError";
 import { priceRun } from "./lib/agentRuntime/pricing";
 // Side-effect: registers the agent-teams tools alongside the rest.
 import "./lib/agentRuntime/phase2Tools";
@@ -578,7 +579,21 @@ export function registerIntegratorStreamRoutes(app: Express): void {
         const msg = err instanceof Error ? err.message : String(err);
         const stack = err instanceof Error ? err.stack : undefined;
         logErr("ERROR in stream pipeline", msg, stack);
-        sse(res, "error", { message: msg });
+        const { code, friendly } = classifyAiError(err);
+        // Persist the failure as an assistant bubble so the thread shows it
+        // after a refresh (matches integratorChat.send behavior).
+        try {
+          await d.insert(integratorChatMessages).values({
+            conversationId,
+            userId: user.id,
+            role: "assistant",
+            content: `⚠ The OS brain couldn't reply: ${friendly}`,
+            toolCalls: JSON.stringify([{ key: "_system_error", input: { code } }]),
+          });
+        } catch { /* best effort */ }
+        // Clients must treat stream end without a `done` event as a failure
+        // ("connection dropped mid-reply") even if this error event is lost.
+        sse(res, "error", { message: friendly, code });
       } finally {
         clearInterval(heartbeat);
         activeStream = null;

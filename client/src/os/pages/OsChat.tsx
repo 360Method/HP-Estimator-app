@@ -9,7 +9,7 @@ import { IntegratorChatInner } from "@/pages/admin/IntegratorChat";
 
 export default function OsChat() {
   return (
-    <OsShell active="/os/chat">
+    <OsShell active="/os/chat" fill>
       <IntegratorChatInner />
     </OsShell>
   );

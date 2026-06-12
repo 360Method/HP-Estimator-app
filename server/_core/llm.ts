@@ -1,4 +1,5 @@
 import { ENV } from "./env";
+import { AiProviderError } from "../lib/aiProviderError";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared LLM interface — historically OpenAI-shaped so many call sites already
@@ -234,7 +235,7 @@ const wantsJson = (params: InvokeParams): boolean => {
 
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   if (!ENV.anthropicApiKey) {
-    throw new Error("ANTHROPIC_API_KEY is not configured");
+    throw new AiProviderError("ANTHROPIC_API_KEY is not configured", { providerType: "no_key" });
   }
 
   const body = buildAnthropicPayload(params);
@@ -251,8 +252,16 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(
-      `LLM invoke failed: ${response.status} ${response.statusText} – ${errorText}`
+    // Pull the provider's error.type out of the body so callers can classify
+    // (billing vs overload vs auth) without string-matching messages.
+    let providerType: string | undefined;
+    try {
+      const parsed = JSON.parse(errorText) as { error?: { type?: string } };
+      providerType = parsed?.error?.type;
+    } catch { /* body wasn't JSON */ }
+    throw new AiProviderError(
+      `LLM invoke failed: ${response.status} ${response.statusText} – ${errorText}`,
+      { status: response.status, providerType },
     );
   }
 

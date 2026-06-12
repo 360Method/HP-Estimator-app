@@ -88,6 +88,7 @@ export function OsShell({
   active,
   wide,
   flush,
+  fill,
   children,
 }: {
   active?: string;
@@ -95,6 +96,12 @@ export function OsShell({
   wide?: boolean;
   /** No content padding; the room's own header (MetricsBar) spans the area. */
   flush?: boolean;
+  /**
+   * Content fills the viewport exactly (no page scroll) — for surfaces that
+   * manage their own scrolling, like Chat. Children get a flex column with
+   * min-h-0 so an inner `flex-1 min-h-0` pane scrolls instead of the page.
+   */
+  fill?: boolean;
   children: ReactNode;
 }) {
   const { user, loading } = useAuth();
@@ -114,7 +121,10 @@ export function OsShell({
   const taskCount = openTasks?.length ?? 0;
 
   return (
-    <div className="min-h-screen" style={{ background: "var(--hp-cream)" }}>
+    <div
+      className={fill ? "h-dvh flex flex-col overflow-hidden" : "min-h-screen"}
+      style={{ background: "var(--hp-cream)" }}
+    >
       {/* ── Top bar ───────────────────────────────────────────── */}
       <header className="sticky top-0 z-40 px-4 py-3" style={{ background: "var(--hp-ink)", color: "white" }}>
         <div className="flex items-center justify-between gap-3">
@@ -142,7 +152,7 @@ export function OsShell({
         </div>
       </header>
 
-      <div className="flex">
+      <div className={"flex" + (fill ? " flex-1 min-h-0" : "")}>
         {/* ── Desktop rail ─────────────────────────────────────── */}
         <aside className="hidden md:block w-52 shrink-0 px-3 py-4 sticky top-[57px] self-start h-[calc(100vh-57px)] overflow-y-auto">
           <nav className="space-y-1">
@@ -172,6 +182,7 @@ export function OsShell({
         <main
           className={
             "flex-1 min-w-0 pb-24 md:pb-8 " +
+            (fill ? "flex flex-col min-h-0 overflow-hidden " : "") +
             (flush ? "" : "px-4 py-5 ") +
             (wide ? "" : "max-w-4xl")
           }

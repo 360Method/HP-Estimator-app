@@ -59,11 +59,21 @@ export function IntegratorChatInner() {
   const send = trpc.integratorChat.send.useMutation({
     onSuccess: () => {
       setDraft("");
-      utils.integratorChat.listMessages.invalidate({ conversationId: activeId ?? 0 });
       utils.integratorChat.listConversations.invalidate();
     },
     onError: (err) => toast.error(err.message),
-    onSettled: () => setPending(false),
+    onSettled: () => {
+      setPending(false);
+      // Refetch on success AND failure — the server persists an error bubble
+      // in the thread when the AI call fails, and it must show up.
+      utils.integratorChat.listMessages.invalidate({ conversationId: activeId ?? 0 });
+    },
+  });
+
+  // Brain health — warn before the user types into a dead chat.
+  const brainHealth = trpc.aiBrain.health.useQuery(undefined, {
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
   });
 
   useEffect(() => {
@@ -108,7 +118,7 @@ export function IntegratorChatInner() {
   }
 
   return (
-      <div className="grid md:grid-cols-[260px_1fr] grid-cols-1 gap-4 h-[calc(100vh-10rem)]">
+      <div className="grid md:grid-cols-[260px_1fr] grid-cols-1 gap-4 flex-1 min-h-0">
         {/* ── Sidebar (desktop; on phones the latest chat auto-opens) ──────── */}
         <Card className="p-3 hidden md:flex flex-col gap-2 overflow-hidden">
           <div className="flex items-center justify-between">
@@ -161,7 +171,7 @@ export function IntegratorChatInner() {
         </Card>
 
         {/* ── Main pane ────────────────────────────────────────────────────── */}
-        <Card className="flex flex-col overflow-hidden">
+        <Card className="flex flex-col overflow-hidden min-h-0">
           <header className="px-4 py-3 border-b flex items-center justify-between gap-2">
             <div>
               <h1 className="text-base font-semibold">Integrator AI</h1>
@@ -186,6 +196,21 @@ export function IntegratorChatInner() {
               </Button>
             </div>
           </header>
+
+          {brainHealth.data && !brainHealth.data.ok && (
+            <div
+              className={
+                "px-4 py-2 text-xs border-b " +
+                (brainHealth.data.status === "degraded"
+                  ? "bg-amber-50 text-amber-800 border-amber-200"
+                  : "bg-red-50 text-red-800 border-red-200")
+              }
+            >
+              {brainHealth.data.status === "degraded"
+                ? "The AI provider is busy — replies may be slow or fail."
+                : "AI is offline (billing or API key). Messages can't get replies until it's fixed."}
+            </div>
+          )}
 
           <div ref={messagesRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
             {activeId === null ? (
@@ -260,7 +285,7 @@ function EmptyState({ onNew, pending }: { onNew: () => void; pending: boolean })
 
 function MessageBubble({ message }: { message: Message }) {
   const isUser = message.role === "user";
-  const tools = useMemo<ToolCallEntry[]>(() => {
+  const allTools = useMemo<ToolCallEntry[]>(() => {
     if (!message.toolCalls) return [];
     try {
       const parsed = JSON.parse(message.toolCalls);
@@ -269,6 +294,9 @@ function MessageBubble({ message }: { message: Message }) {
       return [];
     }
   }, [message.toolCalls]);
+  // A failed AI call is persisted as an assistant message tagged _system_error.
+  const isSystemError = allTools.some((t) => t.key === "_system_error");
+  const tools = isSystemError ? allTools.filter((t) => t.key !== "_system_error") : allTools;
 
   return (
     <div className={"flex " + (isUser ? "justify-end" : "justify-start")}>
@@ -278,7 +306,9 @@ function MessageBubble({ message }: { message: Message }) {
             "rounded-2xl px-4 py-3 text-sm whitespace-pre-wrap break-words " +
             (isUser
               ? "bg-primary text-primary-foreground"
-              : "bg-muted text-foreground")
+              : isSystemError
+                ? "bg-amber-50 text-amber-900 border border-amber-200"
+                : "bg-muted text-foreground")
           }
         >
           {message.content || <em className="opacity-60">(no text)</em>}

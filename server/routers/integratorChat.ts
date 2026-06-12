@@ -30,6 +30,7 @@ import {
   integratorChatMessages,
 } from "../../drizzle/schema";
 import { getAnthropicToolDefinitions, getTool } from "../lib/agentRuntime/tools";
+import { classifyAiError, isAiOfflineCode } from "../lib/aiProviderError";
 import { priceRun } from "../lib/agentRuntime/pricing";
 import { evaluateToolApproval, type ApprovalPolicyResult } from "../lib/agentRuntime/approvalPolicy";
 // Side-effect: registers Phase-2 tool wrappers.
@@ -179,7 +180,7 @@ export const integratorChatRouter = router({
       // 5) Call Anthropic
       const apiKey = process.env.ANTHROPIC_API_KEY;
       if (!apiKey) {
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "ANTHROPIC_API_KEY not set" });
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "The AI brain has no API key configured." });
       }
       const client = new Anthropic({ apiKey });
 
@@ -204,8 +205,27 @@ export const integratorChatRouter = router({
           messages,
         });
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: `Anthropic call failed: ${msg}` });
+        const { code, friendly } = classifyAiError(err);
+        console.error(`[integratorChat] AI call failed (${code}):`, err instanceof Error ? err.message : err);
+        // Persist the failure as a visible assistant bubble so it survives a
+        // refresh — a toast alone reads as "the OS never replied" on a phone.
+        try {
+          await d.insert(integratorChatMessages).values({
+            conversationId: input.conversationId,
+            userId: ctx.user.id,
+            role: "assistant",
+            content: `⚠ The OS brain couldn't reply: ${friendly}`,
+            toolCalls: JSON.stringify([{ key: "_system_error", input: { code } }]),
+          });
+          await d
+            .update(integratorChatConversations)
+            .set({ lastMessageAt: new Date() })
+            .where(eq(integratorChatConversations.id, input.conversationId));
+        } catch { /* best effort — the thrown error below still surfaces */ }
+        throw new TRPCError({
+          code: isAiOfflineCode(code) ? "PRECONDITION_FAILED" : "INTERNAL_SERVER_ERROR",
+          message: friendly,
+        });
       }
 
       const inputTokens = response.usage.input_tokens;
