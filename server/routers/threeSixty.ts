@@ -42,6 +42,7 @@ import {
 import Stripe from "stripe";
 import { nanoid } from "nanoid";
 import { findCustomerByEmail, createCustomer, createOpportunity } from "../db";
+import { journeyRouter } from "./threeSixtyJourney";
 
 // ─── MEMBERSHIPS ─────────────────────────────────────────────────────────────
 
@@ -1503,6 +1504,7 @@ const portfolioAbandonedLeadRouter = router({
 // ─── COMBINED ROUTER ─────────────────────────────────────────────────────────
 export const threeSixtyRouter = router({
   memberships: membershipRouter,
+  journey: journeyRouter,
   visits: visitsRouter,
   checklist: checklistRouter,
   laborBank: laborBankRouter,
