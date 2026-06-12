@@ -1173,6 +1173,14 @@ const checkoutRouter = router({
         hpCustomerId: z.string().optional(),
         /** Property address ID to associate with membership */
         propertyAddressId: z.number().int().optional(),
+        /** CRM properties.id (nanoid) — links the membership to a specific property after payment */
+        propertyId: z.string().optional(),
+        /**
+         * Staff-device redirect overrides: relative paths so a consultant's
+         * checkout returns to the staff surface instead of the public funnel.
+         */
+        successPath: z.string().startsWith("/").optional(),
+        cancelPath: z.string().startsWith("/").optional(),
         /** Frontend origin for success/cancel redirect */
         origin: z.string().url(),
       })
@@ -1201,17 +1209,27 @@ const checkoutRouter = router({
         priceId = getStripePriceId(input.tier, cadence, input.offer);
       }
 
+      // Staff-initiated checkouts (consultant's device, on-site close) must
+      // never prefill the consultant's own email into Stripe.
+      const staffInitiated = Boolean(input.propertyId || input.successPath || input.cancelPath);
+      const joinQuery = (path: string, qs: string) => `${input.origin}${path}${path.includes("?") ? "&" : "?"}${qs}`;
+      const successUrl = joinQuery(input.successPath ?? "/360/confirmation", "session_id={CHECKOUT_SESSION_ID}");
+      const cancelUrl = input.cancelPath
+        ? joinQuery(input.cancelPath, "cancelled=1")
+        : `${input.origin}/360/checkout?tier=${input.tier}&cadence=${cadence}&cancelled=1`;
+
       const session = await stripe.checkout.sessions.create({
         mode: "subscription",
         line_items: [{ price: priceId, quantity: 1 }],
-        customer_email: input.customerEmail ?? (ctx as any).user?.email ?? undefined,
+        customer_email: input.customerEmail ?? (staffInitiated ? undefined : (ctx as any).user?.email) ?? undefined,
         allow_promotion_codes: true,
-        success_url: `${input.origin}/360/confirmation?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${input.origin}/360/checkout?tier=${input.tier}&cadence=${cadence}&cancelled=1`,
+        success_url: successUrl,
+        cancel_url: cancelUrl,
         metadata: {
           tier: input.tier,
           cadence,
           hpCustomerId: input.hpCustomerId ?? "",
+          propertyId: input.propertyId ?? "",
           propertyAddressId: input.propertyAddressId?.toString() ?? "",
           enrolledByUserId: (ctx as any).user?.id?.toString() ?? "",
           customerName: input.customerName ?? "",

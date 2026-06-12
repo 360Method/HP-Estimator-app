@@ -265,6 +265,21 @@ export async function ensureOsTables(): Promise<void> {
       await db.execute(ddl);
     }
 
+    // On-site close flow: offline membership payments (check/comp), in-person
+    // estimate approval with a recorded attestation, and deposit payment
+    // method tracking. All additive; defaults preserve existing behavior.
+    for (const ddl of [
+      sql`ALTER TABLE IF EXISTS "threeSixtyMemberships" ADD COLUMN IF NOT EXISTS "paymentMethod" varchar(20) NOT NULL DEFAULT 'stripe'`,
+      sql`ALTER TABLE IF EXISTS "threeSixtyMemberships" ADD COLUMN IF NOT EXISTS "paymentRef" varchar(120)`,
+      sql`ALTER TABLE IF EXISTS "threeSixtyMemberships" ADD COLUMN IF NOT EXISTS "enrolledByUserId" integer`,
+      sql`ALTER TABLE IF EXISTS "portalEstimates" ADD COLUMN IF NOT EXISTS "approvalChannel" varchar(20) NOT NULL DEFAULT 'portal'`,
+      sql`ALTER TABLE IF EXISTS "portalEstimates" ADD COLUMN IF NOT EXISTS "approvalAttestation" text`,
+      sql`ALTER TABLE IF EXISTS "portalInvoices" ADD COLUMN IF NOT EXISTS "paymentMethod" varchar(20)`,
+      sql`ALTER TABLE IF EXISTS "portalInvoices" ADD COLUMN IF NOT EXISTS "paymentRef" varchar(120)`,
+    ]) {
+      await db.execute(ddl);
+    }
+
     // Remodel quick-quote presets (Step 8 on-site value consultation).
     // RETAIL room-rate ranges, margins baked in; kept apart from the
     // internal-cost price book on purpose.

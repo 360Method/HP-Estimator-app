@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { TIER_DEFINITIONS, type MemberTier } from "@shared/threeSixtyTiers";
 import PropertyEditDialog from "./PropertyEditDialog";
+import EnrollPropertyDialog from "@/components/EnrollPropertyDialog";
 
 type AddressSeed = {
   street?: string | null;
@@ -41,6 +42,7 @@ export default function PropertyStrip({
   onSelect: (propertyId: string) => void;
 }) {
   const [editing, setEditing] = useState<null | { mode: "new" } | { mode: "edit"; property: any }>(null);
+  const [enrolling, setEnrolling] = useState<any>(null);
 
   const utils = trpc.useUtils();
   const { data: props, isLoading } = trpc.properties.listByCustomer.useQuery(
@@ -131,8 +133,16 @@ export default function PropertyStrip({
                     {TIER_DEFINITIONS[tier]?.label ?? "360 Member"}
                   </span>
                 ) : (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500">
-                    Not enrolled
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => { e.stopPropagation(); setEnrolling(p); }}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); setEnrolling(p); } }}
+                    title="Enroll this property in the 360° Method"
+                    className="text-[10px] px-2 py-0.5 rounded-full font-semibold border cursor-pointer"
+                    style={{ borderColor: "var(--hp-gold-deep)", color: "var(--hp-gold-deep)" }}
+                  >
+                    Enroll
                   </span>
                 )}
               </div>
@@ -156,6 +166,14 @@ export default function PropertyStrip({
           property={editing.mode === "edit" ? editing.property : undefined}
           open
           onClose={() => setEditing(null)}
+        />
+      )}
+
+      {enrolling && (
+        <EnrollPropertyDialog
+          property={enrolling}
+          open
+          onClose={() => setEnrolling(null)}
         />
       )}
     </div>

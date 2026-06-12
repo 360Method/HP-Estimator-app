@@ -23,6 +23,7 @@ import {
 import { formatDollars, TIER_DEFINITIONS, type MemberTier } from '../../../shared/threeSixtyTiers';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { toast } from 'sonner';
+import EnrollPropertyDialog from '@/components/EnrollPropertyDialog';
 import ThreeSixtyVisitDetail from '@/pages/ThreeSixtyVisitDetail';
 import ThreeSixtyBaselineWizard from '@/pages/ThreeSixtyBaselineWizard';
 import ThreeSixtyScanDetail from '@/pages/ThreeSixtyScanDetail';
@@ -74,7 +75,12 @@ interface Props {
 }
 
 export default function CustomerMembershipPanel({ customerId }: Props) {
+  const [enrollTarget, setEnrollTarget] = useState<any>(null);
   const { data: memberships, isLoading } = trpc.threeSixty.memberships.getByCustomer.useQuery(
+    { customerId },
+    { enabled: !!customerId }
+  );
+  const { data: customerProps } = trpc.properties.listByCustomer.useQuery(
     { customerId },
     { enabled: !!customerId }
   );
@@ -89,13 +95,34 @@ export default function CustomerMembershipPanel({ customerId }: Props) {
   }
 
   if (!memberships || memberships.length === 0) {
+    const enrollable = (customerProps ?? []).find(
+      (p: any) => p.membership?.status !== 'active'
+    );
     return (
       <div className="py-16 text-center border-2 border-dashed border-border rounded-xl">
         <RefreshCw className="w-8 h-8 mx-auto mb-3 opacity-30" />
         <p className="text-base font-semibold text-muted-foreground">No 360° Memberships</p>
-        <p className="text-sm text-muted-foreground mt-1">
-          Enroll a property from the <strong>Properties</strong> tab to get started.
-        </p>
+        {enrollable ? (
+          <>
+            <p className="text-sm text-muted-foreground mt-1">
+              Enroll {enrollable.label || 'their home'} in the 360° Method, with payment by card, check, or comp.
+            </p>
+            <Button className="mt-4" onClick={() => setEnrollTarget(enrollable)}>
+              Enroll this property
+            </Button>
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground mt-1">
+            Set up a property on this client first, then enroll it here.
+          </p>
+        )}
+        {enrollTarget && (
+          <EnrollPropertyDialog
+            property={enrollTarget}
+            open
+            onClose={() => setEnrollTarget(null)}
+          />
+        )}
       </div>
     );
   }

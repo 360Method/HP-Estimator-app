@@ -12,9 +12,15 @@ import {
   opportunities,
   threeSixtyMemberships,
   threeSixtyVisits,
+  threeSixtyWorkOrders,
+  threeSixtyLaborBankTransactions,
+  osTasks,
+  customers,
   DbProperty,
 } from "../../drizzle/schema";
 import { eq, and, desc, count, sql } from "drizzle-orm";
+import { TIER_DEFINITIONS, type MemberTier } from "../../shared/threeSixtyTiers";
+import { notifyOwner } from "../_core/notification";
 import { nanoid } from "nanoid";
 import Stripe from "stripe";
 function getStripe() {
@@ -449,6 +455,166 @@ export const propertiesRouter = router({
         .where(eq(threeSixtyMemberships.id, membershipId))
         .limit(1);
 
+      return created!;
+    }),
+
+  /**
+   * Enroll a property in a 360° membership paid OFFLINE (check or comp).
+   * Used by the on-site close flow: the membership is active through the paid
+   * term, with a renewal task queued near the renewal date instead of a
+   * Stripe subscription. Mirrors the Stripe webhook's side effects (first
+   * seasonal visit, baseline work order, labor bank credit) so an offline
+   * member's downstream experience is identical.
+   */
+  enrollMembershipOffline: protectedProcedure
+    .input(
+      z.object({
+        propertyId: z.string(),
+        customerId: z.string(),
+        tier: z.enum(["bronze", "silver", "gold"]),
+        cadence: z.enum(["monthly", "quarterly", "annual"]),
+        paymentMethod: z.enum(["check", "comp"]),
+        checkNumber: z.string().max(60).optional(),
+        amountCents: z.number().int().min(0).optional(),
+        /** ISO date the check was received; defaults to today */
+        paidDate: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
+
+      const [prop] = await db
+        .select()
+        .from(properties)
+        .where(eq(properties.id, input.propertyId))
+        .limit(1);
+      if (!prop) throw new TRPCError({ code: "NOT_FOUND" });
+      if (prop.customerId !== input.customerId)
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Property does not belong to this customer." });
+
+      if (prop.membershipId) {
+        const [existing] = await db
+          .select({ status: threeSixtyMemberships.status })
+          .from(threeSixtyMemberships)
+          .where(eq(threeSixtyMemberships.id, prop.membershipId))
+          .limit(1);
+        if (existing?.status === "active") {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "This property already has an active 360° membership.",
+          });
+        }
+      }
+
+      const tierDef = TIER_DEFINITIONS[input.tier as MemberTier];
+      const startDate = input.paidDate ? new Date(input.paidDate).getTime() || Date.now() : Date.now();
+      const msPerDay = 86400000;
+      const cadenceDays = { monthly: 30, quarterly: 90, annual: 365 };
+      const renewalDate = startDate + cadenceDays[input.cadence] * msPerDay;
+
+      // Same deferred-credit rule as the Stripe webhook: monthly silver/gold
+      // credit loads after 90 days.
+      const isDeferred =
+        input.cadence === "monthly" &&
+        (input.tier === "silver" || input.tier === "gold");
+      const creditCents = tierDef.laborBankCreditCents;
+      const initialBalance = isDeferred ? 0 : creditCents;
+      const scheduledCreditAt = isDeferred ? startDate + 90 * msPerDay : null;
+
+      const paymentNote =
+        input.paymentMethod === "check"
+          ? `Paid by check${input.checkNumber ? ` #${input.checkNumber}` : ""}${input.amountCents ? ` ($${(input.amountCents / 100).toFixed(2)})` : ""} on ${new Date(startDate).toLocaleDateString()}`
+          : `Comp membership (no charge), enrolled ${new Date(startDate).toLocaleDateString()}`;
+
+      const [result] = await db
+        .insert(threeSixtyMemberships)
+        .values({
+          customerId: input.customerId,
+          hpCustomerId: input.customerId,
+          tier: input.tier,
+          status: "active",
+          startDate,
+          renewalDate,
+          laborBankBalance: initialBalance,
+          billingCadence: input.cadence,
+          annualScanCompleted: false,
+          planType: "single",
+          scheduledCreditAt: scheduledCreditAt ?? undefined,
+          scheduledCreditCents: isDeferred ? creditCents : 0,
+          paymentMethod: input.paymentMethod,
+          paymentRef: input.checkNumber ?? null,
+          enrolledByUserId: ctx.user.id,
+          notes: paymentNote,
+        })
+        .returning({ id: threeSixtyMemberships.id });
+      const membershipId = Number(result?.id ?? 0);
+
+      await db
+        .update(properties)
+        .set({ membershipId })
+        .where(eq(properties.id, input.propertyId));
+
+      // Webhook-parity side effects. None of these may block enrollment.
+      if (creditCents > 0 && !isDeferred) {
+        await db.insert(threeSixtyLaborBankTransactions).values({
+          membershipId,
+          type: "credit",
+          amountCents: creditCents,
+          description: `Initial ${tierDef.label} plan enrollment credit`,
+          createdAt: new Date(),
+        }).catch((err: Error) => console.error("[enrollOffline] labor bank credit failed:", err));
+      }
+
+      const month = new Date().getMonth();
+      const season = month >= 2 && month <= 4 ? "spring" : month >= 5 && month <= 7 ? "summer" : month >= 8 && month <= 10 ? "fall" : "winter";
+      const includesSeason = input.tier !== "bronze" || season === "spring" || season === "fall";
+      if (includesSeason) {
+        await db.insert(threeSixtyVisits).values({
+          membershipId,
+          customerId: input.customerId,
+          season,
+          status: "scheduled",
+          visitYear: new Date().getFullYear(),
+        }).catch((err: Error) => console.error("[enrollOffline] first visit failed:", err));
+      }
+
+      await db.insert(threeSixtyWorkOrders).values({
+        membershipId,
+        customerId: input.customerId,
+        type: "baseline_scan",
+        status: "open",
+        visitYear: new Date().getFullYear(),
+      }).catch((err: Error) => console.error("[enrollOffline] baseline work order failed:", err));
+
+      // The renewal task carries the manual-renew workflow for offline terms.
+      const [customer] = await db
+        .select({ displayName: customers.displayName })
+        .from(customers)
+        .where(eq(customers.id, input.customerId))
+        .limit(1);
+      const customerName = customer?.displayName || "customer";
+      const propertyLabel = [prop.label, prop.street].filter(Boolean).join(", ") || "property";
+      await db.insert(osTasks).values({
+        title: `Renew 360 membership for ${customerName} (${propertyLabel})`,
+        detail: `${tierDef.label} tier, ${input.cadence} term paid by ${input.paymentMethod}. ${paymentNote}. Term ends ${new Date(renewalDate).toLocaleDateString()}; collect renewal or re-enroll before then.`,
+        dueAt: new Date(renewalDate - 14 * msPerDay),
+        linkType: "customer",
+        linkId: input.customerId,
+        hourglass: "bottom",
+        sourceType: "manual",
+      }).catch((err: Error) => console.error("[enrollOffline] renewal task failed:", err));
+
+      notifyOwner({
+        title: `New 360° Member (${input.paymentMethod}) — ${tierDef.label}`,
+        content: `${customerName} enrolled in ${tierDef.label} (${input.cadence}) for ${propertyLabel}. ${paymentNote}. Membership ID: ${membershipId}. Baseline scan work order created.`,
+      }).catch(() => null);
+
+      const [created] = await db
+        .select()
+        .from(threeSixtyMemberships)
+        .where(eq(threeSixtyMemberships.id, membershipId))
+        .limit(1);
       return created!;
     }),
 

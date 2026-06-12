@@ -309,6 +309,10 @@ export const portalEstimates = pgTable(
     /** Base64 PNG of customer signature */
     signatureDataUrl: text("signatureDataUrl"),
     signerName: varchar("signerName", { length: 255 }),
+    /** portal | in_person — where the approval signature was captured */
+    approvalChannel: varchar("approvalChannel", { length: 20 }).notNull().default("portal"),
+    /** JSON: witnessUserId, witnessName, device, signedAt (in-person approvals only) */
+    approvalAttestation: text("approvalAttestation"),
     declinedAt: timestamp("declinedAt"),
     declineReason: text("declineReason"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -346,6 +350,10 @@ export const portalInvoices = pgTable("portalInvoices", {
   stripePaymentIntentId: varchar("stripePaymentIntentId", { length: 64 }),
   /** Stripe Checkout Session ID for hosted checkout */
   stripeCheckoutSessionId: varchar("stripeCheckoutSessionId", { length: 128 }),
+  /** stripe | check | cash — how the invoice was paid (null until paid) */
+  paymentMethod: varchar("paymentMethod", { length: 20 }),
+  /** Check number or other offline payment reference */
+  paymentRef: varchar("paymentRef", { length: 120 }),
   paidAt: timestamp("paidAt"),
   /** JSON array of line items */
   lineItemsJson: text("lineItemsJson"),
@@ -1018,6 +1026,12 @@ export const threeSixtyMemberships = pgTable("threeSixtyMemberships", {
   scheduledCreditCents: integer("scheduledCreditCents").notNull().default(0),
   /** HP CRM customer ID (nanoid string) — links to customers table */
   hpCustomerId: varchar("hpCustomerId", { length: 64 }),
+  /** stripe | check | comp — how the membership was paid at enrollment */
+  paymentMethod: varchar("paymentMethod", { length: 20 }).notNull().default("stripe"),
+  /** Check number or other offline payment reference */
+  paymentRef: varchar("paymentRef", { length: 120 }),
+  /** Staff user who enrolled this membership (in-person closes) */
+  enrolledByUserId: integer("enrolledByUserId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
 });

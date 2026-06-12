@@ -38,6 +38,7 @@ import {
   updateOpportunity,
 } from "./db";
 import { BASELINE_SOURCE_MARKER } from "./baselineDrip";
+import { pickPropertyForMembership } from "./lib/membershipPropertyLink";
 import { nanoid } from "nanoid";
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
@@ -83,6 +84,9 @@ export async function create360MembershipFromWebhook(
   const cadence = (meta.cadence ?? "annual") as BillingCadence;
   const hpCustomerId = meta.hpCustomerId || null;
   const propertyAddressId = meta.propertyAddressId ? parseInt(meta.propertyAddressId) : null;
+  /** CRM properties.id named at checkout (staff-driven enrollment) */
+  const metaPropertyId = meta.propertyId || null;
+  const enrolledByUserId = meta.enrolledByUserId ? parseInt(meta.enrolledByUserId) || null : null;
   const customerEmail = meta.customerEmail || session.customer_email || "";
   const customerName = meta.customerName || "New Member";
   const customerPhone = meta.customerPhone || "";
@@ -151,6 +155,8 @@ export async function create360MembershipFromWebhook(
     annualScanCompleted: false,
     scheduledCreditAt: scheduledCreditAt ?? undefined,
     scheduledCreditCents,
+    paymentMethod: "stripe",
+    enrolledByUserId: enrolledByUserId ?? undefined,
   }).returning({ id: threeSixtyMemberships.id });
   const membershipId = Number(membershipResult?.id ?? 0);
 
@@ -309,15 +315,16 @@ export async function create360MembershipFromWebhook(
       }
       // Create/link the member's structured home record so the portal can reflect
       // back the address + sq ft + year built they entered in the funnel.
-      if (crmCustomerId && serviceAddress) {
+      // An explicit metadata.propertyId (staff-driven checkout) names the exact
+      // property; the street-string match stays as the funnel fallback.
+      if (crmCustomerId && (metaPropertyId || serviceAddress)) {
         try {
           const existingProps = await db
             .select()
             .from(properties)
             .where(eq(properties.customerId, crmCustomerId));
-          const match = existingProps.find(
-            (p) => (p.street ?? "").toLowerCase().trim() === serviceAddress.toLowerCase().trim()
-          );
+          const picked = pickPropertyForMembership(existingProps, metaPropertyId, serviceAddress);
+          const match = picked ? existingProps.find((p) => p.id === picked.propertyId) : undefined;
           if (match) {
             await db
               .update(properties)
@@ -330,7 +337,7 @@ export async function create360MembershipFromWebhook(
                 ...(serviceZip && !match.zip ? { zip: serviceZip } : {}),
               })
               .where(eq(properties.id, match.id));
-          } else {
+          } else if (serviceAddress) {
             await db.insert(properties).values({
               id: nanoid(),
               customerId: crmCustomerId,
