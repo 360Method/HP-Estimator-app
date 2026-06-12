@@ -11,6 +11,21 @@ import "./index.css";
 
 const queryClient = new QueryClient();
 
+// True only when this browser believed it had a signed-in user (useAuth keeps
+// the snapshot current). Guards the redirect below: a logged-out visitor whose
+// landing page fires protected queries must NOT be bounced, because "/" routes
+// straight back to a page that fires them again — an infinite reload loop on
+// the login screen. Only an expired/revoked session should redirect.
+const hadSignedInUser = () => {
+  try {
+    const raw = localStorage.getItem("hp-runtime-user-info");
+    if (!raw || raw === "undefined" || raw === "null") return false;
+    return Boolean(JSON.parse(raw));
+  } catch {
+    return false;
+  }
+};
+
 const redirectToLoginIfUnauthorized = (error: unknown) => {
   if (!(error instanceof TRPCClientError)) return;
   if (typeof window === "undefined") return;
@@ -18,7 +33,11 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
   const isUnauthorized = error.message === UNAUTHED_ERR_MSG;
 
   if (!isUnauthorized) return;
+  if (!hadSignedInUser()) return;
 
+  // Mark the session gone before reloading so the next load cannot redirect
+  // again even if its own queries 401 before auth state settles.
+  localStorage.setItem("hp-runtime-user-info", "null");
   window.location.href = getLoginUrl();
 };
 

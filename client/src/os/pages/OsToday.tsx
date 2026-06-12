@@ -50,13 +50,17 @@ export default function OsToday() {
   const [adding, setAdding] = useState(false);
   const [newTitle, setNewTitle] = useState("");
 
-  const { data: tasks, isLoading } = trpc.os.tasks.list.useQuery({}, { refetchInterval: 30_000 });
+  // Gate every protected query on auth (OsShell pattern): this is the landing
+  // page for "/", so an ungated 401 here re-triggers the global login redirect
+  // and loops the logged-out login screen forever.
+  const { user } = useAuth();
+  const { data: tasks, isLoading } = trpc.os.tasks.list.useQuery({}, { refetchInterval: 30_000, enabled: !!user });
   const { data: awaitingTasks } = trpc.aiAgents.listTasks.useQuery(
     { status: "awaiting_approval", limit: 50 },
-    { refetchInterval: 30_000 },
+    { refetchInterval: 30_000, enabled: !!user },
   );
-  const { data: readyDrafts } = trpc.agentDrafts.listReady.useQuery(undefined, { refetchInterval: 30_000 });
-  const { data: signals } = trpc.scorecard.liveSignals.useQuery(undefined, { staleTime: 120_000 });
+  const { data: readyDrafts } = trpc.agentDrafts.listReady.useQuery(undefined, { refetchInterval: 30_000, enabled: !!user });
+  const { data: signals } = trpc.scorecard.liveSignals.useQuery(undefined, { staleTime: 120_000, enabled: !!user });
 
   const createTask = trpc.os.tasks.create.useMutation({
     onSuccess: () => {
@@ -72,7 +76,6 @@ export default function OsToday() {
     onError: (e) => toast.error(e.message),
   });
 
-  const { user } = useAuth();
   const approvalsCount = (awaitingTasks?.length ?? 0) + (readyDrafts?.length ?? 0);
   const open = tasks ?? [];
   const hour = new Date().getHours();

@@ -9,6 +9,7 @@ import { Link, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Compass, BookOpen, ChevronRight, RefreshCw } from "lucide-react";
 import { OsShell } from "../OsShell";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { useEstimator } from "@/contexts/EstimatorContext";
 import { markNavIntent } from "../navIntent";
 import {
@@ -26,7 +27,9 @@ const cardStyle = { borderColor: "var(--hp-hairline)" } as const;
 export default function OsMethod() {
   const [, navigate] = useLocation();
   const { setActiveCustomer } = useEstimator();
-  const rosterQ = trpc.threeSixty.journey.roster.useQuery();
+  const { user } = useAuth();
+  // enabled gate matches OsShell: never fire protected queries pre-auth.
+  const rosterQ = trpc.threeSixty.journey.roster.useQuery(undefined, { enabled: !!user });
   const roster = rosterQ.data ?? [];
   const season = SEASON_LABELS[currentSeason()];
 
