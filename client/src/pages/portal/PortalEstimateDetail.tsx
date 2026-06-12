@@ -5,15 +5,14 @@
  * - Print / PDF button triggers window.print()
  */
 import { useParams, useLocation } from "wouter";
-import { useRef, useState, useEffect } from "react";
+import { useState } from "react";
 import { trpc } from "@/lib/trpc";
 import PortalLayout from "@/components/PortalLayout";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, ArrowLeft, Pen, Type, Printer } from "lucide-react";
+import { Loader2, ArrowLeft, Pen, Printer } from "lucide-react";
 import { toast } from "sonner";
-import SignaturePad from "signature_pad";
+import SignatureCapture from "@/components/SignatureCapture";
 import EstimateTierHint from "@/components/portal/continuity/EstimateTierHint";
 
 const HP_LOGO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg";
@@ -96,31 +95,6 @@ export default function PortalEstimateDetail() {
 
   // Approve modal state
   const [approveOpen, setApproveOpen] = useState(false);
-  const [signerName, setSignerName] = useState("");
-  const [sigMode, setSigMode] = useState<"type" | "draw">("type");
-  const [agreed, setAgreed] = useState(false);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const sigPadRef = useRef<SignaturePad | null>(null);
-
-  useEffect(() => {
-    if (approveOpen && sigMode === "draw" && canvasRef.current) {
-      sigPadRef.current = new SignaturePad(canvasRef.current, { backgroundColor: "rgb(255,255,255)" });
-    }
-    return () => { sigPadRef.current?.off(); sigPadRef.current = null; };
-  }, [approveOpen, sigMode]);
-
-  const handleApprove = () => {
-    if (!signerName.trim()) { toast.error("Please enter your name"); return; }
-    if (!agreed) { toast.error("Please agree to conduct business electronically"); return; }
-    let signatureData: string;
-    if (sigMode === "draw") {
-      if (!sigPadRef.current || sigPadRef.current.isEmpty()) { toast.error("Please draw your signature"); return; }
-      signatureData = sigPadRef.current.toDataURL();
-    } else {
-      signatureData = `typed:${signerName}`;
-    }
-    approveMutation.mutate({ id: estimateId, signerName, signatureDataUrl: signatureData });
-  };
 
   if (isLoading) {
     return (
@@ -509,69 +483,14 @@ export default function PortalEstimateDetail() {
             </div>
           )}
 
-          {/* Name */}
-          <Input
-            placeholder="Your full name *"
-            value={signerName}
-            onChange={(e) => setSignerName(e.target.value)}
-            className="mb-4"
+          <SignatureCapture
+            busy={approveMutation.isPending}
+            submitLabel={depositCents > 0 ? "Approve & Pay Deposit" : "Approve Estimate"}
+            onCancel={() => setApproveOpen(false)}
+            onSign={(signerName, signatureDataUrl) =>
+              approveMutation.mutate({ id: estimateId, signerName, signatureDataUrl })
+            }
           />
-
-          {/* Signature */}
-          <p className="text-sm text-gray-600 mb-2">Confirm with your signature</p>
-          <div className="flex gap-2 mb-3">
-            <Button size="sm" variant={sigMode === "type" ? "default" : "outline"}
-              className={sigMode === "type" ? "bg-[#1a2e1a] text-white" : ""}
-              onClick={() => setSigMode("type")}
-            >
-              <Type className="w-3.5 h-3.5 mr-1" /> Type
-            </Button>
-            <Button size="sm" variant={sigMode === "draw" ? "default" : "outline"}
-              className={sigMode === "draw" ? "bg-[#1a2e1a] text-white" : ""}
-              onClick={() => setSigMode("draw")}
-            >
-              <Pen className="w-3.5 h-3.5 mr-1" /> Draw
-            </Button>
-          </div>
-
-          {sigMode === "type" ? (
-            <div className="border border-gray-200 rounded-lg p-4 mb-4 bg-white min-h-16 flex items-end">
-              <span className="text-2xl text-gray-700" style={{ fontFamily: "Dancing Script, cursive", borderBottom: "1px solid #ccc", width: "100%" }}>
-                {signerName || "Your name"}
-              </span>
-            </div>
-          ) : (
-            <div className="border border-gray-200 rounded-lg mb-4 bg-white overflow-hidden">
-              <canvas ref={canvasRef} width={380} height={100} className="w-full" style={{ touchAction: "none" }} />
-              <button className="text-xs text-gray-400 px-3 py-1 hover:text-gray-600" onClick={() => sigPadRef.current?.clear()}>
-                Clear
-              </button>
-            </div>
-          )}
-
-          <p className="text-xs text-gray-500 mb-3">
-            By signing, you accept this estimate, its associated costs, and the{" "}
-            <a href="https://handypioneers.com/terms" className="text-blue-500 underline">Terms and Conditions</a>.
-            Typing or drawing your signature here has the same legal force as a written signature.
-          </p>
-
-          <label className="flex items-start gap-2 text-xs text-gray-600 mb-4 cursor-pointer">
-            <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-0.5" />
-            I agree to conduct business electronically with Handy Pioneers
-          </label>
-
-          <div className="flex gap-3 justify-end">
-            <Button variant="outline" onClick={() => setApproveOpen(false)}>Cancel</Button>
-            <Button
-              className="bg-[#1a2e1a] hover:bg-[#2d4a2d] text-white font-semibold"
-              disabled={approveMutation.isPending || !signerName || !agreed}
-              onClick={handleApprove}
-            >
-              {approveMutation.isPending
-                ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Approving…</>
-                : depositCents > 0 ? "Approve & Pay Deposit" : "Approve Estimate"}
-            </Button>
-          </div>
         </DialogContent>
       </Dialog>
     </PortalLayout>

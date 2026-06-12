@@ -43,4 +43,11 @@ describe("router modules load", () => {
     const mod = await import("./properties");
     expect(mod.propertiesRouter).toBeDefined();
   });
+
+  it("closeFlow router exposes the in-person approval", async () => {
+    const mod = await import("./closeFlow");
+    expect(mod.closeFlowRouter).toBeDefined();
+    const procs = mod.closeFlowRouter._def.procedures as Record<string, unknown>;
+    expect(procs.approveEstimateInPerson).toBeDefined();
+  });
 });
