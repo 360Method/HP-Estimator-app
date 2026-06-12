@@ -303,6 +303,48 @@ export function nextSeasonStart(date: Date = new Date()): Date {
   return month === 11 ? new Date(year + 1, 2, 1) : new Date(year, 2, 1);
 }
 
+// ─── Regions ─────────────────────────────────────────────────────────────────
+//
+// The 9 steps are universal; what a seasonal visit actually checks is not.
+// Seasonal task lists are region specific (the threeSixtyChecklist table
+// carries a region column for exactly this). PNW (Vancouver, WA) is the only
+// region today; expanding means adding a region here and seeding its
+// checklist rows, never editing the method itself.
+
+export type ServiceRegion = 'PNW';
+
+export const DEFAULT_REGION: ServiceRegion = 'PNW';
+
+export interface RegionSeasonalFocus {
+  season: string;
+  focus: string;
+}
+
+export const REGION_SEASONAL_FOCUS: Record<ServiceRegion, RegionSeasonalFocus[]> = {
+  PNW: [
+    {
+      season: 'Spring',
+      focus: 'Drainage, gutters, exterior envelope, moss/algae, trip hazards, irrigation startup.',
+    },
+    {
+      season: 'Summer',
+      focus: 'Decks, fences, paint, exterior repairs, windows, airflow, outdoor living readiness.',
+    },
+    {
+      season: 'Fall',
+      focus: 'Roof line, gutters, weatherproofing, caulking, crawlspace moisture, storm readiness.',
+    },
+    {
+      season: 'Winter',
+      focus: 'Freeze risk, interior leaks, electrical safety, indoor repairs, planning larger spring projects.',
+    },
+  ],
+};
+
+export function getRegionSeasonalFocus(region: ServiceRegion = DEFAULT_REGION): RegionSeasonalFocus[] {
+  return REGION_SEASONAL_FOCUS[region];
+}
+
 export function getThreeSixtyStepByKey(key?: string | null): ThreeSixtyMethodStep | null {
   const normalizedKey =
     key === 'cfo_intelligence' ? 'scale'

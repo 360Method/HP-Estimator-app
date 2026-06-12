@@ -13,24 +13,11 @@ import {
 
 export * from '@shared/threeSixtyMethod';
 
-export const VANCOUVER_PNW_SEASONAL_FOCUS = [
-  {
-    season: 'Spring',
-    focus: 'Drainage, gutters, exterior envelope, moss/algae, trip hazards, irrigation startup.',
-  },
-  {
-    season: 'Summer',
-    focus: 'Decks, fences, paint, exterior repairs, windows, airflow, outdoor living readiness.',
-  },
-  {
-    season: 'Fall',
-    focus: 'Roof line, gutters, weatherproofing, caulking, crawlspace moisture, storm readiness.',
-  },
-  {
-    season: 'Winter',
-    focus: 'Freeze risk, interior leaks, electrical safety, indoor repairs, planning larger spring projects.',
-  },
-];
+// Region-specific seasonal focus lives in the shared canon
+// (REGION_SEASONAL_FOCUS, re-exported above); this alias keeps existing
+// importers working.
+import { REGION_SEASONAL_FOCUS as _regionFocus } from '@shared/threeSixtyMethod';
+export const VANCOUVER_PNW_SEASONAL_FOCUS = _regionFocus.PNW;
 
 export const THREE_SIXTY_OPERATOR_LADDER = [
   'One-off job or lead enters the customer profile.',
