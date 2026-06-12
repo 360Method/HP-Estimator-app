@@ -54,7 +54,10 @@ const presetTierSchema = z
   })
   .refine((t) => t.rateLow <= t.rateHigh, { message: "rateLow must be at or below rateHigh" });
 
-const presetInput = z.object({
+// zod 4 forbids .extend() on a schema carrying an object-level .refine()
+// (it crashed the server at module load on deploy). Keep the bare object,
+// apply the cross-field check to each derived schema instead.
+const presetBase = z.object({
   label: z.string().min(1).max(120),
   description: z.string().max(500).optional(),
   unitType: z.string().min(1).max(10).default("sqft"),
@@ -75,9 +78,14 @@ const presetInput = z.object({
   baseFeeHigh: z.number().min(0),
   minSqft: z.number().min(0),
   sortOrder: z.number().int().min(0).default(0),
-}).refine((p) => p.baseFeeLow <= p.baseFeeHigh, { message: "baseFeeLow must be at or below baseFeeHigh" });
+});
+const baseFeeCoherent = { message: "baseFeeLow must be at or below baseFeeHigh" };
+const presetInput = presetBase.refine((p) => p.baseFeeLow <= p.baseFeeHigh, baseFeeCoherent);
+const presetUpdateInput = presetBase
+  .extend({ id: z.number().int() })
+  .refine((p) => p.baseFeeLow <= p.baseFeeHigh, baseFeeCoherent);
 
-function presetToRow(input: z.infer<typeof presetInput>) {
+function presetToRow(input: z.infer<typeof presetBase>) {
   return {
     label: input.label,
     description: input.description ?? "",
@@ -201,7 +209,7 @@ export const priceBookRouter = router({
     }),
 
   updatePreset: adminProcedure
-    .input(presetInput.extend({ id: z.number().int() }))
+    .input(presetUpdateInput)
     .mutation(async ({ input }) => {
       const d = await db();
       const { id, ...rest } = input;
