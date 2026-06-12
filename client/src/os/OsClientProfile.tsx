@@ -287,12 +287,23 @@ export default function OsClientProfile() {
           ) : (
             opps.map((o: any) => {
               const flow = flowState(o);
+              const stageLc = (o.stage ?? "").toLowerCase();
+              // Sent-but-not-decided estimates can go straight to the on-site
+              // presentation (the close flow derives sign/pay from the portal copy).
+              const presentable = o.area === "estimate"
+                && (o.sentAt || stageLc === "sent")
+                && !stageLc.includes("won") && !stageLc.includes("approved") && !stageLc.includes("rejected");
+              const closeHref = `/os/close/${customerId}${
+                (o.propertyId ?? activeProperty?.id) ? `?propertyId=${encodeURIComponent(o.propertyId ?? activeProperty!.id)}` : ""
+              }`;
               return (
-                <button
+                <div
                   key={o.id}
-                  type="button"
+                  role="button"
+                  tabIndex={0}
                   onClick={() => openOpportunity(o.id)}
-                  className="w-full text-left bg-white rounded-xl border px-4 py-3 flex items-center gap-3 hover:shadow-sm transition-shadow"
+                  onKeyDown={(e) => { if (e.key === "Enter") openOpportunity(o.id); }}
+                  className="w-full text-left bg-white rounded-xl border px-4 py-3 flex items-center gap-3 hover:shadow-sm transition-shadow cursor-pointer"
                   style={{ borderColor: "var(--hp-hairline)" }}
                 >
                   <FileText className="w-4 h-4 shrink-0 text-muted-foreground" />
@@ -307,8 +318,18 @@ export default function OsClientProfile() {
                       {fmtMoney(Number(o.value))}
                     </span>
                   )}
+                  {presentable && (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); navigate(closeHref); }}
+                      className="text-[10px] px-2 py-1 rounded-lg font-semibold border shrink-0"
+                      style={{ borderColor: "var(--hp-gold-deep)", color: "var(--hp-gold-deep)" }}
+                    >
+                      Present
+                    </button>
+                  )}
                   <span className={`text-[10px] px-2 py-0.5 rounded-full ${flow.cls}`}>{flow.label}</span>
-                </button>
+                </div>
               );
             })
           )}

@@ -941,11 +941,24 @@ export default function OsEstimateWizard() {
           defaultPhone={customer?.mobilePhone || ""}
           onClose={() => setShowSendDialog(false)}
           onSent={() => {
-            if (oppId) updateOpportunity(oppId, { sentAt: new Date().toISOString() });
+            // Mirror the server: estimate.send moves the DB row to Sent.
+            if (oppId) updateOpportunity(oppId, { stage: "Sent", sentAt: new Date().toISOString() });
             if (oppId && soldByConsultantId != null) {
               setSoldBy.mutate({ opportunityId: oppId, consultantId: soldByConsultantId });
             }
-            toast.success("Estimate sent.");
+            const cid = customer?.id;
+            if (cid) {
+              const propertyId = state.opportunities.find((o) => o.id === oppId)?.propertyId;
+              const closeHref = `/os/close/${cid}${propertyId ? `?propertyId=${encodeURIComponent(propertyId)}` : ""}`;
+              // One tap from "synced" to standing in front of the client:
+              // the close flow picks up the portal estimate for sign + pay.
+              toast.success("Estimate sent.", {
+                duration: 10000,
+                action: { label: "Present now", onClick: () => navigate(closeHref) },
+              });
+            } else {
+              toast.success("Estimate sent.");
+            }
             navigate("/os/pipeline");
           }}
         />
