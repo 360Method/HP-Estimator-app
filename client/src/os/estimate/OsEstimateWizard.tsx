@@ -15,7 +15,7 @@
  * any price-book item NOT in the catalog become custom line items tagged
  * `pricebook:<itemKey>` so the wizard can re-sync them when picks change.
  */
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
@@ -139,6 +139,35 @@ export default function OsEstimateWizard() {
     return rows.length > 0 ? rows : fallbackRows();
   }, [pbQuery.data]);
   const pbByKey = useMemo(() => new Map(pbRows.map((r) => [r.itemKey, r])), [pbRows]);
+
+  // ── Prefill from query params (quick quote / spot inspection hand-off) ──
+  // ?customerId=&oppId=&title= preselects the client and adopts an existing
+  // opportunity instead of minting a new one, so the consultation that
+  // created the opportunity and the estimate that firms it up stay one row.
+  const prefillApplied = useRef(false);
+  useEffect(() => {
+    if (prefillApplied.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const qCustomerId = params.get("customerId");
+    if (!qCustomerId) {
+      prefillApplied.current = true;
+      return;
+    }
+    // Wait until the synced customer list contains the row.
+    if (!state.customers.some((c) => c.id === qCustomerId)) return;
+    prefillApplied.current = true;
+    const qOppId = params.get("oppId");
+    const qTitle = params.get("title");
+    setClientId(qCustomerId);
+    setActiveCustomer(qCustomerId);
+    if (qOppId) {
+      setOppId(qOppId);
+      setActiveOpportunity(qOppId);
+    }
+    if (qTitle) setJobTitle(qTitle);
+    setStep(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.customers]);
 
   // ── Customer step ───────────────────────────────────────────
   const matches = useMemo(() => {
@@ -452,6 +481,11 @@ export default function OsEstimateWizard() {
           <button type="button" onClick={confirmWorkType} className={primaryBtn} style={{ background: "var(--hp-ink)" }}>
             Continue <ChevronRight className="w-4 h-4 inline -mt-0.5" />
           </button>
+          <Link href="/os/quickquote">
+            <span className="block text-xs text-muted-foreground underline cursor-pointer mt-1">
+              Whole-room remodel? Start with a quick quote instead.
+            </span>
+          </Link>
         </div>
       )}
 
