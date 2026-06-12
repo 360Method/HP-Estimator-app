@@ -93,7 +93,7 @@ export default function OsEstimateWizard() {
   const {
     state, addOpportunity, addCustomer, setActiveCustomer, setActiveOpportunity,
     updateItem, addCustomItem, removeCustomItem, setJobInfo, setSection,
-    setEstimateProposal, updateOpportunity, setGlobal,
+    setEstimateProposal, setEstimateAudit, updateOpportunity, setGlobal,
   } = useEstimator();
   useDbSync(true);
 
@@ -119,6 +119,11 @@ export default function OsEstimateWizard() {
   const [selection, setSelection] = useState<Record<string, Sel>>({});
   const [itemQuery, setItemQuery] = useState("");
   const appliedRemodel = useRef<Set<string>>(new Set());
+
+  // Step 5 — margin floor: a typed-reason override is the only way past
+  // a below-floor price (the server backstop still requires the flag).
+  const [floorOverrideReason, setFloorOverrideReason] = useState("");
+  const [floorOverridden, setFloorOverridden] = useState(false);
 
   // Step 6 — review
   const [bulletOverrides, setBulletOverrides] = useState<Record<string, string[]>>({});
@@ -371,6 +376,29 @@ export default function OsEstimateWizard() {
   }, [state.phases, state.customItems, state.global]);
   const margin = computeMarginAudit(totals.totalHard, totals.totalPrice);
 
+  const belowFloor = margin.status === "below_floor";
+  function confirmFloorOverride() {
+    const reason = floorOverrideReason.trim();
+    if (reason.length < 5) {
+      toast.error("Type the reason for sending below the floor.");
+      return;
+    }
+    setFloorOverridden(true);
+    setEstimateAudit({
+      history: [
+        {
+          id: nanoid(8),
+          type: "margin_override",
+          title: "Margin floor overridden",
+          summary: reason,
+          createdAt: new Date().toISOString(),
+          actor: state.userProfile.firstName || state.userProfile.email || "Consultant",
+        },
+        ...state.estimateAudit.history,
+      ],
+    });
+  }
+
   // Sales tax (customer-safe): resolved from the working globals, which the
   // context points at the customer's ZIP. Snapshots that saved tax OFF keep
   // it — the price-check chip is the explicit way to turn it back on.
@@ -430,7 +458,7 @@ export default function OsEstimateWizard() {
     }
   }
 
-  function openSend() {
+  async function openSend() {
     // The review screen IS the approval gate for the wizard flow.
     const approvedAt = new Date().toISOString();
     const readyProposal = { ...state.estimateProposal, status: "ready_for_customer" as const, approvedAt };
@@ -440,20 +468,27 @@ export default function OsEstimateWizard() {
       // Persist value + snapshot to the DB row so the server records the
       // authoritative margin audit (Rec 1) and commissions can read GP at sale.
       // Proposal + deposit ride along so readiness survives a reload.
-      updateOpp.mutate({
-        id: oppId,
-        value: Math.round(totals.totalPrice),
-        estimateSnapshot: JSON.stringify({
-          jobInfo: state.jobInfo,
-          global: state.global,
-          phases: state.phases,
-          customItems: state.customItems,
-          depositType: state.depositType,
-          depositValue: state.depositValue,
-          proposal: readyProposal,
-          totals,
-        }),
-      });
+      // Awaited so estimate.send's margin backstop reads a fresh belowFloor,
+      // not the value from the last save.
+      try {
+        await updateOpp.mutateAsync({
+          id: oppId,
+          value: Math.round(totals.totalPrice),
+          estimateSnapshot: JSON.stringify({
+            jobInfo: state.jobInfo,
+            global: state.global,
+            phases: state.phases,
+            customItems: state.customItems,
+            depositType: state.depositType,
+            depositValue: state.depositValue,
+            proposal: readyProposal,
+            totals,
+          }),
+        });
+      } catch {
+        // onError already warned; local state is intact and the server
+        // backstop falls back to the last persisted audit.
+      }
     }
     setShowSendDialog(true);
   }
@@ -755,15 +790,52 @@ export default function OsEstimateWizard() {
             </div>
             <p className="text-xs text-muted-foreground mt-2">
               {margin.status === "below_floor"
-                ? `Below the ${(margin.minGM * 100).toFixed(0)}% floor for this job size. Raise the price or trim cost — sending will be blocked.`
+                ? `Below the ${(margin.minGM * 100).toFixed(0)}% floor for this job size. Raise the price or trim cost — continuing is blocked.`
                 : margin.status === "warn"
                   ? "Above the floor but thin. Worth a second look."
                   : `Healthy. Floor for this job size is ${(margin.minGM * 100).toFixed(0)}%.`}
             </p>
+
+            {/* Hard block: a typed reason is the only way past the floor. */}
+            {belowFloor && !floorOverridden && (
+              <div className="mt-3 pt-3 border-t" style={{ borderColor: "#fca5a5" }}>
+                <label className="text-xs font-semibold" style={{ color: "#b91c1c" }}>
+                  Override (logged): why is this price right anyway?
+                </label>
+                <textarea
+                  className="w-full text-sm px-3 py-2 rounded-lg border bg-white mt-1"
+                  style={{ borderColor: "#fca5a5" }}
+                  rows={2}
+                  placeholder="e.g. Strategic first job for a founding member; materials already on hand."
+                  value={floorOverrideReason}
+                  onChange={(e) => setFloorOverrideReason(e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={confirmFloorOverride}
+                  disabled={floorOverrideReason.trim().length < 5}
+                  className="mt-1.5 text-xs px-3 py-2 rounded-lg font-semibold text-white disabled:opacity-40"
+                  style={{ background: "#b91c1c" }}
+                >
+                  Override the floor with this reason
+                </button>
+              </div>
+            )}
+            {belowFloor && floorOverridden && (
+              <p className="text-xs font-semibold mt-2" style={{ color: "#b91c1c" }}>
+                Floor overridden — the reason is logged on this estimate.
+              </p>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
-            <button type="button" onClick={() => setStep(5)} className={primaryBtn} style={{ background: "var(--hp-ink)" }}>
+            <button
+              type="button"
+              onClick={() => setStep(5)}
+              disabled={belowFloor && !floorOverridden}
+              className={primaryBtn}
+              style={{ background: "var(--hp-ink)" }}
+            >
               Looks right — review wording <ChevronRight className="w-4 h-4 inline -mt-0.5" />
             </button>
             <button type="button" onClick={openFullCalculator} className="text-xs px-3 py-2 rounded-lg border font-semibold" style={{ ...inputStyle, color: "var(--hp-ink)" }}>
@@ -862,6 +934,7 @@ export default function OsEstimateWizard() {
           lineItemsJson={JSON.stringify(portalPhases)}
           hpCustomerId={customer?.id}
           hpOpportunityId={oppId ?? undefined}
+          overrideMarginFloor={floorOverridden || undefined}
           isCustomerReady
           approvalStatusLabel="ready for customer"
           defaultEmail={customer?.email || ""}

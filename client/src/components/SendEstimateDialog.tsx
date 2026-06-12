@@ -31,6 +31,8 @@ export interface SendEstimateDialogProps {
   taxRateCode?: string;
   customTaxPct?: number;
   taxAmount?: number; // dollars
+  /** Consultant logged a typed-reason override for a below-floor margin */
+  overrideMarginFloor?: boolean;
   // Pre-filled from customer profile
   defaultEmail?: string;
   defaultPhone?: string;
@@ -58,6 +60,7 @@ export default function SendEstimateDialog({
   taxRateCode,
   customTaxPct,
   taxAmount,
+  overrideMarginFloor,
   defaultEmail = '',
   defaultPhone = '',
   onClose,
@@ -132,6 +135,7 @@ export default function SendEstimateDialog({
       taxRateCode,
       customTaxPct,
       taxAmount,
+      overrideMarginFloor,
       origin: window.location.origin,
     });
   };

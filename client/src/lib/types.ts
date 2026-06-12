@@ -234,7 +234,7 @@ export interface EstimateProposalMeta {
 
 export interface EstimateAuditHistoryEvent {
   id: string;
-  type: 'audit_run' | 'proposal_ready' | 'proposal_sent' | 'approval_blocked';
+  type: 'audit_run' | 'proposal_ready' | 'proposal_sent' | 'approval_blocked' | 'margin_override';
   title: string;
   summary: string;
   createdAt: string;
