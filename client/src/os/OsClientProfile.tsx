@@ -15,14 +15,16 @@ import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useEstimator } from "@/contexts/EstimatorContext";
 import {
-  ArrowLeft, Phone, Mail, MapPin, FileText, CircleDollarSign, Circle, Plus,
+  ArrowLeft, Phone, Mail, MapPin, FileText, CircleDollarSign, Circle, Plus, Pencil,
 } from "lucide-react";
+import CommunicationTab from "@/components/clients/CommunicationTab";
+import EditContactDialog from "./EditContactDialog";
 import CustomerMembershipPanel from "@/components/CustomerMembershipPanel";
 import { MethodStepBoard } from "@/components/threeSixty/MethodStepBoard";
 import { getThreeSixtyStepByKey } from "@shared/threeSixtyMethod";
 import { useLocation } from "wouter";
 
-type Tab = "overview" | "work" | "money";
+type Tab = "overview" | "work" | "money" | "comms";
 
 const fmtMoney = (n: number | null | undefined) =>
   n == null ? "" : `$${Number(n).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
@@ -46,6 +48,7 @@ export default function OsClientProfile() {
   const { state, navigateToTopLevel, setActiveOpportunity } = useEstimator();
   const customerId = state.activeCustomerId ?? "";
   const [tab, setTab] = useState<Tab>("overview");
+  const [editingContact, setEditingContact] = useState(false);
 
   const { data: ctx, isLoading } = trpc.customers.getFullContext.useQuery(
     { id: customerId },
@@ -87,9 +90,20 @@ export default function OsClientProfile() {
       {/* ── Header ─────────────────────────────────────────────── */}
       <div className="mt-2 flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="hp-serif text-2xl leading-tight" style={{ color: "var(--hp-ink)" }}>
-            {c.displayName}
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="hp-serif text-2xl leading-tight" style={{ color: "var(--hp-ink)" }}>
+              {c.displayName}
+            </h1>
+            <button
+              type="button"
+              onClick={() => setEditingContact(true)}
+              title="Edit contact"
+              aria-label="Edit contact"
+              className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+          </div>
           <div className="mt-1.5 flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
             {c.mobilePhone && (
               <a href={`tel:${c.mobilePhone}`} className="inline-flex items-center gap-1 hover:underline">
@@ -127,6 +141,7 @@ export default function OsClientProfile() {
             { id: "overview", label: "Overview" },
             { id: "work", label: `Work${opps.length ? ` (${opps.length})` : ""}` },
             { id: "money", label: `Money${outstanding > 0 ? ` (${fmtMoney(outstanding)} due)` : ""}` },
+            { id: "comms", label: "Comms" },
           ] as { id: Tab; label: string }[]
         ).map((t) => (
           <button
@@ -282,6 +297,27 @@ export default function OsClientProfile() {
               </div>
             ))
           )}
+        </div>
+      )}
+
+      {editingContact && (
+        <EditContactDialog
+          key={`${c.id}-${c.updatedAt ?? ""}`}
+          customer={c as any}
+          open={editingContact}
+          onClose={() => setEditingContact(false)}
+        />
+      )}
+
+      {/* ── Comms ──────────────────────────────────────────────── */}
+      {tab === "comms" && (
+        <div className="mt-4">
+          <CommunicationTab
+            customerId={customerId}
+            customerPhone={c.mobilePhone ?? undefined}
+            customerEmail={c.email ?? undefined}
+            customerName={c.displayName ?? undefined}
+          />
         </div>
       )}
     </div>
