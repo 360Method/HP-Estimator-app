@@ -17,6 +17,8 @@ import { getDb } from "../db";
 import {
   customers,
   opportunities,
+  portalCustomers,
+  portalDocuments,
   properties,
   threeSixtyLaborBankTransactions,
   threeSixtyMemberships,
@@ -25,12 +27,23 @@ import {
   threeSixtyVisits,
   threeSixtyWorkOrders,
 } from "../../drizzle/schema";
-import { eq, inArray, or, sql } from "drizzle-orm";
+import { priorityTranslations } from "../../drizzle/schema.priorityTranslation";
+import { and, desc, eq, inArray, like, or, sql } from "drizzle-orm";
 import { deriveJourney, type JourneyInput, type JourneyState } from "../../shared/threeSixtyJourney";
+import { SEASON_LABELS, type ThreeSixtyStepKey } from "../../shared/threeSixtyMethod";
 import { TIER_DEFINITIONS, type MemberTier } from "../../shared/threeSixtyTiers";
 
 type Db = NonNullable<Awaited<ReturnType<typeof getDb>>>;
 type MembershipRow = typeof threeSixtyMemberships.$inferSelect;
+
+/** One record inside a step on the customer's nine-step board. */
+export type StepContentItem = {
+  kind: "scan" | "workorder" | "visit" | "spot" | "opportunity" | "document" | "info";
+  refId: string | null;
+  label: string;
+  note: string;
+  dateMs: number | null;
+};
 
 export interface MemberJourney {
   membershipId: number;
@@ -215,23 +228,237 @@ async function deriveJourneys(db: Db, memberships: MembershipRow[]): Promise<Mem
 }
 
 export const journeyRouter = router({
-  /** Journey for one customer's membership (CRM customer id). */
+  /**
+   * Journey for one customer, member or not. The nine steps are the
+   * framework for every customer; this also returns what sits inside each
+   * step (the records) so the profile can open any step and show its
+   * contents or its empty state.
+   */
   forCustomer: protectedProcedure
     .input(z.object({ customerId: z.string() }))
     .query(async ({ input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-      const rows = await db.select().from(threeSixtyMemberships)
+
+      const membershipRows = await db.select().from(threeSixtyMemberships)
         .where(or(
           eq(threeSixtyMemberships.hpCustomerId, input.customerId),
           eq(threeSixtyMemberships.customerId, input.customerId),
         ));
       // Prefer the active membership when a customer has history.
-      const sorted = [...rows].sort((a, b) =>
+      const membership = [...membershipRows].sort((a, b) =>
         (a.status === "active" ? 0 : 1) - (b.status === "active" ? 0 : 1) || b.startDate - a.startDate,
-      );
-      const [journey] = await deriveJourneys(db, sorted.slice(0, 1));
-      return journey ?? null;
+      )[0] ?? null;
+
+      const [customer] = await db
+        .select({ id: customers.id, displayName: customers.displayName, firstName: customers.firstName, lastName: customers.lastName })
+        .from(customers)
+        .where(eq(customers.id, input.customerId))
+        .limit(1);
+
+      const [spotRows, oppRows] = await Promise.all([
+        db.select({
+          id: priorityTranslations.id,
+          status: priorityTranslations.status,
+          createdAt: priorityTranslations.createdAt,
+        }).from(priorityTranslations)
+          .where(and(
+            eq(priorityTranslations.hpCustomerId, input.customerId),
+            eq(priorityTranslations.source, "spot_inspection"),
+          ))
+          .orderBy(desc(priorityTranslations.createdAt)),
+        db.select({
+          id: opportunities.id,
+          title: opportunities.title,
+          area: opportunities.area,
+          stage: opportunities.stage,
+          value: opportunities.value,
+          scheduledDate: opportunities.scheduledDate,
+          archived: opportunities.archived,
+          createdAt: opportunities.createdAt,
+        }).from(opportunities).where(eq(opportunities.customerId, input.customerId)),
+      ]);
+
+      // Membership-bound records only exist for members.
+      const mid = membership?.id;
+      const [scanRows, woRows, visitRows, systemCount, txnCount] = mid
+        ? await Promise.all([
+            db.select().from(threeSixtyScans).where(eq(threeSixtyScans.membershipId, mid)),
+            db.select().from(threeSixtyWorkOrders).where(eq(threeSixtyWorkOrders.membershipId, mid)),
+            db.select().from(threeSixtyVisits).where(eq(threeSixtyVisits.membershipId, mid)),
+            db.select({ count: sql<number>`count(*)::int` }).from(threeSixtyPropertySystems)
+              .where(eq(threeSixtyPropertySystems.membershipId, mid)).then(r => r[0]?.count ?? 0),
+            db.select({ count: sql<number>`count(*)::int` }).from(threeSixtyLaborBankTransactions)
+              .where(eq(threeSixtyLaborBankTransactions.membershipId, mid)).then(r => r[0]?.count ?? 0),
+          ])
+        : [[], [], [], 0, 0] as const;
+
+      // Remodel consultations already filed in their portal (Step 8 artifacts).
+      let consultationDocs: { id: number; name: string; uploadedAt: Date | null }[] = [];
+      try {
+        const [pc] = await db.select({ id: portalCustomers.id }).from(portalCustomers)
+          .where(eq(portalCustomers.hpCustomerId, input.customerId)).limit(1);
+        if (pc) {
+          consultationDocs = await db
+            .select({ id: portalDocuments.id, name: portalDocuments.name, uploadedAt: portalDocuments.uploadedAt })
+            .from(portalDocuments)
+            .where(and(eq(portalDocuments.portalCustomerId, pc.id), like(portalDocuments.name, "Remodel options%")));
+        }
+      } catch { /* contents enrichment only */ }
+
+      const journeyInput: JourneyInput = {
+        membership: membership
+          ? {
+              tier: (membership.tier ?? "bronze") as MemberTier,
+              status: (membership.status ?? "active") as "active" | "paused" | "cancelled",
+              startDate: membership.startDate,
+              annualScanCompleted: membership.annualScanCompleted,
+              annualScanDate: membership.annualScanDate ?? null,
+              laborBankBalance: membership.laborBankBalance,
+            }
+          : null,
+        scans: scanRows.map(s => ({
+          status: (s.status ?? "draft") as "draft" | "completed" | "delivered",
+          scanDate: s.scanDate,
+          sentToPortalAt: s.sentToPortalAt ?? null,
+          hasRecommendations: jsonArrayLength(s.recommendationsJson) > 0,
+          findingsCount: jsonArrayLength(s.inspectionItemsJson) || jsonArrayLength(s.recommendationsJson),
+          healthScore: s.healthScore ?? null,
+        })),
+        workOrders: woRows.map(wo => ({
+          type: wo.type,
+          status: wo.status,
+          visitYear: wo.visitYear ?? null,
+          scheduledDate: wo.scheduledDate ?? null,
+          completedDate: wo.completedDate ?? null,
+          hpOpportunityId: wo.hpOpportunityId ?? null,
+        })),
+        visits: visitRows.map(v => ({ season: v.season, status: v.status, visitYear: v.visitYear })),
+        propertySystemsCount: systemCount,
+        opportunities: oppRows.map(o => ({
+          area: o.area,
+          stage: o.stage,
+          value: o.value ?? null,
+          scheduledDate: parseDateMs(o.scheduledDate),
+          archived: o.archived,
+        })),
+        laborBankTxnCount: txnCount,
+        spotInspections: spotRows.map(s => ({
+          status: s.status,
+          createdAt: s.createdAt instanceof Date ? s.createdAt.getTime() : Number(s.createdAt),
+        })),
+      };
+      const journey = deriveJourney(journeyInput);
+
+      // ── What sits inside each step, for the profile's step board ──────────
+      const fmtDate = (d: Date | number | null | undefined) =>
+        d == null ? null : d instanceof Date ? d.getTime() : Number(d);
+      const oppLive = oppRows.filter(o => !o.archived);
+      const jobDone = (stage: string | null) =>
+        ["completed", "invoice sent", "invoice paid"].includes(String(stage ?? "").toLowerCase());
+      const spotLabel = (status: string) =>
+        status === "completed" ? "Mini roadmap delivered"
+        : status === "awaiting_review" ? "Draft awaiting review"
+        : status === "failed" ? "Generation failed"
+        : "Spot inspection in progress";
+
+      const stepContents: Record<ThreeSixtyStepKey, StepContentItem[]> = {
+        baseline: [
+          ...woRows.filter(w => w.type === "baseline_scan").map(w => ({
+            kind: "workorder" as const, refId: String(w.id),
+            label: "Baseline walkthrough", note: w.status.replace("_", " "),
+            dateMs: fmtDate(w.completedDate ?? w.scheduledDate),
+          })),
+          ...scanRows.map(s => ({
+            kind: "scan" as const, refId: String(s.id),
+            label: "360 home scan", note: s.status, dateMs: fmtDate(s.scanDate),
+          })),
+        ],
+        inspect: [
+          ...woRows.filter(w => w.type !== "baseline_scan").map(w => ({
+            kind: "workorder" as const, refId: String(w.id),
+            label: `${SEASON_LABELS[w.type as keyof typeof SEASON_LABELS] ?? w.type} visit ${w.visitYear ?? ""}`.trim(),
+            note: w.status.replace("_", " "), dateMs: fmtDate(w.completedDate ?? w.scheduledDate),
+          })),
+          ...visitRows.map(v => ({
+            kind: "visit" as const, refId: String(v.id),
+            label: `${SEASON_LABELS[v.season as keyof typeof SEASON_LABELS] ?? v.season} visit ${v.visitYear}`,
+            note: v.status, dateMs: fmtDate(v.completedDate ?? v.scheduledDate),
+          })),
+          ...spotRows.map(s => ({
+            kind: "spot" as const, refId: s.id,
+            label: "Spot inspection", note: spotLabel(s.status), dateMs: fmtDate(s.createdAt),
+          })),
+        ],
+        track: [
+          ...oppLive.filter(o => jobDone(o.stage)).slice(0, 6).map(o => ({
+            kind: "opportunity" as const, refId: o.id,
+            label: o.title || "Job", note: "completed", dateMs: parseDateMs(o.createdAt as unknown as string),
+          })),
+          ...spotRows.filter(s => s.status === "completed").map(s => ({
+            kind: "spot" as const, refId: s.id,
+            label: "Spot inspection on the record", note: "delivered", dateMs: fmtDate(s.createdAt),
+          })),
+        ],
+        prioritize: [
+          ...scanRows.filter(s => jsonArrayLength(s.recommendationsJson) > 0).map(s => ({
+            kind: "scan" as const, refId: String(s.id),
+            label: "Priority roadmap from the 360 scan",
+            note: s.sentToPortalAt ? "delivered" : "being prepared", dateMs: fmtDate(s.scanDate),
+          })),
+          ...spotRows.filter(s => ["completed", "awaiting_review", "processing"].includes(s.status)).map(s => ({
+            kind: "spot" as const, refId: s.id,
+            label: "Mini roadmap", note: spotLabel(s.status), dateMs: fmtDate(s.createdAt),
+          })),
+        ],
+        schedule: oppLive
+          .filter(o => parseDateMs(o.scheduledDate) != null && parseDateMs(o.scheduledDate)! > Date.now())
+          .map(o => ({
+            kind: "opportunity" as const, refId: o.id,
+            label: o.title || "Scheduled work", note: "on the calendar", dateMs: parseDateMs(o.scheduledDate),
+          })),
+        execute: oppLive
+          .filter(o => String(o.area) === "job")
+          .slice(0, 8)
+          .map(o => ({
+            kind: "opportunity" as const, refId: o.id,
+            label: o.title || "Job", note: String(o.stage ?? "").toLowerCase() || "open",
+            dateMs: parseDateMs(o.scheduledDate),
+          })),
+        preserve: [],
+        upgrade: [
+          ...oppLive.filter(o => (o.value ?? 0) >= 2500).map(o => ({
+            kind: "opportunity" as const, refId: o.id,
+            label: o.title || "Improvement project", note: String(o.stage ?? "").toLowerCase(),
+            dateMs: parseDateMs(o.scheduledDate),
+          })),
+          ...consultationDocs.map(d => ({
+            kind: "document" as const, refId: String(d.id),
+            label: d.name, note: "in their portal", dateMs: fmtDate(d.uploadedAt),
+          })),
+        ],
+        scale: journey.valueDelivered.healthScore != null
+          ? [{
+              kind: "info" as const, refId: null,
+              label: `Home Score ${journey.valueDelivered.healthScore}`,
+              note: membership?.annualScanDate ? "from the latest review" : "from the latest scan",
+              dateMs: fmtDate(membership?.annualScanDate ?? null),
+            }]
+          : [],
+      };
+
+      const tier = (membership?.tier ?? null) as MemberTier | null;
+      return {
+        membershipId: membership?.id ?? null,
+        customerId: input.customerId,
+        customerName: customer ? customer.displayName || `${customer.firstName} ${customer.lastName}`.trim() : "",
+        tierLabel: tier ? TIER_DEFINITIONS[tier]?.label ?? "" : "",
+        tier,
+        membershipStatus: membership?.status ?? "none",
+        memberSince: membership?.startDate ?? null,
+        journey,
+        stepContents,
+      };
     }),
 
   /** Journey for one membership by id. */

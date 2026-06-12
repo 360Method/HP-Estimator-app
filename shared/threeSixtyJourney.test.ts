@@ -246,6 +246,61 @@ describe('deriveJourney', () => {
     expect(state.valueDelivered.visitsCompleted).toBe(1);
   });
 
+  it('non-member with nothing on file: Inspect is the front door, Advance gated by membership', () => {
+    const state = deriveJourney(baseInput({ membership: null }));
+    expect(state.currentStepKey).toBe('inspect');
+    expect(state.membershipStatus).toBe('none');
+    expect(state.membershipYear).toBe(0);
+    expect(stepStatus(state, 'inspect')).toBe('not_yet');
+    expect(stepStatus(state, 'preserve')).toBe('not_included');
+    expect(stepStatus(state, 'scale')).toBe('not_included');
+    expect(stepStatus(state, 'upgrade')).toBe('not_yet');
+    expect(state.valueDelivered.laborBankBalanceCents).toBe(0);
+  });
+
+  it('non-member spot inspection drives Inspect, Prioritize, then Schedule', () => {
+    const inFlight = deriveJourney(
+      baseInput({
+        membership: null,
+        spotInspections: [{ status: 'awaiting_review', createdAt: NOW - DAY }],
+      }),
+    );
+    expect(stepStatus(inFlight, 'inspect')).toBe('in_progress');
+    expect(inFlight.currentStepKey).toBe('inspect');
+
+    const delivered = deriveJourney(
+      baseInput({
+        membership: null,
+        spotInspections: [{ status: 'completed', createdAt: NOW - DAY }],
+      }),
+    );
+    expect(stepStatus(delivered, 'inspect')).toBe('done');
+    expect(stepStatus(delivered, 'prioritize')).toBe('done');
+    expect(delivered.currentStepKey).toBe('schedule');
+    expect(delivered.valueDelivered.visitsCompleted).toBe(1);
+  });
+
+  it('non-member remodel estimate puts Upgrade in play', () => {
+    const state = deriveJourney(
+      baseInput({
+        membership: null,
+        opportunities: [{ area: 'estimate', stage: 'Sent', value: 12000, scheduledDate: null }],
+      }),
+    );
+    expect(stepStatus(state, 'upgrade')).toBe('in_progress');
+    expect(state.currentStepKey).toBe('upgrade');
+  });
+
+  it('member spot inspection counts toward the record and the roadmap', () => {
+    const state = deriveJourney(
+      baseInput({
+        spotInspections: [{ status: 'completed', createdAt: NOW - 2 * DAY }],
+      }),
+    );
+    expect(stepStatus(state, 'prioritize')).toBe('done');
+    expect(stepStatus(state, 'track')).toBe('done');
+  });
+
   it('reports membership status and value delivered', () => {
     const state = deriveJourney(
       baseInput({

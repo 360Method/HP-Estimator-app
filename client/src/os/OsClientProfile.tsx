@@ -18,8 +18,9 @@ import {
   ArrowLeft, Phone, Mail, MapPin, FileText, CircleDollarSign, Circle, Plus,
 } from "lucide-react";
 import CustomerMembershipPanel from "@/components/CustomerMembershipPanel";
-import { MethodJourneyStrip } from "@/components/threeSixty/MethodJourneyStrip";
+import { MethodStepBoard } from "@/components/threeSixty/MethodStepBoard";
 import { getThreeSixtyStepByKey } from "@shared/threeSixtyMethod";
+import { useLocation } from "wouter";
 
 type Tab = "overview" | "work" | "money";
 
@@ -41,6 +42,7 @@ function flowState(o: { area: string | null; stage: string | null }): { label: s
 }
 
 export default function OsClientProfile() {
+  const [, navigate] = useLocation();
   const { state, navigateToTopLevel, setActiveOpportunity } = useEstimator();
   const customerId = state.activeCustomerId ?? "";
   const [tab, setTab] = useState<Tab>("overview");
@@ -157,42 +159,30 @@ export default function OsClientProfile() {
               ))}
             </div>
           )}
-          {memberJourney && (
-            <MethodJourneyStrip journey={memberJourney.journey} tierLabel={memberJourney.tierLabel} />
-          )}
-
-          {/* The customer is the umbrella: every move starts here, named by
-              its 360 Method step so anyone can see where this work sits. */}
-          <div className="bg-white rounded-xl border px-4 py-3" style={{ borderColor: "var(--hp-hairline)" }}>
-            <div className="text-xs font-semibold mb-2" style={{ color: "var(--hp-gold-deep)" }}>
-              Start something for {c.displayName.split(" ")[0]}
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <Link href={`/os/spot/new?customerId=${encodeURIComponent(customerId)}`}>
-                <span className="block text-left rounded-lg border px-3 py-2.5 cursor-pointer hover:shadow-sm transition-shadow" style={{ borderColor: "var(--hp-hairline)" }}>
-                  <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">Step 2 · Inspect</span>
-                  <span className="block text-sm font-semibold mt-0.5" style={{ color: "var(--hp-ink)" }}>Spot inspection</span>
-                  <span className="block text-[11px] text-muted-foreground mt-0.5">They asked about something. Look first, then show them what is going on.</span>
-                </span>
-              </Link>
-              <Link href="/os/estimate/new">
-                <span className="block text-left rounded-lg border px-3 py-2.5 cursor-pointer hover:shadow-sm transition-shadow" style={{ borderColor: "var(--hp-hairline)" }}>
-                  <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">Step 4 · Prioritize</span>
-                  <span className="block text-sm font-semibold mt-0.5" style={{ color: "var(--hp-ink)" }}>Quote the work</span>
-                  <span className="block text-[11px] text-muted-foreground mt-0.5">Scope is known. Write the estimate and send it for approval.</span>
-                </span>
-              </Link>
-              <Link href={`/os/quickquote?customerId=${encodeURIComponent(customerId)}`}>
-                <span className="block text-left rounded-lg border px-3 py-2.5 cursor-pointer hover:shadow-sm transition-shadow" style={{ borderColor: "var(--hp-hairline)" }}>
-                  <span className="block text-[10px] uppercase tracking-wide text-muted-foreground">Step 8 · Upgrade</span>
-                  <span className="block text-sm font-semibold mt-0.5" style={{ color: "var(--hp-ink)" }}>Remodel options</span>
-                  <span className="block text-[11px] text-muted-foreground mt-0.5">They want the whole room done. Show good, better, best on-site.</span>
-                </span>
-              </Link>
-            </div>
-          </div>
-
+          {/* The umbrella order Marcin set: who they are (header above),
+              whether they are a member (with enroll + labor bank), and then
+              the nine steps for every customer, clickable into contents. */}
           <CustomerMembershipPanel customerId={customerId} />
+
+          {memberJourney && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="hp-eyebrow text-xs" style={{ color: "var(--hp-gold-deep)" }}>
+                  The nine steps for {c.displayName.split(" ")[0]}
+                </h2>
+                <Link href="/os/method">
+                  <span className="text-[11px] text-muted-foreground hover:underline cursor-pointer">How the method works</span>
+                </Link>
+              </div>
+              <MethodStepBoard
+                journey={memberJourney.journey}
+                stepContents={memberJourney.stepContents}
+                customerId={customerId}
+                onOpenOpportunity={(id) => setActiveOpportunity(id)}
+                onOpenSpot={(id) => navigate(`/os/spot/${id}`)}
+              />
+            </div>
+          )}
           {!membership && (ctx as any).portal == null && (
             <p className="text-xs text-muted-foreground">
               No membership and no portal account yet. The portal invite goes out with their first estimate.

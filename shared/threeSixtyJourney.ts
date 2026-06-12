@@ -57,10 +57,15 @@ export interface JourneyState {
   /** Membership year, 1-based. */
   membershipYear: number;
   valueDelivered: JourneyValueDelivered;
-  membershipStatus: 'active' | 'paused' | 'cancelled';
+  membershipStatus: 'active' | 'paused' | 'cancelled' | 'none';
 }
 
 export interface JourneyInput {
+  /**
+   * Null for customers who are not members. The nine steps are the framework
+   * for EVERY customer; membership only changes which signals exist (no
+   * seasonal work orders, no labor bank) and gates the Advance phase.
+   */
   membership: {
     tier: MemberTier;
     status: 'active' | 'paused' | 'cancelled';
@@ -70,7 +75,7 @@ export interface JourneyInput {
     /** Unix ms */
     annualScanDate: number | null;
     laborBankBalance: number;
-  };
+  } | null;
   scans: {
     status: 'draft' | 'completed' | 'delivered';
     /** Unix ms */
@@ -107,6 +112,12 @@ export interface JourneyInput {
     archived?: boolean;
   }[];
   laborBankTxnCount: number;
+  /** Spot inspections (any customer). completed = mini roadmap delivered. */
+  spotInspections?: {
+    status: 'submitted' | 'processing' | 'awaiting_review' | 'completed' | 'failed' | string;
+    /** Unix ms */
+    createdAt: number;
+  }[];
   /** Unix ms; defaults to Date.now(). */
   now?: number;
 }
@@ -130,10 +141,20 @@ export function deriveJourney(input: JourneyInput): JourneyState {
   const season = currentSeason(nowDate);
   const year = nowDate.getFullYear();
   const { membership } = input;
-  const membershipYear = Math.max(1, Math.floor((now - membership.startDate) / MS_PER_YEAR) + 1);
-  const yearTwoReached = now - membership.startDate >= MS_PER_YEAR;
-  const tierSeasons = (TIER_DEFINITIONS[membership.tier]?.seasons ?? []).map(s => s.toLowerCase());
+  const isMember = membership != null;
+  const membershipYear = isMember
+    ? Math.max(1, Math.floor((now - membership.startDate) / MS_PER_YEAR) + 1)
+    : 0;
+  const yearTwoReached = isMember && now - membership.startDate >= MS_PER_YEAR;
+  const tierSeasons = isMember
+    ? (TIER_DEFINITIONS[membership.tier]?.seasons ?? []).map(s => s.toLowerCase())
+    : [];
   const opportunities = input.opportunities.filter(o => !o.archived);
+  const spots = input.spotInspections ?? [];
+  const spotsDelivered = spots.filter(s => norm(s.status) === 'completed');
+  const spotsInFlight = spots.filter(s =>
+    ['submitted', 'processing', 'awaiting_review'].includes(norm(s.status)),
+  );
 
   // ── Shared evidence ────────────────────────────────────────────────────────
   const baselineWO = input.workOrders.filter(wo => norm(wo.type) === 'baseline_scan');
@@ -163,16 +184,23 @@ export function deriveJourney(input: JourneyInput): JourneyState {
     o => norm(o.area) === 'job' && JOB_DONE_STAGES.includes(norm(o.stage)),
   );
   const trackEvents =
-    completedWOs.length + completedVisits.length + input.laborBankTxnCount + opportunities.length;
+    completedWOs.length +
+    completedVisits.length +
+    input.laborBankTxnCount +
+    opportunities.length +
+    spotsDelivered.length;
 
   const latestScan = [...input.scans].sort((a, b) => b.scanDate - a.scanDate)[0] ?? null;
+  // A delivered spot inspection mini roadmap IS a delivered roadmap.
   const roadmapDelivered =
-    latestScan != null &&
-    latestScan.hasRecommendations &&
-    (latestScan.status === 'delivered' || latestScan.sentToPortalAt != null);
+    spotsDelivered.length > 0 ||
+    (latestScan != null &&
+      latestScan.hasRecommendations &&
+      (latestScan.status === 'delivered' || latestScan.sentToPortalAt != null));
   const roadmapInProgress =
     !roadmapDelivered &&
-    input.scans.some(s => s.hasRecommendations || s.status === 'completed');
+    (spotsInFlight.length > 0 ||
+      input.scans.some(s => s.hasRecommendations || s.status === 'completed'));
 
   const futureScheduledWO = input.workOrders
     .filter(wo => wo.scheduledDate != null && wo.scheduledDate > now && norm(wo.status) !== 'skipped')
@@ -200,6 +228,7 @@ export function deriveJourney(input: JourneyInput): JourneyState {
   const upgradeOpen = improvementOpps.some(o => ESTIMATE_OPEN_STAGES.includes(norm(o.stage)));
 
   const annualReviewCurrent =
+    isMember &&
     membership.annualScanCompleted &&
     membership.annualScanDate != null &&
     now - membership.annualScanDate < MS_PER_YEAR;
@@ -222,25 +251,37 @@ export function deriveJourney(input: JourneyInput): JourneyState {
         }
       : baselineInProgress
         ? { key: 'baseline', status: 'in_progress', detail: 'Baseline walkthrough is scheduled or underway.' }
-        : { key: 'baseline', status: 'not_yet', detail: 'Baseline walkthrough has not happened yet.' },
+        : isMember
+          ? { key: 'baseline', status: 'not_yet', detail: 'Baseline walkthrough has not happened yet.' }
+          : { key: 'baseline', status: 'not_yet', detail: 'The full baseline comes with membership or a standalone walkthrough.' },
 
-    inspect: !seasonIncluded
-      ? {
-          key: 'inspect',
-          status: 'not_included',
-          detail: `${SEASON_LABELS[season]} visits are not part of this plan. Next included season is covered.`,
-        }
-      : seasonInspectDone
-        ? { key: 'inspect', status: 'done_this_season', detail: `${SEASON_LABELS[season]} walkthrough is complete.` }
-        : seasonInspectInProgress
-          ? { key: 'inspect', status: 'in_progress', detail: `${SEASON_LABELS[season]} walkthrough is on the calendar.` }
-          : { key: 'inspect', status: 'due_this_season', detail: `${SEASON_LABELS[season]} walkthrough still needs a date.` },
+    inspect: !isMember
+      ? spotsDelivered.length > 0
+        ? {
+            key: 'inspect',
+            status: 'done',
+            detail: `${spotsDelivered.length} spot inspection${spotsDelivered.length === 1 ? '' : 's'} on record.`,
+          }
+        : spotsInFlight.length > 0
+          ? { key: 'inspect', status: 'in_progress', detail: 'A spot inspection is in progress.' }
+          : { key: 'inspect', status: 'not_yet', detail: 'Every request starts with a look. Run a spot inspection.' }
+      : !seasonIncluded
+        ? {
+            key: 'inspect',
+            status: 'not_included',
+            detail: `${SEASON_LABELS[season]} visits are not part of this plan. Next included season is covered.`,
+          }
+        : seasonInspectDone
+          ? { key: 'inspect', status: 'done_this_season', detail: `${SEASON_LABELS[season]} walkthrough is complete.` }
+          : seasonInspectInProgress
+            ? { key: 'inspect', status: 'in_progress', detail: `${SEASON_LABELS[season]} walkthrough is on the calendar.` }
+            : { key: 'inspect', status: 'due_this_season', detail: `${SEASON_LABELS[season]} walkthrough still needs a date.` },
 
-    track: !baselineDone
-      ? { key: 'track', status: 'not_yet', detail: 'The record starts once the baseline is documented.' }
-      : trackEvents > 0
-        ? { key: 'track', status: 'done', detail: `${trackEvents} events on the home record.` }
-        : { key: 'track', status: 'in_progress', detail: 'Record is open and waiting for its first entries.' },
+    track: trackEvents > 0
+      ? { key: 'track', status: 'done', detail: `${trackEvents} events on the home record.` }
+      : baselineDone || spotsDelivered.length > 0
+        ? { key: 'track', status: 'in_progress', detail: 'Record is open and waiting for its first entries.' }
+        : { key: 'track', status: 'not_yet', detail: 'The record starts with the first visit.' },
 
     prioritize: roadmapDelivered
       ? { key: 'prioritize', status: 'done', detail: 'Priority roadmap is delivered and current.' }
@@ -268,31 +309,47 @@ export function deriveJourney(input: JourneyInput): JourneyState {
         ? { key: 'execute', status: 'in_progress', detail: 'Work is underway.' }
         : { key: 'execute', status: 'not_yet', detail: 'No roadmap work has started yet.' },
 
-    preserve: !yearTwoReached
-      ? { key: 'preserve', status: 'waiting_year_two', detail: 'Preservation routines begin in year two.' }
-      : completedWOs.some(wo => wo.visitYear != null && wo.visitYear >= new Date(membership.startDate).getFullYear() + 1)
-        ? { key: 'preserve', status: 'done', detail: 'Preservation routines are running.' }
-        : { key: 'preserve', status: 'in_progress', detail: 'Year two has started. Time to propose life extension work.' },
+    preserve: !isMember
+      ? { key: 'preserve', status: 'not_included', detail: 'Preservation routines open with a Proactive Path membership.' }
+      : !yearTwoReached
+        ? { key: 'preserve', status: 'waiting_year_two', detail: 'Preservation routines begin in year two.' }
+        : completedWOs.some(wo => wo.visitYear != null && wo.visitYear >= new Date(membership.startDate).getFullYear() + 1)
+          ? { key: 'preserve', status: 'done', detail: 'Preservation routines are running.' }
+          : { key: 'preserve', status: 'in_progress', detail: 'Year two has started. Time to propose life extension work.' },
 
     upgrade: upgradeWon
       ? { key: 'upgrade', status: 'done', detail: 'Improvement work has been delivered.' }
       : upgradeOpen
-        ? { key: 'upgrade', status: 'in_progress', detail: 'An improvement option is with the member.' }
-        : !yearTwoReached
-          ? { key: 'upgrade', status: 'waiting_year_two', detail: 'Upgrade conversations usually start in year two.' }
-          : { key: 'upgrade', status: 'not_yet', detail: 'No improvement projects proposed yet.' },
+        ? { key: 'upgrade', status: 'in_progress', detail: 'An improvement option is on the table.' }
+        : !isMember
+          ? { key: 'upgrade', status: 'not_yet', detail: 'Remodel options can start any time.' }
+          : !yearTwoReached
+            ? { key: 'upgrade', status: 'waiting_year_two', detail: 'Upgrade conversations usually start in year two.' }
+            : { key: 'upgrade', status: 'not_yet', detail: 'No improvement projects proposed yet.' },
 
-    scale: !yearTwoReached
-      ? { key: 'scale', status: 'waiting_year_two', detail: 'The first annual review lands in year two.' }
-      : annualReviewCurrent && healthScore != null
-        ? { key: 'scale', status: 'done', detail: `Annual review is current. Home Score ${healthScore}.` }
-        : healthScore != null
-          ? { key: 'scale', status: 'in_progress', detail: 'Home Score is on record. Annual review is due.' }
-          : { key: 'scale', status: 'not_yet', detail: 'No Home Score on record yet.' },
+    scale: !isMember
+      ? { key: 'scale', status: 'not_included', detail: 'The Home Score and annual review open with membership.' }
+      : !yearTwoReached
+        ? { key: 'scale', status: 'waiting_year_two', detail: 'The first annual review lands in year two.' }
+        : annualReviewCurrent && healthScore != null
+          ? { key: 'scale', status: 'done', detail: `Annual review is current. Home Score ${healthScore}.` }
+          : healthScore != null
+            ? { key: 'scale', status: 'in_progress', detail: 'Home Score is on record. Annual review is due.' }
+            : { key: 'scale', status: 'not_yet', detail: 'No Home Score on record yet.' },
   };
 
   // ── Headline step ──────────────────────────────────────────────────────────
   const currentStepKey: ThreeSixtyStepKey = (() => {
+    if (!isMember) {
+      // Non-member: the front door is the look, then the same working order.
+      if (stepStates.upgrade.status === 'in_progress') return 'upgrade';
+      if (spotsInFlight.length > 0) return 'inspect';
+      if (!roadmapDelivered && roadmapInProgress) return 'prioritize';
+      if (executeInProgress) return 'execute';
+      if (roadmapDelivered && nextScheduledMs === Infinity && !executedThisYear) return 'schedule';
+      if (spots.length === 0 && opportunities.length === 0) return 'inspect';
+      return 'track';
+    }
     if (!baselineDone) return 'baseline';
     // Seasonal cycle in working order for the current season.
     if (seasonIncluded && !seasonInspectDone) return 'inspect';
@@ -311,11 +368,13 @@ export function deriveJourney(input: JourneyInput): JourneyState {
   })();
 
   if (currentStepKey === 'track') {
-    stepStates.track.detail = `Holding steady. ${nextSeasonLabel} season starts ${nextSeasonDate}.`;
+    stepStates.track.detail = isMember
+      ? `Holding steady. ${nextSeasonLabel} season starts ${nextSeasonDate}.`
+      : 'Record is open. The next request starts with a look.';
   }
 
   const activeStepKeys: ThreeSixtyStepKey[] = [currentStepKey];
-  if (baselineDone && currentStepKey !== 'track') activeStepKeys.push('track');
+  if ((baselineDone || spotsDelivered.length > 0) && currentStepKey !== 'track') activeStepKeys.push('track');
 
   const phase = THREE_SIXTY_METHOD_STEPS.find(s => s.key === currentStepKey)!.phase;
 
@@ -327,12 +386,15 @@ export function deriveJourney(input: JourneyInput): JourneyState {
     season,
     membershipYear,
     valueDelivered: {
-      visitsCompleted: completedWOs.filter(wo => norm(wo.type) !== 'baseline_scan').length + completedVisits.length,
+      visitsCompleted:
+        completedWOs.filter(wo => norm(wo.type) !== 'baseline_scan').length +
+        completedVisits.length +
+        spotsDelivered.length,
       findingsLogged,
       healthScore,
-      laborBankBalanceCents: membership.laborBankBalance,
+      laborBankBalanceCents: membership?.laborBankBalance ?? 0,
       jobsCompleted: completedJobs.length,
     },
-    membershipStatus: membership.status,
+    membershipStatus: membership?.status ?? 'none',
   };
 }
