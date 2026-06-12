@@ -213,6 +213,27 @@ export async function ensureOsTables(): Promise<void> {
     await db.execute(sql`
       CREATE INDEX IF NOT EXISTS os_price_items_kind_idx ON os_price_items (kind, active)`);
 
+    // Consultant registry + sold-by attribution (HP-SOP-205 commission plan).
+    // Internal-only: commission figures never reach portal serialization.
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS os_consultants (
+        id serial PRIMARY KEY,
+        "businessId" integer NOT NULL DEFAULT 1,
+        name varchar(200) NOT NULL,
+        email varchar(320) NOT NULL DEFAULT '',
+        "userId" integer,
+        "commissionRateBps" integer NOT NULL DEFAULT 0,
+        active boolean NOT NULL DEFAULT true,
+        "createdAt" timestamp DEFAULT now() NOT NULL,
+        "updatedAt" timestamp DEFAULT now() NOT NULL
+      )`);
+    await db.execute(sql`
+      ALTER TABLE IF EXISTS opportunities
+      ADD COLUMN IF NOT EXISTS "soldByConsultantId" integer`);
+    await db.execute(sql`
+      ALTER TABLE IF EXISTS opportunities
+      ADD COLUMN IF NOT EXISTS "commissionPaidAt" timestamp`);
+
     console.log("[boot] ensureOsTables OK");
   } catch (err) {
     console.warn("[boot] ensureOsTables failed (non-fatal):", err);

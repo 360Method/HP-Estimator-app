@@ -47,6 +47,11 @@ export const PORTAL_FORBIDDEN_KEYS: readonly string[] = [
   "costCents",
   "markupPercent",
   "markupBps",
+  // consultant commission (HP-SOP-205): internal pay data, never customer-facing
+  "soldByConsultantId",
+  "commissionPaidAt",
+  "commissionRateBps",
+  "commissionCents",
 ];
 
 const FORBIDDEN = new Set<string>(PORTAL_FORBIDDEN_KEYS);

@@ -114,14 +114,23 @@ export default function OsEstimateWizard() {
   // Step 6 — review
   const [bulletOverrides, setBulletOverrides] = useState<Record<string, string[]>>({});
   const [showSendDialog, setShowSendDialog] = useState(false);
+  /** Consultant credited with the sale (null = house / Marcin). */
+  const [soldByConsultantId, setSoldByConsultantId] = useState<number | null>(null);
 
   const createOpp = trpc.opportunities.create.useMutation({
     onError: (err) => console.warn("[wizard] DB opportunity create failed (local state preserved):", err.message),
+  });
+  const updateOpp = trpc.opportunities.update.useMutation({
+    onError: (err) => console.warn("[wizard] DB opportunity update failed (local state preserved):", err.message),
   });
   const createCust = trpc.customers.create.useMutation({
     onError: (err) => console.warn("[wizard] DB customer create failed:", err.message),
   });
   const pbQuery = trpc.priceBook.list.useQuery(undefined, { staleTime: 60_000 });
+  const consultantsQuery = trpc.commissions.listConsultants.useQuery(undefined, { staleTime: 60_000 });
+  const setSoldBy = trpc.commissions.setSoldBy.useMutation({
+    onError: (err) => console.warn("[wizard] sold-by attribution failed:", err.message),
+  });
   const brainHealth = trpc.aiBrain.health.useQuery(undefined, { staleTime: 5 * 60_000, refetchOnWindowFocus: false });
   const rewritePhase = trpc.estimate.rewritePhase.useMutation();
 
@@ -180,8 +189,10 @@ export default function OsEstimateWizard() {
         state: customer?.state ?? "WA", zip: customer?.zip ?? "", jobType: "", scope: title,
       };
       addOpportunity({ id, area: "estimate", stage: "Draft", title, value: 0, notes: "", archived: false, clientSnapshot: clientSnap });
+      // Same id locally and in the DB, so the portal estimate's hpOpportunityId
+      // resolves to a real row (portal approval marks it Won, commissions join it).
       createOpp.mutate({
-        customerId: clientId ?? "", area: "estimate", stage: "Draft", title, value: 0, notes: "",
+        id, customerId: clientId ?? "", area: "estimate", stage: "Draft", title, value: 0, notes: "",
         archived: false, clientSnapshot: JSON.stringify(clientSnap),
       });
       setOppId(id);
@@ -305,7 +316,22 @@ export default function OsEstimateWizard() {
   function openSend() {
     // The review screen IS the approval gate for the wizard flow.
     setEstimateProposal({ status: "ready_for_customer", approvedAt: new Date().toISOString() });
-    if (oppId) updateOpportunity(oppId, { value: Math.round(totals.totalPrice) });
+    if (oppId) {
+      updateOpportunity(oppId, { value: Math.round(totals.totalPrice) });
+      // Persist value + snapshot to the DB row so the server records the
+      // authoritative margin audit (Rec 1) and commissions can read GP at sale.
+      updateOpp.mutate({
+        id: oppId,
+        value: Math.round(totals.totalPrice),
+        estimateSnapshot: JSON.stringify({
+          jobInfo: state.jobInfo,
+          global: state.global,
+          phases: state.phases,
+          customItems: state.customItems,
+          totals,
+        }),
+      });
+    }
     setShowSendDialog(true);
   }
 
@@ -626,6 +652,23 @@ export default function OsEstimateWizard() {
             <span className="text-sm font-semibold" style={{ color: "var(--hp-ink)" }}>Total investment</span>
             <span className="text-base font-bold" style={{ color: "var(--hp-ink)" }}>{fmt(totals.totalPrice)}</span>
           </div>
+          {/* Sold-by attribution (internal); hidden until consultants exist */}
+          {(consultantsQuery.data?.length ?? 0) > 0 && (
+            <div className="bg-white rounded-xl border px-4 py-3 flex items-center justify-between gap-3" style={inputStyle}>
+              <span className="text-sm" style={{ color: "var(--hp-ink)" }}>Sold by</span>
+              <select
+                className="text-sm px-2 py-1.5 rounded-lg border bg-white"
+                style={inputStyle}
+                value={soldByConsultantId ?? ""}
+                onChange={(e) => setSoldByConsultantId(e.target.value ? Number(e.target.value) : null)}
+              >
+                <option value="">House / Marcin</option>
+                {consultantsQuery.data!.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <button type="button" onClick={openSend} className={primaryBtn + " w-full"} style={{ background: "var(--hp-gold-deep)" }}>
             Send to {customer?.displayName ?? "customer"}
           </button>
@@ -652,6 +695,9 @@ export default function OsEstimateWizard() {
           onClose={() => setShowSendDialog(false)}
           onSent={() => {
             if (oppId) updateOpportunity(oppId, { sentAt: new Date().toISOString() });
+            if (oppId && soldByConsultantId != null) {
+              setSoldBy.mutate({ opportunityId: oppId, consultantId: soldByConsultantId });
+            }
             toast.success("Estimate sent.");
             navigate("/os/pipeline");
           }}

@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { BookOpenCheck, Bot, Eraser, ExternalLink, Mail } from "lucide-react";
+import { BookOpenCheck, Bot, Eraser, ExternalLink, HandCoins, Mail } from "lucide-react";
 import { OsShell } from "../OsShell";
 
 export default function OsSettings() {
@@ -97,6 +97,22 @@ export default function OsSettings() {
               Price book
             </div>
             <div className="text-xs text-muted-foreground">The services and rates estimates are built from.</div>
+          </div>
+          <ExternalLink className="w-4 h-4 text-muted-foreground" />
+        </div>
+      </Link>
+
+      <Link href="/os/commissions">
+        <div
+          className="mt-3 bg-white rounded-xl border px-4 py-3 flex items-center gap-3 cursor-pointer hover:shadow-sm transition-shadow"
+          style={{ borderColor: "var(--hp-hairline)" }}
+        >
+          <HandCoins className="w-4 h-4" style={{ color: "var(--hp-gold-deep)" }} />
+          <div className="flex-1">
+            <div className="text-sm font-medium" style={{ color: "var(--hp-ink)" }}>
+              Commissions
+            </div>
+            <div className="text-xs text-muted-foreground">Consultant rates, sold-by attribution, and what's payable.</div>
           </div>
           <ExternalLink className="w-4 h-4 text-muted-foreground" />
         </div>

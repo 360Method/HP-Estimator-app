@@ -58,6 +58,7 @@ import { idsRouter } from "./routers/ids";
 import { scorecardRouter } from "./routers/scorecard";
 import { osRouter } from "./routers/os";
 import { priceBookRouter } from "./routers/priceBook";
+import { commissionsRouter } from "./routers/commissions";
 import { requestPasswordReset, consumePasswordReset } from "./passwordReset";
 import {
   getAdminAllowlist,
@@ -126,6 +127,7 @@ export const appRouter = router({
   scorecard: scorecardRouter,
   os: osRouter,
   priceBook: priceBookRouter,
+  commissions: commissionsRouter,
 
   auth: router({
     /**

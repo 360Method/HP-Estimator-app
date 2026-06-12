@@ -68,6 +68,16 @@ const OpportunityInput = z.object({
   membershipId: z.number().optional(),
 });
 
+/**
+ * Create accepts an optional client-generated id so local state, the DB row,
+ * and portalEstimates.hpOpportunityId can all share ONE id. Without it the
+ * server minted its own id while the client kept a different local one, so
+ * portal approval's "mark Won" and any DB-side join silently missed the row.
+ */
+const OpportunityCreateInput = OpportunityInput.extend({
+  id: z.string().min(4).max(64).optional(),
+});
+
 export const opportunitiesRouter = router({
   /** List opportunities, optionally filtered by area, customerId, or archived status */
   list: protectedProcedure
@@ -92,12 +102,12 @@ export const opportunitiesRouter = router({
 
   /** Create a new opportunity */
   create: protectedProcedure
-    .input(OpportunityInput)
+    .input(OpportunityCreateInput)
     .mutation(async ({ input }) => {
-      const id = nanoid();
+      const id = input.id ?? nanoid();
       // Record the authoritative margin audit from the estimate snapshot (Rec 1).
       const margin = marginFieldsFromSnapshot(input.estimateSnapshot);
-      const result = await createOpportunity({ id, ...input, ...(margin ?? {}) });
+      const result = await createOpportunity({ ...input, id, ...(margin ?? {}) });
       // Auto-flag/clear the IDS margin-floor issue (Rec 2).
       if (margin) {
         syncMarginFloorIssue({

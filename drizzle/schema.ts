@@ -742,6 +742,11 @@ export const opportunities = pgTable("opportunities", {
   belowFloor: boolean("belowFloor").default(false).notNull(),
   /** ISO timestamp of the last margin audit. */
   marginAuditedAt: varchar("marginAuditedAt", { length: 32 }),
+  // ── Consultant commission (HP-SOP-205): internal-only, never portal-serialized ──
+  /** FK to os_consultants.id: who sold this job (null = house / Marcin). */
+  soldByConsultantId: integer("soldByConsultantId"),
+  /** Set when the commission for this job was manually marked paid out. */
+  commissionPaidAt: timestamp("commissionPaidAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
 });
@@ -2686,4 +2691,27 @@ export const osPriceItems = pgTable("os_price_items", {
 });
 export type OsPriceItem = typeof osPriceItems.$inferSelect;
 export type InsertOsPriceItem = typeof osPriceItems.$inferInsert;
+
+/**
+ * The Consultant registry, the sales seat (HP-SOP-205). Each consultant
+ * carries a personal commission rate in basis points (always < 1000 = 10% of
+ * job price). Consultants are deactivated, never deleted, so old jobs keep
+ * their attribution. All commission figures are INTERNAL: nothing from this
+ * table is ever serialized to the portal.
+ */
+export const osConsultants = pgTable("os_consultants", {
+  id: serial("id").primaryKey(),
+  businessId: integer("businessId").notNull().default(1),
+  name: varchar("name", { length: 200 }).notNull(),
+  email: varchar("email", { length: 320 }).notNull().default(""),
+  /** Link to users.id once the consultant gets a staff login. */
+  userId: integer("userId"),
+  /** Personal commission rate in basis points (e.g. 800 = 8%). Always < 1000. */
+  commissionRateBps: integer("commissionRateBps").notNull().default(0),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
+});
+export type OsConsultant = typeof osConsultants.$inferSelect;
+export type InsertOsConsultant = typeof osConsultants.$inferInsert;
 
