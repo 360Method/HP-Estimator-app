@@ -100,6 +100,8 @@ import { notifyOwner } from "../_core/notification";
 import { storagePut } from "../storage";
 import { broadcastOpportunityUpdate, broadcastPortalMessage } from "../sse";
 import { declinedOpportunityStage, planEstimateResend } from "../lib/estimateSync";
+import { approvePortalEstimate, uploadSignatureToS3 } from "../lib/estimateApproval";
+import { emailWrapper, ctaButton } from "../lib/email/hpEmailTheme";
 import Stripe from "stripe";
 import { ENV } from "../_core/env";
 import { runAutomationsForTrigger } from "../automationEngine";
@@ -234,25 +236,6 @@ async function createCrmLeadFromPortalRequest(opts: {
   }
 
   return { leadId: newLeadId, hpCustomerId: hpCustomerIdForLead };
-}
-
-// ─── SIGNATURE STORAGE HELPER ───────────────────────────────────────────────
-/**
- * Converts a base64 PNG data URL to a Buffer and uploads it to S3.
- * Returns the CDN URL. Falls back to the original dataUrl if upload fails.
- */
-async function uploadSignatureToS3(dataUrl: string, prefix: string): Promise<string> {
-  try {
-    // Strip the data:image/png;base64, prefix
-    const base64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
-    const buffer = Buffer.from(base64, 'base64');
-    const key = `signatures/${prefix}-${Date.now()}.png`;
-    const { url } = await storagePut(key, buffer, 'image/png');
-    return url;
-  } catch (err) {
-    console.warn('[portal] Signature S3 upload failed, storing as dataUrl:', err);
-    return dataUrl; // graceful fallback
-  }
 }
 
 function getStripe() {
@@ -469,107 +452,20 @@ export const portalRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const est = await getPortalEstimateById(input.id);
-      if (!est || est.customerId !== ctx.portalCustomer.id) {
-        throw new TRPCError({ code: "NOT_FOUND" });
-      }
-      if (est.status === "approved") {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "Already approved" });
-      }
-
-      // Upload signature to S3 and store CDN URL instead of raw base64
-      const sigUrl = await uploadSignatureToS3(
-        input.signatureDataUrl,
-        `est-${input.id}-${ctx.portalCustomer.id}`
-      );
-
-      await updatePortalEstimateStatus(input.id, "approved", {
-        approvedAt: new Date(),
+      // Shared pipeline (server/lib/estimateApproval.ts) \u2014 the close flow's
+      // in-person approval runs the same body with channel 'in_person'.
+      return approvePortalEstimate({
+        estimateId: input.id,
         signerName: input.signerName,
-        signatureDataUrl: sigUrl,
-      });
-
-      // Auto-create deposit invoice if deposit > 0
-      let depositInvoice = null;
-      if (est.depositAmount > 0) {
-        depositInvoice = await createPortalInvoice({
-          customerId: est.customerId,
-          estimateId: est.id,
-          invoiceNumber: `DEP-${est.estimateNumber}`,
-          type: "deposit",
-          status: "due",
-          amountDue: est.depositAmount,
-          amountPaid: 0,
-          tipAmount: 0,
-          dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
-          jobTitle: est.title,
-          lineItemsJson: est.lineItemsJson,
-          sentAt: new Date(),
-        });
-      }
-
-      // Mark pro-side opportunity as won (if linked) and broadcast SSE update
-      if (est.hpOpportunityId) {
-        const now = new Date().toISOString();
-        await updateOpportunity(est.hpOpportunityId, {
-          stage: 'Won',
-          wonAt: now,
-          portalApprovedAt: now,
-        }).catch((e: unknown) => {
-          console.warn('[portal.approveEstimate] Could not mark opportunity won:', e);
-        });
-        broadcastOpportunityUpdate(est.hpOpportunityId, {
-          stage: 'Won',
-          wonAt: now,
-          portalApprovedAt: now,
-          updatedAt: now,
-        });
-      }
-
-      // Send approval confirmation email to customer
-      const baseUrl = process.env.PORTAL_BASE_URL ?? 'https://client.handypioneers.com';
-      const depositFmt = est.depositAmount > 0
-        ? `$${(est.depositAmount / 100).toFixed(2)}`
-        : null;
-      const invoiceUrl = depositInvoice
-        ? `${baseUrl}/portal/invoices/${depositInvoice.id}`
-        : `${baseUrl}/portal/invoices`;
-      {
-        const appCfg = await getOrCreateAppSettings().catch(() => null);
-        const tmplVars = {
-          customerName: ctx.portalCustomer.name,
-          customerFirstName: ctx.portalCustomer.name?.split(' ')[0],
+        signatureDataUrl: input.signatureDataUrl,
+        channel: 'portal',
+        portalCustomer: {
+          id: ctx.portalCustomer.id,
+          name: ctx.portalCustomer.name,
           email: ctx.portalCustomer.email,
-          referenceNumber: est.estimateNumber,
-          description: est.title ?? 'Your Project',
-          amount: depositFmt ?? '',
-          invoiceUrl,
-          portalUrl: baseUrl,
-        };
-        const approvalSubject = appCfg?.emailEstimateApprovedSubject?.trim() || `Your estimate is approved. Thank you!`;
-        const approvalHtml = interpolatePortalTemplate(appCfg?.emailEstimateApprovedBody, tmplVars)
-          ? `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;">${interpolatePortalTemplate(appCfg?.emailEstimateApprovedBody, tmplVars)!.replace(/\n/g, '<br/>')}</div>`
-          : buildApprovalConfirmationEmail(ctx.portalCustomer.name, est.estimateNumber, est.title ?? 'Your Project', depositFmt, invoiceUrl, baseUrl);
-        await sendEmail({ to: ctx.portalCustomer.email, subject: approvalSubject, html: approvalHtml }).catch(() => null);
-      }
-
-      // Notify HP team
-      await notifyOwner({
-        title: `\u2705 Estimate Approved: ${est.estimateNumber}`,
-        content: `${ctx.portalCustomer.name} approved estimate ${est.estimateNumber} (${est.title}) and signed electronically.${est.hpOpportunityId ? ` Opportunity ${est.hpOpportunityId} marked Won.` : ''}`,
-      }).catch(() => null);
-      // Fire estimate_approved automation (non-blocking)
-      runAutomationsForTrigger('estimate_approved', {
-        customerName: ctx.portalCustomer.name,
-        customerFirstName: ctx.portalCustomer.name?.split(' ')[0],
-        email: ctx.portalCustomer.email,
-        phone: (ctx.portalCustomer as any).phone ?? undefined,
-        referenceNumber: est.estimateNumber,
-        amount: est.totalAmount ? `$${(est.totalAmount / 100).toFixed(2)}` : undefined,
-        description: est.title ?? undefined,
-      }).catch(e => console.error('[automation] estimate_approved error:', e));
-
-      return { estimate: await getPortalEstimateById(input.id), depositInvoice };
+          phone: (ctx.portalCustomer as any).phone ?? null,
+        },
+      });
     }),
 
   /** Customer declines estimate */
@@ -2778,66 +2674,8 @@ export const portalRouter = router({
     }),
 });
 // ─── EMAIL TEMPLATES ──────────────────────────────────────────────────────────
-// HP brand palette: forest green #1a2e1a / #2d4a2d, warm gold #c8922a
-const HP_LOGO_EMAIL = "https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg";
-
-function emailWrapper(content: string, accentColor = "#c8922a") {
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Handy Pioneers</title>
-</head>
-<body style="margin:0;padding:0;background:#f4f5f7;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f5f7;padding:32px 16px;">
-    <tr><td align="center">
-      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
-        <!-- HEADER -->
-        <tr>
-          <td style="background:linear-gradient(135deg,#1a2e1a 0%,#2d4a2d 100%);padding:28px 40px;text-align:center;">
-            <img src="${HP_LOGO_EMAIL}" alt="Handy Pioneers" height="64" style="display:block;margin:0 auto 12px;border-radius:4px;" />
-            <p style="margin:0;color:rgba(255,255,255,0.65);font-size:11px;letter-spacing:0.12em;text-transform:uppercase;">Reliable Renovations, Trusted Results</p>
-          </td>
-        </tr>
-        <!-- BODY -->
-        <tr>
-          <td style="padding:36px 40px 28px;color:#1a1a1a;font-size:15px;line-height:1.6;">
-            ${content}
-          </td>
-        </tr>
-        <!-- DIVIDER -->
-        <tr>
-          <td style="padding:0 40px;"><hr style="border:none;border-top:1px solid #e8e8e8;margin:0;" /></td>
-        </tr>
-        <!-- FOOTER -->
-        <tr>
-          <td style="padding:20px 40px 28px;text-align:center;">
-            <p style="margin:0 0 4px;font-size:12px;color:#888;">Handy Pioneers &bull; Vancouver, WA 98683</p>
-            <p style="margin:0 0 4px;font-size:12px;color:#888;">
-              <a href="tel:3608386731" style="color:#888;text-decoration:none;">(360) 838-6731</a>
-              &nbsp;&bull;&nbsp;
-              <a href="mailto:help@handypioneers.com" style="color:#888;text-decoration:none;">help@handypioneers.com</a>
-            </p>
-            <p style="margin:0;font-size:12px;">
-              <a href="https://handypioneers.com" style="color:${accentColor};text-decoration:none;">handypioneers.com</a>
-            </p>
-          </td>
-        </tr>
-      </table>
-    </td></tr>
-  </table>
-</body>
-</html>`;
-}
-
-function ctaButton(label: string, url: string, color = "#c8922a") {
-  return `<table width="100%" cellpadding="0" cellspacing="0" style="margin:28px 0;">
-    <tr><td align="center">
-      <a href="${url}" style="display:inline-block;background:${color};color:#ffffff;font-size:15px;font-weight:700;letter-spacing:0.04em;padding:14px 36px;border-radius:6px;text-decoration:none;">${label}</a>
-    </td></tr>
-  </table>`;
-}
+// The branded shell (emailWrapper/ctaButton) lives in lib/email/hpEmailTheme.ts,
+// shared with the estimate-approval lib.
 
 function buildMagicLinkEmail(name: string, url: string) {
   const firstName = name.split(' ')[0];
@@ -2879,29 +2717,6 @@ function buildInvoiceEmail(name: string, invoiceNumber: string, amountCents: num
     </table>
     ${ctaButton('Review & Pay Invoice', url)}
     <p style="margin:0;font-size:13px;color:#888;text-align:center;">Questions about this invoice? <a href="mailto:help@handypioneers.com" style="color:#c8922a;">Contact us</a> and we'll be happy to help.</p>
-  `);
-}
-
-function buildApprovalConfirmationEmail(
-  name: string,
-  estimateNumber: string,
-  title: string,
-  depositFmt: string | null,
-  invoiceUrl: string,
-  _baseUrl: string,
-) {
-  const firstName = name.split(' ')[0];
-  const depositSection = depositFmt
-    ? `<p style="margin:0 0 20px;">To get your project scheduled, please pay the <strong>${depositFmt} deposit</strong> using the button below.</p>
-       ${ctaButton('Pay Deposit Now', invoiceUrl, '#1a2e1a')}`
-    : `<p style="margin:0 0 20px;">Our team will be in touch shortly to schedule your project.</p>`;
-  return emailWrapper(`
-    <h2 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#1a2e1a;">Estimate Approved. Thank You!</h2>
-    <p style="margin:0 0 12px;">Hi ${firstName},</p>
-    <p style="margin:0 0 8px;">We've received your approval for estimate <strong>${estimateNumber}</strong>:</p>
-    <p style="margin:0 0 20px;padding:12px 16px;background:#f8f9fa;border-left:3px solid #1a2e1a;border-radius:0 4px 4px 0;font-weight:600;color:#1a2e1a;">${title}</p>
-    ${depositSection}
-    <p style="margin:0;font-size:13px;color:#888;text-align:center;">Questions? <a href="mailto:help@handypioneers.com" style="color:#c8922a;">Reply to this email</a> or call us at (360) 838-6731.</p>
   `);
 }
 
