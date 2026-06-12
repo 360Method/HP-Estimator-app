@@ -12,6 +12,7 @@ import {
   ConsultantWorkflowMeta, EstimateAuditMeta, EstimateProposalMeta, EstimatePricebookMeta,
 } from '@/lib/types';
 import { ALL_PHASES, DEFAULTS } from '@/lib/phases';
+import { buildEstimateSnapshot } from '@/lib/estimateSnapshot';
 import { generateProjectSchedule } from '@/lib/generateProjectSchedule';
 import { nanoid } from 'nanoid';
 
@@ -644,29 +645,7 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
       // ── Save current working state into the outgoing opportunity's snapshot ──
       let updatedOpportunities = state.opportunities;
       if (state.activeOpportunityId) {
-        const outgoingSnapshot: EstimateSnapshot = {
-          jobInfo: state.jobInfo,
-          global: state.global,
-          phases: state.phases,
-          customItems: state.customItems,
-          fieldNotes: state.fieldNotes,
-          summaryNotes: state.summaryNotes,
-          estimatorNotes: state.estimatorNotes,
-          clientNote: state.clientNote,
-          estimateOverrides: state.estimateOverrides,
-          phaseOverrides: state.phaseOverrides ?? [],
-          signature: state.signature,
-          signedAt: state.signedAt,
-          signedBy: state.signedBy,
-          depositType: state.depositType,
-          depositValue: state.depositValue,
-          consultantWorkflow: state.consultantWorkflow,
-          audit: state.estimateAudit,
-          proposal: state.estimateProposal,
-          pricebook: state.estimatePricebook,
-          approvedAt: state.estimateProposal.approvedAt ?? state.estimateAudit.approvedAt,
-          approvedBy: state.estimateProposal.approvedBy ?? state.estimateAudit.approvedBy,
-        };
+        const outgoingSnapshot: EstimateSnapshot = buildEstimateSnapshot(state);
         updatedOpportunities = state.opportunities.map(o =>
           o.id === state.activeOpportunityId
             ? { ...o, estimateSnapshot: outgoingSnapshot }
@@ -993,23 +972,7 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
         // Also save the active opportunity's snapshot before flushing
         let oppsToFlush = state.opportunities;
         if (state.activeOpportunityId) {
-          const outSnap: EstimateSnapshot = {
-            jobInfo: state.jobInfo,
-            global: state.global,
-            phases: state.phases,
-            customItems: state.customItems,
-            fieldNotes: state.fieldNotes,
-            summaryNotes: state.summaryNotes,
-            estimatorNotes: state.estimatorNotes,
-            clientNote: state.clientNote,
-            estimateOverrides: state.estimateOverrides,
-            phaseOverrides: state.phaseOverrides ?? [],
-            signature: state.signature,
-            signedAt: state.signedAt,
-            signedBy: state.signedBy,
-            depositType: state.depositType,
-            depositValue: state.depositValue,
-          };
+          const outSnap: EstimateSnapshot = buildEstimateSnapshot(state);
           oppsToFlush = state.opportunities.map(o =>
             o.id === state.activeOpportunityId ? { ...o, estimateSnapshot: outSnap } : o
           );
