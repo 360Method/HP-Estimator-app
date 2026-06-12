@@ -21,6 +21,7 @@ import { adminProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
 import {
   agentDrafts,
+  aiAgentTasks,
   notifications,
   opportunities,
   osBusiness,
@@ -590,6 +591,30 @@ export const osRouter = router({
         console.log("[freshStart] wiped:", JSON.stringify(counts));
         return { ok: true, counts };
       }),
+
+    /**
+     * Decline everything in the Approvals inbox in one tap: ready nurturer
+     * drafts become cancelled, parked agent tasks become rejected. Same
+     * effect as declining each item by hand; nothing is deleted, the audit
+     * trail stays.
+     */
+    clearApprovals: adminProcedure.mutation(async () => {
+      const d = await db();
+      const draftsRes: any = await d
+        .update(agentDrafts)
+        .set({ status: "cancelled", cancelReason: "declined_all" })
+        .where(eq(agentDrafts.status, "ready"));
+      const tasksRes: any = await d
+        .update(aiAgentTasks)
+        .set({ status: "rejected", completedAt: new Date() })
+        .where(eq(aiAgentTasks.status, "awaiting_approval"));
+      const counts = {
+        drafts: Number(draftsRes?.rowCount ?? 0),
+        tasks: Number(tasksRes?.rowCount ?? 0),
+      };
+      console.log("[clearApprovals] declined:", JSON.stringify(counts));
+      return { ok: true, counts };
+    }),
   }),
 
   decisions: router({
