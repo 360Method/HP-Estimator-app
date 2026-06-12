@@ -75,7 +75,11 @@ export default function SendEstimateDialog({
       if (data.email) channels.push('email');
       if (data.sms) channels.push('SMS');
       const partial = data.errors.length > 0 ? ` (partial — ${data.errors.join(', ')})` : '';
-      toast.success(`Estimate sent via ${channels.join(' & ')}${partial}`);
+      toast.success(
+        channels.length > 0
+          ? `Estimate sent via ${channels.join(' & ')}${partial}`
+          : 'Estimate synced to the portal. Ready for in-person signing.'
+      );
       setSent(true);
       onSent?.();
     },
@@ -88,13 +92,15 @@ export default function SendEstimateDialog({
     '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const customerScopeSummary = approvalSummary?.trim() || scopeSummary || '';
 
+  // With both channels off, the send becomes a quiet portal-only sync: the
+  // estimate lands in the customer's portal (ready for the in-person close
+  // flow) and no message goes out. The customer email is still required so
+  // the portal account can be created or matched.
+  const portalOnly = !sendViaEmail && !sendViaSms;
+
   const handleSend = () => {
-    if (!sendViaEmail && !sendViaSms) {
-      toast.error('Select at least one channel (email or SMS)');
-      return;
-    }
-    if (sendViaEmail && !email.trim()) {
-      toast.error('Enter a valid email address');
+    if (!email.trim()) {
+      toast.error(portalOnly ? 'Enter the customer email (needed to link their portal account)' : 'Enter a valid email address');
       return;
     }
     if (sendViaSms && !phone.trim()) {
@@ -108,7 +114,7 @@ export default function SendEstimateDialog({
     sendMutation.mutate({
       sendEmail: sendViaEmail,
       sendSms: sendViaSms,
-      toEmail: sendViaEmail ? email.trim() : undefined,
+      toEmail: email.trim(),
       toPhone: sendViaSms ? phone.trim() : undefined,
       estimateNumber,
       customerName,
@@ -215,10 +221,12 @@ export default function SendEstimateDialog({
                 </div>
               </div>
 
-              {/* ── Email field ── */}
-              {sendViaEmail && (
+              {/* ── Email field (also required for portal-only sync) ── */}
+              {(sendViaEmail || portalOnly) && (
                 <div>
-                  <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Customer Email</label>
+                  <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
+                    Customer Email{portalOnly ? ' (for their portal account, no email is sent)' : ''}
+                  </label>
                   <input
                     type="email"
                     value={email}
@@ -265,10 +273,13 @@ export default function SendEstimateDialog({
                 </div>
               )}
 
-              {!sendViaEmail && !sendViaSms && (
-                <div className="flex items-center gap-2 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
-                  <AlertCircle size={13} className="shrink-0" />
-                  Select at least one channel above.
+              {portalOnly && (
+                <div className="flex items-start gap-2 px-3 py-2.5 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800">
+                  <AlertCircle size={13} className="shrink-0 mt-0.5" />
+                  <span>
+                    <strong>Portal only:</strong> with both channels off, the estimate syncs quietly to the
+                    customer portal (no email, no text) so it is ready for in-person signing in the close flow.
+                  </span>
                 </div>
               )}
             </div>
@@ -283,13 +294,13 @@ export default function SendEstimateDialog({
               </button>
               <button
                 onClick={handleSend}
-                disabled={sendMutation.isPending || !isCustomerReady || (!sendViaEmail && !sendViaSms)}
+                disabled={sendMutation.isPending || !isCustomerReady}
                 className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {sendMutation.isPending ? (
-                  <><Loader2 size={14} className="animate-spin" /> Sending…</>
+                  <><Loader2 size={14} className="animate-spin" /> {portalOnly ? 'Syncing…' : 'Sending…'}</>
                 ) : (
-                  <><Send size={14} /> Send Estimate</>
+                  <><Send size={14} /> {portalOnly ? 'Sync to Portal' : 'Send Estimate'}</>
                 )}
               </button>
             </div>

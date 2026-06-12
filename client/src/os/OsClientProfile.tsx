@@ -46,7 +46,7 @@ function flowState(o: { area: string | null; stage: string | null }): { label: s
 
 export default function OsClientProfile() {
   const [, navigate] = useLocation();
-  const { state, navigateToTopLevel, setActiveOpportunity } = useEstimator();
+  const { state, navigateToTopLevel, setActiveOpportunity, setSection } = useEstimator();
   const customerId = state.activeCustomerId ?? "";
   const [tab, setTab] = useState<Tab>("overview");
   const [editingContact, setEditingContact] = useState(false);
@@ -238,7 +238,7 @@ export default function OsClientProfile() {
                 stepContents={memberJourney.stepContents}
                 customerId={customerId}
                 propertyId={activeProperty?.id ?? null}
-                onOpenOpportunity={(id) => setActiveOpportunity(id)}
+                onOpenOpportunity={(id) => { setActiveOpportunity(id); setSection("opp-details"); }}
                 onOpenSpot={(id) => navigate(`/os/spot/${id}`)}
               />
             </div>
@@ -277,7 +277,7 @@ export default function OsClientProfile() {
                 <button
                   key={o.id}
                   type="button"
-                  onClick={() => setActiveOpportunity(o.id)}
+                  onClick={() => { setActiveOpportunity(o.id); setSection("opp-details"); }}
                   className="w-full text-left bg-white rounded-xl border px-4 py-3 flex items-center gap-3 hover:shadow-sm transition-shadow"
                   style={{ borderColor: "var(--hp-hairline)" }}
                 >

@@ -32,6 +32,7 @@ import {
   properties,
   threeSixtyMemberships,
   threeSixtyScans,
+  opportunities,
 } from "../../drizzle/schema";
 import { priorityTranslations } from "../../drizzle/schema.priorityTranslation";
 import { eq, and, desc } from "drizzle-orm";
@@ -207,6 +208,29 @@ export const closeFlowRouter = router({
         }
       }
 
+      // Internal estimate-area opportunities (customer-safe fields only):
+      // pre-flight lists these when nothing is synced for signing yet, so the
+      // consultant can jump straight to the builder and sync quietly.
+      const internalOppRows = await db
+        .select({
+          id: opportunities.id,
+          title: opportunities.title,
+          value: opportunities.value,
+          stage: opportunities.stage,
+          archived: opportunities.archived,
+          area: opportunities.area,
+        })
+        .from(opportunities)
+        .where(and(eq(opportunities.customerId, input.customerId), eq(opportunities.area, "estimate")));
+      const internalEstimates = internalOppRows
+        .filter((o) => !o.archived)
+        .map((o) => ({
+          id: o.id,
+          title: o.title,
+          valueDollars: Number(o.value) || 0,
+          stage: o.stage,
+        }));
+
       return {
         customer: {
           id: customer.id,
@@ -228,6 +252,7 @@ export const closeFlowRouter = router({
         roadmaps,
         estimate,
         depositInvoice,
+        internalEstimates,
         readiness: {
           hasRoadmap: roadmaps.length > 0,
           estimateSynced: !!estimate,

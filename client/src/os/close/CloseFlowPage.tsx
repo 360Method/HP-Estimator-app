@@ -10,13 +10,15 @@
  * load (closeSteps.ts owns the skip rules).
  */
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "wouter";
+import { useParams, useLocation } from "wouter";
 import type { inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "../../../../server/routers";
 import { trpc } from "@/lib/trpc";
+import { useEstimator } from "@/contexts/EstimatorContext";
+import { markNavIntent } from "../navIntent";
 import { toast } from "sonner";
 import {
-  ArrowLeft, ArrowRight, CalendarCheck, Check, CheckCircle2, FileText,
+  ArrowLeft, ArrowRight, CalendarCheck, Check, CheckCircle2, Eye, FileText,
   Loader2, Mail, PenLine, X,
 } from "lucide-react";
 import SignatureCapture from "@/components/SignatureCapture";
@@ -179,6 +181,23 @@ function ReadinessRow({ ok, label, fix }: { ok: boolean; label: string; fix?: st
 
 function PreflightStep({ ctx, onBegin, onExit }: { ctx: CloseContext; onBegin: () => void; onExit: () => void }) {
   const r = ctx.readiness;
+  const [, navigate] = useLocation();
+  const { setActiveCustomer, setActiveOpportunity, setSection } = useEstimator();
+
+  // Jump straight into the builder for an internal estimate so the
+  // consultant can price it and sync it quietly (Send → Sync to Portal),
+  // then come back to Start close. Same deep-link handshake the
+  // notification bell uses.
+  const openInBuilder = (opportunityId: string) => {
+    setActiveCustomer(ctx.customer.id, "direct");
+    setActiveOpportunity(opportunityId);
+    setSection("opp-details");
+    markNavIntent();
+    navigate("/os/clients");
+  };
+
+  const fmtDollars = (n: number) => `$${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+
   return (
     <div className="pt-6">
       <p className="hp-eyebrow text-xs mb-1" style={{ color: "var(--hp-gold-deep)" }}>On-site close</p>
@@ -198,18 +217,13 @@ function PreflightStep({ ctx, onBegin, onExit }: { ctx: CloseContext; onBegin: (
         />
         <ReadinessRow
           ok={r.estimateSynced}
-          label="Estimate synced to the portal"
-          fix="Send the estimate to the portal from the estimate screen, then come back. The presentation cannot start without it."
+          label="Estimate ready for signing"
+          fix="Nothing is synced for signing yet. You can still present the roadmap and membership now; to sign today, open the estimate below and use Send, then Sync to Portal (no message goes out)."
         />
         <ReadinessRow
           ok={r.customerEmailPresent}
           label="Customer email on file"
           fix="Add an email on the client profile to enable card payments and confirmations."
-        />
-        <ReadinessRow
-          ok={r.portalAccountPresent}
-          label="Portal account linked"
-          fix="Sending the estimate to the portal creates the account."
         />
         {r.alreadyMember && ctx.property?.membershipTierLabel && (
           <div className="flex items-center gap-2 mt-2 text-xs">
@@ -221,7 +235,7 @@ function PreflightStep({ ctx, onBegin, onExit }: { ctx: CloseContext; onBegin: (
         )}
       </div>
 
-      {ctx.estimate && (
+      {ctx.estimate ? (
         <div className="mt-4 bg-white rounded-xl border px-5 py-4 flex items-center gap-3" style={{ borderColor: "var(--hp-hairline)" }}>
           <FileText className="w-4 h-4 shrink-0 text-muted-foreground" />
           <div className="flex-1 min-w-0">
@@ -233,15 +247,40 @@ function PreflightStep({ ctx, onBegin, onExit }: { ctx: CloseContext; onBegin: (
             </div>
           </div>
         </div>
-      )}
+      ) : ctx.internalEstimates.length > 0 ? (
+        <div className="mt-4 bg-white rounded-xl border px-5 py-4" style={{ borderColor: "var(--hp-hairline)" }}>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+            Estimates in the pipeline, not yet synced for signing
+          </p>
+          <div className="space-y-2">
+            {ctx.internalEstimates.map((e) => (
+              <div key={e.id} className="flex items-center gap-3">
+                <FileText className="w-4 h-4 shrink-0 text-muted-foreground" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate">{e.title || "Untitled estimate"}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {e.valueDollars > 0 ? `${fmtDollars(e.valueDollars)} · ` : ""}{e.stage}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => openInBuilder(e.id)}
+                  className="text-xs px-3 py-1.5 rounded-lg font-semibold border shrink-0"
+                  style={{ borderColor: "var(--hp-gold-deep)", color: "var(--hp-gold-deep)" }}
+                >
+                  Open in builder
+                </button>
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-3">
+            In the builder: review the price, then Send, leave both message channels off, and tap Sync to Portal. Come back here and the estimate is ready to sign.
+          </p>
+        </div>
+      ) : null}
 
       <div className="mt-6 flex items-center gap-3">
-        <button
-          type="button"
-          disabled={!r.estimateSynced}
-          onClick={onBegin}
-          className="hp-button-gold disabled:opacity-40 disabled:cursor-not-allowed"
-        >
+        <button type="button" onClick={onBegin} className="hp-button-gold">
           Begin presentation
           <ArrowRight className="w-4 h-4 ml-1.5 inline" />
         </button>
@@ -249,6 +288,11 @@ function PreflightStep({ ctx, onBegin, onExit }: { ctx: CloseContext; onBegin: (
           Back to profile
         </button>
       </div>
+      {!r.estimateSynced && (
+        <p className="text-xs text-muted-foreground mt-2">
+          Without a synced estimate, the presentation covers the roadmap and membership; the signing and deposit steps are skipped.
+        </p>
+      )}
     </div>
   );
 }
@@ -312,6 +356,10 @@ function RoadmapStep({ ctx, onBack, onNext }: { ctx: CloseContext; onBack: () =>
 // ─── Estimate review ──────────────────────────────────────────────────────────
 
 function EstimateStep({ ctx, onBack, onNext }: { ctx: CloseContext; onBack: () => void; onNext: () => void }) {
+  // The consultant owns the price reveal: the document opens scope-only so
+  // the value walk happens first, and dollars appear only on their tap.
+  // Re-entering after approval shows pricing immediately.
+  const [priceRevealed, setPriceRevealed] = useState(ctx.estimate?.status === "approved");
   if (!ctx.estimate) return null;
   return (
     <StepShell
@@ -319,13 +367,25 @@ function EstimateStep({ ctx, onBack, onNext }: { ctx: CloseContext; onBack: () =
       title="Your estimate"
       onBack={onBack}
       footer={
-        <button type="button" onClick={onNext} className="hp-button-gold">
-          {ctx.estimate.status === "approved" ? "Continue" : "Looks right, let's sign"}
-          <ArrowRight className="w-4 h-4 ml-1.5 inline" />
-        </button>
+        priceRevealed ? (
+          <button type="button" onClick={onNext} className="hp-button-gold">
+            {ctx.estimate.status === "approved" ? "Continue" : "Looks right, let's sign"}
+            <ArrowRight className="w-4 h-4 ml-1.5 inline" />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setPriceRevealed(true)}
+            className="inline-flex items-center text-sm px-4 py-2.5 rounded-lg font-semibold border"
+            style={{ borderColor: "var(--hp-gold-deep)", color: "var(--hp-gold-deep)" }}
+          >
+            <Eye className="w-4 h-4 mr-1.5" /> Reveal pricing
+          </button>
+        )
       }
     >
       <EstimateDocument
+        showPricing={priceRevealed}
         estimate={{
           ...ctx.estimate,
           customerName: ctx.customer.name,
@@ -436,28 +496,44 @@ function DoneStep({ ctx, customerId, onExit }: { ctx: CloseContext; customerId: 
   return (
     <StepShell eyebrow="All set" title="What happens next">
       <div className="bg-white rounded-xl border px-5 py-5 space-y-4" style={{ borderColor: "var(--hp-hairline)" }}>
-        <div className="flex items-start gap-3">
-          <CheckCircle2 className="w-5 h-5 mt-0.5 shrink-0 text-emerald-600" />
-          <div>
-            <p className="text-sm font-semibold">Your project is locked in</p>
-            <p className="text-xs text-muted-foreground">
-              {ctx.estimate?.title ?? "The approved work"} is moving to scheduling.
-            </p>
+        {ctx.estimate?.status === "approved" ? (
+          <>
+            <div className="flex items-start gap-3">
+              <CheckCircle2 className="w-5 h-5 mt-0.5 shrink-0 text-emerald-600" />
+              <div>
+                <p className="text-sm font-semibold">Your project is locked in</p>
+                <p className="text-xs text-muted-foreground">
+                  {ctx.estimate?.title ?? "The approved work"} is moving to scheduling.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <CalendarCheck className="w-5 h-5 mt-0.5 shrink-0" style={{ color: "var(--hp-gold-deep)" }} />
+              <div>
+                <p className="text-sm font-semibold">Scheduling</p>
+                <p className="text-xs text-muted-foreground">
+                  {scheduled
+                    ? `Work is on the calendar for ${scheduled}.`
+                    : opp
+                      ? "The job has been created; dates land on your calendar shortly."
+                      : "The job and schedule are being generated now."}
+                </p>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="flex items-start gap-3">
+            <CheckCircle2 className="w-5 h-5 mt-0.5 shrink-0 text-emerald-600" />
+            <div>
+              <p className="text-sm font-semibold">Thanks for walking through it together</p>
+              <p className="text-xs text-muted-foreground">
+                {ctx.readiness.alreadyMember || ctx.property?.membershipTierLabel
+                  ? "Your home is on the proactive plan; seasonal visits and the annual scan come to you."
+                  : "Everything we covered today is saved; we follow up with the next step."}
+              </p>
+            </div>
           </div>
-        </div>
-        <div className="flex items-start gap-3">
-          <CalendarCheck className="w-5 h-5 mt-0.5 shrink-0" style={{ color: "var(--hp-gold-deep)" }} />
-          <div>
-            <p className="text-sm font-semibold">Scheduling</p>
-            <p className="text-xs text-muted-foreground">
-              {scheduled
-                ? `Work is on the calendar for ${scheduled}.`
-                : opp
-                  ? "The job has been created; dates land on your calendar shortly."
-                  : "The job and schedule are being generated now."}
-            </p>
-          </div>
-        </div>
+        )}
         <div className="flex items-start gap-3">
           <Mail className="w-5 h-5 mt-0.5 shrink-0 text-muted-foreground" />
           <div>

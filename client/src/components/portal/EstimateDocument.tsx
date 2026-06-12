@@ -83,12 +83,20 @@ export default function EstimateDocument({
   canApprove = false,
   onApprove,
   children,
+  showPricing = true,
 }: {
   estimate: EstimateDocumentData;
   canApprove?: boolean;
   onApprove?: () => void;
   /** Rendered inside the document wrapper after the totals (e.g. the portal's footer CTA) */
   children?: React.ReactNode;
+  /**
+   * When false, every dollar figure is withheld (unit prices, amounts,
+   * subtotals, totals, deposit) and only the scope renders. The close flow
+   * uses this so the consultant walks the value before revealing the price.
+   * The portal always passes true.
+   */
+  showPricing?: boolean;
 }) {
   const { phases, legacy } = parseLineItems(est.lineItemsJson);
 
@@ -164,7 +172,7 @@ export default function EstimateDocument({
       <div className="px-8 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50">
         <div>
           <p className="font-semibold text-gray-900">Option #1</p>
-          <p className="text-sm text-gray-500">{fmtMoney(totalCents)}</p>
+          {showPricing && <p className="text-sm text-gray-500">{fmtMoney(totalCents)}</p>}
         </div>
         {canApprove && onApprove && (
           <Button
@@ -193,8 +201,8 @@ export default function EstimateDocument({
                 <tr className="bg-gray-50 border-y border-gray-100 text-xs text-gray-500">
                   <th className="text-left px-8 py-2 font-semibold">Services</th>
                   <th className="text-right px-4 py-2 font-semibold w-16">Qty</th>
-                  <th className="text-right px-4 py-2 font-semibold w-28">Unit Price</th>
-                  <th className="text-right px-8 py-2 font-semibold w-28">Amount</th>
+                  {showPricing && <th className="text-right px-4 py-2 font-semibold w-28">Unit Price</th>}
+                  {showPricing && <th className="text-right px-8 py-2 font-semibold w-28">Amount</th>}
                 </tr>
               </thead>
               <tbody>
@@ -210,17 +218,19 @@ export default function EstimateDocument({
                       )}
                     </td>
                     <td className="px-4 py-3 text-right text-gray-600 align-top">{item.qty}</td>
-                    <td className="px-4 py-3 text-right text-gray-600 align-top">{fmtMoneyFlat(item.unitPrice)}</td>
-                    <td className="px-8 py-3 text-right font-semibold text-gray-900 align-top">{fmtMoneyFlat(item.amount)}</td>
+                    {showPricing && <td className="px-4 py-3 text-right text-gray-600 align-top">{fmtMoneyFlat(item.unitPrice)}</td>}
+                    {showPricing && <td className="px-8 py-3 text-right font-semibold text-gray-900 align-top">{fmtMoneyFlat(item.amount)}</td>}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
           {/* Phase subtotal */}
-          <div className="px-8 py-2 text-right text-xs text-gray-500 border-t border-gray-100">
-            Services subtotal: <span className="font-semibold text-gray-700">{fmtMoneyFlat(phase.phaseTotal)}</span>
-          </div>
+          {showPricing && (
+            <div className="px-8 py-2 text-right text-xs text-gray-500 border-t border-gray-100">
+              Services subtotal: <span className="font-semibold text-gray-700">{fmtMoneyFlat(phase.phaseTotal)}</span>
+            </div>
+          )}
         </div>
       ))}
 
@@ -232,8 +242,8 @@ export default function EstimateDocument({
               <tr className="bg-gray-50 border-y border-gray-100 text-xs text-gray-500">
                 <th className="text-left px-8 py-2 font-semibold">Services</th>
                 <th className="text-right px-4 py-2 font-semibold w-16">Qty</th>
-                <th className="text-right px-4 py-2 font-semibold w-28">Unit Price</th>
-                <th className="text-right px-8 py-2 font-semibold w-28">Amount</th>
+                {showPricing && <th className="text-right px-4 py-2 font-semibold w-28">Unit Price</th>}
+                {showPricing && <th className="text-right px-8 py-2 font-semibold w-28">Amount</th>}
               </tr>
             </thead>
             <tbody>
@@ -241,8 +251,8 @@ export default function EstimateDocument({
                 <tr key={i} className="border-b border-gray-50 last:border-0">
                   <td className="px-8 py-3 text-gray-700 whitespace-pre-wrap">{item.description}</td>
                   <td className="px-4 py-3 text-right text-gray-500">{item.qty > 0 ? item.qty.toFixed(0) : "—"}</td>
-                  <td className="px-4 py-3 text-right text-gray-500">{item.unitPrice > 0 ? fmtMoney(item.unitPrice) : "—"}</td>
-                  <td className="px-8 py-3 text-right font-semibold">{fmtMoney(item.amount)}</td>
+                  {showPricing && <td className="px-4 py-3 text-right text-gray-500">{item.unitPrice > 0 ? fmtMoney(item.unitPrice) : "—"}</td>}
+                  {showPricing && <td className="px-8 py-3 text-right font-semibold">{fmtMoney(item.amount)}</td>}
                 </tr>
               ))}
             </tbody>
@@ -250,8 +260,8 @@ export default function EstimateDocument({
         </div>
       )}
 
-      {/* ── Totals ── */}
-      <div className="px-8 py-5 space-y-2 text-sm">
+      {/* ── Totals (withheld until pricing is revealed) ── */}
+      {showPricing && <div className="px-8 py-5 space-y-2 text-sm">
         {taxEnabled ? (
           <>
             <div className="flex justify-between text-gray-500">
@@ -289,7 +299,7 @@ export default function EstimateDocument({
             <span>{fmtMoney(depositCents)}</span>
           </div>
         )}
-      </div>
+      </div>}
 
       {children}
     </div>
