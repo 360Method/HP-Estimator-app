@@ -27,6 +27,8 @@ import { useEstimator } from "@/contexts/EstimatorContext";
 import { useDbSync } from "@/hooks/useDbSync";
 import { ALL_PHASES } from "@/lib/phases";
 import { calcCustomItem, calcPhase, calcTotals } from "@/lib/calc";
+import { resolveTax } from "@/lib/tax";
+import { getTaxRateForZip } from "@/lib/taxRates";
 import { computeMarginAudit } from "@shared/marginFloor";
 import { buildPortalPhases, buildSowBullets, type ActivePhaseData } from "@/lib/sow";
 import type { UnitType } from "@/lib/types";
@@ -91,7 +93,7 @@ export default function OsEstimateWizard() {
   const {
     state, addOpportunity, addCustomer, setActiveCustomer, setActiveOpportunity,
     updateItem, addCustomItem, removeCustomItem, setJobInfo, setSection,
-    setEstimateProposal, updateOpportunity,
+    setEstimateProposal, updateOpportunity, setGlobal,
   } = useEstimator();
   useDbSync(true);
 
@@ -368,6 +370,17 @@ export default function OsEstimateWizard() {
     return { phaseResults, customResults, totals: calcTotals(phaseResults, customResults) };
   }, [state.phases, state.customItems, state.global]);
   const margin = computeMarginAudit(totals.totalHard, totals.totalPrice);
+
+  // Sales tax (customer-safe): resolved from the working globals, which the
+  // context points at the customer's ZIP. Snapshots that saved tax OFF keep
+  // it — the price-check chip is the explicit way to turn it back on.
+  const tax = resolveTax(state.global, totals.totalPrice);
+  const grandTotal = tax?.grandTotal ?? totals.totalPrice;
+  function enableTax() {
+    const zip = customer?.zip || state.jobInfo.zip;
+    const zipInfo = zip ? getTaxRateForZip(zip) : null;
+    setGlobal({ taxEnabled: true, ...(zipInfo ? { taxRateCode: zipInfo.code } : {}) });
+  }
 
   const activePhaseData: ActivePhaseData[] = useMemo(() => {
     return state.phases
@@ -693,11 +706,29 @@ export default function OsEstimateWizard() {
                 <span className="text-sm font-semibold" style={{ color: "var(--hp-ink)" }}>{fmt(p.phaseTotal)}</span>
               </div>
             ))}
+            {tax && (
+              <div className="px-4 py-3 flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Sales tax ({tax.label})</span>
+                <span className="text-sm" style={{ color: "var(--hp-ink)" }}>{fmt(tax.taxAmount)}</span>
+              </div>
+            )}
             <div className="px-4 py-3 flex items-center justify-between">
               <span className="text-sm font-semibold" style={{ color: "var(--hp-ink)" }}>Customer total</span>
-              <span className="text-base font-bold" style={{ color: "var(--hp-ink)" }}>{fmt(totals.totalPrice)}</span>
+              <span className="text-base font-bold" style={{ color: "var(--hp-ink)" }}>{fmt(grandTotal)}</span>
             </div>
           </div>
+
+          {!tax && (
+            <button
+              type="button"
+              onClick={enableTax}
+              className="w-full text-left rounded-xl border px-4 py-3 flex items-center justify-between"
+              style={{ borderColor: "#fca5a5", background: "#fef2f2" }}
+            >
+              <span className="text-sm font-semibold" style={{ color: "#b91c1c" }}>Tax is OFF</span>
+              <span className="text-xs font-semibold" style={{ color: "#b91c1c" }}>Tap to add sales tax</span>
+            </button>
+          )}
 
           {/* Margin meter */}
           <div
@@ -773,9 +804,23 @@ export default function OsEstimateWizard() {
               </div>
             );
           })}
-          <div className="bg-white rounded-xl border px-4 py-3 flex items-center justify-between" style={inputStyle}>
-            <span className="text-sm font-semibold" style={{ color: "var(--hp-ink)" }}>Total investment</span>
-            <span className="text-base font-bold" style={{ color: "var(--hp-ink)" }}>{fmt(totals.totalPrice)}</span>
+          <div className="bg-white rounded-xl border divide-y" style={inputStyle}>
+            {tax && (
+              <>
+                <div className="px-4 py-2.5 flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Subtotal</span>
+                  <span className="text-sm" style={{ color: "var(--hp-ink)" }}>{fmt(totals.totalPrice)}</span>
+                </div>
+                <div className="px-4 py-2.5 flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Sales tax ({tax.label})</span>
+                  <span className="text-sm" style={{ color: "var(--hp-ink)" }}>{fmt(tax.taxAmount)}</span>
+                </div>
+              </>
+            )}
+            <div className="px-4 py-3 flex items-center justify-between">
+              <span className="text-sm font-semibold" style={{ color: "var(--hp-ink)" }}>Total investment</span>
+              <span className="text-base font-bold" style={{ color: "var(--hp-ink)" }}>{fmt(grandTotal)}</span>
+            </div>
           </div>
           {/* Sold-by attribution (internal); hidden until consultants exist */}
           {(consultantsQuery.data?.length ?? 0) > 0 && (
@@ -806,8 +851,12 @@ export default function OsEstimateWizard() {
           customerName={customer?.displayName ?? "Customer"}
           jobTitle={jobTitle || "Project Estimate"}
           totalPrice={totals.totalPrice}
-          depositLabel={`50% deposit (${fmt(totals.totalPrice / 2)})`}
-          depositAmount={totals.totalPrice / 2}
+          depositLabel={`50% deposit (${fmt(grandTotal / 2)})`}
+          depositAmount={grandTotal / 2}
+          taxEnabled={state.global.taxEnabled}
+          taxRateCode={state.global.taxRateCode}
+          customTaxPct={state.global.customTaxPct}
+          taxAmount={tax?.taxAmount}
           scopeSummary={jobTitle}
           lineItemsText={portalPhases.map((p) => `${p.phaseName}\n${p.items.map((i) => `  • ${i.scopeOfWork || i.name}`).join("\n")}\n  Investment: ${fmt(p.phaseTotal)}`).join("\n\n")}
           lineItemsJson={JSON.stringify(portalPhases)}

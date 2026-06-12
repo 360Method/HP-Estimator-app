@@ -20,6 +20,7 @@ import AddressMapPreview from '@/components/AddressMapPreview';
 import SendEstimateDialog from '@/components/SendEstimateDialog';
 import { trpc } from '@/lib/trpc';
 import { getTaxRateForZip, CLARK_COUNTY_TAX_RATES } from '@/lib/taxRates';
+import { resolveTax } from '@/lib/tax';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -409,18 +410,16 @@ export default function EstimateSection() {
   const minGM = totals.totalHard < 2000 ? 0.40 : 0.30;
   const isReady = gmFlag === 'ok' && totals.totalPrice > 0;
 
-  // ── Tax calculations ─────────────────────────────────────────
+  // ── Tax calculations (shared resolver with wizard + PresentSection) ──
   const taxEnabled = state.global.taxEnabled ?? false;
   const taxRateCode = state.global.taxRateCode ?? '0603';
   const customTaxPct = state.global.customTaxPct ?? 8.9;
-  const taxRateInfo = useMemo(() => {
-    if (!taxEnabled) return null;
-    if (taxRateCode === 'none') return null;
-    if (taxRateCode === 'custom') return { rate: customTaxPct / 100, label: `Custom (${customTaxPct}%)`, code: 'custom' };
-    return CLARK_COUNTY_TAX_RATES.find(r => r.code === taxRateCode) ?? null;
-  }, [taxEnabled, taxRateCode, customTaxPct]);
-  const taxAmount = taxRateInfo ? totals.totalPrice * taxRateInfo.rate : 0;
-  const grandTotal = totals.totalPrice + taxAmount;
+  const taxRateInfo = useMemo(
+    () => resolveTax(state.global, totals.totalPrice),
+    [state.global, totals.totalPrice]
+  );
+  const taxAmount = taxRateInfo?.taxAmount ?? 0;
+  const grandTotal = taxRateInfo?.grandTotal ?? totals.totalPrice;
 
   // Auto-populate tax code from job zip when tax is enabled
   const handleTaxToggle = useCallback((enabled: boolean) => {

@@ -13,6 +13,7 @@ import {
 } from '@/lib/types';
 import { ALL_PHASES, DEFAULTS } from '@/lib/phases';
 import { buildEstimateSnapshot } from '@/lib/estimateSnapshot';
+import { getTaxRateForZip } from '@/lib/taxRates';
 import { generateProjectSchedule } from '@/lib/generateProjectSchedule';
 import { nanoid } from 'nanoid';
 
@@ -59,6 +60,21 @@ const defaultEstimateProposal = (): EstimateProposalMeta => ({
   approvedBy: null,
 });
 
+/**
+ * Default calculator globals for a fresh estimate. Tax is ON by default
+ * (2026-06-12: silently-off tax was eating ~8.9% on taxed jobs); the rate
+ * code resolves from the customer's ZIP when known, else Vancouver.
+ * Existing snapshots keep whatever they saved — never silently reprice.
+ */
+const defaultGlobal = (zip?: string, defaultTaxCode?: string): GlobalSettings => ({
+  markupPct: DEFAULTS.markupPct,
+  laborRate: DEFAULTS.laborRate,
+  paintRate: DEFAULTS.paintRate,
+  taxEnabled: true,
+  taxRateCode: defaultTaxCode ?? (zip ? getTaxRateForZip(zip)?.code : undefined) ?? '0603',
+  customTaxPct: 8.9,
+});
+
 const defaultEstimatePricebook = (): EstimatePricebookMeta => ({
   catalogVersion: 'frontend-catalog-v1',
   region: 'Vancouver / Clark County, WA',
@@ -87,14 +103,7 @@ const initialState: EstimatorState = {
     jobNumber: `HP-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 900) + 100)}`,
     scope: '',
   },
-  global: {
-    markupPct: DEFAULTS.markupPct,
-    laborRate: DEFAULTS.laborRate,
-    paintRate: DEFAULTS.paintRate,
-    taxEnabled: false,
-    taxRateCode: '0603', // Vancouver WA default
-    customTaxPct: 8.9,
-  },
+  global: defaultGlobal(),
   phases: ALL_PHASES,
   customItems: [],
   fieldNotes: '',
@@ -693,7 +702,7 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
         activeSection: state.activeSection,
         // Restore snapshot or start fresh
         jobInfo: snap?.jobInfo ?? freshJobInfo,
-        global: snap?.global ?? { markupPct: DEFAULTS.markupPct, laborRate: DEFAULTS.laborRate, paintRate: DEFAULTS.paintRate, taxEnabled: false, taxRateCode: '0603', customTaxPct: 8.9 },
+        global: snap?.global ?? defaultGlobal(freshJobInfo.zip),
         phases: snap?.phases ? mergePhasesWithCatalog(snap.phases as any[]) : ALL_PHASES,
         customItems: snap?.customItems ?? [],
         fieldNotes: snap?.fieldNotes ?? '',
@@ -1025,6 +1034,11 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
             portalInvitedAt: null,
             privateNotes: customer.customerNotes || '',
           };
+      // ZIP hook: point the working tax code at this customer's locale
+      // (their saved override wins, then their ZIP). Enabled/amounts are
+      // per-estimate and restored from snapshots, so only the code moves.
+      const customerTaxCode = customer.defaultTaxCode
+        ?? (customer.zip ? getTaxRateForZip(customer.zip)?.code : undefined);
       return {
         ...state,
         customers: flushedCustomers,
@@ -1032,6 +1046,7 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
         activeSection: 'customer',
         activeOpportunityId: null,
         jobInfo: loadedJobInfo,
+        global: customerTaxCode ? { ...state.global, taxRateCode: customerTaxCode } : state.global,
         customerProfile: loadedProfile,
         activityFeed: customer.activityFeed || [],
         opportunities: customer.opportunities || [],

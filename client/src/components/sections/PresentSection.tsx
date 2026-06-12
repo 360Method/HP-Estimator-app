@@ -15,7 +15,8 @@
 import { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import { useEstimator } from '@/contexts/EstimatorContext';
 import { calcPhase, calcCustomItem, calcTotals, fmtDollar, fmtDollarCents } from '@/lib/calc';
-import { CLARK_COUNTY_TAX_RATES } from '@/lib/taxRates';
+import { getTaxRateForZip } from '@/lib/taxRates';
+import { resolveTax } from '@/lib/tax';
 import { X, Printer, Mail, PenLine, RotateCcw, Check, CheckCircle2, Settings2, Eye, EyeOff, Trophy, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import EstimateApprovedModal from '@/components/EstimateApprovedModal';
@@ -453,7 +454,7 @@ function ColVisPanel({ cols, onChange, onClose }: { cols: Record<ColKey, boolean
 
 // ─── Main PresentSection ──────────────────────────────────────
 export default function PresentSection() {
-  const { state, setSection, setSignature, clearSignature, setEstimateAudit } = useEstimator();
+  const { state, setSection, setSignature, clearSignature, setEstimateAudit, setGlobal } = useEstimator();
   const [showSigPad, setShowSigPad] = useState(false);
   const [showColPanel, setShowColPanel] = useState(false);
   const [cols, setCols] = useState<Record<ColKey, boolean>>(DEFAULT_COLS);
@@ -495,19 +496,23 @@ export default function PresentSection() {
   }, [activeCustom]);
 
   // Deposit from configured settings (pct or flat)
-  // Resolve tax rate from global settings
+  // Resolve tax rate from global settings (shared with the wizard + EstimateSection)
   const taxEnabled = state.global.taxEnabled ?? false;
   const taxRateCode = state.global.taxRateCode ?? '0603';
   const customTaxPct = state.global.customTaxPct ?? 8.9;
-  const resolvedTax = useMemo(() => {
-    if (!taxEnabled) return null;
-    if (taxRateCode === 'none') return null;
-    if (taxRateCode === 'custom') return { rate: customTaxPct / 100, label: `Custom (${customTaxPct}%)` };
-    const preset = CLARK_COUNTY_TAX_RATES.find(r => r.code === taxRateCode);
-    return preset ? { rate: preset.rate, label: preset.label } : null;
-  }, [taxEnabled, taxRateCode, customTaxPct]);
-  const taxAmount = resolvedTax ? Math.round(totals.totalPrice * resolvedTax.rate) : 0;
-  const grandTotal = totals.totalPrice + taxAmount;
+  const resolvedTax = useMemo(
+    () => resolveTax(state.global, totals.totalPrice),
+    [state.global, totals.totalPrice]
+  );
+  const taxAmount = resolvedTax?.taxAmount ?? 0;
+  const grandTotal = resolvedTax?.grandTotal ?? totals.totalPrice;
+
+  // One-tap recovery for quoted-with-tax-off estimates (snapshots keep their
+  // saved setting; this is an explicit consultant action, never automatic).
+  const enableTax = useCallback(() => {
+    const zipInfo = state.jobInfo.zip ? getTaxRateForZip(state.jobInfo.zip) : null;
+    setGlobal({ taxEnabled: true, ...(zipInfo ? { taxRateCode: zipInfo.code } : {}) });
+  }, [state.jobInfo.zip, setGlobal]);
 
   const deposit = state.depositType === 'pct'
     ? grandTotal * (state.depositValue / 100)
@@ -875,7 +880,17 @@ export default function PresentSection() {
                   ) : (
                     <div className="flex justify-between py-2 border-b border-gray-200 text-sm">
                       <span className="text-gray-600">Tax</span>
-                      <span className="text-gray-400 italic text-xs self-center">Not included</span>
+                      <span className="flex items-center gap-2">
+                        <span className="text-gray-400 italic text-xs">Not included</span>
+                        <button
+                          type="button"
+                          onClick={enableTax}
+                          className="no-print text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-300 hover:bg-red-200"
+                          title="Sales tax is not being charged on this estimate. Tap to enable it at the customer's local rate."
+                        >
+                          Tax is OFF — enable
+                        </button>
+                      </span>
                     </div>
                   )}
                   <div className="flex justify-between py-3 border-b-2 border-gray-900 text-base">
@@ -961,7 +976,7 @@ export default function PresentSection() {
           taxEnabled={taxEnabled}
           taxRateCode={taxRateCode}
           customTaxPct={customTaxPct}
-          taxAmount={taxAmount / 100}
+          taxAmount={resolvedTax ? taxAmount : undefined}
           onClose={() => setShowSendDialog(false)}
           onSent={() => {
             setEstimateAudit({
