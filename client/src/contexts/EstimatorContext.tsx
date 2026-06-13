@@ -410,14 +410,28 @@ function reducer(state: EstimatorState, action: Action): EstimatorState {
     case 'SET_SECTION':
       return { ...state, activeSection: action.payload };
 
-    case 'NAVIGATE_TO_TOP_LEVEL':
-      // Single atomic action: clear customer/opportunity and set the top-level section
+    case 'NAVIGATE_TO_TOP_LEVEL': {
+      // Single atomic action: clear customer/opportunity and set the top-level
+      // section. Flush working state into the outgoing opportunity first
+      // (mirrors SET_ACTIVE_OPPORTUNITY) — without it, any reset through here
+      // dropped unsent wizard picks on the floor.
+      let updatedOpportunities = state.opportunities;
+      if (state.activeOpportunityId) {
+        const outgoingSnapshot: EstimateSnapshot = buildEstimateSnapshot(state);
+        updatedOpportunities = state.opportunities.map(o =>
+          o.id === state.activeOpportunityId
+            ? { ...o, estimateSnapshot: outgoingSnapshot }
+            : o
+        );
+      }
       return {
         ...state,
+        opportunities: updatedOpportunities,
         activeSection: action.payload,
         activeCustomerId: null,
         activeOpportunityId: null,
       };
+    }
 
     case 'SET_JOB_INFO': {
       const newJobInfo = { ...state.jobInfo, ...action.payload };

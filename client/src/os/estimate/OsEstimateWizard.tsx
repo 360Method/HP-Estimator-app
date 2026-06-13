@@ -30,6 +30,7 @@ import { calcCustomItem, calcPhase, calcTotals } from "@/lib/calc";
 import { resolveTax } from "@/lib/tax";
 import { getTaxRateForZip } from "@/lib/taxRates";
 import { computeMarginAudit } from "@shared/marginFloor";
+import { buildEstimateSnapshotForDb } from "@/lib/estimateSnapshot";
 import { buildPortalPhases, buildSowBullets, type ActivePhaseData } from "@/lib/sow";
 import type { UnitType } from "@/lib/types";
 import SendEstimateDialog from "@/components/SendEstimateDialog";
@@ -430,17 +431,67 @@ export default function OsEstimateWizard() {
   const customer = state.customers.find((c) => c.id === clientId);
   const fmt = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 
+  // ── Open full calculator (lossless hand-off) ─────────────────
+  // applyToContext dispatches into the reducer, so the picks land in
+  // state.phases/customItems one render later. The pending flag waits for
+  // that render, persists the snapshot to the DB row (a Room remount —
+  // StrictMode double-mount, slow lazy chunk — can reset working state, and
+  // the DB copy is what survives), THEN navigates.
+  const [pendingCalcNav, setPendingCalcNav] = useState(false);
   function openFullCalculator() {
     applyToContext();
+    setPendingCalcNav(true);
+  }
+  useEffect(() => {
+    if (!pendingCalcNav) return;
+    const reflectsSelection = Object.entries(selection).every(([key, sel]) => {
+      if (sel.qty <= 0) return true;
+      const loc = CATALOG_INDEX.get(key);
+      if (loc) {
+        const item = state.phases.find((p) => p.id === loc.phaseId)?.items.find((i) => i.id === key);
+        return !!item && item.enabled && item.qty === sel.qty;
+      }
+      return state.customItems.some((ci) => ci.notes === `pricebook:${key}`);
+    });
+    if (!reflectsSelection) return;
+    setPendingCalcNav(false);
+    if (oppId) {
+      updateOpp.mutate({
+        id: oppId,
+        value: Math.round(totals.totalPrice),
+        estimateSnapshot: JSON.stringify({ ...buildEstimateSnapshotForDb(state), totals }),
+      });
+    }
     setSection("calculator");
     markNavIntent();
     navigate("/os/pipeline");
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingCalcNav, state.phases, state.customItems]);
 
   function goToStep(n: number) {
     if (n >= 4) applyToContext();
     setStep(n);
   }
+
+  // ── Price-check adjustments ──────────────────────────────────
+  // Changing qty or tier on the price check re-syncs the engine one render
+  // later (applyToContext reads `selection`, so it must run after the state
+  // update lands). Totals and the margin meter recompute live.
+  const priceCheckDirty = useRef(false);
+  function adjustSelection(key: string, patch: Partial<Sel>) {
+    setSelection((s) => {
+      const cur = s[key];
+      if (!cur) return s;
+      return { ...s, [key]: { ...cur, ...patch } };
+    });
+    priceCheckDirty.current = true;
+  }
+  useEffect(() => {
+    if (!priceCheckDirty.current) return;
+    priceCheckDirty.current = false;
+    applyToContext();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selection]);
 
   async function polishPhase(d: ActivePhaseData) {
     try {
@@ -734,6 +785,67 @@ export default function OsEstimateWizard() {
         <div className="space-y-3 max-w-lg">
           <h1 className="hp-serif text-xl" style={{ color: "var(--hp-ink)" }}>Price check</h1>
           <p className="text-xs text-muted-foreground -mt-1">Internal view. The customer never sees costs or margin.</p>
+
+          {/* Adjustable lines: qty and tier move the total and margin live. */}
+          <div className="bg-white rounded-xl border divide-y" style={inputStyle}>
+            {Object.entries(selection).map(([key, sel]) => {
+              const row = pbByKey.get(key);
+              if (!row) return null;
+              let tierNames: Record<TierKey, string> | null = null;
+              if (row.hasTiers && row.tiersJson) {
+                try {
+                  const t = JSON.parse(row.tiersJson);
+                  tierNames = { good: t.good?.name || "Good", better: t.better?.name || "Better", best: t.best?.name || "Best" };
+                } catch { /* none */ }
+              }
+              return (
+                <div key={key} className="px-4 py-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm flex-1 min-w-0 truncate" style={{ color: "var(--hp-ink)" }}>{row.name}</span>
+                    <span className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button" aria-label="Less"
+                        onClick={() => adjustSelection(key, { qty: Math.max(0, sel.qty - 1) })}
+                        className="w-7 h-7 rounded-lg border text-sm font-semibold"
+                        style={{ ...inputStyle, color: "var(--hp-ink)" }}
+                      >
+                        −
+                      </button>
+                      <input
+                        className="w-16 text-sm px-2 py-1 rounded-lg border text-right" style={inputStyle}
+                        inputMode="decimal" value={sel.qty}
+                        onChange={(e) => adjustSelection(key, { qty: parseFloat(e.target.value) || 0 })}
+                      />
+                      <button
+                        type="button" aria-label="More"
+                        onClick={() => adjustSelection(key, { qty: sel.qty + 1 })}
+                        className="w-7 h-7 rounded-lg border text-sm font-semibold"
+                        style={{ ...inputStyle, color: "var(--hp-ink)" }}
+                      >
+                        +
+                      </button>
+                      <span className="text-xs text-muted-foreground w-9">{row.unitType}</span>
+                    </span>
+                  </div>
+                  {tierNames && (
+                    <div className="flex gap-1.5 mt-1.5">
+                      {(["good", "better", "best"] as TierKey[]).map((t) => (
+                        <button
+                          key={t} type="button"
+                          onClick={() => adjustSelection(key, { tier: t })}
+                          className={"text-xs px-2.5 py-1 rounded-lg border " + (sel.tier === t ? "font-semibold text-white" : "bg-white text-muted-foreground")}
+                          style={sel.tier === t ? { background: "var(--hp-gold-deep)", borderColor: "var(--hp-gold-deep)" } : inputStyle}
+                        >
+                          {tierNames[t]}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
           <div className="bg-white rounded-xl border divide-y" style={inputStyle}>
             {portalPhases.map((p) => (
               <div key={p.phaseName} className="px-4 py-3 flex items-center justify-between">
