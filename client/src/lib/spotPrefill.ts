@@ -68,13 +68,25 @@ function matchPriceBookRow(finding: SpotFindingSeed, rows: SpotSeedPbRow[]): Spo
 
 /**
  * Build one editable line per finding. The whole set lands on the price
- * check so the consultant sees everything they picked, in one place.
+ * check so the consultant sees everything they picked, in one place. Each
+ * line arrives PRICED so nothing reads as "needs pricing" out of the gate:
+ *  - a confident price-book match comes in priced from that row;
+ *  - otherwise the AI's planning range seeds the price. The range is a
+ *    customer-facing retail bracket, so we start at its low end and back
+ *    into the hard cost at the global margin (price = cost / (1 - gm)), put
+ *    that into the material field, and leave labor at zero. The consultant
+ *    refines or rebalances it; the customer price already lands in range.
+ *  - only a finding with neither a match nor a positive range stays
+ *    flagged for a hand price.
+ * The whole line stays editable through the full calculator engine.
  */
 export function seedCustomsFromSpotFindings(
   findings: SpotFindingSeed[],
   pbRows: SpotSeedPbRow[],
   spotInspectionId: string,
+  globalMarkupPct = 0.4,
 ): SpotSeedCustom[] {
+  const gm = globalMarkupPct > 0 && globalMarkupPct < 1 ? globalMarkupPct : 0.4;
   return findings.map((finding, idx) => {
     const description = (finding.recommended_approach || finding.finding || finding.category).slice(0, 300);
     const row = matchPriceBookRow(finding, pbRows);
@@ -94,6 +106,21 @@ export function seedCustomsFromSpotFindings(
         matCostPerUnit: matCost,
         laborHrsPerUnit,
         laborRate,
+      };
+    }
+    // Seed from the AI's planning range: start at the low end so we never
+    // auto-inflate a quote, and the consultant raises it toward the high end.
+    const startPrice = finding.low > 0 ? finding.low : 0;
+    if (startPrice > 0) {
+      const hardCost = Math.round(startPrice * (1 - gm));
+      return {
+        description,
+        notes: `spot:${spotInspectionId}:${idx}`,
+        unitType: "unit",
+        qty: 1,
+        matCostPerUnit: hardCost,
+        laborHrsPerUnit: 0,
+        laborRate: 0,
       };
     }
     return {

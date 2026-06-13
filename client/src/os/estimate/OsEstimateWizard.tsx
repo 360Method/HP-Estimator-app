@@ -278,8 +278,9 @@ export default function OsEstimateWizard() {
     spotSeedApplied.current = true;
     if (hasPicks) return;
     // One editable line per finding, all of them — not just the ones that
-    // matched a price-book SKU. They land together on the price check.
-    const customs = seedCustomsFromSpotFindings(seed.findings, pbRows, seed.spotInspectionId);
+    // matched a price-book SKU. Priced from the row or from the AI range at
+    // the global margin, so they land ready rather than "needs pricing".
+    const customs = seedCustomsFromSpotFindings(seed.findings, pbRows, seed.spotInspectionId, state.global.markupPct);
     for (const custom of customs) {
       addCustomItem({
         phaseId: 0,
@@ -496,6 +497,19 @@ export default function OsEstimateWizard() {
     () => state.customItems.filter((ci) => ci.notes?.startsWith("spot:")),
     [state.customItems],
   );
+  const seedFindings = useMemo(
+    () => state.opportunities.find((o) => o.id === oppId)?.spotFindings?.findings ?? [],
+    [state.opportunities, oppId],
+  );
+  // The AI planning range behind a seeded line (notes: spot:<id>:<idx>), shown
+  // as a hint so the consultant can price toward the high end if warranted.
+  function spotRangeFor(ci: { notes?: string }): { low: number; high: number } | null {
+    const parts = (ci.notes ?? "").split(":");
+    if (parts[0] !== "spot" || parts.length < 3) return null;
+    const idx = parseInt(parts[2], 10);
+    const f = Number.isFinite(idx) ? seedFindings[idx] : undefined;
+    return f && (f.low > 0 || f.high > 0) ? { low: f.low, high: f.high } : null;
+  }
   // A spot-origin estimate keeps the "From the inspection" editor available
   // even if every seeded line has been deleted, so the consultant can still
   // add lines. Normal estimates never show it.
@@ -953,16 +967,24 @@ export default function OsEstimateWizard() {
                   + Add a line
                 </button>
               </div>
-              {spotItems.map((ci) => (
-                <div key={ci.id}>
-                  <CustomItemRow ci={ci} lockNotes defaultExpanded={isUnpricedSpotItem(ci)} />
-                  {isUnpricedSpotItem(ci) && (
-                    <p className="text-[11px] font-semibold -mt-2 mb-3 ml-1" style={{ color: "#b91c1c" }}>
-                      Needs a price: open this line and set material and labor, or a cost per unit.
-                    </p>
-                  )}
-                </div>
-              ))}
+              {spotItems.map((ci) => {
+                const range = spotRangeFor(ci);
+                return (
+                  <div key={ci.id}>
+                    <CustomItemRow ci={ci} lockNotes defaultExpanded={isUnpricedSpotItem(ci)} />
+                    {range && (
+                      <p className="text-[11px] -mt-2 mb-1 ml-1 text-muted-foreground">
+                        Inspection range: {fmt(range.low)} to {fmt(range.high)}. Starts at the low end; raise it to fit the scope.
+                      </p>
+                    )}
+                    {isUnpricedSpotItem(ci) && (
+                      <p className="text-[11px] font-semibold mb-3 ml-1" style={{ color: "#b91c1c" }}>
+                        Needs a price: open this line and set material and labor, or a cost per unit.
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
               {spotItems.length === 0 && (
                 <div className="bg-white rounded-xl border px-4 py-3 text-xs text-muted-foreground" style={inputStyle}>
                   No line items yet. Add one, or go back and pick the work.
