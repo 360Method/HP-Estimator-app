@@ -109,6 +109,7 @@ const OsCommissions = lazy(() => import("./os/pages/OsCommissions"));
 const OsMethod = lazy(() => import("./os/pages/OsMethod"));
 const OsQuickQuote = lazy(() => import("./os/pages/OsQuickQuote"));
 const OsSpotInspection = lazy(() => import("./os/pages/OsSpotInspection"));
+const OsRoadmapReview = lazy(() => import("./os/pages/OsRoadmapReview"));
 const OsEstimateWizard = lazy(() => import("./os/estimate/OsEstimateWizard"));
 const OsPropertyStep = lazy(() => import("./os/pages/OsPropertyStep"));
 const CloseFlowPage = lazy(() => import("./os/close/CloseFlowPage"));
@@ -256,6 +257,7 @@ function Router() {
       <Route path="/os/quickquote" component={staffOnly(OsQuickQuote)} />
       <Route path="/os/spot/new" component={staffOnly(OsSpotInspection)} />
       <Route path="/os/spot/:id" component={staffOnly(OsSpotInspection)} />
+      <Route path="/os/roadmap-review/:id" component={staffOnly(OsRoadmapReview)} />
       <Route path="/os/estimate/new" component={staffOnly(OsEstimateWizard)} />
       <Route path="/os/estimate/:oppId" component={staffOnly(OsEstimateWizard)} />
       <Route path="/os/property/:propertyId/step/:stepKey" component={staffOnly(OsPropertyStep)} />

@@ -29,12 +29,13 @@ type Stage = {
 const STAGES: Stage[] = [
   { key: "received", label: "Report received" },
   { key: "reviewing", label: "Reviewing with our standard-of-care framework" },
-  { key: "preparing", label: "Your personalized 360° Roadmap is being prepared" },
+  { key: "preparing", label: "Your 360° Roadmap is being personally reviewed by our team" },
   { key: "delivered", label: "Delivered to your inbox" },
 ];
 
 function activeStageIndex(status: string | undefined, deliveredAt: Date | string | null | undefined): number {
   if (deliveredAt || status === "completed") return 3;
+  if (status === "awaiting_review") return 2;
   if (status === "processing") return 1;
   if (status === "submitted") return 0;
   if (status === "failed") return 1;
@@ -52,6 +53,9 @@ export default function PortalRoadmapSubmitted() {
       refetchInterval: (q: any) => {
         const s = (q.state.data as any)?.status;
         if (s === "completed" || s === "failed") return false;
+        // A person reviews every roadmap before it sends; no need to poll
+        // hard while it waits for them.
+        if (s === "awaiting_review") return 60000;
         return 5000;
       },
       refetchOnWindowFocus: true,
@@ -154,6 +158,11 @@ export default function PortalRoadmapSubmitted() {
                           (~60–90 seconds)
                         </span>
                       ) : null}
+                      {isActive && i === 2 ? (
+                        <span className="text-xs font-normal ml-2" style={{ color: "#8a8a82" }}>
+                          (within one business day)
+                        </span>
+                      ) : null}
                     </p>
                   </div>
                 </li>
@@ -211,11 +220,12 @@ export default function PortalRoadmapSubmitted() {
               fits into the broader story of your property.
             </p>
             <p>
-              Within a few minutes, you'll receive a personalized roadmap to your email
-              with prioritized findings, contextual recommendations, and an estimated
-              investment range for each item. The PDF is yours to keep, and a private
-              portal link travels with it so the roadmap stays alongside your home's
-              living health record.
+              Within one business day, you'll receive a personalized roadmap to your
+              email with prioritized findings, contextual recommendations, and an
+              estimated investment range for each item. Every roadmap is personally
+              reviewed by our team before it sends. The PDF is yours to keep, and a
+              private portal link travels with it so the roadmap stays alongside your
+              home's living health record.
             </p>
             <p>
               A member of our Concierge team will reach out within one business day to
@@ -282,7 +292,7 @@ export default function PortalRoadmapSubmitted() {
             <p className="font-semibold mb-1">We couldn't pull a live status update.</p>
             <p>
               Your submission was received. The roadmap email will still arrive — if it
-              doesn't land within 30 minutes, please reach out at{" "}
+              doesn't land within one business day, please reach out at{" "}
               <a href="mailto:help@handypioneers.com" className="underline">
                 help@handypioneers.com
               </a>

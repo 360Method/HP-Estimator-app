@@ -13,30 +13,12 @@ import { Link, useLocation, useRoute } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { nanoid } from "nanoid";
-import { Camera, Check, ChevronRight, FileText, Send, Trash2, Wand2 } from "lucide-react";
+import { Camera, Check, ChevronRight, FileText, Trash2, Wand2 } from "lucide-react";
 import { OsShell } from "../OsShell";
 import { useEstimator } from "@/contexts/EstimatorContext";
 import { useDbSync } from "@/hooks/useDbSync";
 import { MethodContextBanner } from "@/components/threeSixty/MethodContextBanner";
-
-type Urgency = "NOW" | "SOON" | "WAIT";
-
-const URGENCY_STYLE: Record<Urgency, string> = {
-  NOW: "bg-red-100 text-red-800 border-red-200",
-  SOON: "bg-amber-100 text-amber-800 border-amber-300",
-  WAIT: "bg-emerald-100 text-emerald-800 border-emerald-200",
-};
-
-type DraftFinding = {
-  category: string;
-  finding: string;
-  interpretation?: string;
-  recommended_approach?: string;
-  urgency: Urgency;
-  investment_range_low_usd: number;
-  investment_range_high_usd: number;
-  reasoning: string;
-};
+import { DraftReviewEditor, type ReviewDraft } from "../spot/DraftReviewEditor";
 
 const money = (n: number) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -79,7 +61,6 @@ export default function OsSpotInspection() {
 
   // ── Existing-inspection state ─────────────────────────────────
   const [notesDraft, setNotesDraft] = useState<string | null>(null);
-  const [draft, setDraft] = useState<{ summary: string; findings: DraftFinding[] } | null>(null);
   const [uploading, setUploading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [pickedFindings, setPickedFindings] = useState<Record<number, boolean>>({});
@@ -137,7 +118,6 @@ export default function OsSpotInspection() {
   const generateM = trpc.spotInspection.generate.useMutation({
     onSuccess: () => {
       setGenerating(false);
-      setDraft(null);
       utils.spotInspection.get.invalidate({ id: inspectionId ?? "" });
       toast.success("Draft ready. Review it before anything goes out.");
     },
@@ -190,39 +170,6 @@ export default function OsSpotInspection() {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = "";
     }
-  }
-
-  function startEditDraft() {
-    if (!insp?.draft) return;
-    setDraft({
-      summary: insp.draft.summary_1_paragraph ?? "",
-      findings: (insp.draft.findings ?? []).map((f) => ({
-        category: f.category,
-        finding: f.finding,
-        interpretation: f.interpretation,
-        recommended_approach: f.recommended_approach,
-        urgency: f.urgency as Urgency,
-        investment_range_low_usd: f.investment_range_low_usd,
-        investment_range_high_usd: f.investment_range_high_usd,
-        reasoning: f.reasoning ?? "",
-      })),
-    });
-  }
-
-  function saveDraft() {
-    if (!draft || !inspectionId) return;
-    for (const f of draft.findings) {
-      if (f.investment_range_low_usd > f.investment_range_high_usd) {
-        toast.error(`${f.category}: the low end of the range is above the high end.`);
-        return;
-      }
-    }
-    updateDraftM.mutate({
-      id: inspectionId,
-      summary: draft.summary,
-      findings: draft.findings,
-    });
-    setDraft(null);
   }
 
   function buildEstimate() {
@@ -457,102 +404,15 @@ export default function OsSpotInspection() {
           <h2 className="hp-eyebrow text-xs mb-2" style={{ color: "var(--hp-gold-deep)" }}>
             The draft. Review it like dictation: fix anything, then approve.
           </h2>
-
-          {draft ? (
-            <div className="bg-white rounded-xl border p-4 space-y-3" style={inputStyle}>
-              <textarea className={inputCls} style={inputStyle} rows={3} value={draft.summary}
-                onChange={(e) => setDraft({ ...draft, summary: e.target.value })} />
-              {draft.findings.map((f, i) => (
-                <div key={i} className="rounded-lg border p-3 space-y-2" style={inputStyle}>
-                  <div className="flex gap-2">
-                    <input className={inputCls + " font-semibold"} style={inputStyle} value={f.category}
-                      onChange={(e) => setDraft({ ...draft, findings: draft.findings.map((x, j) => (j === i ? { ...x, category: e.target.value } : x)) })} />
-                    <div className="flex gap-1">
-                      {(["NOW", "SOON", "WAIT"] as Urgency[]).map((u) => (
-                        <button key={u} type="button"
-                          onClick={() => setDraft({ ...draft, findings: draft.findings.map((x, j) => (j === i ? { ...x, urgency: u } : x)) })}
-                          className={`text-[10px] px-2 py-1 rounded-full border font-semibold ${f.urgency === u ? URGENCY_STYLE[u] : "bg-white text-muted-foreground"}`}>
-                          {u}
-                        </button>
-                      ))}
-                    </div>
-                    <button type="button" aria-label="Remove finding"
-                      onClick={() => setDraft({ ...draft, findings: draft.findings.filter((_, j) => j !== i) })}>
-                      <Trash2 className="w-4 h-4 text-muted-foreground" />
-                    </button>
-                  </div>
-                  <textarea className={inputCls} style={inputStyle} rows={2} value={f.finding} placeholder="What we observed"
-                    onChange={(e) => setDraft({ ...draft, findings: draft.findings.map((x, j) => (j === i ? { ...x, finding: e.target.value } : x)) })} />
-                  <textarea className={inputCls} style={inputStyle} rows={2} value={f.interpretation ?? ""} placeholder="What it means for the home"
-                    onChange={(e) => setDraft({ ...draft, findings: draft.findings.map((x, j) => (j === i ? { ...x, interpretation: e.target.value } : x)) })} />
-                  <textarea className={inputCls} style={inputStyle} rows={2} value={f.recommended_approach ?? ""} placeholder="How we would approach it"
-                    onChange={(e) => setDraft({ ...draft, findings: draft.findings.map((x, j) => (j === i ? { ...x, recommended_approach: e.target.value } : x)) })} />
-                  <div className="flex gap-2 items-center">
-                    <span className="text-xs text-muted-foreground">Range</span>
-                    <input className={inputCls + " w-28"} style={inputStyle} inputMode="numeric" value={f.investment_range_low_usd}
-                      onChange={(e) => setDraft({ ...draft, findings: draft.findings.map((x, j) => (j === i ? { ...x, investment_range_low_usd: parseFloat(e.target.value) || 0 } : x)) })} />
-                    <span className="text-xs text-muted-foreground">to</span>
-                    <input className={inputCls + " w-28"} style={inputStyle} inputMode="numeric" value={f.investment_range_high_usd}
-                      onChange={(e) => setDraft({ ...draft, findings: draft.findings.map((x, j) => (j === i ? { ...x, investment_range_high_usd: parseFloat(e.target.value) || 0 } : x)) })} />
-                  </div>
-                </div>
-              ))}
-              <div className="flex justify-end gap-2">
-                <button type="button" className="text-xs px-3 py-2 rounded-lg border" style={inputStyle} onClick={() => setDraft(null)}>Cancel</button>
-                <button type="button" className="text-xs px-4 py-2 rounded-lg font-semibold text-white" style={{ background: "var(--hp-ink)" }} onClick={saveDraft}>
-                  Save draft
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="bg-white rounded-xl border p-4" style={inputStyle}>
-              <p className="text-sm leading-relaxed" style={{ color: "var(--hp-ink)" }}>{insp.draft.summary_1_paragraph}</p>
-              <div className="mt-3 space-y-2">
-                {(insp.draft.findings ?? []).map((f, i) => (
-                  <div key={i} className="rounded-lg border px-3 py-2" style={inputStyle}>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-semibold" style={{ color: "var(--hp-ink)" }}>{f.category}</span>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${URGENCY_STYLE[f.urgency as Urgency]}`}>{f.urgency}</span>
-                    </div>
-                    <p className="text-xs mt-1" style={{ color: "var(--hp-ink)" }}>{f.finding}</p>
-                    {f.interpretation && (
-                      <p className="text-xs text-muted-foreground mt-1.5">
-                        <span className="font-medium" style={{ color: "var(--hp-ink)" }}>What it means: </span>
-                        {f.interpretation}
-                      </p>
-                    )}
-                    {f.recommended_approach && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        <span className="font-medium" style={{ color: "var(--hp-ink)" }}>How we would approach it: </span>
-                        {f.recommended_approach}
-                      </p>
-                    )}
-                    <p className="text-xs font-medium mt-1.5" style={{ color: "var(--hp-ink)" }}>
-                      {money(f.investment_range_low_usd)} to {money(f.investment_range_high_usd)}
-                    </p>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-4 flex items-center justify-between gap-2 flex-wrap">
-                <button type="button" className="text-xs underline text-muted-foreground" onClick={startEditDraft}>
-                  Edit the draft
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (window.confirm("Send this mini roadmap? The customer sees it in their portal and gets the email right away.")) {
-                      approveM.mutate({ id: inspectionId });
-                    }
-                  }}
-                  disabled={approveM.isPending}
-                  className="flex items-center gap-1.5 text-sm px-5 py-2.5 rounded-xl font-semibold text-white"
-                  style={{ background: "var(--hp-gold-deep)" }}
-                >
-                  <Send className="w-4 h-4" /> {approveM.isPending ? "Delivering…" : "Approve and send"}
-                </button>
-              </div>
-            </div>
-          )}
+          <DraftReviewEditor
+            draft={insp.draft as ReviewDraft}
+            onSave={(edited) =>
+              updateDraftM.mutate({ id: inspectionId, summary: edited.summary, findings: edited.findings })
+            }
+            onApprove={() => approveM.mutate({ id: inspectionId })}
+            approving={approveM.isPending}
+            approveConfirmText="Send this mini roadmap? The customer sees it in their portal and gets the email right away."
+          />
         </section>
       )}
 

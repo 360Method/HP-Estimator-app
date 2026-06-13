@@ -17,7 +17,6 @@ import { router, publicProcedure, protectedProcedure } from "../_core/trpc";
 import { getDb } from "../db";
 import {
   priorityTranslations,
-  homeHealthRecords,
   portalProperties,
   portalAccounts,
   type DbPriorityTranslation,
@@ -26,20 +25,15 @@ import {
   findOrCreatePortalAccount,
   findOrCreatePortalProperty,
   findOrCreateHealthRecord,
-  issueMagicLink,
 } from "../lib/priorityTranslation/portalAccount";
 import {
   parseAddress,
   callClaudeForTranslation,
-  mergeFindings,
   newTranslationId,
 } from "../lib/priorityTranslation/processor";
-import { renderPriorityTranslationPdf } from "../lib/priorityTranslation/pdf";
-import { sendPriorityTranslationReady } from "../lib/priorityTranslation/email";
 import { notifyOwner } from "../_core/notification";
 import { findCustomerByEmail, createCustomer, createOpportunity } from "../db";
 import { onLeadCreated } from "../leadRouting";
-import { scheduleRoadmapFollowup } from "../lib/leadNurturer/roadmapFollowup";
 import { nanoid } from "nanoid";
 
 // ─── Input schemas ──────────────────────────────────────────────────────────
@@ -53,6 +47,21 @@ const submitInput = z.object({
   pdfStoragePath: z.string().trim().optional(),
   reportUrl: z.string().trim().url().optional(),
   source: z.string().default("priority_translation_lead_magnet"),
+});
+
+// Fresh object on purpose (zod 4: never .extend() a refined schema) — this is
+// the same shape the spot inspection review uses.
+const reviewFindingSchema = z.object({
+  category: z.string().min(1).max(120),
+  finding: z.string().min(1).max(2000),
+  interpretation: z.string().max(2000).optional(),
+  recommended_approach: z.string().max(2000).optional(),
+  urgency: z.enum(["NOW", "SOON", "WAIT"]),
+  investment_range_low_usd: z.number().min(0),
+  investment_range_high_usd: z.number().min(0),
+  reasoning: z.string().max(2000).default(""),
+}).refine((f) => f.investment_range_low_usd <= f.investment_range_high_usd, {
+  message: "The low end of the range must be at or below the high end",
 });
 
 // ─── Core processing logic (called from submit + process endpoint) ───────────
@@ -91,15 +100,6 @@ async function resolvePropertyAddress(db: any, propertyId: string): Promise<stri
   return [p.street, p.city, p.state, p.zip].filter(Boolean).join(", ");
 }
 
-async function resolveFirstName(db: any, portalAccountId: string): Promise<string> {
-  const rows = await db
-    .select()
-    .from(portalAccounts)
-    .where(eq(portalAccounts.id, portalAccountId))
-    .limit(1);
-  return rows[0]?.firstName ?? "";
-}
-
 async function resolveEmail(db: any, portalAccountId: string): Promise<string> {
   const rows = await db
     .select()
@@ -110,60 +110,9 @@ async function resolveEmail(db: any, portalAccountId: string): Promise<string> {
 }
 
 /**
- * Look up the CRM customer for a portal account.
- * Uses portalAccount.customerId if set; falls back to email match.
- */
-/**
- * Find the customer's most-recent open lead opportunity, or create one
- * anchored to the Roadmap delivery so the follow-up cadence's drafts attach
- * to a specific opportunity in the customer profile (Marcin's "drafts on
- * opportunities" architecture, 2026-04-28).
- */
-async function findOrCreateRoadmapLead(db: any, customerId: string): Promise<string> {
-  const { opportunities } = await import("../../drizzle/schema");
-  const { and, desc } = await import("drizzle-orm");
-  const existing = await db
-    .select()
-    .from(opportunities)
-    .where(and(eq(opportunities.customerId, customerId), eq(opportunities.area, "lead"), eq(opportunities.archived, false)))
-    .orderBy(desc(opportunities.createdAt))
-    .limit(1);
-  if (existing[0]) return existing[0].id as string;
-  const id = nanoid();
-  await createOpportunity({
-    id,
-    customerId,
-    area: "lead",
-    stage: "Roadmap delivered",
-    title: "Home Health Roadmap follow-up",
-    value: 0,
-    notes: "Auto-created when the Priority Translation Roadmap was delivered.",
-    archived: false,
-  } as any);
-  return id;
-}
-
-async function resolveCrmCustomerId(db: any, portalAccountId: string): Promise<string | null> {
-  const { customers } = await import("../../drizzle/schema");
-  const acctRows = await db
-    .select()
-    .from(portalAccounts)
-    .where(eq(portalAccounts.id, portalAccountId))
-    .limit(1);
-  const acct = acctRows[0];
-  if (!acct) return null;
-  if (acct.customerId) return acct.customerId;
-  if (!acct.email) return null;
-  const match = await db
-    .select()
-    .from(customers)
-    .where(eq(customers.email, acct.email.toLowerCase()))
-    .limit(1);
-  return match[0]?.id ?? null;
-}
-
-/**
- * Runs the full 6-step processing pipeline for one translation row.
+ * Runs intake processing for one translation row: load the PDF, run Claude,
+ * park the draft as awaiting_review. Delivery happens in
+ * deliverFunnelRoadmap once a human approves.
  * Safe to call fire-and-forget (catches and records failures).
  */
 export async function runPriorityTranslation(db: any, translationId: string): Promise<void> {
@@ -188,67 +137,22 @@ export async function runPriorityTranslation(db: any, translationId: string): Pr
     const propertyAddress = await resolvePropertyAddress(db, row.propertyId);
     const claudeResponse = await callClaudeForTranslation({ propertyAddress, pdfBuffer, apiKey });
 
-    // 3. Merge findings into home health record.
-    if (row.homeHealthRecordId) {
-      const existing = await db
-        .select()
-        .from(homeHealthRecords)
-        .where(eq(homeHealthRecords.id, row.homeHealthRecordId))
-        .limit(1);
-      const merged = mergeFindings(existing[0]?.findings ?? [], claudeResponse.findings, row.id);
-      await db
-        .update(homeHealthRecords)
-        .set({ findings: merged, summary: claudeResponse.summary_1_paragraph, updatedAt: new Date() })
-        .where(eq(homeHealthRecords.id, row.homeHealthRecordId));
-    }
-
-    // 4. Render branded output PDF.
-    const firstName = await resolveFirstName(db, row.portalAccountId);
-    const pdfOut = await renderPriorityTranslationPdf({ firstName, propertyAddress, claudeResponse });
-
-    // 5. Issue magic link and send email with PDF attached.
-    const portalBaseUrl = process.env.PORTAL_BASE_URL ?? "https://pro.handypioneers.com";
-    const link = await issueMagicLink(db, { portalAccountId: row.portalAccountId, portalBaseUrl });
-    const resendKey = process.env.RESEND_API_KEY;
-    if (!resendKey) throw new Error("RESEND_API_KEY not configured");
-    const toEmail = await resolveEmail(db, row.portalAccountId);
-    await sendPriorityTranslationReady({
-      apiKey: resendKey,
-      to: toEmail,
-      firstName,
-      magicLinkUrl: link.url,
-      pdfBuffer: pdfOut,
-      propertyAddress,
-    });
-
-    // 6. Mark completed.
+    // 3. Park the draft for human review. Nothing auto-sends: every
+    // AI-drafted roadmap waits for a person to approve it (Marcin,
+    // 2026-06-12). Delivery — render, health-record merge, email, follow-up
+    // cadence — happens in deliverFunnelRoadmap on approval.
     await db
       .update(priorityTranslations)
-      .set({ status: "completed", claudeResponse, deliveredAt: new Date(), updatedAt: new Date() })
+      .set({ status: "awaiting_review", claudeResponse, updatedAt: new Date() })
       .where(eq(priorityTranslations.id, row.id));
 
-    // 7. Schedule Path B nurture follow-up cadence.
-    try {
-      const customerId = await resolveCrmCustomerId(db, row.portalAccountId);
-      if (customerId) {
-        // Anchor the cadence to a specific lead opportunity so the resulting
-        // drafts surface inside that lead in Marcin's customer profile rather
-        // than as flat customer-level rows. If the customer has no open lead,
-        // create one tied to this Roadmap delivery.
-        const opportunityId = await findOrCreateRoadmapLead(db, customerId);
-        await scheduleRoadmapFollowup({
-          customerId,
-          opportunityId,
-          portalAccountId: row.portalAccountId,
-          homeHealthRecordId: row.homeHealthRecordId,
-          recipientEmail: toEmail,
-        });
-      } else {
-        console.warn(`[PT] no CRM customer for portal account ${row.portalAccountId}; skipping follow-up cadence`);
-      }
-    } catch (followupErr) {
-      console.error("[PT] scheduleRoadmapFollowup failed:", followupErr);
-    }
+    const toEmail = await resolveEmail(db, row.portalAccountId);
+    notifyOwner({
+      title: `Roadmap draft ready for review — ${toEmail}`,
+      content:
+        `The AI draft for ${propertyAddress} is waiting in Approvals. ` +
+        `Review, edit if needed, and approve to deliver. The homeowner was promised their roadmap within one business day.`,
+    }).catch((e) => console.warn("[PT] review notification failed:", e));
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     await db
@@ -355,7 +259,7 @@ export const priorityTranslationRouter = router({
     // Also ping owner via notifyOwner (belt-and-suspenders).
     notifyOwner({
       title: `New Priority Translation — ${input.firstName} ${input.lastName}`,
-      content: `${input.email} submitted an inspection report for ${input.propertyAddress}. Processing now — they'll receive the PDF within a few minutes.`,
+      content: `${input.email} submitted an inspection report for ${input.propertyAddress}. The AI draft will land in Approvals for your review; they were promised their roadmap within one business day.`,
     }).catch((e) => console.warn("[PT] notifyOwner failed:", e));
 
     // Fire processing in the background — no queue needed at current volume.
@@ -422,6 +326,136 @@ export const priorityTranslationRouter = router({
       if (!row) throw new TRPCError({ code: "NOT_FOUND" });
 
       return row;
+    }),
+
+  // ── Review gate (staff) ─────────────────────────────────────────────────
+  // Every AI-drafted roadmap waits here until a human approves it. Spot
+  // inspections review on their own page; funnel rows review at
+  // /os/roadmap-review/:id. Both show up in the one queue.
+
+  /** All drafts awaiting review, with who and where, newest first. */
+  listAwaitingReview: protectedProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+    const { desc } = await import("drizzle-orm");
+    const rows = await db
+      .select()
+      .from(priorityTranslations)
+      .where(eq(priorityTranslations.status, "awaiting_review"))
+      .orderBy(desc(priorityTranslations.createdAt));
+    const out = [];
+    for (const row of rows) {
+      const [account] = await db
+        .select()
+        .from(portalAccounts)
+        .where(eq(portalAccounts.id, row.portalAccountId))
+        .limit(1);
+      const [prop] = await db
+        .select()
+        .from(portalProperties)
+        .where(eq(portalProperties.id, row.propertyId))
+        .limit(1);
+      out.push({
+        id: row.id,
+        source: row.source,
+        customerName:
+          `${account?.firstName ?? ""} ${account?.lastName ?? ""}`.trim() || account?.email || "",
+        email: account?.email ?? "",
+        propertyAddress: prop ? [prop.street, prop.city].filter(Boolean).join(", ") : "",
+        findingCount: (row.claudeResponse as any)?.findings?.length ?? 0,
+        createdAt: row.createdAt,
+      });
+    }
+    return out;
+  }),
+
+  /** One funnel draft with everything the review editor needs. */
+  getForReview: protectedProcedure
+    .input(z.object({ id: z.string().min(1) }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const rows = await db
+        .select()
+        .from(priorityTranslations)
+        .where(eq(priorityTranslations.id, input.id))
+        .limit(1);
+      const row = rows[0];
+      if (!row) throw new TRPCError({ code: "NOT_FOUND" });
+      const [account] = await db
+        .select()
+        .from(portalAccounts)
+        .where(eq(portalAccounts.id, row.portalAccountId))
+        .limit(1);
+      const [prop] = await db
+        .select()
+        .from(portalProperties)
+        .where(eq(portalProperties.id, row.propertyId))
+        .limit(1);
+      return {
+        id: row.id,
+        source: row.source,
+        status: row.status,
+        customerName:
+          `${account?.firstName ?? ""} ${account?.lastName ?? ""}`.trim() || account?.email || "",
+        email: account?.email ?? "",
+        propertyAddress: prop ? [prop.street, prop.city].filter(Boolean).join(", ") : "",
+        homeownerNotes: row.notes,
+        draft: row.claudeResponse,
+        failureReason: row.failureReason,
+        approvedAt: row.approvedAt,
+        deliveredAt: row.deliveredAt,
+        createdAt: row.createdAt,
+      };
+    }),
+
+  /** Staff edits to a funnel draft while it is awaiting review. */
+  updateDraftResponse: protectedProcedure
+    .input(z.object({
+      id: z.string().min(1),
+      summary: z.string().min(1).max(4000),
+      executiveSummary: z.string().max(8000).optional(),
+      closing: z.string().max(4000).optional(),
+      findings: z.array(reviewFindingSchema).min(1).max(10),
+    }))
+    .mutation(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB unavailable" });
+      const rows = await db
+        .select()
+        .from(priorityTranslations)
+        .where(eq(priorityTranslations.id, input.id))
+        .limit(1);
+      const row = rows[0];
+      if (!row) throw new TRPCError({ code: "NOT_FOUND" });
+      if (row.status !== "awaiting_review") {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Only a draft awaiting review can be edited" });
+      }
+      const prev = (row.claudeResponse ?? {}) as any;
+      const next = {
+        ...prev,
+        summary_1_paragraph: input.summary,
+        executive_summary: input.executiveSummary ?? prev.executive_summary,
+        closing: input.closing ?? prev.closing,
+        findings: input.findings,
+      };
+      await db
+        .update(priorityTranslations)
+        .set({ claudeResponse: next, updatedAt: new Date() })
+        .where(eq(priorityTranslations.id, input.id));
+      return { ok: true };
+    }),
+
+  /** The human gate for funnel roadmaps: approve and deliver. */
+  approveAndDeliverFunnel: protectedProcedure
+    .input(z.object({ id: z.string().min(1) }))
+    .mutation(async ({ input, ctx }) => {
+      const { deliverFunnelRoadmap } = await import("../lib/priorityTranslation/orchestrator");
+      try {
+        return await deliverFunnelRoadmap(input.id, { approvedBy: String((ctx as any).user?.id ?? "staff") });
+      } catch (err) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: (err as Error).message });
+      }
     }),
 
   /**

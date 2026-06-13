@@ -34,7 +34,10 @@ import {
   portalProperties,
   type ClaudePriorityTranslationResponse,
 } from "../../../drizzle/schema.priorityTranslation";
-import { properties } from "../../../drizzle/schema";
+import { properties, portalCustomers } from "../../../drizzle/schema";
+import { storagePut } from "../../storage";
+import { addPortalDocument } from "../../portalDb";
+import { buildDeliverableDisplayName } from "../../../shared/deliverableName";
 import {
   parseAddress,
   callClaudeForTranslation,
@@ -762,125 +765,31 @@ async function processRoadmap(args: ProcessArgs): Promise<void> {
         apiKey,
       }));
 
-    // 2. Merge into health record.
-    const existing = await db
-      .select()
-      .from(homeHealthRecords)
-      .where(eq(homeHealthRecords.id, args.homeHealthRecordId))
-      .limit(1);
-    const merged = mergeFindings(
-      existing[0]?.findings ?? [],
-      claudeResponse.findings,
-      args.id,
-    );
-    await db
-      .update(homeHealthRecords)
-      .set({
-        findings: merged,
-        summary: claudeResponse.summary_1_paragraph,
-        updatedAt: new Date(),
-      })
-      .where(eq(homeHealthRecords.id, args.homeHealthRecordId));
-
-    // 3. Render PDF — with the inspector's own photos beside each finding.
-    // Candidates come from the source_pages Claude cited; a Haiku vision pass
-    // then assigns only photos that clearly depict each finding (page numbers
-    // alone put wrong photos under findings — Marcin's bug report 2026-06-07).
-    // Photo problems never block delivery; the roadmap just ships photo-less.
-    let photosByFinding: Record<number, Uint8Array[]> | undefined;
-    if (photoSourcePdf) {
-      try {
-        const photosByPage = await extractReportPhotos(new Uint8Array(photoSourcePdf));
-        if (photosByPage.size > 0) {
-          photosByFinding = await matchPhotosToFindings({
-            apiKey,
-            findings: claudeResponse.findings ?? [],
-            photosByPage,
-          });
-          const attached = Object.values(photosByFinding).reduce((n, p) => n + p.length, 0);
-          console.log(
-            `[roadmap-generator] ${args.id} photos: ${photosByPage.size} report pages with usable images, ${attached} vision-verified across ${Object.keys(photosByFinding).length} findings`,
-          );
-        }
-      } catch (err) {
-        console.warn(`[roadmap-generator] ${args.id} photo extraction skipped:`, err);
-      }
-    }
-
-    const pdfBuffer = await renderPriorityTranslationPdf({
-      firstName: args.firstName,
-      propertyAddress: args.propertyAddress,
-      claudeResponse,
-      photosByFinding,
-      photosLabel: "FROM YOUR INSPECTION REPORT",
-    });
-
-    // 4. Magic link + email.
-    //
-    // PORTAL_BASE_URL is the customer-facing portal subdomain
-    // (client.handypioneers.com in prod). The magic link goes through the
-    // portal's auth route; verifyToken now bridges portalMagicLinks via
-    // consumeRoadmapMagicLinkAsPortalCustomer so the homeowner ends up with
-    // a real portalSession after clicking. We pass &redirect= so they land
-    // on the public roadmap page either way (succeeded auth or already-
-    // consumed token).
-    const portalBaseUrl =
-      process.env.PORTAL_BASE_URL || "https://client.handypioneers.com";
-    const link = await issueMagicLink(db, {
-      portalAccountId: args.portalAccountId,
-      portalBaseUrl,
-    });
-    const redirectPath = `/portal/roadmap/submitted/${args.id}`;
-    const magicLinkUrl = `${link.url}&redirect=${encodeURIComponent(redirectPath)}`;
-
-    const resendKey = process.env.RESEND_API_KEY;
-    if (!resendKey) throw new Error("RESEND_API_KEY not set");
-
-    await sendPriorityTranslationReady({
-      apiKey: resendKey,
-      to: args.email,
-      firstName: args.firstName,
-      magicLinkUrl,
-      pdfBuffer,
-      propertyAddress: args.propertyAddress,
-    });
-
-    // 5. Mark completed.
+    // 2. Park the draft for human review. Nothing auto-sends: every
+    // AI-drafted roadmap waits for a person to read it, fix it, and approve
+    // it (Marcin, 2026-06-12). Delivery — PDF render, health-record merge,
+    // email, follow-up cadence — happens in deliverFunnelRoadmap on
+    // approval. The funnel promises the homeowner their roadmap within one
+    // business day.
     await db
       .update(priorityTranslations)
-      .set({
-        status: "completed",
-        claudeResponse,
-        deliveredAt: new Date(),
-        updatedAt: new Date(),
-      })
+      .set({ status: "awaiting_review", claudeResponse, updatedAt: new Date() })
       .where(eq(priorityTranslations.id, args.id));
 
     console.log(
-      `[roadmap-generator] delivered ${args.id} to ${args.email} (${claudeResponse.findings.length} findings)`,
+      `[roadmap-generator] ${args.id} draft ready for review (${claudeResponse.findings.length} findings)`,
     );
 
-    // 6. Schedule the post-delivery nurture cadence (roadmap_followup). The
-    // legacy tRPC path always did this; the Express path previously never did
-    // — marketing-site submissions got no follow-up. Best-effort.
-    if (args.customerId) {
-      try {
-        const { scheduleRoadmapFollowup } = await import("../leadNurturer/roadmapFollowup");
-        const result = await scheduleRoadmapFollowup({
-          customerId: args.customerId,
-          opportunityId: args.opportunityId ?? null,
-          portalAccountId: args.portalAccountId,
-          homeHealthRecordId: args.homeHealthRecordId,
-          recipientEmail: args.email,
-          recipientPhone: args.phone ?? null,
-        });
-        console.log(
-          `[roadmap-generator] roadmap_followup for ${args.id}: scheduled=${result.scheduled} skipped=${result.skipped ?? "no"}`,
-        );
-      } catch (nurtureErr) {
-        console.error(`[roadmap-generator] followup scheduling failed for ${args.id}`, nurtureErr);
-      }
-    }
+    import("../../_core/notification")
+      .then(({ notifyOwner }) =>
+        notifyOwner({
+          title: `Roadmap draft ready for review — ${args.email}`,
+          content:
+            `The AI draft for ${args.propertyAddress} is waiting in Approvals. ` +
+            `Review, edit if needed, and approve to deliver. The homeowner was promised their roadmap within one business day.`,
+        }),
+      )
+      .catch((err) => console.error(`[roadmap-generator] review notification failed for ${args.id}`, err));
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     await db
@@ -897,6 +806,219 @@ async function processRoadmap(args: ProcessArgs): Promise<void> {
     notifyOwnerOfFailure(args, reason).catch(() => null);
     throw err;
   }
+}
+
+/**
+ * Approve the (possibly edited) funnel draft: merge findings into the home
+ * health record, render the PDF with the inspector's photos, file it in the
+ * customer's portal documents, email the magic link plus the PDF, and start
+ * the follow-up cadence. The mirror of the spot inspection's
+ * approveAndDeliver — the human gate is the same on every river.
+ */
+export async function deliverFunnelRoadmap(
+  id: string,
+  opts: { approvedBy: string },
+): Promise<{ ok: true }> {
+  const db = await getDb();
+  if (!db) throw new Error("DB unavailable");
+
+  const rows = await db
+    .select()
+    .from(priorityTranslations)
+    .where(eq(priorityTranslations.id, id))
+    .limit(1);
+  const row = rows[0];
+  if (!row) throw new Error(`No priorityTranslations row for ${id}`);
+  if (row.source === "spot_inspection") {
+    throw new Error("Spot inspections deliver through their own approve flow");
+  }
+  if (row.status !== "awaiting_review") {
+    throw new Error("Only a draft that is awaiting review can be approved");
+  }
+  const claudeResponse = row.claudeResponse as ClaudePriorityTranslationResponse | null;
+  if (!claudeResponse?.findings?.length) throw new Error("Nothing to deliver: the draft has no findings");
+
+  const accounts = await db
+    .select()
+    .from(portalAccounts)
+    .where(eq(portalAccounts.id, row.portalAccountId))
+    .limit(1);
+  const account = accounts[0];
+  if (!account) throw new Error(`No portal account ${row.portalAccountId} for ${id}`);
+
+  const props = await db
+    .select()
+    .from(portalProperties)
+    .where(eq(portalProperties.id, row.propertyId))
+    .limit(1);
+  const prop = props[0];
+  const propertyAddress = prop
+    ? [prop.street, [prop.city, prop.state].filter(Boolean).join(", "), prop.zip]
+        .filter(Boolean)
+        .join(", ")
+    : "the property";
+
+  // 1. Merge the approved findings into the living home health record.
+  if (row.homeHealthRecordId) {
+    const [existing] = await db
+      .select()
+      .from(homeHealthRecords)
+      .where(eq(homeHealthRecords.id, row.homeHealthRecordId))
+      .limit(1);
+    const merged = mergeFindings(existing?.findings ?? [], claudeResponse.findings, id);
+    await db
+      .update(homeHealthRecords)
+      .set({ findings: merged, summary: claudeResponse.summary_1_paragraph, updatedAt: new Date() })
+      .where(eq(homeHealthRecords.id, row.homeHealthRecordId));
+  }
+
+  // 2. The inspector's photos beside each finding — reload the source PDF
+  // (volume first, reportUrl second). Matching runs against the APPROVED
+  // findings, so consultant edits are what the photos line up with. Photo
+  // problems never block delivery; the roadmap just ships photo-less.
+  let photosByFinding: Record<number, Uint8Array[]> | undefined;
+  try {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    let sourcePdf: Buffer | undefined;
+    if (row.pdfStoragePath && fs.existsSync(row.pdfStoragePath)) {
+      sourcePdf = fs.readFileSync(row.pdfStoragePath);
+    } else if (row.reportUrl) {
+      const fetched = await fetchReportFromUrl(row.reportUrl);
+      if (fetched?.kind === "pdf") sourcePdf = fetched.buffer;
+    }
+    if (sourcePdf && apiKey) {
+      const photosByPage = await extractReportPhotos(new Uint8Array(sourcePdf));
+      if (photosByPage.size > 0) {
+        photosByFinding = await matchPhotosToFindings({
+          apiKey,
+          findings: claudeResponse.findings ?? [],
+          photosByPage,
+        });
+      }
+    }
+  } catch (err) {
+    console.warn(`[roadmap-generator] ${id} photo extraction skipped at delivery:`, err);
+  }
+
+  // 3. Render and store the PDF (consultant edits included).
+  const pdfBuffer = await renderPriorityTranslationPdf({
+    firstName: account.firstName ?? "",
+    propertyAddress,
+    claudeResponse,
+    photosByFinding,
+    photosLabel: "FROM YOUR INSPECTION REPORT",
+  });
+  let storedUrl: string | null = null;
+  let storedKey: string | null = null;
+  try {
+    const stored = await storagePut(`roadmap-funnel/${id}.pdf`, pdfBuffer, "application/pdf");
+    storedUrl = stored.url;
+    storedKey = stored.key;
+  } catch (err) {
+    console.warn(`[roadmap-generator] ${id} PDF storage failed (email still carries it):`, err);
+  }
+
+  // 4. File it in portal documents when the customer has a portal login.
+  if (storedUrl && storedKey && account.customerId) {
+    try {
+      const [portalCustomer] = await db
+        .select()
+        .from(portalCustomers)
+        .where(eq(portalCustomers.hpCustomerId, account.customerId))
+        .limit(1);
+      if (portalCustomer) {
+        await addPortalDocument({
+          portalCustomerId: portalCustomer.id,
+          name: buildDeliverableDisplayName({
+            kind: "funnel_roadmap",
+            lastName: account.lastName,
+            street: propertyAddress,
+          }),
+          url: storedUrl,
+          fileKey: storedKey,
+          mimeType: "application/pdf",
+        });
+      }
+    } catch (err) {
+      console.warn(`[roadmap-generator] portal document filing failed for ${id}:`, err);
+    }
+  }
+
+  // 5. Magic link + email with the PDF attached.
+  const resendKey = process.env.RESEND_API_KEY;
+  if (!resendKey) throw new Error("RESEND_API_KEY not set");
+  const portalBaseUrl = process.env.PORTAL_BASE_URL || "https://client.handypioneers.com";
+  const link = await issueMagicLink(db, { portalAccountId: account.id, portalBaseUrl });
+  const redirectPath = `/portal/roadmap/submitted/${id}`;
+  await sendPriorityTranslationReady({
+    apiKey: resendKey,
+    to: account.email,
+    firstName: account.firstName ?? "",
+    magicLinkUrl: `${link.url}&redirect=${encodeURIComponent(redirectPath)}`,
+    pdfBuffer,
+    propertyAddress,
+  });
+
+  // 6. Mark completed with the approval stamp.
+  await db
+    .update(priorityTranslations)
+    .set({
+      status: "completed",
+      outputPdfPath: storedUrl,
+      deliveredAt: new Date(),
+      approvedBy: opts.approvedBy,
+      approvedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(priorityTranslations.id, id));
+
+  console.log(
+    `[roadmap-generator] delivered ${id} to ${account.email} after review by ${opts.approvedBy} (${claudeResponse.findings.length} findings)`,
+  );
+
+  // 7. Post-delivery nurture cadence. Best-effort.
+  try {
+    let customerId = account.customerId ?? null;
+    if (!customerId && account.email) {
+      const found = await findCustomerByEmail(account.email.trim().toLowerCase()).catch(() => null);
+      customerId = found?.id ?? null;
+    }
+    if (customerId) {
+      // Anchor the cadence to the customer's most recent open lead so the
+      // resulting drafts surface inside that lead in the customer profile.
+      let opportunityId: string | null = null;
+      try {
+        const { opportunities } = await import("../../../drizzle/schema");
+        const { and: andOp, desc } = await import("drizzle-orm");
+        const [lead] = await db
+          .select({ id: opportunities.id })
+          .from(opportunities)
+          .where(
+            andOp(
+              eq(opportunities.customerId, customerId),
+              eq(opportunities.area, "lead"),
+              eq(opportunities.archived, false),
+            ),
+          )
+          .orderBy(desc(opportunities.createdAt))
+          .limit(1);
+        opportunityId = lead?.id ?? null;
+      } catch { /* the cadence still schedules without an anchor */ }
+      const { scheduleRoadmapFollowup } = await import("../leadNurturer/roadmapFollowup");
+      await scheduleRoadmapFollowup({
+        customerId,
+        opportunityId,
+        portalAccountId: account.id,
+        homeHealthRecordId: row.homeHealthRecordId ?? "",
+        recipientEmail: account.email,
+        recipientPhone: account.phone || null,
+      });
+    }
+  } catch (nurtureErr) {
+    console.error(`[roadmap-generator] followup scheduling failed for ${id}`, nurtureErr);
+  }
+
+  return { ok: true };
 }
 
 /**
