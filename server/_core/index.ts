@@ -1358,7 +1358,19 @@ async function startServer() {
   app.use(express.urlencoded({ limit: "2mb", extended: true }));
 
   // ── Public website inquiry endpoint (Path A — ProjectInquiryForm) ─────────
-  const { publicInquiryRouter } = await import("../routers/publicInquiry.js");
+  const { publicInquiryRouter, handleInquiryUpload } = await import("../routers/publicInquiry.js");
+  // Attachment uploads get their OWN, more generous limiter: a single inquiry can
+  // carry many photos (one request each), and uploads only write to Cloudinary —
+  // never the DB/Stripe/email — so they don't belong under the tight write limiter.
+  // Registered BEFORE the catch-all /api/public mount so it bypasses publicWriteLimiter.
+  const publicUploadLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 200,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many uploads, please try again in a few minutes." },
+  });
+  app.post("/api/public/upload", publicUploadLimiter, handleInquiryUpload);
   app.use("/api/public", publicWriteLimiter, publicInquiryRouter);
 
   // ── Staff admin auth: /api/auth/login, /api/auth/logout, /api/auth/me ─────

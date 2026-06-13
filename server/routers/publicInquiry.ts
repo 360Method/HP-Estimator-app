@@ -16,8 +16,10 @@
  */
 
 import express from "express";
+import type { Request, Response } from "express";
 import { nanoid } from "nanoid";
 import { randomBytes } from "crypto";
+import { storagePut } from "../storage";
 import {
   findCustomerByEmail,
   createCustomer,
@@ -486,3 +488,83 @@ publicInquiryRouter.post("/inquiry/details", async (req, res) => {
     res.status(500).json({ error: "An unexpected error occurred. Please try again." });
   }
 });
+
+/**
+ * Public attachment upload — POST /api/public/upload
+ *
+ * Lets the public website attach photos and documents to a consultation inquiry
+ * BEFORE the lead is submitted. The browser uploads one file at a time (base64),
+ * gets back a stored CDN URL, and includes the collected URLs as `photoUrls`
+ * on the /inquiry submit. Those URLs land on the lead + online request, so the
+ * back-office leads inbox and the customer portal can both show them.
+ *
+ * Mounted in server/_core/index.ts with its OWN rate limiter (more generous than
+ * the tight public-write limiter) because this only writes to Cloudinary — never
+ * to the DB, Stripe, or email — and a single inquiry can carry many photos.
+ */
+const MAX_UPLOAD_BYTES = 15 * 1024 * 1024; // 15 MB per file (stays under the 25 MB JSON body cap once base64-encoded)
+
+// Photos plus the documents homeowners actually send: inspection reports,
+// quotes, plans, warranties.
+const ALLOWED_UPLOAD_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+  "image/gif",
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "text/plain",
+];
+
+const EXT_BY_TYPE: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/heic": "heic",
+  "image/heif": "heif",
+  "image/gif": "gif",
+  "application/pdf": "pdf",
+  "application/msword": "doc",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+  "text/plain": "txt",
+};
+
+export async function handleInquiryUpload(req: Request, res: Response): Promise<void> {
+  try {
+    const { filename = "", mimeType = "", base64 = "" } = req.body ?? {};
+
+    if (!mimeType || !ALLOWED_UPLOAD_TYPES.includes(String(mimeType))) {
+      res.status(400).json({ error: "Unsupported file type. Please upload a photo (JPG, PNG, WEBP, HEIC) or a document (PDF, DOC, TXT)." });
+      return;
+    }
+    if (!base64 || typeof base64 !== "string") {
+      res.status(400).json({ error: "Missing file data." });
+      return;
+    }
+
+    const raw = base64.includes(",") ? base64.split(",")[1] : base64;
+    const buffer = Buffer.from(raw, "base64");
+    if (buffer.byteLength === 0) {
+      res.status(400).json({ error: "Empty file." });
+      return;
+    }
+    if (buffer.byteLength > MAX_UPLOAD_BYTES) {
+      res.status(413).json({ error: "That file is too large. Please keep each file under 15 MB." });
+      return;
+    }
+
+    const safeExt = (String(filename).split(".").pop() ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const ext = EXT_BY_TYPE[String(mimeType)] ?? (safeExt || "bin");
+    const suffix = randomBytes(6).toString("hex");
+    const key = `inquiry-attachments/${Date.now()}-${suffix}.${ext}`;
+
+    const { url } = await storagePut(key, buffer, String(mimeType));
+    res.status(201).json({ url, filename: String(filename), mimeType: String(mimeType), size: buffer.byteLength });
+  } catch (err: any) {
+    console.error("[publicInquiry/upload] error:", err);
+    res.status(500).json({ error: "Upload failed. Please try again." });
+  }
+}
