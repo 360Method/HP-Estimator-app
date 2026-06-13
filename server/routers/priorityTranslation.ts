@@ -53,6 +53,7 @@ const submitInput = z.object({
 // the same shape the spot inspection review uses.
 const reviewFindingSchema = z.object({
   category: z.string().min(1).max(120),
+  area_key: z.string().max(40).optional(),
   finding: z.string().min(1).max(2000),
   interpretation: z.string().max(2000).optional(),
   recommended_approach: z.string().max(2000).optional(),

@@ -136,6 +136,19 @@ export type SpotInspectionPhoto = {
   caption?: string;
   /** 0-based index of the finding this photo belongs under in the PDF. */
   findingIndex?: number;
+  /** Capture line (SpotCaptureLine.id) this photo was taken for. */
+  lineId?: string;
+};
+
+/**
+ * One structured finding line captured on-site: an area chip plus the
+ * consultant's note, with its own photos (SpotInspectionPhoto.lineId).
+ * areaKey is a shared/homeSystems.ts HomeSystemKey.
+ */
+export type SpotCaptureLine = {
+  id: string;
+  areaKey: string;
+  note: string;
 };
 
 export type ClaudePriorityTranslationResponse = {
@@ -149,6 +162,8 @@ export type ClaudePriorityTranslationResponse = {
   closing?: string;
   findings: Array<{
     category: string;
+    /** shared/homeSystems.ts HomeSystemKey — snapped via normalizeToSystem when absent. */
+    area_key?: string;
     finding: string;
     /** "What this means for your home" — interpretation in plain language. */
     interpretation?: string;
@@ -191,6 +206,8 @@ export const priorityTranslations = pgTable(
     crmPropertyId: varchar("crmPropertyId", { length: 64 }),
     /** JSON SpotInspectionPhoto[] — on-site photos (Cloudinary). */
     capturedPhotosJson: json("capturedPhotosJson").$type<SpotInspectionPhoto[]>(),
+    /** JSON SpotCaptureLine[] — structured finding lines; null = legacy blob capture. */
+    captureLinesJson: json("captureLinesJson").$type<SpotCaptureLine[]>(),
     /** The consultant's on-site narration; `notes` stays homeowner-facing. */
     techNotes: text("techNotes"),
     /** Staff user id who approved the mini roadmap for delivery. */

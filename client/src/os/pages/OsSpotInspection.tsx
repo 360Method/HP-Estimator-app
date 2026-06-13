@@ -13,12 +13,15 @@ import { Link, useLocation, useRoute } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { nanoid } from "nanoid";
-import { Camera, Check, ChevronRight, FileText, Trash2, Wand2 } from "lucide-react";
+import { Camera, Check, ChevronRight, FileText, Plus, Trash2, Wand2 } from "lucide-react";
 import { OsShell } from "../OsShell";
 import { useEstimator } from "@/contexts/EstimatorContext";
 import { useDbSync } from "@/hooks/useDbSync";
 import { MethodContextBanner } from "@/components/threeSixty/MethodContextBanner";
 import { DraftReviewEditor, type ReviewDraft } from "../spot/DraftReviewEditor";
+import { HOME_SYSTEMS } from "@shared/homeSystems";
+
+type CaptureLine = { id: string; areaKey: string; note: string };
 
 const money = (n: number) =>
   n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -61,6 +64,10 @@ export default function OsSpotInspection() {
 
   // ── Existing-inspection state ─────────────────────────────────
   const [notesDraft, setNotesDraft] = useState<string | null>(null);
+  /** Local working copy of the structured finding lines (null until seeded). */
+  const [lines, setLines] = useState<CaptureLine[] | null>(null);
+  /** Which line the next photo upload belongs to (null = general). */
+  const photoTargetLine = useRef<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [pickedFindings, setPickedFindings] = useState<Record<number, boolean>>({});
@@ -115,6 +122,9 @@ export default function OsSpotInspection() {
     onSuccess: () => toast.success("Notes saved."),
     onError: (e) => toast.error(e.message),
   });
+  const setLinesM = trpc.spotInspection.setCaptureLines.useMutation({
+    onError: (e) => toast.error(e.message),
+  });
   const generateM = trpc.spotInspection.generate.useMutation({
     onSuccess: () => {
       setGenerating(false);
@@ -152,6 +162,7 @@ export default function OsSpotInspection() {
 
   async function onPickPhotos(files: FileList | null) {
     if (!files || !inspectionId) return;
+    const lineId = photoTargetLine.current ?? undefined;
     setUploading(true);
     try {
       for (const file of Array.from(files)) {
@@ -162,14 +173,41 @@ export default function OsSpotInspection() {
           base64,
           folder: "spot-inspections",
         });
-        await addPhotoM.mutateAsync({ id: inspectionId, url: up.url, fileKey: up.key });
+        await addPhotoM.mutateAsync({ id: inspectionId, url: up.url, fileKey: up.key, lineId });
       }
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
       setUploading(false);
+      photoTargetLine.current = null;
       if (fileRef.current) fileRef.current.value = "";
     }
+  }
+
+  // ── Structured capture lines ──────────────────────────────────
+  // New visits capture one card per finding (area chip + note + photos).
+  // Rows that already have blob notes or untagged photos and no lines stay
+  // in the legacy single-textarea mode so nothing in flight breaks.
+  const blobMode =
+    !insp?.captureLines &&
+    ((insp?.techNotes ?? "").trim() !== "" || (insp?.photos?.length ?? 0) > 0) &&
+    (lines?.length ?? 0) === 0;
+  const workingLines: CaptureLine[] = lines ?? insp?.captureLines ?? [];
+
+  function persistLines(next: CaptureLine[]) {
+    setLines(next);
+    if (inspectionId) setLinesM.mutate({ id: inspectionId, lines: next });
+  }
+  function addLine() {
+    persistLines([...workingLines, { id: nanoid(8), areaKey: "other", note: "" }]);
+  }
+  function removeLine(lineId: string) {
+    persistLines(workingLines.filter((l) => l.id !== lineId));
+  }
+  function patchLine(lineId: string, patch: Partial<CaptureLine>, save: boolean) {
+    const next = workingLines.map((l) => (l.id === lineId ? { ...l, ...patch } : l));
+    if (save) persistLines(next);
+    else setLines(next);
   }
 
   function buildEstimate() {
@@ -315,67 +353,136 @@ export default function OsSpotInspection() {
         />
       </div>
 
-      {/* ── Photos ─────────────────────────────────────────────── */}
+      {/* Shared photo input: photoTargetLine decides where the upload lands. */}
       {!delivered && (
-        <section className="mt-5">
-          <h2 className="hp-eyebrow text-xs mb-2" style={{ color: "var(--hp-gold-deep)" }}>Photos</h2>
-          <div className="bg-white rounded-xl border p-4" style={inputStyle}>
-            <div className="flex flex-wrap gap-2">
-              {(insp?.photos ?? []).map((p) => (
-                <div key={p.fileKey} className="relative w-24 h-24 rounded-lg overflow-hidden border" style={inputStyle}>
-                  <img src={p.url} alt={p.caption ?? "Inspection photo"} className="w-full h-full object-cover" />
-                  <button
-                    type="button"
-                    onClick={() => removePhotoM.mutate({ id: inspectionId, fileKey: p.fileKey })}
-                    className="absolute top-1 right-1 bg-black/60 rounded-full p-1"
-                    aria-label="Remove photo"
-                  >
-                    <Trash2 className="w-3 h-3 text-white" />
-                  </button>
-                </div>
-              ))}
-              <button
-                type="button"
-                onClick={() => fileRef.current?.click()}
-                disabled={uploading}
-                className="w-24 h-24 rounded-lg border-2 border-dashed flex flex-col items-center justify-center text-muted-foreground"
-                style={inputStyle}
-              >
-                <Camera className="w-5 h-5 mb-1" />
-                <span className="text-[10px]">{uploading ? "Uploading…" : "Add photos"}</span>
-              </button>
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                multiple
-                className="hidden"
-                onChange={(e) => onPickPhotos(e.target.files)}
-              />
-            </div>
-          </div>
-        </section>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          multiple
+          className="hidden"
+          onChange={(e) => onPickPhotos(e.target.files)}
+        />
       )}
 
-      {/* ── Notes ──────────────────────────────────────────────── */}
-      {!delivered && (
-        <section className="mt-5">
-          <h2 className="hp-eyebrow text-xs mb-2" style={{ color: "var(--hp-gold-deep)" }}>What is going on</h2>
-          <textarea
-            className={inputCls + " bg-white"}
-            style={inputStyle}
-            rows={4}
-            placeholder="Say it like you'd explain it to the homeowner: what you found, where, how bad, what you suspect."
-            value={notesDraft ?? insp?.techNotes ?? ""}
-            onChange={(e) => setNotesDraft(e.target.value)}
-            onBlur={() => {
-              if (notesDraft != null && notesDraft !== insp?.techNotes) {
-                notesM.mutate({ id: inspectionId, techNotes: notesDraft });
-              }
-            }}
-          />
-          <div className="mt-3 flex items-center gap-3">
+      {/* ── Structured capture: one card per finding ───────────── */}
+      {!delivered && !blobMode && (
+        <section className="mt-5 space-y-3">
+          <h2 className="hp-eyebrow text-xs" style={{ color: "var(--hp-gold-deep)" }}>What you found</h2>
+          {workingLines.map((line, idx) => {
+            const linePhotos = (insp?.photos ?? []).filter((p) => p.lineId === line.id);
+            return (
+              <div key={line.id} className="bg-white rounded-xl border p-3 space-y-2" style={inputStyle}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-muted-foreground">Finding {idx + 1}</span>
+                  <button type="button" aria-label="Remove finding line" onClick={() => removeLine(line.id)}>
+                    <Trash2 className="w-4 h-4 text-muted-foreground" />
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {HOME_SYSTEMS.map((s) => (
+                    <button
+                      key={s.key}
+                      type="button"
+                      onClick={() => patchLine(line.id, { areaKey: s.key }, true)}
+                      className={"text-[11px] px-2 py-1 rounded-full border " + (line.areaKey === s.key ? "font-semibold text-white" : "bg-white text-muted-foreground")}
+                      style={line.areaKey === s.key ? { background: "var(--hp-gold-deep)", borderColor: "var(--hp-gold-deep)" } : inputStyle}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+                <textarea
+                  className={inputCls}
+                  style={inputStyle}
+                  rows={2}
+                  placeholder="What is going on here, like you'd explain it to the homeowner."
+                  value={line.note}
+                  onChange={(e) => patchLine(line.id, { note: e.target.value }, false)}
+                  onBlur={() => persistLines(workingLines)}
+                />
+                <div className="flex flex-wrap gap-2">
+                  {linePhotos.map((p) => (
+                    <div key={p.fileKey} className="relative w-16 h-16 rounded-lg overflow-hidden border" style={inputStyle}>
+                      <img src={p.url} alt={p.caption ?? "Finding photo"} className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => removePhotoM.mutate({ id: inspectionId, fileKey: p.fileKey })}
+                        className="absolute top-0.5 right-0.5 bg-black/60 rounded-full p-0.5"
+                        aria-label="Remove photo"
+                      >
+                        <Trash2 className="w-3 h-3 text-white" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => { photoTargetLine.current = line.id; fileRef.current?.click(); }}
+                    disabled={uploading}
+                    className="w-16 h-16 rounded-lg border-2 border-dashed flex flex-col items-center justify-center text-muted-foreground"
+                    style={inputStyle}
+                  >
+                    <Camera className="w-4 h-4" />
+                    <span className="text-[9px] mt-0.5">{uploading ? "…" : "Photos"}</span>
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+          <button
+            type="button"
+            onClick={addLine}
+            className="flex items-center gap-1.5 text-sm px-4 py-2.5 rounded-xl border font-semibold"
+            style={{ ...inputStyle, color: "var(--hp-ink)" }}
+          >
+            <Plus className="w-4 h-4" /> Add a finding
+          </button>
+
+          {/* General photos not tied to one finding */}
+          {(insp?.photos ?? []).some((p) => !p.lineId) && (
+            <div className="bg-white rounded-xl border p-3" style={inputStyle}>
+              <p className="text-xs font-semibold text-muted-foreground mb-2">General photos</p>
+              <div className="flex flex-wrap gap-2">
+                {(insp?.photos ?? []).filter((p) => !p.lineId).map((p) => (
+                  <div key={p.fileKey} className="relative w-16 h-16 rounded-lg overflow-hidden border" style={inputStyle}>
+                    <img src={p.url} alt={p.caption ?? "Inspection photo"} className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => removePhotoM.mutate({ id: inspectionId, fileKey: p.fileKey })}
+                      className="absolute top-0.5 right-0.5 bg-black/60 rounded-full p-0.5"
+                      aria-label="Remove photo"
+                    >
+                      <Trash2 className="w-3 h-3 text-white" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <details className="bg-white rounded-xl border overflow-hidden" style={inputStyle}>
+            <summary className="px-4 py-2.5 text-xs font-semibold cursor-pointer select-none text-muted-foreground">
+              General notes (optional)
+            </summary>
+            <div className="px-3 pb-3">
+              <textarea
+                className={inputCls}
+                style={inputStyle}
+                rows={3}
+                placeholder="Anything that applies to the whole visit."
+                value={notesDraft ?? insp?.techNotes ?? ""}
+                onChange={(e) => setNotesDraft(e.target.value)}
+                onBlur={() => {
+                  if (notesDraft != null && notesDraft !== insp?.techNotes) {
+                    notesM.mutate({ id: inspectionId, techNotes: notesDraft });
+                  }
+                }}
+              />
+            </div>
+          </details>
+
+          <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={() => {
@@ -385,7 +492,13 @@ export default function OsSpotInspection() {
                 setGenerating(true);
                 generateM.mutate({ id: inspectionId });
               }}
-              disabled={generating || status === "processing" || ((insp?.photos?.length ?? 0) === 0 && !(notesDraft ?? insp?.techNotes))}
+              disabled={
+                generating ||
+                status === "processing" ||
+                ((insp?.photos?.length ?? 0) === 0 &&
+                  !workingLines.some((l) => l.note.trim()) &&
+                  !(notesDraft ?? insp?.techNotes))
+              }
               className="flex items-center gap-1.5 text-sm px-4 py-2.5 rounded-xl font-semibold text-white disabled:opacity-40"
               style={{ background: "var(--hp-ink)" }}
             >
@@ -396,6 +509,79 @@ export default function OsSpotInspection() {
             )}
           </div>
         </section>
+      )}
+
+      {/* ── Legacy blob capture (rows started before finding lines) ── */}
+      {!delivered && blobMode && (
+        <>
+          <section className="mt-5">
+            <h2 className="hp-eyebrow text-xs mb-2" style={{ color: "var(--hp-gold-deep)" }}>Photos</h2>
+            <div className="bg-white rounded-xl border p-4" style={inputStyle}>
+              <div className="flex flex-wrap gap-2">
+                {(insp?.photos ?? []).map((p) => (
+                  <div key={p.fileKey} className="relative w-24 h-24 rounded-lg overflow-hidden border" style={inputStyle}>
+                    <img src={p.url} alt={p.caption ?? "Inspection photo"} className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => removePhotoM.mutate({ id: inspectionId, fileKey: p.fileKey })}
+                      className="absolute top-1 right-1 bg-black/60 rounded-full p-1"
+                      aria-label="Remove photo"
+                    >
+                      <Trash2 className="w-3 h-3 text-white" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => { photoTargetLine.current = null; fileRef.current?.click(); }}
+                  disabled={uploading}
+                  className="w-24 h-24 rounded-lg border-2 border-dashed flex flex-col items-center justify-center text-muted-foreground"
+                  style={inputStyle}
+                >
+                  <Camera className="w-5 h-5 mb-1" />
+                  <span className="text-[10px]">{uploading ? "Uploading…" : "Add photos"}</span>
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <section className="mt-5">
+            <h2 className="hp-eyebrow text-xs mb-2" style={{ color: "var(--hp-gold-deep)" }}>What is going on</h2>
+            <textarea
+              className={inputCls + " bg-white"}
+              style={inputStyle}
+              rows={4}
+              placeholder="Say it like you'd explain it to the homeowner: what you found, where, how bad, what you suspect."
+              value={notesDraft ?? insp?.techNotes ?? ""}
+              onChange={(e) => setNotesDraft(e.target.value)}
+              onBlur={() => {
+                if (notesDraft != null && notesDraft !== insp?.techNotes) {
+                  notesM.mutate({ id: inspectionId, techNotes: notesDraft });
+                }
+              }}
+            />
+            <div className="mt-3 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  if (notesDraft != null && notesDraft !== insp?.techNotes) {
+                    notesM.mutate({ id: inspectionId, techNotes: notesDraft });
+                  }
+                  setGenerating(true);
+                  generateM.mutate({ id: inspectionId });
+                }}
+                disabled={generating || status === "processing" || ((insp?.photos?.length ?? 0) === 0 && !(notesDraft ?? insp?.techNotes))}
+                className="flex items-center gap-1.5 text-sm px-4 py-2.5 rounded-xl font-semibold text-white disabled:opacity-40"
+                style={{ background: "var(--hp-ink)" }}
+              >
+                <Wand2 className="w-4 h-4" /> {reviewing ? "Generate again" : "Generate mini roadmap"}
+              </button>
+              {insp?.failureReason && status === "failed" && (
+                <span className="text-xs text-red-600">Last run failed: {insp.failureReason}</span>
+              )}
+            </div>
+          </section>
+        </>
       )}
 
       {/* ── Draft review ───────────────────────────────────────── */}

@@ -7,7 +7,8 @@
  */
 import { useState } from "react";
 import { toast } from "sonner";
-import { Send, Trash2 } from "lucide-react";
+import { Plus, Send, Trash2 } from "lucide-react";
+import { HOME_SYSTEMS, homeSystemLabel, isHomeSystemKey } from "@shared/homeSystems";
 
 export type Urgency = "NOW" | "SOON" | "WAIT";
 
@@ -19,6 +20,7 @@ export const URGENCY_STYLE: Record<Urgency, string> = {
 
 export type DraftFinding = {
   category: string;
+  area_key?: string;
   finding: string;
   interpretation?: string;
   recommended_approach?: string;
@@ -59,6 +61,7 @@ export function DraftReviewEditor({
       summary: draft.summary_1_paragraph ?? "",
       findings: (draft.findings ?? []).map((f) => ({
         category: f.category,
+        area_key: f.area_key,
         finding: f.finding,
         interpretation: f.interpretation,
         recommended_approach: f.recommended_approach,
@@ -70,9 +73,32 @@ export function DraftReviewEditor({
     });
   }
 
+  function addFinding() {
+    if (!editing) return;
+    setEditing({
+      ...editing,
+      findings: [
+        ...editing.findings,
+        {
+          category: "",
+          area_key: "other",
+          finding: "",
+          urgency: "SOON",
+          investment_range_low_usd: 0,
+          investment_range_high_usd: 0,
+          reasoning: "",
+        },
+      ],
+    });
+  }
+
   function save() {
     if (!editing) return;
     for (const f of editing.findings) {
+      if (!f.category.trim() || !f.finding.trim()) {
+        toast.error("Every finding needs a title and a description before saving.");
+        return;
+      }
       if (f.investment_range_low_usd > f.investment_range_high_usd) {
         toast.error(`${f.category}: the low end of the range is above the high end.`);
         return;
@@ -106,6 +132,16 @@ export function DraftReviewEditor({
                 <Trash2 className="w-4 h-4 text-muted-foreground" />
               </button>
             </div>
+            <div className="flex flex-wrap gap-1.5">
+              {HOME_SYSTEMS.map((s) => (
+                <button key={s.key} type="button"
+                  onClick={() => setEditing({ ...editing, findings: editing.findings.map((x, j) => (j === i ? { ...x, area_key: s.key } : x)) })}
+                  className={"text-[10px] px-2 py-0.5 rounded-full border " + (f.area_key === s.key ? "font-semibold text-white" : "bg-white text-muted-foreground")}
+                  style={f.area_key === s.key ? { background: "var(--hp-gold-deep)", borderColor: "var(--hp-gold-deep)" } : inputStyle}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
             <textarea className={inputCls} style={inputStyle} rows={2} value={f.finding} placeholder="What we observed"
               onChange={(e) => setEditing({ ...editing, findings: editing.findings.map((x, j) => (j === i ? { ...x, finding: e.target.value } : x)) })} />
             <textarea className={inputCls} style={inputStyle} rows={2} value={f.interpretation ?? ""} placeholder="What it means for the home"
@@ -122,11 +158,17 @@ export function DraftReviewEditor({
             </div>
           </div>
         ))}
-        <div className="flex justify-end gap-2">
-          <button type="button" className="text-xs px-3 py-2 rounded-lg border" style={inputStyle} onClick={() => setEditing(null)}>Cancel</button>
-          <button type="button" className="text-xs px-4 py-2 rounded-lg font-semibold text-white" style={{ background: "var(--hp-ink)" }} onClick={save}>
-            Save draft
+        <div className="flex items-center justify-between gap-2">
+          <button type="button" onClick={addFinding}
+            className="flex items-center gap-1 text-xs px-3 py-2 rounded-lg border font-semibold" style={{ ...inputStyle, color: "var(--hp-ink)" }}>
+            <Plus className="w-3.5 h-3.5" /> Add a finding
           </button>
+          <div className="flex gap-2">
+            <button type="button" className="text-xs px-3 py-2 rounded-lg border" style={inputStyle} onClick={() => setEditing(null)}>Cancel</button>
+            <button type="button" className="text-xs px-4 py-2 rounded-lg font-semibold text-white" style={{ background: "var(--hp-ink)" }} onClick={save}>
+              Save draft
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -140,7 +182,14 @@ export function DraftReviewEditor({
           <div key={i} className="rounded-lg border px-3 py-2" style={inputStyle}>
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm font-semibold" style={{ color: "var(--hp-ink)" }}>{f.category}</span>
-              <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${URGENCY_STYLE[f.urgency as Urgency]}`}>{f.urgency}</span>
+              <span className="flex items-center gap-1.5">
+                {f.area_key && isHomeSystemKey(f.area_key) && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full border bg-white text-muted-foreground" style={inputStyle}>
+                    {homeSystemLabel(f.area_key)}
+                  </span>
+                )}
+                <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${URGENCY_STYLE[f.urgency as Urgency]}`}>{f.urgency}</span>
+              </span>
             </div>
             <p className="text-xs mt-1" style={{ color: "var(--hp-ink)" }}>{f.finding}</p>
             {f.interpretation && (

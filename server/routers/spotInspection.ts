@@ -18,7 +18,9 @@ import {
   portalProperties,
   type ClaudePriorityTranslationResponse,
   type SpotInspectionPhoto,
+  type SpotCaptureLine,
 } from "../../drizzle/schema.priorityTranslation";
+import { normalizeToSystem } from "../../shared/homeSystems";
 import { properties } from "../../drizzle/schema";
 import {
   createSpotInspection,
@@ -45,6 +47,7 @@ async function loadSpotRow(id: string) {
 
 const findingSchema = z.object({
   category: z.string().min(1).max(120),
+  area_key: z.string().max(40).optional(),
   finding: z.string().min(1).max(2000),
   interpretation: z.string().max(2000).optional(),
   recommended_approach: z.string().max(2000).optional(),
@@ -123,6 +126,7 @@ export const spotInspectionRouter = router({
           ? [prop.street, prop.city].filter(Boolean).join(", ")
           : "",
         photos: (row.capturedPhotosJson ?? []) as SpotInspectionPhoto[],
+        captureLines: (row.captureLinesJson ?? null) as SpotCaptureLine[] | null,
         techNotes: row.techNotes ?? "",
         draft: (row.claudeResponse ?? null) as ClaudePriorityTranslationResponse | null,
         pdfUrl: row.outputPdfPath,
@@ -162,12 +166,14 @@ export const spotInspectionRouter = router({
       url: z.string().url(),
       fileKey: z.string().min(1),
       caption: z.string().max(300).optional(),
+      /** Capture line this photo was taken for (SpotCaptureLine.id). */
+      lineId: z.string().max(64).optional(),
     }))
     .mutation(async ({ input }) => {
       const { d, row } = await loadSpotRow(input.id);
       if (row.status === "completed") throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Already delivered" });
       const photos = [...((row.capturedPhotosJson ?? []) as SpotInspectionPhoto[])];
-      photos.push({ url: input.url, fileKey: input.fileKey, caption: input.caption });
+      photos.push({ url: input.url, fileKey: input.fileKey, caption: input.caption, lineId: input.lineId });
       await d
         .update(priorityTranslations)
         .set({ capturedPhotosJson: photos, updatedAt: new Date() })
@@ -200,6 +206,29 @@ export const spotInspectionRouter = router({
         .set({ techNotes: input.techNotes, updatedAt: new Date() })
         .where(eq(priorityTranslations.id, input.id));
       return { ok: true };
+    }),
+
+  /** Replace the structured capture lines (full array, like a form save). */
+  setCaptureLines: protectedProcedure
+    .input(z.object({
+      id: z.string().min(1),
+      lines: z.array(z.object({
+        id: z.string().min(1).max(64),
+        areaKey: z.string().max(40),
+        note: z.string().max(4000),
+      })).max(20),
+    }))
+    .mutation(async ({ input }) => {
+      const { d, row } = await loadSpotRow(input.id);
+      if (row.status === "completed") throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Already delivered" });
+      // Snap every area onto the taxonomy so downstream consumers never see
+      // a key outside shared/homeSystems.ts.
+      const lines = input.lines.map((l) => ({ ...l, areaKey: normalizeToSystem(l.areaKey) }));
+      await d
+        .update(priorityTranslations)
+        .set({ captureLinesJson: lines, updatedAt: new Date() })
+        .where(eq(priorityTranslations.id, input.id));
+      return { count: lines.length };
     }),
 
   /** Run the AI over photos + notes. Returns when the draft is ready. */

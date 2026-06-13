@@ -9,7 +9,8 @@
  * health record merge work unchanged.
  */
 import Anthropic from "@anthropic-ai/sdk";
-import type { ClaudePriorityTranslationResponse } from "../../../drizzle/schema.priorityTranslation";
+import type { ClaudePriorityTranslationResponse, SpotCaptureLine } from "../../../drizzle/schema.priorityTranslation";
+import { homeSystemLabel, normalizeToSystem } from "../../../shared/homeSystems";
 import { extractJson } from "../priorityTranslation/processor";
 import { SPOT_INSPECTION_MODEL, SPOT_INSPECTION_SYSTEM_PROMPT, spotInspectionUserText } from "./prompt";
 
@@ -20,6 +21,8 @@ export type SpotPhotoInput = {
   /** Publicly fetchable URL (Cloudinary signed link). */
   url: string;
   caption?: string;
+  /** Capture line this photo was taken for (SpotCaptureLine.id). */
+  lineId?: string;
 };
 
 const VALID_URGENCY = new Set(["NOW", "SOON", "WAIT"]);
@@ -50,6 +53,9 @@ export function validateMiniRoadmap(parsed: unknown): ClaudePriorityTranslationR
     }
     f.investment_range_low_usd = low;
     f.investment_range_high_usd = high;
+    // area_key is advisory: snap whatever came back (or the category text)
+    // onto the taxonomy. Never a hard failure.
+    f.area_key = normalizeToSystem(f.area_key ?? f.category);
   }
   return r;
 }
@@ -58,10 +64,13 @@ export async function callClaudeForSpotInspection(args: {
   propertyAddress: string;
   techNotes: string;
   photos: SpotPhotoInput[];
+  /** Structured finding lines; null/empty = legacy blob capture. */
+  captureLines?: SpotCaptureLine[] | null;
   memberContext?: string | null;
   apiKey: string;
 }): Promise<ClaudePriorityTranslationResponse> {
-  if (args.photos.length === 0 && !args.techNotes.trim()) {
+  const lines = (args.captureLines ?? []).filter((l) => l.note.trim());
+  if (args.photos.length === 0 && !args.techNotes.trim() && lines.length === 0) {
     throw new Error("A spot inspection needs photos or notes before generating");
   }
 
@@ -69,15 +78,39 @@ export async function callClaudeForSpotInspection(args: {
   const photos = args.photos.slice(0, SPOT_INSPECTION_MAX_PHOTOS);
 
   const userContent: Anthropic.Messages.ContentBlockParam[] = [];
-  for (const photo of photos) {
-    userContent.push({
-      type: "image",
-      source: { type: "url", url: photo.url },
-    });
+  const pushPhoto = (photo: SpotPhotoInput) => {
+    userContent.push({ type: "image", source: { type: "url", url: photo.url } });
     if (photo.caption?.trim()) {
       userContent.push({ type: "text", text: `(Photo note: ${photo.caption.trim()})` });
     }
+  };
+
+  if (lines.length > 0) {
+    // Structured capture: each line's text followed by its own photos, so
+    // the model can keep findings and evidence paired one to one.
+    const usedPhotoIds = new Set<string>();
+    lines.forEach((line, i) => {
+      const label = homeSystemLabel(normalizeToSystem(line.areaKey));
+      userContent.push({
+        type: "text",
+        text: `Line ${i + 1} [${label}] (area_key: ${normalizeToSystem(line.areaKey)}): ${line.note.trim()}`,
+      });
+      for (const photo of photos) {
+        if (photo.lineId === line.id) {
+          pushPhoto(photo);
+          usedPhotoIds.add(photo.url);
+        }
+      }
+    });
+    const unassigned = photos.filter((p) => !usedPhotoIds.has(p.url));
+    if (unassigned.length > 0) {
+      userContent.push({ type: "text", text: `General photos from the visit, not tied to one line:` });
+      unassigned.forEach(pushPhoto);
+    }
+  } else {
+    for (const photo of photos) pushPhoto(photo);
   }
+
   userContent.push({
     type: "text",
     text: spotInspectionUserText({
@@ -85,6 +118,7 @@ export async function callClaudeForSpotInspection(args: {
       techNotes: args.techNotes,
       photoCount: photos.length,
       memberContext: args.memberContext,
+      hasCaptureLines: lines.length > 0,
     }),
   });
 

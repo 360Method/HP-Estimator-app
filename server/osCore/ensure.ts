@@ -244,6 +244,9 @@ export async function ensureOsTables(): Promise<void> {
       sql`ALTER TABLE IF EXISTS "priorityTranslations" ADD COLUMN IF NOT EXISTS "techNotes" text`,
       sql`ALTER TABLE IF EXISTS "priorityTranslations" ADD COLUMN IF NOT EXISTS "approvedBy" varchar(64)`,
       sql`ALTER TABLE IF EXISTS "priorityTranslations" ADD COLUMN IF NOT EXISTS "approvedAt" timestamp`,
+      // Structured capture lines (area chip + note per finding); null keeps
+      // the legacy techNotes blob mode working.
+      sql`ALTER TABLE IF EXISTS "priorityTranslations" ADD COLUMN IF NOT EXISTS "captureLinesJson" json`,
     ]) {
       await db.execute(ddl);
     }

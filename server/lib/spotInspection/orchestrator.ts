@@ -173,7 +173,8 @@ export async function generateMiniRoadmap(id: string): Promise<void> {
     const claudeResponse = await callClaudeForSpotInspection({
       propertyAddress,
       techNotes: row.techNotes ?? "",
-      photos: photos.map((p) => ({ url: p.url, caption: p.caption })),
+      photos: photos.map((p) => ({ url: p.url, caption: p.caption, lineId: p.lineId })),
+      captureLines: row.captureLinesJson ?? null,
       memberContext,
       apiKey,
     });
@@ -215,17 +216,31 @@ export async function approveAndDeliver(id: string, opts: { approvedBy: string }
   const propertyAddress = await propertyAddressFor(db, row.propertyId);
 
   // 1. Photos by finding for the PDF (fetch the few Cloudinary images).
+  // A photo taken for a capture line maps to that line's finding (the
+  // prompt asks for findings one per line, in order); an explicit
+  // findingIndex is the fallback for legacy rows and manual placement.
   const photos = (row.capturedPhotosJson ?? []) as SpotInspectionPhoto[];
+  const lineIndexById = new Map<string, number>(
+    (row.captureLinesJson ?? []).map((line, i) => [line.id, i]),
+  );
+  const findingIndexFor = (photo: SpotInspectionPhoto): number | null => {
+    if (photo.lineId != null && lineIndexById.has(photo.lineId)) {
+      const idx = lineIndexById.get(photo.lineId)!;
+      if (idx < (claudeResponse.findings?.length ?? 0)) return idx;
+    }
+    return photo.findingIndex ?? null;
+  };
   let photosByFinding: Record<number, Uint8Array[]> | undefined;
-  if (photos.some((p) => p.findingIndex != null)) {
+  if (photos.some((p) => findingIndexFor(p) != null)) {
     photosByFinding = {};
     for (const photo of photos) {
-      if (photo.findingIndex == null) continue;
+      const findingIndex = findingIndexFor(photo);
+      if (findingIndex == null) continue;
       try {
         const res = await fetch(photo.url);
         if (!res.ok) continue;
         const bytes = new Uint8Array(await res.arrayBuffer());
-        (photosByFinding[photo.findingIndex] ??= []).push(bytes);
+        (photosByFinding[findingIndex] ??= []).push(bytes);
       } catch {
         // photo problems never block delivery
       }
