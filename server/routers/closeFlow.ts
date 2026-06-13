@@ -264,6 +264,79 @@ export const closeFlowRouter = router({
       };
     }),
 
+  /**
+   * Roadmap PDF bytes for the presentation. The browser can't be trusted to
+   * load the document host directly inside a frame (CSP, Cloudinary's
+   * default PDF-delivery block, legacy report hosts), so the server fetches
+   * the file and the client renders it from a blob URL. Errors surface as a
+   * readable message on the step instead of a silent gray box.
+   */
+  getRoadmapPdf: closeProcedure
+    .input(z.object({
+      customerId: z.string(),
+      /** Composite id from getContext roadmaps: "spot-<id>" | "scan-<id>" */
+      roadmapId: z.string(),
+    }))
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+      let url: string | null = null;
+      let signedFallbackKey: string | null = null;
+      if (input.roadmapId.startsWith("spot-")) {
+        const id = input.roadmapId.slice("spot-".length);
+        const [row] = await db
+          .select({
+            hpCustomerId: priorityTranslations.hpCustomerId,
+            outputPdfPath: priorityTranslations.outputPdfPath,
+          })
+          .from(priorityTranslations)
+          .where(eq(priorityTranslations.id, id))
+          .limit(1);
+        if (!row || row.hpCustomerId !== input.customerId) {
+          throw new TRPCError({ code: "NOT_FOUND", message: "Roadmap not found for this customer" });
+        }
+        url = row.outputPdfPath;
+        signedFallbackKey = `spot-inspections/${id}.pdf`;
+      } else if (input.roadmapId.startsWith("scan-")) {
+        const id = Number(input.roadmapId.slice("scan-".length));
+        if (!Number.isFinite(id)) throw new TRPCError({ code: "BAD_REQUEST", message: "Bad roadmap id" });
+        const [row] = await db
+          .select({ reportUrl: threeSixtyScans.reportUrl })
+          .from(threeSixtyScans)
+          .where(eq(threeSixtyScans.id, id))
+          .limit(1);
+        url = row?.reportUrl ?? null;
+      } else {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Bad roadmap id" });
+      }
+      if (!url) throw new TRPCError({ code: "NOT_FOUND", message: "No PDF on file for this roadmap" });
+
+      const tryFetch = async (u: string) => {
+        const res = await fetch(u);
+        if (!res.ok) return { ok: false as const, status: res.status };
+        return { ok: true as const, buf: Buffer.from(await res.arrayBuffer()) };
+      };
+
+      let result = await tryFetch(url);
+      // Cloudinary blocks public PDF delivery on some accounts; a signed
+      // URL is the sanctioned way through for files we stored ourselves.
+      if (!result.ok && signedFallbackKey) {
+        try {
+          const { storageGet } = await import("../storage");
+          const signed = await storageGet(signedFallbackKey);
+          result = await tryFetch(signed.url);
+        } catch { /* fall through to the original error */ }
+      }
+      if (!result.ok) {
+        throw new TRPCError({
+          code: "BAD_GATEWAY",
+          message: `The document host refused to serve the PDF (HTTP ${result.status}). It is stored at: ${url}`,
+        });
+      }
+      return { base64: result.buf.toString("base64"), mimeType: "application/pdf" };
+    }),
+
   approveEstimateInPerson: closeProcedure
     .input(
       z.object({

@@ -316,6 +316,44 @@ function StepShell({
   );
 }
 
+/**
+ * Renders the roadmap PDF from server-fetched bytes (blob URL). Loading the
+ * document host directly in an iframe fails in the field — CSP, Cloudinary's
+ * PDF-delivery block — and failures show as a blank or "content blocked"
+ * frame. This way the server does the fetch and any error is readable.
+ */
+function RoadmapPdfViewer({ customerId, roadmapId, originalUrl }: { customerId: string; roadmapId: string; originalUrl: string }) {
+  const pdfQuery = trpc.closeFlow.getRoadmapPdf.useQuery(
+    { customerId, roadmapId },
+    { staleTime: 10 * 60_000, retry: 1, refetchOnWindowFocus: false },
+  );
+  const blobUrl = useMemo(() => {
+    if (!pdfQuery.data) return null;
+    const bytes = Uint8Array.from(atob(pdfQuery.data.base64), (c) => c.charCodeAt(0));
+    return URL.createObjectURL(new Blob([bytes], { type: pdfQuery.data.mimeType }));
+  }, [pdfQuery.data]);
+  useEffect(() => () => { if (blobUrl) URL.revokeObjectURL(blobUrl); }, [blobUrl]);
+
+  if (pdfQuery.isLoading) {
+    return (
+      <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground" style={{ height: "40vh" }}>
+        <Loader2 className="w-4 h-4 animate-spin" /> Loading the roadmap…
+      </div>
+    );
+  }
+  if (!blobUrl) {
+    return (
+      <div className="px-4 py-8 text-sm text-muted-foreground space-y-2">
+        <p>The roadmap PDF would not load{pdfQuery.error ? `: ${pdfQuery.error.message}` : "."}</p>
+        <a href={originalUrl} target="_blank" rel="noopener noreferrer" className="underline font-medium">
+          Try opening it in a new tab
+        </a>
+      </div>
+    );
+  }
+  return <iframe src={blobUrl} title="Roadmap PDF" className="w-full" style={{ height: "70vh", border: 0 }} />;
+}
+
 function RoadmapStep({ ctx, onBack, onNext }: { ctx: CloseContext; onBack: () => void; onNext: () => void }) {
   const latest = ctx.roadmaps[0];
   return (
@@ -335,7 +373,7 @@ function RoadmapStep({ ctx, onBack, onNext }: { ctx: CloseContext; onBack: () =>
             <span className="text-sm font-medium">{latest.title}</span>
             <span className="text-xs text-muted-foreground">Delivered {fmtDate(latest.dateMs)}</span>
           </div>
-          <iframe src={latest.pdfUrl} title="Roadmap PDF" className="w-full" style={{ height: "70vh", border: 0 }} />
+          <RoadmapPdfViewer customerId={ctx.customer.id} roadmapId={latest.id} originalUrl={latest.pdfUrl} />
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">No roadmap on file.</p>
