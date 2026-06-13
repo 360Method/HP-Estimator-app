@@ -19,6 +19,7 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import Stripe from "stripe";
 import { handleInboundSms, handleCallStatusUpdate, downloadAndStoreRecording, normalizePhoneForTwilio } from "../twilio";
+import { registerVoiceAgentRoutes } from "../voiceAgent";
 import twilio from "twilio";
 import { exchangeGmailCode, pollInboundEmails, sendOverdueReminderEmail, isGmailConfigured } from "../gmail";
 import { runEmailManagerPipeline } from "../emailManagerAI";
@@ -619,6 +620,10 @@ async function startServer() {
     }
     res.json({ received: true });
   });
+
+  // ── AI voice agent (Vapi today; vendor-neutral) ─────────────────────────────
+  // POST /api/voice-agent/:provider/events — mid-call tools + end-of-call report
+  registerVoiceAgentRoutes(app);
 
   // ── Twilio SMS inbound webhook ──────────────────────────────────────────────
   // POST /api/twilio/sms — Twilio calls this when an SMS arrives

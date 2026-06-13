@@ -23,6 +23,10 @@ export const ENV = {
   twilioAccountSid: process.env.TWILIO_ACCOUNT_SID ?? "",
   twilioAuthToken: process.env.TWILIO_AUTH_TOKEN ?? "",
   twilioPhoneNumber: process.env.TWILIO_PHONE_NUMBER ?? "",
+  // ── AI voice agent (vendor-neutral; Vapi is the first adapter) ───────────────
+  voiceAgentProvider: (process.env.VOICE_AGENT_PROVIDER ?? "vapi") as "vapi" | "retell" | "bland",
+  vapiWebhookSecret: process.env.VAPI_WEBHOOK_SECRET ?? "",
+  vapiApiKey: process.env.VAPI_API_KEY ?? "",
   qbClientId: process.env.QUICKBOOKS_CLIENT_ID ?? "",
   qbClientSecret: process.env.QUICKBOOKS_CLIENT_SECRET ?? "",
   qbEnvironment: (process.env.QUICKBOOKS_ENVIRONMENT ?? "sandbox") as "sandbox" | "production",
