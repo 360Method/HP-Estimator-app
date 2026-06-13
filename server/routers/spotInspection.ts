@@ -406,6 +406,54 @@ export const spotInspectionRouter = router({
         attachments: attachments.length > 0 ? JSON.stringify(attachments) : undefined,
         spotFindingsJson: JSON.stringify(seed),
       });
-      return { opportunityId: input.opportunityId, title };
+      // Return the seed + client snapshot so the caller can hydrate local
+      // state immediately (the wizard preloads from opp.spotFindings; a DB
+      // re-sync would otherwise be a race against the prefill effect).
+      return {
+        opportunityId: input.opportunityId,
+        title,
+        spotFindings: seed,
+        crmPropertyId: row.crmPropertyId ?? null,
+        clientSnapshot,
+      };
+    }),
+
+  /**
+   * Delivered PDF bytes for the staff "Open the PDF" link. The stored
+   * Cloudinary raw URL 401s on direct access (the account requires signed
+   * delivery for raw assets), so the server fetches it: stored URL first,
+   * then signed candidates (with-extension public_id, then legacy
+   * extensionless). Mirrors closeFlow.getRoadmapPdf and portal.getDocumentFile.
+   */
+  getDeliveredPdf: protectedProcedure
+    .input(z.object({ id: z.string().min(1) }))
+    .query(async ({ input }) => {
+      const { row } = await loadSpotRow(input.id);
+      if (!row.outputPdfPath) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "No PDF on file for this inspection yet" });
+      }
+      const tryFetch = async (u: string) => {
+        const res = await fetch(u);
+        if (!res.ok) return { ok: false as const, status: res.status };
+        return { ok: true as const, buf: Buffer.from(await res.arrayBuffer()) };
+      };
+      let result = await tryFetch(row.outputPdfPath);
+      if (!result.ok) {
+        try {
+          const { storageGet } = await import("../storage");
+          const signed = await storageGet(`spot-inspections/${input.id}.pdf`, "raw");
+          for (const candidate of signed.candidateUrls) {
+            result = await tryFetch(candidate);
+            if (result.ok) break;
+          }
+        } catch { /* fall through to the original error */ }
+      }
+      if (!result.ok) {
+        throw new TRPCError({
+          code: "BAD_GATEWAY",
+          message: `The document host refused to serve the PDF (HTTP ${result.status}).`,
+        });
+      }
+      return { base64: result.buf.toString("base64"), mimeType: "application/pdf" };
     }),
 });

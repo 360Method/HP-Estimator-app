@@ -13,8 +13,9 @@ import { Link, useLocation, useRoute } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { nanoid } from "nanoid";
-import { Camera, Check, ChevronRight, FileText, Plus, Trash2, Wand2 } from "lucide-react";
+import { ArrowLeft, Camera, Check, ChevronRight, FileText, Plus, Trash2, Wand2 } from "lucide-react";
 import { OsShell } from "../OsShell";
+import { markNavIntent } from "../navIntent";
 import { useEstimator } from "@/contexts/EstimatorContext";
 import { useDbSync } from "@/hooks/useDbSync";
 import { MethodContextBanner } from "@/components/threeSixty/MethodContextBanner";
@@ -40,9 +41,10 @@ export default function OsSpotInspection() {
   const [matchExisting, params] = useRoute("/os/spot/:id");
   const inspectionId = matchExisting && params?.id !== "new" ? params!.id : null;
 
-  const { state, addOpportunity, setActiveCustomer, setActiveOpportunity } = useEstimator();
+  const { state, addOpportunity, setActiveCustomer, setActiveOpportunity, setSection } = useEstimator();
   useDbSync(true);
   const utils = trpc.useUtils();
+  const [openingPdf, setOpeningPdf] = useState(false);
 
   // ── New-inspection state ──────────────────────────────────────
   const [clientQuery, setClientQuery] = useState("");
@@ -224,9 +226,15 @@ export default function OsSpotInspection() {
       { id: inspectionId, opportunityId: oppId, findingIndexes: indexes },
       {
         onSuccess: (r) => {
+          // Hydrate local state with the seed the server just wrote, so the
+          // wizard's prefill effect preloads the picks instead of racing a
+          // DB re-sync (the reason items weren't preselecting before).
           addOpportunity({
             id: oppId, area: "estimate", stage: "Draft", title: r.title, value: 0,
             notes: "", archived: false,
+            spotFindings: r.spotFindings,
+            propertyId: r.crmPropertyId ?? undefined,
+            clientSnapshot: r.clientSnapshot,
           });
           setActiveCustomer(insp.customerId!);
           setActiveOpportunity(oppId);
@@ -236,6 +244,43 @@ export default function OsSpotInspection() {
         },
       },
     );
+  }
+
+  /**
+   * Leave the inspection without sending. Everything is already persisted
+   * (lines on blur, photos on upload, notes on blur, the AI draft sits at
+   * awaiting_review), so this just flushes a pending note and returns to
+   * the client profile. The inspection reopens from there any time.
+   */
+  function goBackToClient() {
+    if (inspectionId && notesDraft != null && notesDraft !== insp?.techNotes) {
+      notesM.mutate({ id: inspectionId, techNotes: notesDraft });
+    }
+    if (insp?.customerId) {
+      setActiveCustomer(insp.customerId);
+      setSection("customer");
+      markNavIntent();
+      navigate("/os/clients");
+    } else {
+      navigate("/os/clients");
+    }
+  }
+
+  /** Open the delivered PDF via server-fetched bytes (the raw Cloudinary URL 401s). */
+  async function openDeliveredPdf() {
+    if (!inspectionId) return;
+    setOpeningPdf(true);
+    try {
+      const res = await utils.spotInspection.getDeliveredPdf.fetch({ id: inspectionId });
+      const bytes = Uint8Array.from(atob(res.base64), (c) => c.charCodeAt(0));
+      const url = URL.createObjectURL(new Blob([bytes], { type: res.mimeType }));
+      window.open(url, "_blank", "noopener,noreferrer");
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (e) {
+      toast.error((e as Error).message || "Could not open the PDF");
+    } finally {
+      setOpeningPdf(false);
+    }
   }
 
   const inputCls = "w-full text-sm px-3 py-2 rounded-lg border";
@@ -334,6 +379,14 @@ export default function OsSpotInspection() {
 
   return (
     <OsShell active="/os/spot/new">
+      <button
+        type="button"
+        onClick={goBackToClient}
+        className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:underline mb-3"
+      >
+        <ArrowLeft className="w-3.5 h-3.5" />
+        {insp?.customerName ? `Back to ${insp.customerName}` : "Back to client"}
+      </button>
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="hp-serif text-2xl" style={{ color: "var(--hp-ink)" }}>
@@ -504,10 +557,21 @@ export default function OsSpotInspection() {
             >
               <Wand2 className="w-4 h-4" /> {reviewing ? "Generate again" : "Generate mini roadmap"}
             </button>
+            <button
+              type="button"
+              onClick={goBackToClient}
+              className="text-sm px-4 py-2.5 rounded-xl border font-semibold"
+              style={{ ...inputStyle, color: "var(--hp-ink)" }}
+            >
+              Save and finish later
+            </button>
             {insp?.failureReason && status === "failed" && (
               <span className="text-xs text-red-600">Last run failed: {insp.failureReason}</span>
             )}
           </div>
+          <p className="text-xs text-muted-foreground">
+            Everything you enter saves as you go. You can leave and pick this back up from the client's page any time.
+          </p>
         </section>
       )}
 
@@ -599,60 +663,82 @@ export default function OsSpotInspection() {
             approving={approveM.isPending}
             approveConfirmText="Send this mini roadmap? The customer sees it in their portal and gets the email right away."
           />
+          <div className="mt-3 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={goBackToClient}
+              className="text-sm px-4 py-2.5 rounded-xl border font-semibold"
+              style={{ ...inputStyle, color: "var(--hp-ink)" }}
+            >
+              Save and finish later
+            </button>
+            <span className="text-xs text-muted-foreground">
+              The draft is saved. Approving is the only thing that sends it to the customer.
+            </span>
+          </div>
         </section>
       )}
 
-      {/* ── Delivered ──────────────────────────────────────────── */}
+      {/* ── Delivered banner ───────────────────────────────────── */}
       {delivered && insp && (
-        <section className="mt-6 mb-8">
+        <section className="mt-6">
           <div className="bg-white rounded-xl border p-4" style={{ borderColor: "rgba(200,146,42,0.4)" }}>
             <div className="flex items-center gap-2 text-sm font-semibold" style={{ color: "var(--hp-ink)" }}>
               <Check className="w-4 h-4 text-emerald-600" /> Delivered. It is in their portal and their inbox.
             </div>
             {insp.pdfUrl && (
-              <a href={insp.pdfUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs underline text-muted-foreground mt-2">
-                <FileText className="w-3.5 h-3.5" /> Open the PDF
-              </a>
+              <button
+                type="button"
+                onClick={openDeliveredPdf}
+                disabled={openingPdf}
+                className="inline-flex items-center gap-1 text-xs underline text-muted-foreground mt-2 disabled:opacity-50"
+              >
+                <FileText className="w-3.5 h-3.5" /> {openingPdf ? "Opening…" : "Open the PDF"}
+              </button>
             )}
           </div>
+        </section>
+      )}
 
-          {(insp.draft?.findings?.length ?? 0) > 0 && (
-            <div className="mt-4 bg-white rounded-xl border p-4" style={inputStyle}>
-              <h3 className="text-sm font-semibold mb-1" style={{ color: "var(--hp-ink)" }}>
-                Ready to price something?
-              </h3>
-              <p className="text-xs text-muted-foreground mb-3">
-                Pick the findings they want handled and build the real scope.
-              </p>
-              <div className="space-y-1.5">
-                {(insp.draft?.findings ?? []).map((f, i) => (
-                  <label key={i} className="flex items-start gap-2 text-sm cursor-pointer" style={{ color: "var(--hp-ink)" }}>
-                    <input
-                      type="checkbox"
-                      className="mt-1"
-                      checked={!!pickedFindings[i]}
-                      onChange={(e) => setPickedFindings({ ...pickedFindings, [i]: e.target.checked })}
-                    />
-                    <span>
-                      <span className="font-medium">{f.category}.</span>{" "}
-                      <span className="text-muted-foreground">{money(f.investment_range_low_usd)} to {money(f.investment_range_high_usd)}</span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-              <div className="mt-3 flex justify-end">
-                <button
-                  type="button"
-                  onClick={buildEstimate}
-                  disabled={convertM.isPending}
-                  className="flex items-center gap-1.5 text-sm px-4 py-2.5 rounded-xl font-semibold text-white"
-                  style={{ background: "var(--hp-ink)" }}
-                >
-                  Build the estimate <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
+      {/* ── Build the estimate (available once a draft exists, sent or not) ── */}
+      {(delivered || reviewing) && insp && (insp.draft?.findings?.length ?? 0) > 0 && (
+        <section className="mt-4 mb-8">
+          <div className="bg-white rounded-xl border p-4" style={inputStyle}>
+            <h3 className="text-sm font-semibold mb-1" style={{ color: "var(--hp-ink)" }}>
+              Ready to price something?
+            </h3>
+            <p className="text-xs text-muted-foreground mb-3">
+              Pick the findings they want handled and build the real scope. You can do this whether or not you have
+              sent the roadmap to the customer.
+            </p>
+            <div className="space-y-1.5">
+              {(insp.draft?.findings ?? []).map((f, i) => (
+                <label key={i} className="flex items-start gap-2 text-sm cursor-pointer" style={{ color: "var(--hp-ink)" }}>
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={!!pickedFindings[i]}
+                    onChange={(e) => setPickedFindings({ ...pickedFindings, [i]: e.target.checked })}
+                  />
+                  <span>
+                    <span className="font-medium">{f.category}.</span>{" "}
+                    <span className="text-muted-foreground">{money(f.investment_range_low_usd)} to {money(f.investment_range_high_usd)}</span>
+                  </span>
+                </label>
+              ))}
             </div>
-          )}
+            <div className="mt-3 flex justify-end">
+              <button
+                type="button"
+                onClick={buildEstimate}
+                disabled={convertM.isPending}
+                className="flex items-center gap-1.5 text-sm px-4 py-2.5 rounded-xl font-semibold text-white"
+                style={{ background: "var(--hp-ink)" }}
+              >
+                Build the estimate <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
 
           <p className="text-xs text-muted-foreground mt-3">
             Not a member yet? This visit is exactly what the Proactive Path does on a rhythm.{" "}
