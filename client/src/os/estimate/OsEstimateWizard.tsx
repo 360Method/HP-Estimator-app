@@ -31,7 +31,7 @@ import { resolveTax } from "@/lib/tax";
 import { getTaxRateForZip } from "@/lib/taxRates";
 import { computeMarginAudit } from "@shared/marginFloor";
 import { buildEstimateSnapshotForDb } from "@/lib/estimateSnapshot";
-import { isUnpricedSpotItem, seedSelectionFromSpotFindings } from "@/lib/spotPrefill";
+import { isUnpricedSpotItem, seedCustomsFromSpotFindings } from "@/lib/spotPrefill";
 import { buildPortalPhases, buildSowBullets, type ActivePhaseData } from "@/lib/sow";
 import type { UnitType } from "@/lib/types";
 import SendEstimateDialog from "@/components/SendEstimateDialog";
@@ -276,25 +276,34 @@ export default function OsEstimateWizard() {
       state.customItems.some((ci) => ci.notes?.startsWith("spot:") || ci.notes?.startsWith("pricebook:"));
     spotSeedApplied.current = true;
     if (hasPicks) return;
-    const result = seedSelectionFromSpotFindings(seed.findings, pbRows, seed.spotInspectionId);
-    if (Object.keys(result.selection).length > 0) {
-      setSelection((s) => ({ ...result.selection, ...s }));
-    }
-    for (const custom of result.customs) {
+    // One editable line per finding, all of them — not just the ones that
+    // matched a price-book SKU. They land together on the price check.
+    const customs = seedCustomsFromSpotFindings(seed.findings, pbRows, seed.spotInspectionId);
+    for (const custom of customs) {
       addCustomItem({
         phaseId: 0,
         description: custom.description,
-        unitType: "unit" as UnitType,
-        qty: 1,
-        matCostPerUnit: 0,
-        laborHrsPerUnit: 1,
-        laborRate: 0,
+        unitType: custom.unitType as UnitType,
+        qty: custom.qty,
+        matCostPerUnit: custom.matCostPerUnit,
+        laborHrsPerUnit: custom.laborHrsPerUnit,
+        laborRate: custom.laborRate,
         notes: custom.notes,
         markupPct: null,
       });
     }
     if (!workType) setWorkType("maintenance");
-    toast.success("Findings carried over. Price the flagged lines on the price check.");
+    // Reference panel: what the visit found, shown above the price check.
+    setLoadedNotes(seed.findings.map((f) => `• ${f.category}: ${f.finding}`).join("\n"));
+    // Land on the price check so every carried line is visible at once.
+    setStep(4);
+    const n = customs.length;
+    const unpriced = customs.filter((c) => c.notes.includes("needs-pricing")).length;
+    toast.success(
+      unpriced > 0
+        ? `${n} item${n === 1 ? "" : "s"} carried from the inspection. Price the ${unpriced} flagged line${unpriced === 1 ? "" : "s"}.`
+        : `${n} item${n === 1 ? "" : "s"} carried from the inspection. Review and send.`,
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [oppId, state.activeOpportunityId, state.opportunities, pbQuery.isLoading, pbRows]);
 
@@ -472,6 +481,41 @@ export default function OsEstimateWizard() {
     () => buildPortalPhases(activePhaseData, state.customItems, customResults),
     [activePhaseData, state.customItems, customResults],
   );
+
+  // Spot-inspection lines get their own editable section on the price check,
+  // so the phase-totals list there excludes them to avoid showing them twice.
+  // The customer-facing review (step 6) still uses the full portalPhases.
+  const priceCheckPhases = useMemo(() => {
+    const items = state.customItems.filter((ci) => !ci.notes?.startsWith("spot:"));
+    const ids = new Set(items.map((i) => i.id));
+    const results = customResults.filter((r) => ids.has(r.id));
+    return buildPortalPhases(activePhaseData, items, results);
+  }, [activePhaseData, state.customItems, customResults]);
+  const spotItems = useMemo(
+    () => state.customItems.filter((ci) => ci.notes?.startsWith("spot:")),
+    [state.customItems],
+  );
+  // A spot-origin estimate keeps the "From the inspection" editor available
+  // even if every seeded line has been deleted, so the consultant can still
+  // add lines. Normal estimates never show it.
+  const isSpotEstimate = useMemo(() => {
+    const opp = state.opportunities.find((o) => o.id === oppId);
+    return !!opp?.spotFindings?.findings?.length || spotItems.length > 0;
+  }, [state.opportunities, oppId, spotItems.length]);
+
+  function addSpotLine() {
+    addCustomItem({
+      phaseId: 0,
+      description: "New line item",
+      unitType: "unit" as UnitType,
+      qty: 1,
+      matCostPerUnit: 0,
+      laborHrsPerUnit: 1,
+      laborRate: 0,
+      notes: `spot:manual:${Date.now()} needs-pricing`,
+      markupPct: null,
+    });
+  }
 
   const selectedCount = Object.keys(selection).length;
   const customer = state.customers.find((c) => c.id === clientId);
@@ -833,6 +877,7 @@ export default function OsEstimateWizard() {
           <p className="text-xs text-muted-foreground -mt-1">Internal view. The customer never sees costs or margin.</p>
 
           {/* Adjustable lines: qty and tier move the total and margin live. */}
+          {Object.keys(selection).length > 0 && (
           <div className="bg-white rounded-xl border divide-y" style={inputStyle}>
             {Object.entries(selection).map(([key, sel]) => {
               const row = pbByKey.get(key);
@@ -891,50 +936,70 @@ export default function OsEstimateWizard() {
               );
             })}
           </div>
+          )}
 
-          {/* Spot-inspection lines that still need a human price. Internal
-              view: cost fields never reach the customer. */}
-          {state.customItems.some((ci) => ci.notes?.startsWith("spot:")) && (
-            <div className="bg-white rounded-xl border divide-y" style={inputStyle}>
-              {state.customItems.filter((ci) => ci.notes?.startsWith("spot:")).map((ci) => {
-                const unpriced = isUnpricedSpotItem(ci);
-                return (
-                  <div key={ci.id} className="px-4 py-2.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm flex-1 min-w-0" style={{ color: "var(--hp-ink)" }}>
-                        {ci.description}
+          {/* From the inspection: one editable line per finding. Edit the
+              wording, set qty and cost, delete, or add more. Cost fields are
+              internal and never reach the customer. */}
+          {isSpotEstimate && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h2 className="hp-eyebrow text-xs" style={{ color: "var(--hp-gold-deep)" }}>
+                  From the inspection
+                </h2>
+                <button type="button" onClick={addSpotLine} className="text-xs font-semibold underline" style={{ color: "var(--hp-ink)" }}>
+                  + Add a line
+                </button>
+              </div>
+              <div className="bg-white rounded-xl border divide-y" style={inputStyle}>
+                {spotItems.map((ci) => {
+                  const unpriced = isUnpricedSpotItem(ci);
+                  return (
+                    <div key={ci.id} className="px-4 py-2.5 space-y-1.5">
+                      <div className="flex items-start gap-2">
+                        <input
+                          className="text-sm flex-1 min-w-0 px-2 py-1 rounded-lg border bg-white"
+                          style={inputStyle}
+                          value={ci.description}
+                          onChange={(e) => updateCustomItem(ci.id, { description: e.target.value })}
+                        />
+                        <button type="button" aria-label="Remove line" onClick={() => removeCustomItem(ci.id)} className="shrink-0 mt-1.5">
+                          <span className="text-xs text-muted-foreground underline">Remove</span>
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs text-muted-foreground">Qty</label>
+                        <input
+                          className="w-16 text-sm px-2 py-1 rounded-lg border text-right" style={inputStyle}
+                          inputMode="decimal" value={ci.qty}
+                          onChange={(e) => updateCustomItem(ci.id, { qty: parseFloat(e.target.value) || 0 })}
+                        />
+                        <label className="text-xs text-muted-foreground ml-2">Cost per unit</label>
+                        <input
+                          className="w-24 text-sm px-2 py-1 rounded-lg border text-right" style={inputStyle}
+                          inputMode="decimal" value={ci.laborRate}
+                          onChange={(e) => updateCustomItem(ci.id, { laborRate: parseFloat(e.target.value) || 0 })}
+                        />
                         {unpriced && (
-                          <span className="ml-2 text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: "#fef2f2", color: "#b91c1c" }}>
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: "#fef2f2", color: "#b91c1c" }}>
                             Needs pricing
                           </span>
                         )}
-                      </span>
-                      <button type="button" aria-label="Remove line" onClick={() => removeCustomItem(ci.id)} className="shrink-0">
-                        <span className="text-xs text-muted-foreground underline">Remove</span>
-                      </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 mt-1.5">
-                      <label className="text-xs text-muted-foreground">Qty</label>
-                      <input
-                        className="w-16 text-sm px-2 py-1 rounded-lg border text-right" style={inputStyle}
-                        inputMode="decimal" value={ci.qty}
-                        onChange={(e) => updateCustomItem(ci.id, { qty: parseFloat(e.target.value) || 0 })}
-                      />
-                      <label className="text-xs text-muted-foreground ml-2">Cost per unit</label>
-                      <input
-                        className="w-24 text-sm px-2 py-1 rounded-lg border text-right" style={inputStyle}
-                        inputMode="decimal" value={ci.laborRate}
-                        onChange={(e) => updateCustomItem(ci.id, { laborRate: parseFloat(e.target.value) || 0 })}
-                      />
-                    </div>
+                  );
+                })}
+                {spotItems.length === 0 && (
+                  <div className="px-4 py-3 text-xs text-muted-foreground">
+                    No line items yet. Add one, or go back and pick the work.
                   </div>
-                );
-              })}
+                )}
+              </div>
             </div>
           )}
 
           <div className="bg-white rounded-xl border divide-y" style={inputStyle}>
-            {portalPhases.map((p) => (
+            {priceCheckPhases.map((p) => (
               <div key={p.phaseName} className="px-4 py-3 flex items-center justify-between">
                 <span className="text-sm" style={{ color: "var(--hp-ink)" }}>{p.phaseName}</span>
                 <span className="text-sm font-semibold" style={{ color: "var(--hp-ink)" }}>{fmt(p.phaseTotal)}</span>

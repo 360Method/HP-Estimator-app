@@ -1,12 +1,14 @@
 /**
  * client/src/lib/spotPrefill.ts
  *
- * Turns a spot-inspection seed (Opportunity.spotFindings) into wizard
- * state: findings that confidently match a price-book row become normal
- * selections; everything else becomes a zero-cost custom line flagged
- * "needs pricing" so the price check is where the consultant sets the
- * number. Matching is deliberately conservative: a wrong auto-price is
- * worse than a flagged line.
+ * Turns a spot-inspection seed (Opportunity.spotFindings) into a set of
+ * pre-filled, editable estimate line items: ONE line per finding, all
+ * visible together on the price check. A finding that confidently matches
+ * a price-book row comes in priced from that row; everything else comes in
+ * zero-cost and flagged "needs pricing" so the consultant sets the number.
+ * Either way the consultant can edit, reprice, or delete each line, and add
+ * more. Matching stays conservative: a wrong auto-price is worse than a
+ * line the consultant prices by hand.
  */
 import type { SpotFindingSeed } from "@/lib/types";
 
@@ -14,14 +16,25 @@ export type SpotSeedPbRow = {
   itemKey: string;
   name: string;
   category: string;
+  unitType: string;
+  laborMode: "hr" | "flat";
+  laborRate: string;
+  hrsPerUnit: string;
+  flatRatePerUnit: string;
+  hasTiers: boolean;
+  tiersJson: string | null;
   defaultQty: string;
 };
 
-export type SpotSeedResult = {
-  /** Wizard selection entries for confidently matched price-book rows. */
-  selection: Record<string, { qty: number; tier: "good" }>;
-  /** Custom-item specs for everything that needs a human price. */
-  customs: Array<{ description: string; notes: string }>;
+/** One pre-filled estimate line, ready to hand to addCustomItem. */
+export type SpotSeedCustom = {
+  description: string;
+  notes: string;
+  unitType: string;
+  qty: number;
+  matCostPerUnit: number;
+  laborHrsPerUnit: number;
+  laborRate: number;
 };
 
 const STOPWORDS = new Set([
@@ -53,31 +66,49 @@ function matchPriceBookRow(finding: SpotFindingSeed, rows: SpotSeedPbRow[]): Spo
   return null;
 }
 
-export function seedSelectionFromSpotFindings(
+/**
+ * Build one editable line per finding. The whole set lands on the price
+ * check so the consultant sees everything they picked, in one place.
+ */
+export function seedCustomsFromSpotFindings(
   findings: SpotFindingSeed[],
   pbRows: SpotSeedPbRow[],
   spotInspectionId: string,
-): SpotSeedResult {
-  const selection: SpotSeedResult["selection"] = {};
-  const customs: SpotSeedResult["customs"] = [];
-  findings.forEach((finding, idx) => {
+): SpotSeedCustom[] {
+  return findings.map((finding, idx) => {
+    const description = (finding.recommended_approach || finding.finding || finding.category).slice(0, 300);
     const row = matchPriceBookRow(finding, pbRows);
-    if (row && !selection[row.itemKey]) {
-      selection[row.itemKey] = { qty: parseFloat(row.defaultQty) || 1, tier: "good" };
-      return;
+    if (row) {
+      let matCost = 0;
+      if (row.hasTiers && row.tiersJson) {
+        try { matCost = Number(JSON.parse(row.tiersJson)?.good?.rate ?? 0); } catch { /* none */ }
+      }
+      const laborHrsPerUnit = row.laborMode === "hr" ? parseFloat(row.hrsPerUnit) || 0 : 1;
+      const laborRate = row.laborMode === "hr" ? parseFloat(row.laborRate) || 0 : parseFloat(row.flatRatePerUnit) || 0;
+      const priced = matCost > 0 || laborRate > 0;
+      return {
+        description,
+        notes: `spot:${spotInspectionId}:${idx}${priced ? "" : " needs-pricing"}`,
+        unitType: row.unitType || "unit",
+        qty: parseFloat(row.defaultQty) || 1,
+        matCostPerUnit: matCost,
+        laborHrsPerUnit,
+        laborRate,
+      };
     }
-    customs.push({
-      description: (finding.recommended_approach || finding.finding).slice(0, 300),
+    return {
+      description,
       notes: `spot:${spotInspectionId}:${idx} needs-pricing`,
-    });
+      unitType: "unit",
+      qty: 1,
+      matCostPerUnit: 0,
+      laborHrsPerUnit: 1,
+      laborRate: 0,
+    };
   });
-  return { selection, customs };
 }
 
-/** True when a custom item came from a spot seed and still has no price. */
+/** True when a spot-seeded line still has no price (blocks send, shows the badge). */
 export function isUnpricedSpotItem(item: { notes?: string; matCostPerUnit: number; laborRate: number }): boolean {
-  return !!item.notes?.startsWith("spot:") &&
-    item.notes.includes("needs-pricing") &&
-    item.matCostPerUnit <= 0 &&
-    item.laborRate <= 0;
+  return !!item.notes?.startsWith("spot:") && item.matCostPerUnit <= 0 && item.laborRate <= 0;
 }
