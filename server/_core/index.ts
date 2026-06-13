@@ -335,7 +335,10 @@ async function startServer() {
       directives: {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'", "'unsafe-inline'", "https://maps.googleapis.com", "https://js.stripe.com", "https://www.googletagmanager.com", "https://*.twiliocdn.com"],
-        frameSrc: ["https://js.stripe.com", "https://hooks.stripe.com"],
+        // Stripe checkout frames + the document stores that serve roadmap /
+        // inspection PDFs embedded in the close flow and portal (Cloudinary
+        // is current storage, CloudFront serves legacy report URLs).
+        frameSrc: ["https://js.stripe.com", "https://hooks.stripe.com", "https://res.cloudinary.com", "https://d2xsxph8kpxj0f.cloudfront.net"],
         connectSrc: ["'self'", "https://api.stripe.com", "https://js.stripe.com", "https://maps.googleapis.com", "https://fonts.googleapis.com", "https://fonts.gstatic.com", "https://d2xsxph8kpxj0f.cloudfront.net", "https://www.google-analytics.com", "https://analytics.google.com", "https://region1.google-analytics.com", ...twilioBrowserSources],
         imgSrc: ["'self'", "data:", "blob:", "https:", "http:"],
         mediaSrc: ["'self'", "data:", "blob:", "https://*.twilio.com", "https://*.twiliocdn.com"],
