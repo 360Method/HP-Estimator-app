@@ -208,6 +208,29 @@ export const closeFlowRouter = router({
         }
       }
 
+      // The job created when the deposit landed (customer-safe: id, stage,
+      // scheduled date only). DoneStep reads this to tell the truth about
+      // where the work stands instead of promising automation that may not
+      // have run.
+      let jobOpportunity: { id: string; stage: string; scheduledDate: string | null } | null = null;
+      if (estimate?.hpOpportunityId) {
+        const [job] = await db
+          .select({
+            id: opportunities.id,
+            stage: opportunities.stage,
+            scheduledDate: opportunities.scheduledDate,
+          })
+          .from(opportunities)
+          .where(and(
+            eq(opportunities.sourceEstimateId, estimate.hpOpportunityId),
+            eq(opportunities.area, "job"),
+          ))
+          .limit(1);
+        if (job) {
+          jobOpportunity = { id: job.id, stage: job.stage, scheduledDate: job.scheduledDate ?? null };
+        }
+      }
+
       // Internal estimate-area opportunities (customer-safe fields only):
       // pre-flight lists these when nothing is synced for signing yet, so the
       // consultant can jump straight to the builder and sync quietly.
@@ -252,6 +275,7 @@ export const closeFlowRouter = router({
         roadmaps,
         estimate,
         depositInvoice,
+        jobOpportunity,
         internalEstimates,
         readiness: {
           hasRoadmap: roadmaps.length > 0,
@@ -467,6 +491,20 @@ export const closeFlowRouter = router({
         await reflectPortalInvoicePaymentToInternal(inv, input.amountCents, reference);
       } catch (syncErr) {
         console.warn("[closeFlow.recordDepositCheckPayment] internal invoice reflection failed:", syncErr);
+      }
+
+      // The same completion chain card payments get: one receipt email
+      // (receiptSentAt-gated), and for a deposit the Job + scheduling task.
+      try {
+        const { onInvoicePaid } = await import("../lib/payments/depositPaid");
+        await onInvoicePaid({
+          invoiceId: input.invoiceId,
+          amountCents: input.amountCents,
+          method: "check",
+          reference,
+        });
+      } catch (completionErr) {
+        console.error("[closeFlow.recordDepositCheckPayment] invoice completion failed:", completionErr);
       }
 
       const witnessName = ctx.user.name || ctx.user.email || `Staff user ${ctx.user.id}`;

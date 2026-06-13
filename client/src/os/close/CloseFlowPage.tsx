@@ -511,16 +511,18 @@ function SignStep({
 // ─── Done ────────────────────────────────────────────────────────────────────
 
 function DoneStep({ ctx, customerId, onExit }: { ctx: CloseContext; customerId: string; onExit: () => void }) {
-  // Schedule generation runs automatically on Won; poll the canonical
-  // customer context until the created job and its dates land.
-  const { data: full } = trpc.customers.getFullContext.useQuery(
-    { id: customerId },
+  // The deposit webhook creates the job server-side moments after payment;
+  // poll the close context briefly so the job and its dates land while the
+  // customer is still looking at this screen. Every line below states only
+  // what has actually happened.
+  const { data: fresh } = trpc.closeFlow.getContext.useQuery(
+    { customerId },
     { refetchInterval: 4000 },
   );
-  const opp = ctx.estimate?.hpOpportunityId
-    ? (full?.opportunities as any[] | undefined)?.find((o) => o.id === ctx.estimate!.hpOpportunityId) ?? null
-    : null;
-  const scheduled = opp?.scheduledDate ? fmtDate(opp.scheduledDate) : null;
+  const live = fresh ?? ctx;
+  const job = (live as { jobOpportunity?: { id: string; stage: string; scheduledDate: string | null } | null }).jobOpportunity ?? null;
+  const depositPaid = live.readiness.depositInvoiceStatus === "paid";
+  const scheduled = job?.scheduledDate ? fmtDate(job.scheduledDate) : null;
 
   return (
     <StepShell eyebrow="All set" title="What happens next">
@@ -530,9 +532,13 @@ function DoneStep({ ctx, customerId, onExit }: { ctx: CloseContext; customerId: 
             <div className="flex items-start gap-3">
               <CheckCircle2 className="w-5 h-5 mt-0.5 shrink-0 text-emerald-600" />
               <div>
-                <p className="text-sm font-semibold">Your project is locked in</p>
+                <p className="text-sm font-semibold">
+                  {depositPaid ? "Deposit received" : "Your project is locked in"}
+                </p>
                 <p className="text-xs text-muted-foreground">
-                  {ctx.estimate?.title ?? "The approved work"} is moving to scheduling.
+                  {depositPaid
+                    ? "A receipt is in your inbox."
+                    : `${ctx.estimate?.title ?? "The approved work"} is signed and saved in your portal.`}
                 </p>
               </div>
             </div>
@@ -543,9 +549,7 @@ function DoneStep({ ctx, customerId, onExit }: { ctx: CloseContext; customerId: 
                 <p className="text-xs text-muted-foreground">
                   {scheduled
                     ? `Work is on the calendar for ${scheduled}.`
-                    : opp
-                      ? "The job has been created; dates land on your calendar shortly."
-                      : "The job and schedule are being generated now."}
+                    : "We will call you to schedule the work."}
                 </p>
               </div>
             </div>

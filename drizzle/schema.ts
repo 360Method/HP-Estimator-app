@@ -354,6 +354,8 @@ export const portalInvoices = pgTable("portalInvoices", {
   paymentMethod: varchar("paymentMethod", { length: 20 }),
   /** Check number or other offline payment reference */
   paymentRef: varchar("paymentRef", { length: 120 }),
+  /** When the payment receipt email went out — idempotency gate, one receipt ever */
+  receiptSentAt: timestamp("receiptSentAt"),
   paidAt: timestamp("paidAt"),
   /** JSON array of line items */
   lineItemsJson: text("lineItemsJson"),

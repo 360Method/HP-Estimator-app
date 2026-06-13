@@ -276,6 +276,9 @@ export async function ensureOsTables(): Promise<void> {
       sql`ALTER TABLE IF EXISTS "portalEstimates" ADD COLUMN IF NOT EXISTS "approvalAttestation" text`,
       sql`ALTER TABLE IF EXISTS "portalInvoices" ADD COLUMN IF NOT EXISTS "paymentMethod" varchar(20)`,
       sql`ALTER TABLE IF EXISTS "portalInvoices" ADD COLUMN IF NOT EXISTS "paymentRef" varchar(120)`,
+      // One receipt per invoice across every payment path (card webhook
+      // retries, check recording) — the single idempotency gate.
+      sql`ALTER TABLE IF EXISTS "portalInvoices" ADD COLUMN IF NOT EXISTS "receiptSentAt" timestamp`,
     ]) {
       await db.execute(ddl);
     }
