@@ -32,6 +32,7 @@ import { getTaxRateForZip } from "@/lib/taxRates";
 import { computeMarginAudit } from "@shared/marginFloor";
 import { buildEstimateSnapshotForDb } from "@/lib/estimateSnapshot";
 import { isUnpricedSpotItem, seedCustomsFromSpotFindings } from "@/lib/spotPrefill";
+import { CustomItemRow } from "@/components/sections/CustomItemRow";
 import { buildPortalPhases, buildSowBullets, type ActivePhaseData } from "@/lib/sow";
 import type { UnitType } from "@/lib/types";
 import SendEstimateDialog from "@/components/SendEstimateDialog";
@@ -94,7 +95,7 @@ export default function OsEstimateWizard() {
   const [, navigate] = useLocation();
   const {
     state, addOpportunity, addCustomer, setActiveCustomer, setActiveOpportunity,
-    updateItem, addCustomItem, updateCustomItem, removeCustomItem, setJobInfo, setSection,
+    updateItem, addCustomItem, removeCustomItem, setJobInfo, setSection,
     setEstimateProposal, setEstimateAudit, updateOpportunity, setGlobal,
   } = useEstimator();
   useDbSync(true);
@@ -938,9 +939,10 @@ export default function OsEstimateWizard() {
           </div>
           )}
 
-          {/* From the inspection: one editable line per finding. Edit the
-              wording, set qty and cost, delete, or add more. Cost fields are
-              internal and never reach the customer. */}
+          {/* From the inspection: one line per finding, priced with the same
+              engine the full calculator uses (material + labor + gross-margin
+              → customer price). Edit wording, costs, margin; delete; add more.
+              A line with no cost yet is flagged and opens expanded. */}
           {isSpotEstimate && (
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -951,50 +953,21 @@ export default function OsEstimateWizard() {
                   + Add a line
                 </button>
               </div>
-              <div className="bg-white rounded-xl border divide-y" style={inputStyle}>
-                {spotItems.map((ci) => {
-                  const unpriced = isUnpricedSpotItem(ci);
-                  return (
-                    <div key={ci.id} className="px-4 py-2.5 space-y-1.5">
-                      <div className="flex items-start gap-2">
-                        <input
-                          className="text-sm flex-1 min-w-0 px-2 py-1 rounded-lg border bg-white"
-                          style={inputStyle}
-                          value={ci.description}
-                          onChange={(e) => updateCustomItem(ci.id, { description: e.target.value })}
-                        />
-                        <button type="button" aria-label="Remove line" onClick={() => removeCustomItem(ci.id)} className="shrink-0 mt-1.5">
-                          <span className="text-xs text-muted-foreground underline">Remove</span>
-                        </button>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <label className="text-xs text-muted-foreground">Qty</label>
-                        <input
-                          className="w-16 text-sm px-2 py-1 rounded-lg border text-right" style={inputStyle}
-                          inputMode="decimal" value={ci.qty}
-                          onChange={(e) => updateCustomItem(ci.id, { qty: parseFloat(e.target.value) || 0 })}
-                        />
-                        <label className="text-xs text-muted-foreground ml-2">Cost per unit</label>
-                        <input
-                          className="w-24 text-sm px-2 py-1 rounded-lg border text-right" style={inputStyle}
-                          inputMode="decimal" value={ci.laborRate}
-                          onChange={(e) => updateCustomItem(ci.id, { laborRate: parseFloat(e.target.value) || 0 })}
-                        />
-                        {unpriced && (
-                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: "#fef2f2", color: "#b91c1c" }}>
-                            Needs pricing
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-                {spotItems.length === 0 && (
-                  <div className="px-4 py-3 text-xs text-muted-foreground">
-                    No line items yet. Add one, or go back and pick the work.
-                  </div>
-                )}
-              </div>
+              {spotItems.map((ci) => (
+                <div key={ci.id}>
+                  <CustomItemRow ci={ci} lockNotes defaultExpanded={isUnpricedSpotItem(ci)} />
+                  {isUnpricedSpotItem(ci) && (
+                    <p className="text-[11px] font-semibold -mt-2 mb-3 ml-1" style={{ color: "#b91c1c" }}>
+                      Needs a price: open this line and set material and labor, or a cost per unit.
+                    </p>
+                  )}
+                </div>
+              ))}
+              {spotItems.length === 0 && (
+                <div className="bg-white rounded-xl border px-4 py-3 text-xs text-muted-foreground" style={inputStyle}>
+                  No line items yet. Add one, or go back and pick the work.
+                </div>
+              )}
             </div>
           )}
 
