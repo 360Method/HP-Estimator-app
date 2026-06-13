@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import PortalLayout from "@/components/PortalLayout";
-import { Loader2, FolderOpen, FileText, DollarSign, ChevronRight } from "lucide-react";
+import PortalPdfViewer from "@/pages/portal/PortalPdfViewer";
+import { Loader2, FolderOpen, FileText, DollarSign, ChevronRight, Map } from "lucide-react";
 
 function fmtMoney(cents: number) {
   return `$${(cents / 100).toFixed(2)}`;
@@ -35,9 +37,12 @@ function invoiceBadge(status: string) {
 export default function PortalDocuments() {
   const [, navigate] = useLocation();
   const { data, isLoading } = trpc.portal.getDocuments.useQuery();
+  const { data: sharedDocs } = trpc.portal.getDocumentsPortal.useQuery();
+  const [openDoc, setOpenDoc] = useState<{ id: number; name: string } | null>(null);
   const estimates = data?.estimates ?? [];
   const invoices = data?.invoices ?? [];
-  const totalDocs = estimates.length + invoices.length;
+  const reports = sharedDocs ?? [];
+  const totalDocs = estimates.length + invoices.length + reports.length;
   const pendingCount =
     estimates.filter((e) => e.status === "sent" || e.status === "viewed").length +
     invoices.filter((i) => i.status === "due" || i.status === "overdue").length;
@@ -63,10 +68,34 @@ export default function PortalDocuments() {
           <div className="flex flex-col items-center justify-center py-20 text-gray-400">
             <FolderOpen className="w-16 h-16 mb-4 text-gray-300" />
             <p className="text-base">No documents yet</p>
-            <p className="text-sm mt-1">Estimates and invoices sent to you will appear here.</p>
+            <p className="text-sm mt-1">Estimates, invoices, and reports sent to you will appear here.</p>
           </div>
         ) : (
           <div className="space-y-8">
+            {/* Reports and roadmaps shared by HP */}
+            {reports.length > 0 && (
+              <section>
+                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <Map className="w-4 h-4" /> Reports and roadmaps
+                </h2>
+                <div className="border border-gray-200 rounded-md overflow-hidden">
+                  {reports.map((doc) => (
+                    <div
+                      key={doc.id}
+                      className="flex items-center justify-between gap-3 px-4 py-3 border-b border-gray-100 last:border-0 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer"
+                      onClick={() => setOpenDoc({ id: doc.id, name: doc.name })}
+                    >
+                      <div className="min-w-0">
+                        <p className="font-medium text-blue-600 truncate">{doc.name}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">Delivered {fmtDate(doc.uploadedAt)}</p>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
             {/* Estimates */}
             {estimates.length > 0 && (
               <section>
@@ -135,6 +164,10 @@ export default function PortalDocuments() {
               </section>
             )}
           </div>
+        )}
+
+        {openDoc && (
+          <PortalPdfViewer documentId={openDoc.id} name={openDoc.name} onClose={() => setOpenDoc(null)} />
         )}
       </div>
     </PortalLayout>

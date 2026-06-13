@@ -15,6 +15,7 @@ import { getDb, getCustomerById } from "../db";
 import { osRemodelQuotePresets, threeSixtyMemberships } from "../../drizzle/schema";
 import { computeQuickQuote, presetFromRow } from "../../shared/remodelQuickQuote";
 import { TIER_DEFINITIONS, type MemberTier } from "../../shared/threeSixtyTiers";
+import { buildDeliverableDisplayName } from "../../shared/deliverableName";
 import { renderConsultationPdf } from "../lib/quickQuote/consultationPdf";
 import { storagePut } from "../storage";
 import { upsertPortalCustomer, addPortalDocument } from "../portalDb";
@@ -116,7 +117,11 @@ export const quickQuoteRouter = router({
       }
       await addPortalDocument({
         portalCustomerId: portalCustomer.id,
-        name: `Remodel options: ${preset.label}, ${new Date().toLocaleDateString("en-US")}`,
+        name: buildDeliverableDisplayName({
+          kind: "remodel_options",
+          lastName: customer.lastName,
+          street: customer.street,
+        }),
         url: stored.url,
         fileKey: stored.key,
         mimeType: "application/pdf",

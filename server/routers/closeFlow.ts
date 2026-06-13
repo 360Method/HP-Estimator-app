@@ -321,11 +321,16 @@ export const closeFlowRouter = router({
       let result = await tryFetch(url);
       // Cloudinary blocks public PDF delivery on some accounts; a signed
       // URL is the sanctioned way through for files we stored ourselves.
+      // Raw assets may live under two public_ids (with and without the
+      // extension), so try each candidate.
       if (!result.ok && signedFallbackKey) {
         try {
           const { storageGet } = await import("../storage");
-          const signed = await storageGet(signedFallbackKey);
-          result = await tryFetch(signed.url);
+          const signed = await storageGet(signedFallbackKey, "raw");
+          for (const candidate of signed.candidateUrls) {
+            result = await tryFetch(candidate);
+            if (result.ok) break;
+          }
         } catch { /* fall through to the original error */ }
       }
       if (!result.ok) {

@@ -28,6 +28,7 @@ import {
 } from "../../../drizzle/schema.priorityTranslation";
 import { portalCustomers, threeSixtyMemberships } from "../../../drizzle/schema";
 import { TIER_DEFINITIONS, type MemberTier } from "../../../shared/threeSixtyTiers";
+import { buildDeliverableDisplayName } from "../../../shared/deliverableName";
 import { mergeFindings, newTranslationId } from "../priorityTranslation/processor";
 import {
   findOrCreatePortalAccount,
@@ -269,7 +270,11 @@ export async function approveAndDeliver(id: string, opts: { approvedBy: string }
       if (portalCustomer) {
         await addPortalDocument({
           portalCustomerId: portalCustomer.id,
-          name: `Spot inspection mini roadmap, ${new Date().toLocaleDateString("en-US")}`,
+          name: buildDeliverableDisplayName({
+            kind: "spot_roadmap",
+            lastName: account.lastName,
+            street: propertyAddress,
+          }),
           url: stored.url,
           fileKey: stored.key,
           mimeType: "application/pdf",

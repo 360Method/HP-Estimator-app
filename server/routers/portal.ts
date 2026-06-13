@@ -2078,6 +2078,64 @@ export const portalRouter = router({
     return getPortalDocumentsByCustomer(ctx.portalCustomer.id);
   }),
 
+  /**
+   * Customer-facing: document bytes for the in-portal viewer. The document
+   * host can't be trusted inside an iframe (CSP, Cloudinary's PDF-delivery
+   * block, legacy rows stored under an extensionless public_id), so the
+   * server fetches the file and the client renders it from a blob URL.
+   */
+  getDocumentFile: portalProcedure
+    .input(z.object({ documentId: z.number().int() }))
+    .query(async ({ ctx, input }) => {
+      const { getDb } = await import('../db');
+      const { portalDocuments } = await import('../../drizzle/schema');
+      const { and, eq } = await import('drizzle-orm');
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database unavailable' });
+      const [row] = await db
+        .select()
+        .from(portalDocuments)
+        .where(
+          and(
+            eq(portalDocuments.id, input.documentId),
+            eq(portalDocuments.portalCustomerId, ctx.portalCustomer.id)
+          )
+        )
+        .limit(1);
+      if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Document not found' });
+
+      const tryFetch = async (u: string) => {
+        const res = await fetch(u);
+        if (!res.ok) return { ok: false as const, status: res.status };
+        return { ok: true as const, buf: Buffer.from(await res.arrayBuffer()) };
+      };
+
+      let result = await tryFetch(row.url);
+      // Stored URL refused (Cloudinary PDF-delivery block, or a legacy row
+      // whose public_id lost its extension): sign and try each candidate.
+      if (!result.ok && row.fileKey) {
+        try {
+          const { storageGet } = await import('../storage');
+          const signed = await storageGet(row.fileKey);
+          for (const candidate of signed.candidateUrls) {
+            result = await tryFetch(candidate);
+            if (result.ok) break;
+          }
+        } catch { /* fall through to the original error */ }
+      }
+      if (!result.ok) {
+        throw new TRPCError({
+          code: 'BAD_GATEWAY',
+          message: `The document host refused to serve this file (HTTP ${result.status}).`,
+        });
+      }
+      return {
+        base64: result.buf.toString('base64'),
+        mimeType: row.mimeType || 'application/pdf',
+        name: row.name,
+      };
+    }),
+
   // ── 360° INSPECTION REPORTS ────────────────────────────────────────────────
   /** List all 360° inspection reports sent to this customer */
   getReports: portalProcedure.query(async ({ ctx }) => {
