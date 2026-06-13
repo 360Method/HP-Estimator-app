@@ -20,7 +20,7 @@ import {
   type SpotInspectionPhoto,
   type SpotCaptureLine,
 } from "../../drizzle/schema.priorityTranslation";
-import { normalizeToSystem } from "../../shared/homeSystems";
+import { homeSystemLabel, normalizeToSystem } from "../../shared/homeSystems";
 import { properties } from "../../drizzle/schema";
 import {
   createSpotInspection,
@@ -283,7 +283,12 @@ export const spotInspectionRouter = router({
       }
     }),
 
-  /** Turn interest into a real scope: mint the opportunity for the wizard. */
+  /**
+   * Turn interest into a real scope: mint the opportunity for the wizard.
+   * The structured seed (spotFindingsJson) carries everything downstream —
+   * areas, ranges, interpretation, photos — so the wizard preloads instead
+   * of restarting from scratch. Notes keep the flat text for reference.
+   */
   createOpportunityFromFindings: protectedProcedure
     .input(z.object({
       id: z.string().min(1),
@@ -291,13 +296,93 @@ export const spotInspectionRouter = router({
       findingIndexes: z.array(z.number().int().min(0)).min(1),
     }))
     .mutation(async ({ input }) => {
-      const { row } = await loadSpotRow(input.id);
+      const { d, row } = await loadSpotRow(input.id);
       if (!row.hpCustomerId) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "No CRM customer linked" });
       const draft = row.claudeResponse as ClaudePriorityTranslationResponse | null;
-      const findings = (draft?.findings ?? []).filter((_, i) => input.findingIndexes.includes(i));
+      const allFindings = draft?.findings ?? [];
+      const picked = input.findingIndexes
+        .filter((i) => i >= 0 && i < allFindings.length)
+        .sort((a, b) => a - b);
+      const findings = picked.map((i) => allFindings[i]);
       if (findings.length === 0) throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Pick at least one finding" });
       const customer = await getCustomerById(row.hpCustomerId).catch(() => null);
-      const title = `Spot inspection work for ${customer?.displayName ?? "Client"}`;
+
+      const [prop] = await d
+        .select()
+        .from(portalProperties)
+        .where(eq(portalProperties.id, row.propertyId))
+        .limit(1);
+      const street = prop?.street?.trim() || customer?.street?.trim() || "";
+
+      // Photos per finding: a line's photos belong to its finding (the
+      // prompt keeps line order); explicit findingIndex is the fallback.
+      const photos = (row.capturedPhotosJson ?? []) as SpotInspectionPhoto[];
+      const lineIndexById = new Map<string, number>(
+        ((row.captureLinesJson ?? []) as SpotCaptureLine[]).map((line, i) => [line.id, i]),
+      );
+      const photoUrlsByFinding = new Map<number, string[]>();
+      for (const photo of photos) {
+        let idx: number | null = null;
+        if (photo.lineId != null && lineIndexById.has(photo.lineId)) idx = lineIndexById.get(photo.lineId)!;
+        else if (photo.findingIndex != null) idx = photo.findingIndex;
+        if (idx == null) continue;
+        photoUrlsByFinding.set(idx, [...(photoUrlsByFinding.get(idx) ?? []), photo.url]);
+      }
+
+      // Title from the areas involved: "Roof and gutters + Plumbing - 1234 Main St".
+      const areaLabels = [...new Set(
+        findings.map((f) => homeSystemLabel(normalizeToSystem(f.area_key ?? f.category))),
+      )].slice(0, 3);
+      const title = [areaLabels.join(" + ") || "Spot inspection work", street].filter(Boolean).join(" - ");
+
+      const seed = {
+        spotInspectionId: row.id,
+        crmPropertyId: row.crmPropertyId ?? null,
+        findings: picked.map((i) => {
+          const f = allFindings[i];
+          return {
+            areaKey: normalizeToSystem(f.area_key ?? f.category),
+            category: f.category,
+            finding: f.finding,
+            interpretation: f.interpretation,
+            recommended_approach: f.recommended_approach,
+            urgency: f.urgency,
+            low: f.investment_range_low_usd,
+            high: f.investment_range_high_usd,
+            photoUrls: photoUrlsByFinding.get(i) ?? [],
+          };
+        }),
+      };
+
+      const attachments = photos
+        .filter((p) => {
+          const idx = p.lineId != null && lineIndexById.has(p.lineId)
+            ? lineIndexById.get(p.lineId)!
+            : p.findingIndex ?? null;
+          return idx != null && picked.includes(idx);
+        })
+        .map((p) => ({
+          id: p.fileKey,
+          name: p.caption?.trim() || p.fileKey.split("/").pop() || "Spot inspection photo",
+          url: p.url,
+          mimeType: "image/jpeg",
+          size: 0,
+          uploadedAt: new Date().toISOString(),
+        }));
+
+      const clientSnapshot = {
+        client: customer?.displayName ?? "",
+        companyName: customer?.company ?? "",
+        phone: customer?.mobilePhone ?? "",
+        email: customer?.email ?? "",
+        address: street,
+        city: prop?.city ?? customer?.city ?? "",
+        state: prop?.state ?? customer?.state ?? "WA",
+        zip: prop?.zip ?? customer?.zip ?? "",
+        jobType: "",
+        scope: title,
+      };
+
       const notes = [
         `From spot inspection ${row.id} (${new Date(row.createdAt).toLocaleDateString("en-US")}).`,
         ``,
@@ -306,6 +391,7 @@ export const spotInspectionRouter = router({
             `${f.urgency}: ${f.category}. ${f.finding} Planning range $${f.investment_range_low_usd.toLocaleString()} to $${f.investment_range_high_usd.toLocaleString()}.`,
         ),
       ].join("\n");
+
       await createOpportunity({
         id: input.opportunityId,
         customerId: row.hpCustomerId,
@@ -314,6 +400,11 @@ export const spotInspectionRouter = router({
         title,
         notes,
         value: 0,
+        propertyId: row.crmPropertyId ?? undefined,
+        propertyIdSource: row.crmPropertyId ? "manual" : undefined,
+        clientSnapshot: JSON.stringify(clientSnapshot),
+        attachments: attachments.length > 0 ? JSON.stringify(attachments) : undefined,
+        spotFindingsJson: JSON.stringify(seed),
       });
       return { opportunityId: input.opportunityId, title };
     }),

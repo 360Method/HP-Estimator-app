@@ -31,6 +31,7 @@ import { resolveTax } from "@/lib/tax";
 import { getTaxRateForZip } from "@/lib/taxRates";
 import { computeMarginAudit } from "@shared/marginFloor";
 import { buildEstimateSnapshotForDb } from "@/lib/estimateSnapshot";
+import { isUnpricedSpotItem, seedSelectionFromSpotFindings } from "@/lib/spotPrefill";
 import { buildPortalPhases, buildSowBullets, type ActivePhaseData } from "@/lib/sow";
 import type { UnitType } from "@/lib/types";
 import SendEstimateDialog from "@/components/SendEstimateDialog";
@@ -93,7 +94,7 @@ export default function OsEstimateWizard() {
   const [, navigate] = useLocation();
   const {
     state, addOpportunity, addCustomer, setActiveCustomer, setActiveOpportunity,
-    updateItem, addCustomItem, removeCustomItem, setJobInfo, setSection,
+    updateItem, addCustomItem, updateCustomItem, removeCustomItem, setJobInfo, setSection,
     setEstimateProposal, setEstimateAudit, updateOpportunity, setGlobal,
   } = useEstimator();
   useDbSync(true);
@@ -251,6 +252,51 @@ export default function OsEstimateWizard() {
     setStep(Object.keys(sel).length > 0 ? 4 : 1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resumeOppId, state.activeOpportunityId, state.phases, state.customItems]);
+
+  // ── Spot-inspection seed: preload the wizard from the findings ──
+  // The adopted opportunity may carry spotFindings (structured transfer
+  // from createOpportunityFromFindings). Findings that confidently match a
+  // price-book row become selections; the rest become zero-cost custom
+  // lines flagged "needs pricing", priced on the price-check step.
+  const spotSeedApplied = useRef(false);
+  useEffect(() => {
+    if (spotSeedApplied.current || !oppId || state.activeOpportunityId !== oppId) return;
+    if (pbQuery.isLoading) return;
+    const opp = state.opportunities.find((o) => o.id === oppId);
+    const seed = opp?.spotFindings;
+    if (!seed?.findings?.length) {
+      spotSeedApplied.current = true;
+      return;
+    }
+    // Only seed a blank estimate: existing picks or spot customs mean the
+    // consultant (or an earlier visit to this page) already started.
+    const hasPicks =
+      Object.keys(selection).length > 0 ||
+      state.phases.some((p) => p.items.some((i) => i.enabled && i.qty > 0)) ||
+      state.customItems.some((ci) => ci.notes?.startsWith("spot:") || ci.notes?.startsWith("pricebook:"));
+    spotSeedApplied.current = true;
+    if (hasPicks) return;
+    const result = seedSelectionFromSpotFindings(seed.findings, pbRows, seed.spotInspectionId);
+    if (Object.keys(result.selection).length > 0) {
+      setSelection((s) => ({ ...result.selection, ...s }));
+    }
+    for (const custom of result.customs) {
+      addCustomItem({
+        phaseId: 0,
+        description: custom.description,
+        unitType: "unit" as UnitType,
+        qty: 1,
+        matCostPerUnit: 0,
+        laborHrsPerUnit: 1,
+        laborRate: 0,
+        notes: custom.notes,
+        markupPct: null,
+      });
+    }
+    if (!workType) setWorkType("maintenance");
+    toast.success("Findings carried over. Price the flagged lines on the price check.");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [oppId, state.activeOpportunityId, state.opportunities, pbQuery.isLoading, pbRows]);
 
   // ── Customer step ───────────────────────────────────────────
   const matches = useMemo(() => {
@@ -846,6 +892,47 @@ export default function OsEstimateWizard() {
             })}
           </div>
 
+          {/* Spot-inspection lines that still need a human price. Internal
+              view: cost fields never reach the customer. */}
+          {state.customItems.some((ci) => ci.notes?.startsWith("spot:")) && (
+            <div className="bg-white rounded-xl border divide-y" style={inputStyle}>
+              {state.customItems.filter((ci) => ci.notes?.startsWith("spot:")).map((ci) => {
+                const unpriced = isUnpricedSpotItem(ci);
+                return (
+                  <div key={ci.id} className="px-4 py-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm flex-1 min-w-0" style={{ color: "var(--hp-ink)" }}>
+                        {ci.description}
+                        {unpriced && (
+                          <span className="ml-2 text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ background: "#fef2f2", color: "#b91c1c" }}>
+                            Needs pricing
+                          </span>
+                        )}
+                      </span>
+                      <button type="button" aria-label="Remove line" onClick={() => removeCustomItem(ci.id)} className="shrink-0">
+                        <span className="text-xs text-muted-foreground underline">Remove</span>
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <label className="text-xs text-muted-foreground">Qty</label>
+                      <input
+                        className="w-16 text-sm px-2 py-1 rounded-lg border text-right" style={inputStyle}
+                        inputMode="decimal" value={ci.qty}
+                        onChange={(e) => updateCustomItem(ci.id, { qty: parseFloat(e.target.value) || 0 })}
+                      />
+                      <label className="text-xs text-muted-foreground ml-2">Cost per unit</label>
+                      <input
+                        className="w-24 text-sm px-2 py-1 rounded-lg border text-right" style={inputStyle}
+                        inputMode="decimal" value={ci.laborRate}
+                        onChange={(e) => updateCustomItem(ci.id, { laborRate: parseFloat(e.target.value) || 0 })}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           <div className="bg-white rounded-xl border divide-y" style={inputStyle}>
             {portalPhases.map((p) => (
               <div key={p.phaseName} className="px-4 py-3 flex items-center justify-between">
@@ -940,11 +1027,16 @@ export default function OsEstimateWizard() {
             )}
           </div>
 
+          {state.customItems.some(isUnpricedSpotItem) && (
+            <p className="text-xs font-semibold" style={{ color: "#b91c1c" }}>
+              Price the flagged spot-inspection lines before continuing.
+            </p>
+          )}
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => setStep(5)}
-              disabled={belowFloor && !floorOverridden}
+              disabled={(belowFloor && !floorOverridden) || state.customItems.some(isUnpricedSpotItem)}
               className={primaryBtn}
               style={{ background: "var(--hp-ink)" }}
             >

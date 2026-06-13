@@ -728,6 +728,13 @@ export const opportunities = pgTable("opportunities", {
   // Source tracking
   /** If created from an online request */
   onlineRequestId: integer("onlineRequestId"),
+  /**
+   * JSON spot-inspection seed ({spotInspectionId, crmPropertyId, findings})
+   * written by createOpportunityFromFindings. Its own column on purpose:
+   * estimateSnapshot is client-owned and flushed wholesale, so the seed
+   * would not survive there.
+   */
+  spotFindingsJson: text("spotFindingsJson"),
   /** Property this opportunity is linked to (null = not yet linked) */
   propertyId: varchar("propertyId", { length: 64 }),
   /** How propertyId was set: 'manual' | 'auto-migrated' | null */

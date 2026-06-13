@@ -233,6 +233,11 @@ export async function ensureOsTables(): Promise<void> {
     await db.execute(sql`
       ALTER TABLE IF EXISTS opportunities
       ADD COLUMN IF NOT EXISTS "commissionPaidAt" timestamp`);
+    // Structured spot-inspection seed for the estimate wizard (slice:
+    // spot findings transfer instead of a notes blob).
+    await db.execute(sql`
+      ALTER TABLE IF EXISTS opportunities
+      ADD COLUMN IF NOT EXISTS "spotFindingsJson" text`);
 
     // Spot inspection columns on priorityTranslations (Step 2 doctor-style
     // visit reuses the Roadmap Generator pipeline). Idempotent: prod drizzle

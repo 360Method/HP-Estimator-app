@@ -58,6 +58,9 @@ function dbOppToLocal(o: any): Opportunity {
     attachments: (() => { try { return JSON.parse(o.attachments ?? "null") ?? undefined; } catch { return undefined; } })(),
     jobActivity: (() => { try { return JSON.parse(o.jobActivity ?? "null") ?? undefined; } catch { return undefined; } })(),
     clientSnapshot: (() => { try { return JSON.parse(o.clientSnapshot ?? "null") ?? undefined; } catch { return undefined; } })(),
+    spotFindings: (() => { try { return JSON.parse(o.spotFindingsJson ?? "null") ?? undefined; } catch { return undefined; } })(),
+    propertyId: o.propertyId ?? undefined,
+    propertyIdSource: o.propertyIdSource ?? undefined,
   };
 }
 

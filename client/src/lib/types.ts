@@ -792,6 +792,26 @@ export interface EstimateSnapshot {
   approvedBy?: string | null;
 }
 
+/** One structured finding carried from a spot inspection into an estimate. */
+export interface SpotFindingSeed {
+  areaKey: string;
+  category: string;
+  finding: string;
+  interpretation?: string;
+  recommended_approach?: string;
+  urgency: 'NOW' | 'SOON' | 'WAIT';
+  low: number;
+  high: number;
+  photoUrls: string[];
+}
+
+/** The spot-inspection seed written by createOpportunityFromFindings. */
+export interface SpotFindingsSeed {
+  spotInspectionId: string;
+  crmPropertyId?: string | null;
+  findings: SpotFindingSeed[];
+}
+
 export interface Opportunity {
   id: string;
   area: PipelineArea;
@@ -847,6 +867,8 @@ export interface Opportunity {
   leadAttachments?: JobAttachment[];
   // If this lead was created from an online booking request, link to it
   onlineRequestId?: number;
+  // Structured spot-inspection seed (estimate wizard prefill)
+  spotFindings?: SpotFindingsSeed;
   // Property this opportunity is linked to
   propertyId?: string | null;
   propertyIdSource?: 'manual' | 'auto-migrated' | null;
