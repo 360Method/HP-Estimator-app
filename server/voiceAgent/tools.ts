@@ -21,6 +21,7 @@ import {
 import { onLeadCreated, type LeadSource } from "../leadRouting";
 import { isRoadmapZipServed, normalizeZip } from "../lib/priorityTranslation/serviceArea";
 import { sendSms, isTwilioConfigured } from "../twilio";
+import { sendEmail } from "../gmail";
 import { calendlyConfigured, getAvailableSlots, createSchedulingLink } from "./calendly";
 import { ENV } from "../_core/env";
 import type { NormalizedToolCall, NormalizedToolResult } from "./types";
@@ -213,11 +214,33 @@ const tools: Record<string, ToolFn> = {
     if (!link) {
       return "Couldn't create the booking link. Capture their preferred time and let them know the team will confirm.";
     }
+    const note = chosenTime ? ` for ${chosenTime}` : "";
+    let texted = false;
     if (phone && isTwilioConfigured()) {
-      const body = `Handy Pioneers: tap to confirm your assessment${chosenTime ? ` (${chosenTime})` : ""}: ${link}`;
-      await sendSms(phone, body).catch((e) => console.error("[voiceAgent] booking SMS failed:", e));
+      const body = `Handy Pioneers: tap to confirm your assessment${note}: ${link}`;
+      texted = await sendSms(phone, body).then(() => true).catch((e) => {
+        console.error("[voiceAgent] booking SMS failed:", e);
+        return false;
+      });
     }
-    return `Texted the booking link to ${phone || "the caller"}${chosenTime ? ` for ${chosenTime}` : ""}. Tell them to tap it to lock in the time, and that you have it noted.`;
+    let emailed = false;
+    if (email) {
+      emailed = await sendEmail({
+        to: email,
+        subject: "Confirm your Handy Pioneers visit",
+        body: `Tap to confirm your assessment${note}: ${link}`,
+        html: `<p>Tap to confirm your assessment${note}:</p><p><a href="${link}">${link}</a></p>`,
+        skipReplyToken: true,
+      }).then(() => true).catch((e) => {
+        console.error("[voiceAgent] booking email failed:", e);
+        return false;
+      });
+    }
+    if (!texted && !emailed) {
+      return "I have the link but couldn't send it yet. Confirm their email or number and let them know the team will get it to them.";
+    }
+    const how = texted && emailed ? "texted and emailed" : texted ? "texted" : "emailed";
+    return `I've ${how} ${name || "the caller"} the booking link${note}. Tell them to tap it to lock in the time, and that you have it noted.`;
   },
 
   /** Hand the live call to a person. Actual bridging is the platform's job. */
