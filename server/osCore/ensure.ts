@@ -313,6 +313,34 @@ export async function ensureOsTables(): Promise<void> {
         "updatedAt" timestamp DEFAULT now() NOT NULL
       )`);
 
+    // Material catalog for the field estimate's good/better/best/premium
+    // picker. Internal COST per unit by tier; margin applied by the engine.
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS os_materials (
+        id serial PRIMARY KEY,
+        "businessId" integer NOT NULL DEFAULT 1,
+        category varchar(120) NOT NULL,
+        name varchar(200) NOT NULL,
+        "unitType" varchar(20) NOT NULL DEFAULT 'unit',
+        supplier varchar(40) NOT NULL DEFAULT 'other',
+        "goodPrice" numeric(10,2) NOT NULL DEFAULT 0,
+        "goodLabel" varchar(160) NOT NULL DEFAULT '',
+        "betterPrice" numeric(10,2) NOT NULL DEFAULT 0,
+        "betterLabel" varchar(160) NOT NULL DEFAULT '',
+        "bestPrice" numeric(10,2) NOT NULL DEFAULT 0,
+        "bestLabel" varchar(160) NOT NULL DEFAULT '',
+        "premiumPrice" numeric(10,2) NOT NULL DEFAULT 0,
+        "premiumLabel" varchar(160) NOT NULL DEFAULT '',
+        notes text,
+        active boolean NOT NULL DEFAULT true,
+        "sortOrder" integer NOT NULL DEFAULT 0,
+        source text NOT NULL DEFAULT 'human',
+        "createdAt" timestamp DEFAULT now() NOT NULL,
+        "updatedAt" timestamp DEFAULT now() NOT NULL
+      )`);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS os_materials_category_idx ON os_materials (category, active)`);
+
     console.log("[boot] ensureOsTables OK");
   } catch (err) {
     console.warn("[boot] ensureOsTables failed (non-fatal):", err);

@@ -58,6 +58,7 @@ import { idsRouter } from "./routers/ids";
 import { scorecardRouter } from "./routers/scorecard";
 import { osRouter } from "./routers/os";
 import { priceBookRouter } from "./routers/priceBook";
+import { materialsRouter } from "./routers/materials";
 import { commissionsRouter } from "./routers/commissions";
 import { spotInspectionRouter } from "./routers/spotInspection";
 import { quickQuoteRouter } from "./routers/quickQuote";
@@ -130,6 +131,7 @@ export const appRouter = router({
   scorecard: scorecardRouter,
   os: osRouter,
   priceBook: priceBookRouter,
+  materials: materialsRouter,
   commissions: commissionsRouter,
   spotInspection: spotInspectionRouter,
   quickQuote: quickQuoteRouter,

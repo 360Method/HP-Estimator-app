@@ -13,7 +13,7 @@ import { Link, useLocation } from "wouter";
 import {
   Sun, MessageSquareText, Inbox, BookOpen, BookOpenCheck, GitBranch, Users, Wallet,
   CalendarDays, HardHat, HandCoins, Bot, MoreHorizontal, X, MessageCircle, ScrollText, Settings,
-  Compass,
+  Compass, Boxes,
 } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
@@ -48,6 +48,7 @@ const ROOM_NAV: NavItem[] = [
 const SYSTEM_NAV: NavItem[] = [
   { href: "/os/decisions", label: "Decisions", icon: ScrollText },
   { href: "/os/pricebook", label: "Price book", icon: BookOpenCheck },
+  { href: "/os/materials", label: "Materials", icon: Boxes },
   { href: "/os/commissions", label: "Commissions", icon: HandCoins },
   { href: "/admin/agents", label: "Agents", icon: Bot },
   { href: "/admin/scheduling", label: "Booking slots", icon: CalendarDays },

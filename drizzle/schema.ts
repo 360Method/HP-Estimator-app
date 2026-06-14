@@ -2757,6 +2757,38 @@ export const osRemodelQuotePresets = pgTable("os_remodel_quote_presets", {
 export type OsRemodelQuotePreset = typeof osRemodelQuotePresets.$inferSelect;
 export type InsertOsRemodelQuotePreset = typeof osRemodelQuotePresets.$inferInsert;
 
+// ─── os_materials ──────────────────────────────────────────────────────────
+// Material catalog for the field estimate's good/better/best/premium picker.
+// Every price is an internal COST per unit (what HP pays the supplier); the
+// estimate engine applies margin on top, so these never reach the customer.
+// Populated by staff (CFM / Home Depot price points); supplier-tagged.
+export const osMaterials = pgTable("os_materials", {
+  id: serial("id").primaryKey(),
+  businessId: integer("businessId").notNull().default(1),
+  category: varchar("category", { length: 120 }).notNull(),
+  name: varchar("name", { length: 200 }).notNull(),
+  unitType: varchar("unitType", { length: 20 }).notNull().default("unit"),
+  /** cfm | home_depot | other — where the price points come from. */
+  supplier: varchar("supplier", { length: 40 }).notNull().default("other"),
+  /** Per-tier COST per unit + a product label (e.g. "Builder-grade laminate"). */
+  goodPrice: numeric("goodPrice", { precision: 10, scale: 2 }).notNull().default("0"),
+  goodLabel: varchar("goodLabel", { length: 160 }).notNull().default(""),
+  betterPrice: numeric("betterPrice", { precision: 10, scale: 2 }).notNull().default("0"),
+  betterLabel: varchar("betterLabel", { length: 160 }).notNull().default(""),
+  bestPrice: numeric("bestPrice", { precision: 10, scale: 2 }).notNull().default("0"),
+  bestLabel: varchar("bestLabel", { length: 160 }).notNull().default(""),
+  premiumPrice: numeric("premiumPrice", { precision: 10, scale: 2 }).notNull().default("0"),
+  premiumLabel: varchar("premiumLabel", { length: 160 }).notNull().default(""),
+  notes: text("notes"),
+  active: boolean("active").notNull().default(true),
+  sortOrder: integer("sortOrder").notNull().default(0),
+  source: text("source").$type<"seed" | "human">().notNull().default("human"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().$onUpdate(() => new Date()).notNull(),
+});
+export type OsMaterial = typeof osMaterials.$inferSelect;
+export type InsertOsMaterial = typeof osMaterials.$inferInsert;
+
 /**
  * The Consultant registry, the sales seat (HP-SOP-205). Each consultant
  * carries a personal commission rate in basis points (always < 1000 = 10% of
