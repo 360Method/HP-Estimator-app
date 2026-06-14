@@ -9,7 +9,9 @@ import { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { ArrowLeft, ArrowRight, Banknote, CreditCard, Gift, Loader2 } from "lucide-react";
-import TierCards, { cadencePerLabel } from "@/components/TierCards";
+import { cadencePerLabel } from "@/components/TierCards";
+import RichTierCards from "@/components/threeSixty/RichTierCards";
+import SeasonalVisitsGrid from "@/components/threeSixty/SeasonalVisitsGrid";
 import {
   TIER_DEFINITIONS,
   formatDollars,
@@ -254,8 +256,14 @@ export default function MembershipStep({
               </p>
             </div>
           )}
+
+          <div className="mb-4">
+            <SeasonalVisitsGrid />
+          </div>
+
+          <p className="hp-eyebrow text-xs mb-1" style={{ color: "var(--hp-gold-deep)" }}>Choose the plan</p>
           <div className="bg-white rounded-xl border px-5 py-5" style={{ borderColor: "var(--hp-hairline)" }}>
-            <TierCards tier={tier} cadence={cadence} onTierChange={setTier} onCadenceChange={setCadence} band={band} />
+            <RichTierCards tier={tier} cadence={cadence} onTierChange={setTier} onCadenceChange={setCadence} band={band} />
 
             <p className="text-sm font-medium mt-5 mb-2">Payment</p>
             <div className="space-y-2">
