@@ -277,10 +277,9 @@ export default function OsEstimateWizard() {
       state.customItems.some((ci) => ci.notes?.startsWith("spot:") || ci.notes?.startsWith("pricebook:"));
     spotSeedApplied.current = true;
     if (hasPicks) return;
-    // One editable line per finding, all of them — not just the ones that
-    // matched a price-book SKU. Priced from the row or from the AI range at
-    // the global margin, so they land ready rather than "needs pricing".
-    const customs = seedCustomsFromSpotFindings(seed.findings, pbRows, seed.spotInspectionId, state.global.markupPct);
+    // One editable line per finding, each priced from its inspection range
+    // at the global margin, so they land ready rather than "needs pricing".
+    const customs = seedCustomsFromSpotFindings(seed.findings, seed.spotInspectionId, state.global.markupPct);
     for (const custom of customs) {
       addCustomItem({
         phaseId: 0,
