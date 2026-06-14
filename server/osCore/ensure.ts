@@ -370,4 +370,13 @@ export async function ensureOsTables(): Promise<void> {
   } catch (err) {
     console.warn("[boot] importQuickQuoteSeed failed (non-fatal):", err);
   }
+
+  // Starter material catalog (real Home Depot cost points from Yates 2702).
+  // Never-clobbers: only inserts materials that don't already exist.
+  try {
+    const { importMaterialsSeed } = await import("./materialsSeed");
+    await importMaterialsSeed();
+  } catch (err) {
+    console.warn("[boot] importMaterialsSeed failed (non-fatal):", err);
+  }
 }
