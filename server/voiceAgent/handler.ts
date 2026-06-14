@@ -8,6 +8,7 @@
  * capture_lead tool) already created an opportunity and notified the team, so
  * this does not double-notify.
  */
+import { nanoid } from "nanoid";
 import {
   findOrCreateCustomerFromCall,
   findOrCreateConversation,
@@ -16,7 +17,10 @@ import {
   incrementUnread,
   insertCallLog,
   insertMessage,
+  listOpportunities,
+  createOpportunity,
 } from "../db";
+import { onLeadCreated } from "../leadRouting";
 import type { NormalizedCallReport } from "./types";
 
 export async function handleCallReport(report: NormalizedCallReport): Promise<void> {
@@ -82,6 +86,42 @@ export async function handleCallReport(report: NormalizedCallReport): Promise<vo
 
   await updateConversationLastMessage(conv.id, summaryLine, "call").catch(() => {});
   await incrementUnread(conv.id).catch(() => {});
+
+  // Safety net: never lose a real caller. If the agent didn't capture a lead
+  // (e.g. the caller asked straight for a human, or a transfer went to
+  // voicemail), and this customer has no opportunity at all, open one from the
+  // call summary so it lands in the pipeline like every other lead.
+  try {
+    if (customer?.id && durationSecs >= 10 && (report.summary?.trim() || report.transcript?.trim())) {
+      const existing = await listOpportunities(undefined, customer.id);
+      if (existing.length === 0) {
+        const leadId = nanoid();
+        await createOpportunity({
+          id: leadId,
+          customerId: customer.id,
+          area: "lead",
+          stage: "New Lead",
+          title: `${customer.displayName || callerPhone} — Phone call`,
+          notes: [
+            "Source: AI phone agent (auto-captured at end of call)",
+            report.summary ? `Summary: ${report.summary.trim()}` : "",
+            `Callback: ${callerPhone}`,
+          ].filter(Boolean).join("\n"),
+          archived: false,
+        });
+        await onLeadCreated({
+          opportunityId: leadId,
+          customerId: customer.id,
+          title: `New phone lead — ${customer.displayName || callerPhone}`,
+          source: "inbound_call",
+          priority: "normal",
+        }).catch(() => {});
+        console.log(`[voiceAgent] safety-net lead created for ${callerPhone} (${leadId})`);
+      }
+    }
+  } catch (e) {
+    console.error("[voiceAgent] safety-net lead failed:", e);
+  }
 
   console.log(
     `[voiceAgent] logged AI call ${report.callId} from ${callerPhone} (${durationSecs}s, ended=${report.endedReason ?? "?"}) callLog=${callLog?.id ?? "none"}`,

@@ -29,6 +29,9 @@ const VOICE_ID = process.env.VAPI_VOICE_ID || "cgSgspJ2msm6clMCkdW9";
 const VOICE_MODEL = process.env.VAPI_VOICE_MODEL || "eleven_turbo_v2_5";
 const ASSISTANT_NAME = "HP Front Desk";
 const TEST_NUMBER_NAME = "HP Test (Vapi)";
+// Where "talk to a person" transfers to — HP Google Voice line. If unanswered,
+// it falls to that line's voicemail; the lead is already captured server-side.
+const TRANSFER_NUMBER = process.env.HP_TRANSFER_NUMBER || "+13602179444";
 
 if (!KEY) { console.error("VAPI_API_KEY missing"); process.exit(1); }
 if (!SECRET) { console.error("VAPI_WEBHOOK_SECRET missing"); process.exit(1); }
@@ -94,12 +97,17 @@ const tools = [
     },
     ["summary"],
   ),
-  fnTool(
-    "transfer_to_human",
-    "Use when the caller asks for a person or the matter needs a human now.",
-    {},
-    [],
-  ),
+  {
+    // Native Vapi transfer — actually bridges the call to a person.
+    type: "transferCall",
+    destinations: [
+      {
+        type: "number",
+        number: TRANSFER_NUMBER,
+        message: "Of course. Let me connect you with someone on our team now. One moment, please.",
+      },
+    ],
+  },
 ];
 
 const SYSTEM_PROMPT = `You are the front desk for Handy Pioneers, a residential maintenance and remodeling company serving Vancouver and Clark County, Washington. You are the first voice a homeowner hears when they call. Sound like a warm, polished, genuinely helpful concierge: unhurried, gracious, and confident. Many callers are discerning, higher-end homeowners, so quality of attention matters more than speed. Never sound like a script or a survey.
@@ -135,10 +143,10 @@ USING YOUR TOOLS
 - Early, once you have their number (or caller ID), call lookup_caller so you can greet returning clients by name and confirm details instead of re-asking.
 - Once you have a ZIP, call check_service_area to confirm we serve them before promising a visit.
 - When you have the essentials, call capture_lead with every field you have gathered (including intent and budget if shared). Call it once near the end; if a lot changes, you may call it again to update.
-- If they ask for a person, or it is an emergency, use transfer_to_human.
+- If they ask for a person, or it is an emergency: FIRST make sure you have already saved their details with capture_lead, then transfer the call to connect them with our team. If no one is available, they will reach our voicemail and the team will call them right back, so reassure them their details are saved.
 
 CLOSING
-Tell them clearly what happens next: a team member will follow up to confirm the details and get them scheduled. Thank them warmly by name. Do not promise a specific appointment time yourself.
+Always call capture_lead before the call ends or before any transfer, even if the caller is brief or asks straight for a person. We never lose someone's details. Then tell them clearly what happens next: a team member will follow up to confirm the details and get them scheduled. Thank them warmly by name. Do not promise a specific appointment time yourself.
 
 HARD RULES
 - Never quote prices, hourly rates, or discuss cost, markup, or margins. We price by the project, and a team member handles quotes after understanding the work.
@@ -230,6 +238,6 @@ function fail(where, res) {
   console.log("\n=== DONE ===");
   console.log(`Assistant ID: ${assistant.id}`);
   console.log(`Model:        ${assistant?.model?.model}`);
-  console.log(`Tools:        ${(assistant?.model?.tools || []).map((t) => t.function?.name).join(", ")}`);
+  console.log(`Tools:        ${(assistant?.model?.tools || []).map((t) => t.function?.name || t.type).join(", ")}`);
   console.log(`Test number:  ${num?.number || "(provision in dashboard — see warning above)"}`);
 })();
