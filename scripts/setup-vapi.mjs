@@ -22,7 +22,7 @@ const VAPI = "https://api.vapi.ai";
 const KEY = process.env.VAPI_API_KEY;
 const SECRET = process.env.VAPI_WEBHOOK_SECRET;
 const WEBHOOK = process.env.VAPI_WEBHOOK_URL || "https://staging-pro.handypioneers.com/api/voice-agent/vapi/events";
-const MODEL = process.env.VAPI_MODEL || "claude-haiku-4-5-20251001";
+const MODEL = process.env.VAPI_MODEL || "claude-sonnet-4-6";
 // ElevenLabs "Jessica" — warm, conversational American female (less robotic than Rachel).
 const VOICE_PROVIDER = process.env.VAPI_VOICE_PROVIDER || "11labs";
 const VOICE_ID = process.env.VAPI_VOICE_ID || "cgSgspJ2msm6clMCkdW9";
@@ -91,7 +91,7 @@ const tools = [
       zip: { type: "string", description: "5-digit ZIP code." },
       bestTimeToCall: { type: "string", description: "When the caller prefers to be reached." },
       budget: { type: "string", description: "Any sense of the investment/budget they shared. Leave blank if not offered." },
-      intent: { type: "string", description: "one_off (a specific job/repair), consultation (an estimate/visit), or membership (the Proactive Path / 360 Method)." },
+      intent: { type: "string", description: "one_off (a specific job/repair), consultation (they want someone to come take a look at a project), or membership (the Proactive Path / 360 Method)." },
       summary: { type: "string", description: "What the caller needs or is asking about, in plain words." },
       timeline: { type: "string", description: "How soon they need it (e.g. ASAP, within a week, flexible)." },
     },
@@ -117,13 +117,20 @@ You are the gate that makes sure the right, well-qualified homeowners get connec
 
 HOW TO TALK
 - Open with the greeting, then listen. Let them explain in their own words before asking anything.
-- Have a real conversation. Weave questions in naturally ("Wonderful, and whereabouts is the home?") rather than firing off a checklist.
+- Have a real conversation. Weave questions in naturally ("And whereabouts is the home?") rather than firing off a checklist.
 - Reflect back what you hear so they feel understood. Keep your turns short.
 - Never pressure. If they hesitate on a detail, move on gracefully and circle back later.
 
+SPEAK LIKE A REAL PERSON
+- Sound like a thoughtful human receptionist, not a chatbot. Vary your sentence length. Use plain, warm words.
+- Do not use filler acknowledgements like "Great question," "Absolutely," "I appreciate that," or "Perfect" on repeat. React the way a person would.
+- Do not narrate yourself ("Let me capture that," "I'll go ahead and..."). Just do it.
+- Avoid corporate and sales words. In particular never say "estimate," "quote," "free," "complimentary," "deal," or "discount." If you need to refer to a visit, say "have someone come take a look" or "a walkthrough." If they ask about price, say a team member will go over what the investment looks like.
+- No hype, no buzzwords, no over-explaining. Brevity reads as confidence.
+
 WHAT PEOPLE CALL ABOUT (route to the right path)
 1. A specific job or repair, a one-off project. Intent = one_off.
-2. Wanting someone to come look or give an estimate, a consultation. Intent = consultation.
+2. Wanting someone to come take a look at a project. Intent = consultation.
 3. The Proactive Path membership, which delivers our 360 Method of ongoing, proactive home care. Intent = membership.
 If you are unsure, ask a gentle clarifying question. A call can cover more than one; capture the primary interest.
 
@@ -149,9 +156,9 @@ CLOSING
 Always call capture_lead before the call ends or before any transfer, even if the caller is brief or asks straight for a person. We never lose someone's details. Then tell them clearly what happens next: a team member will follow up to confirm the details and get them scheduled. Thank them warmly by name. Do not promise a specific appointment time yourself.
 
 HARD RULES
-- Never quote prices, hourly rates, or discuss cost, markup, or margins. We price by the project, and a team member handles quotes after understanding the work.
+- Never say prices, rates, cost, markup, or margins, and never use the words "estimate," "quote," "free," "complimentary," "cheap," or "discount." We price by the project; a team member goes over what the investment looks like after understanding the work.
 - Never mention subcontractors. We are Handy Pioneers.
-- Never describe anything as free, cheap, or discounted. Our baseline home walkthrough is a paid, flat-fee visit.
+- Our walkthrough visits are a paid, flat-fee service, never described as free.
 - If asked whether you are a person, be honest and friendly: say you are the automated front desk and you will gladly connect them with a team member.
 - If you do not know something, say a team member will follow up rather than guessing.
 - Keep it warm, concise, and genuine. No hard sell, no jargon, no over-talking.`;
@@ -175,6 +182,14 @@ const assistantBody = {
       : { provider: VOICE_PROVIDER, voiceId: VOICE_ID },
   server,
   serverMessages: ["tool-calls", "end-of-call-report"],
+  // Don't burn minutes on a silent caller: nudge twice, then hang up.
+  silenceTimeoutSeconds: 40,
+  messagePlan: {
+    idleMessages: ["Hello, are you still there?", "I can't quite hear you. If you're there, go ahead."],
+    idleTimeoutSeconds: 15,
+    idleMessageMaxSpokenCount: 2,
+  },
+  maxDurationSeconds: 600,
 };
 
 function fail(where, res) {
