@@ -12,8 +12,10 @@ import {
   ALL_TIERS,
   formatDollars,
   getTierPrice,
+  getTierPriceForBand,
   type MemberTier,
   type BillingCadence,
+  type HomeSizeBand,
 } from "@shared/threeSixtyTiers";
 
 const CADENCE_OPTIONS: { id: BillingCadence; label: string; badge?: string; per: string }[] = [
@@ -31,12 +33,17 @@ export default function TierCards({
   cadence,
   onTierChange,
   onCadenceChange,
+  band,
 }: {
   tier: MemberTier;
   cadence: BillingCadence;
   onTierChange: (t: MemberTier) => void;
   onCadenceChange: (c: BillingCadence) => void;
+  /** When set, prices are sized to the home's band (the on-site close). */
+  band?: HomeSizeBand;
 }) {
+  const priceFor = (id: MemberTier, c: BillingCadence) =>
+    band ? getTierPriceForBand(id, c, band) : getTierPrice(id, c);
   return (
     <div className="space-y-4">
       {/* Billing cadence */}
@@ -65,7 +72,7 @@ export default function TierCards({
         {ALL_TIERS.map((id) => {
           const def = TIER_DEFINITIONS[id];
           const isSelected = tier === id;
-          const priceCents = getTierPrice(id, cadence);
+          const priceCents = priceFor(id, cadence);
           const per = cadencePerLabel(cadence);
           return (
             <div
@@ -94,7 +101,7 @@ export default function TierCards({
               <p className="text-xs text-muted-foreground mb-1">{def.tagline}</p>
               {cadence === "annual" && (
                 <p className="text-xs text-green-700 font-medium mb-1">
-                  {formatDollars(def.pricing.monthlyEquivalentAnnual)}/mo equivalent
+                  {formatDollars(Math.round(priceFor(id, "annual") / 12))}/mo equivalent
                 </p>
               )}
               {isSelected && (

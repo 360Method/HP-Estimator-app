@@ -222,9 +222,63 @@ export function formatDollars(cents: number): string {
     : `$${dollars.toFixed(2)}`;
 }
 
-/** Get the price for a given tier and cadence */
+/** Get the price for a given tier and cadence (floor / standard home size) */
 export function getTierPrice(tier: MemberTier, cadence: BillingCadence): number {
   return TIER_DEFINITIONS[tier].pricing[cadence];
+}
+
+// ─── HOME-SIZE PRICING ───────────────────────────────────────────────────────
+// Membership price scales with home size, exactly like the marketing site
+// (handy-pioneers-manus client/src/lib/tiers.ts). The smallest homes
+// (< 2,000 sq ft) are the floor and pay the published base prices; larger
+// homes build up by a band multiplier. Size is an INTERNAL pricing input —
+// the customer only ever sees the final price for their home, never a band.
+
+export type HomeSizeBand = "standard" | "large" | "estate" | "grand";
+
+/** < 2,000 → standard · 2,000–3,500 → large · 3,500–5,000 → estate · 5,000+ → grand */
+export function bandForSqft(sqft: number | null | undefined): HomeSizeBand {
+  if (!sqft || sqft <= 0) return "standard";
+  if (sqft < 2000) return "standard";
+  if (sqft < 3500) return "large";
+  if (sqft < 5000) return "estate";
+  return "grand";
+}
+
+const BAND_MULTIPLIER: Record<HomeSizeBand, number> = {
+  standard: 1.0,
+  large: 1.3,
+  estate: 1.6,
+  grand: 1.9,
+};
+
+// Monthly grid in cents — hand-set to the $9 convention, mirrors the site.
+const MEMBERSHIP_MONTHLY_GRID: Record<HomeSizeBand, Record<MemberTier, number>> = {
+  standard: { bronze: 5900, silver: 9900, gold: 14900 },
+  large: { bronze: 7900, silver: 12900, gold: 19900 },
+  estate: { bronze: 9900, silver: 15900, gold: 23900 },
+  grand: { bronze: 11900, silver: 18900, gold: 28900 },
+};
+
+/** Size-banded price in cents. Monthly comes from the grid; quarterly/annual
+ *  apply the band multiplier to the floor cadence price. */
+export function getTierPriceForBand(
+  tier: MemberTier,
+  cadence: BillingCadence,
+  band: HomeSizeBand = "standard",
+): number {
+  if (cadence === "monthly") return MEMBERSHIP_MONTHLY_GRID[band][tier];
+  const flat = TIER_DEFINITIONS[tier].pricing[cadence];
+  return Math.round(flat * (BAND_MULTIPLIER[band] ?? 1));
+}
+
+/** Stripe recurring interval for a cadence, for dynamic (size-banded) prices. */
+export function cadenceToStripeInterval(
+  cadence: BillingCadence,
+): { interval: "month" | "year"; interval_count: number } {
+  if (cadence === "monthly") return { interval: "month", interval_count: 1 };
+  if (cadence === "quarterly") return { interval: "month", interval_count: 3 };
+  return { interval: "year", interval_count: 1 };
 }
 
 /** Get annual equivalent cost for display comparison */

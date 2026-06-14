@@ -269,6 +269,7 @@ export const closeFlowRouter = router({
               city: property.city,
               state: property.state,
               zip: property.zip,
+              sqft: property.sqft ?? null,
               membershipTierLabel,
             }
           : null,

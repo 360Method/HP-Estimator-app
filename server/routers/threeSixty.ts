@@ -26,6 +26,8 @@ import {
   calcMemberDiscount,
   effectiveDiscountRate,
   TIER_DEFINITIONS,
+  getTierPriceForBand,
+  cadenceToStripeInterval,
   type MemberTier,
   type BillingCadence,
 } from "../../shared/threeSixtyTiers";
@@ -1153,6 +1155,13 @@ const checkoutRouter = router({
          * annual price resolved server-side from the home's sqft.
          */
         offer: z.enum(["buynow", "buynow_sized"]).optional(),
+        /**
+         * Size-banded recurring membership (the on-site close). The band is
+         * resolved SERVER-SIDE from the home's sqft and the price is charged
+         * dynamically (price_data) so card billing matches the displayed,
+         * size-based price. Distinct from the buy-now OTO offers.
+         */
+        sizedMembership: z.boolean().optional(),
         /** priorityTranslations.id when arriving from the roadmap funnel (metadata only) */
         translationId: z.string().optional(),
         /** Customer name for prefill */
@@ -1200,13 +1209,31 @@ const checkoutRouter = router({
       // properties row wins over the client-passed sqft (tamper-resistant).
       // The band itself is internal; only the resulting price is visible.
       let sizeBand: HomeSizeBand | "" = "";
-      let priceId: string;
+      // Stripe's exported LineItem param type isn't reliably importable across
+      // SDK versions; this is a single Stripe param, validated at the API.
+      let lineItem: any;
       if (input.offer === "buynow_sized") {
         const sqft = await resolveSqftForBand(input.hpCustomerId, input.sqft);
         sizeBand = bandForSqft(sqft);
-        priceId = getSizedBuynowPriceId(sizeBand);
+        lineItem = { price: getSizedBuynowPriceId(sizeBand), quantity: 1 };
+      } else if (input.sizedMembership && !isBuynow) {
+        // Size-banded recurring membership. Band resolved server-side (CRM
+        // sqft wins over client value, tamper-resistant). Charged dynamically
+        // so the card matches the size-based price the rep presented.
+        const sqft = await resolveSqftForBand(input.hpCustomerId, input.sqft);
+        sizeBand = bandForSqft(sqft);
+        const rec = cadenceToStripeInterval(cadence);
+        lineItem = {
+          quantity: 1,
+          price_data: {
+            currency: "usd",
+            unit_amount: getTierPriceForBand(input.tier, cadence, sizeBand),
+            recurring: { interval: rec.interval, interval_count: rec.interval_count },
+            product_data: { name: `360° Method — ${TIER_DEFINITIONS[input.tier].label}` },
+          },
+        };
       } else {
-        priceId = getStripePriceId(input.tier, cadence, input.offer);
+        lineItem = { price: getStripePriceId(input.tier, cadence, input.offer), quantity: 1 };
       }
 
       // Staff-initiated checkouts (consultant's device, on-site close) must
@@ -1220,7 +1247,7 @@ const checkoutRouter = router({
 
       const session = await stripe.checkout.sessions.create({
         mode: "subscription",
-        line_items: [{ price: priceId, quantity: 1 }],
+        line_items: [lineItem],
         customer_email: input.customerEmail ?? (staffInitiated ? undefined : (ctx as any).user?.email) ?? undefined,
         allow_promotion_codes: true,
         success_url: successUrl,

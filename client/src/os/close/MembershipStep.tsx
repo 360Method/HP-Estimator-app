@@ -13,7 +13,9 @@ import TierCards, { cadencePerLabel } from "@/components/TierCards";
 import {
   TIER_DEFINITIONS,
   formatDollars,
-  getTierPrice,
+  getTierPriceForBand,
+  bandForSqft,
+  calcMemberDiscount,
   type MemberTier,
   type BillingCadence,
 } from "@shared/threeSixtyTiers";
@@ -41,6 +43,52 @@ export default function MembershipStep({
   const customerId = ctx.customer.id;
   const property = ctx.property;
   const utils = trpc.useUtils();
+
+  // ── Home size drives the price. A lead with no home on file (or no sqft)
+  // can't be priced or enrolled until we capture it — that was the blocker.
+  const [sqftInput, setSqftInput] = useState<string>(property?.sqft ? String(property.sqft) : "");
+  const [addr, setAddr] = useState({ street: "", city: "", state: "WA", zip: "" });
+  const needsHome = !property || !property.sqft;
+  const band = bandForSqft(property?.sqft ?? null);
+
+  const createProperty = trpc.properties.create.useMutation({
+    onSuccess: () => {
+      void utils.closeFlow.getContext.invalidate();
+      void utils.properties.listByCustomer.invalidate({ customerId });
+      toast.success("Home saved. Member pricing is sized to it.");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  const updateProperty = trpc.properties.update.useMutation({
+    onSuccess: () => {
+      void utils.closeFlow.getContext.invalidate();
+      void utils.properties.listByCustomer.invalidate({ customerId });
+      toast.success("Home size saved. Member pricing is sized to it.");
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  function saveHome() {
+    const n = parseInt(sqftInput, 10);
+    if (!n || n <= 0) {
+      toast.error("Enter the home's square footage to size the membership.");
+      return;
+    }
+    if (property) {
+      updateProperty.mutate({ id: property.id, sqft: n });
+    } else {
+      createProperty.mutate({
+        customerId,
+        label: "Home",
+        isPrimary: true,
+        sqft: n,
+        street: addr.street.trim(),
+        city: addr.city.trim(),
+        state: addr.state.trim(),
+        zip: addr.zip.trim(),
+      });
+    }
+  }
 
   // Poll while a Stripe tab is open, until the webhook links the membership.
   const { data: liveProps } = trpc.properties.listByCustomer.useQuery(
@@ -75,14 +123,22 @@ export default function MembershipStep({
     onError: (e) => toast.error(e.message),
   });
 
-  const priceCents = getTierPrice(tier, cadence);
+  const priceCents = getTierPriceForBand(tier, cadence, band);
   const emailPresent = ctx.readiness.customerEmailPresent;
+
+  // On-site closer: show what membership saves on the very estimate in front
+  // of them. Discount applies to the work, not the tax pass-through.
+  const estTaxCents = (ctx.estimate as { taxAmount?: number } | null)?.taxAmount ?? 0;
+  const estWorkCents = Math.max(0, (ctx.estimate?.totalAmount ?? 0) - estTaxCents);
+  const estSavingsCents = estWorkCents > 0 ? calcMemberDiscount(tier, estWorkCents) : 0;
 
   const startCardCheckout = () => {
     if (!property) return;
     createSession.mutate({
       tier,
       cadence,
+      sizedMembership: true,
+      sqft: property.sqft ?? undefined,
       hpCustomerId: customerId,
       propertyId: property.id,
       customerName: ctx.customer.name || undefined,
@@ -137,10 +193,69 @@ export default function MembershipStep({
             I'll confirm later
           </button>
         </div>
+      ) : needsHome ? (
+        <div className="bg-white rounded-xl border px-5 py-5 space-y-4" style={{ borderColor: "var(--hp-hairline)" }}>
+          <div>
+            <p className="text-sm font-semibold">First, the size of the home</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Membership is priced to the home. Enter the square footage to size the plan and unlock enrollment.
+            </p>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground">Square footage</label>
+            <input
+              className="w-full border rounded-lg px-3 py-2 text-sm"
+              style={{ borderColor: "var(--hp-hairline)" }}
+              inputMode="numeric"
+              placeholder="e.g. 1850"
+              value={sqftInput}
+              onChange={(e) => setSqftInput(e.target.value)}
+            />
+            {parseInt(sqftInput, 10) > 0 && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Full Coverage for this home: <span className="font-semibold" style={{ color: "var(--hp-ink)" }}>
+                  {formatDollars(getTierPriceForBand("silver", "annual", bandForSqft(parseInt(sqftInput, 10))))}/yr
+                </span>
+              </p>
+            )}
+          </div>
+          {!property && (
+            <div className="grid grid-cols-2 gap-2">
+              <input className="col-span-2 border rounded-lg px-3 py-2 text-sm" style={{ borderColor: "var(--hp-hairline)" }} placeholder="Street (optional)" value={addr.street} onChange={(e) => setAddr({ ...addr, street: e.target.value })} />
+              <input className="border rounded-lg px-3 py-2 text-sm" style={{ borderColor: "var(--hp-hairline)" }} placeholder="City" value={addr.city} onChange={(e) => setAddr({ ...addr, city: e.target.value })} />
+              <div className="grid grid-cols-2 gap-2">
+                <input className="border rounded-lg px-3 py-2 text-sm" style={{ borderColor: "var(--hp-hairline)" }} placeholder="State" value={addr.state} onChange={(e) => setAddr({ ...addr, state: e.target.value })} />
+                <input className="border rounded-lg px-3 py-2 text-sm" style={{ borderColor: "var(--hp-hairline)" }} placeholder="ZIP" value={addr.zip} onChange={(e) => setAddr({ ...addr, zip: e.target.value })} />
+              </div>
+            </div>
+          )}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={saveHome}
+              disabled={createProperty.isPending || updateProperty.isPending}
+              className="hp-button-gold disabled:opacity-40"
+            >
+              {(createProperty.isPending || updateProperty.isPending) && <Loader2 className="w-4 h-4 mr-1.5 inline animate-spin" />}
+              Save home and show pricing
+            </button>
+            <button type="button" onClick={onSkip} className="text-sm text-muted-foreground hover:underline">
+              Skip membership <ArrowRight className="w-3.5 h-3.5 inline" />
+            </button>
+          </div>
+        </div>
       ) : (
         <>
+          {estSavingsCents > 0 && (
+            <div className="rounded-xl border px-5 py-3 mb-3" style={{ borderColor: "rgba(200,146,42,0.4)", background: "rgba(200,146,42,0.06)" }}>
+              <p className="text-sm" style={{ color: "var(--hp-ink)" }}>
+                As a <span className="font-semibold">{TIER_DEFINITIONS[tier].label}</span> member, {ctx.customer.name?.split(" ")[0] || "they"} would save about{" "}
+                <span className="font-semibold" style={{ color: "var(--hp-gold-deep)" }}>{formatDollars(estSavingsCents)}</span> on today's estimate — and every job after.
+              </p>
+            </div>
+          )}
           <div className="bg-white rounded-xl border px-5 py-5" style={{ borderColor: "var(--hp-hairline)" }}>
-            <TierCards tier={tier} cadence={cadence} onTierChange={setTier} onCadenceChange={setCadence} />
+            <TierCards tier={tier} cadence={cadence} onTierChange={setTier} onCadenceChange={setCadence} band={band} />
 
             <p className="text-sm font-medium mt-5 mb-2">Payment</p>
             <div className="space-y-2">

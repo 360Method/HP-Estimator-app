@@ -44,6 +44,8 @@ const propertyInput = z.object({
   addressNotes: z.string().optional(),
   lat: z.string().optional(),
   lng: z.string().optional(),
+  /** Home square footage — drives size-banded membership pricing. */
+  sqft: z.number().int().positive().optional(),
 });
 
 // ─── Health score computation ─────────────────────────────────────────────────
@@ -258,6 +260,7 @@ export const propertiesRouter = router({
         addressNotes: input.addressNotes ?? null,
         lat: input.lat ?? null,
         lng: input.lng ?? null,
+        sqft: input.sqft ?? null,
         source: input.source,
       });
 
