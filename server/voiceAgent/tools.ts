@@ -147,7 +147,7 @@ const tools: Record<string, ToolFn> = {
         email ? `Email: ${email}` : "",
         `Callback: ${phone}`,
         bestTime ? `Best time to call: ${bestTime}` : "",
-        budget ? `Budget mentioned: ${budget}` : "",
+        budget ? `Investment: ${budget}` : "",
         `Timeline: ${timeline}`,
       ].filter(Boolean).join("\n"),
       archived: false,
