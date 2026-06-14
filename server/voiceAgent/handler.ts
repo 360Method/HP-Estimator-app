@@ -200,7 +200,7 @@ async function finalizeLeadFromTranscript(
     ex.email ? `Email: ${ex.email}` : "",
     `Callback: ${callerPhone}`,
     ex.bestTimeToCall ? `Best time to call: ${ex.bestTimeToCall}` : "",
-    ex.budget ? `Budget mentioned: ${ex.budget}` : "",
+    ex.budget ? `Investment: ${ex.budget}` : "",
     ex.timeline ? `Timeline: ${ex.timeline}` : "",
   ].filter(Boolean).join("\n");
 

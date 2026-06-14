@@ -41,7 +41,7 @@ const RECORD_TOOL: LlmToolDef = {
         description: "one_off: a specific job/repair. consultation: wants someone to come look. membership: the Proactive Path / 360 Method.",
       },
       summary: { type: "string", description: "What they need, one plain sentence." },
-      budget: { type: "string", description: "Budget/investment they mentioned, if any." },
+      budget: { type: "string", description: "Level of investment they mentioned for the project, if any." },
       bestTimeToCall: { type: "string", description: "When to reach them, if stated." },
       timeline: { type: "string", description: "How soon they need it, if stated." },
     },
