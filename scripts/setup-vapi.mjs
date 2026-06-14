@@ -97,6 +97,23 @@ const tools = [
     },
     ["summary"],
   ),
+  fnTool(
+    "check_availability",
+    "Get the next real openings for an in-home assessment. Call this when an engaged caller wants someone to come take a look.",
+    {},
+    [],
+  ),
+  fnTool(
+    "send_booking_link",
+    "Text the caller a one-tap link to confirm the time they picked. Call after they choose from check_availability.",
+    {
+      chosenTime: { type: "string", description: "The opening the caller picked, e.g. 'Tuesday at 5 PM'." },
+      name: { type: "string", description: "Caller's full name, to prefill the booking." },
+      email: { type: "string", description: "Caller's email, to prefill the booking." },
+      phone: { type: "string", description: "Number to text the link to; defaults to caller ID." },
+    },
+    [],
+  ),
   {
     // Native Vapi transfer — actually bridges the call to a person.
     type: "transferCall",
@@ -150,6 +167,11 @@ USING YOUR TOOLS
 - Early, once you have their number (or caller ID), call lookup_caller so you can greet returning clients by name and confirm details instead of re-asking.
 - Once you have a ZIP, call check_service_area to confirm we serve them before promising a visit.
 - When you have the essentials, call capture_lead with every field you have gathered (including intent and budget if shared). Call it once near the end; if a lot changes, you may call it again to update.
+
+GETTING THEM ON THE CALENDAR
+- When an engaged caller wants someone to come take a look, offer to get them on the calendar. Call check_availability, then offer two or three of the openings naturally ("I could do Tuesday at 5, or Wednesday at 4:30, what works?"). Read times the way a person would, not as a long list.
+- Once they pick, call send_booking_link with the time they chose plus their name and email. Tell them you've just texted a link to lock it in, and that it takes a few seconds. Times are Pacific.
+- Still call capture_lead so their full details are saved either way.
 - If they ask for a person, or it is an emergency: FIRST make sure you have already saved their details with capture_lead, then transfer the call to connect them with our team. If no one is available, they will reach our voicemail and the team will call them right back, so reassure them their details are saved.
 
 CLOSING

@@ -12,6 +12,7 @@ import { ENV } from "../_core/env";
 import { vapiAdapter } from "./adapters/vapi";
 import { runTool, type ToolContext, VOICE_AGENT_TOOLS } from "./tools";
 import { handleCallReport } from "./handler";
+import { handleCalendlyEvent } from "./calendlyWebhook";
 import type { VoiceAdapter } from "./types";
 
 const ADAPTERS: Record<string, VoiceAdapter> = {
@@ -76,5 +77,16 @@ export function registerVoiceAgentRoutes(app: Express): void {
       }
     },
   );
-  console.log("[voiceAgent] routes mounted at /api/voice-agent/:provider/events");
+  // Calendly webhook: a confirmed booking syncs into the portal.
+  app.post("/api/voice-agent/calendly", express.json({ limit: "1mb" }), async (req: Request, res: Response) => {
+    const secret = process.env.CALENDLY_WEBHOOK_SECRET;
+    if (secret && req.query.s !== secret) {
+      console.warn("[calendly] webhook rejected — bad/missing secret");
+      return res.status(403).json({ error: "Forbidden" });
+    }
+    res.status(200).json({ ok: true }); // ack fast
+    handleCalendlyEvent(req.body).catch((e) => console.error("[calendly] webhook error:", e));
+  });
+
+  console.log("[voiceAgent] routes mounted at /api/voice-agent/:provider/events (+ /calendly)");
 }
