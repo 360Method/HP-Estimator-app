@@ -20,6 +20,8 @@ import {
 } from "../db";
 import { onLeadCreated, type LeadSource } from "../leadRouting";
 import { isRoadmapZipServed, normalizeZip } from "../lib/priorityTranslation/serviceArea";
+import { sendSms, isTwilioConfigured } from "../twilio";
+import { calendlyConfigured, getAvailableSlots, createSchedulingLink } from "./calendly";
 import { ENV } from "../_core/env";
 import type { NormalizedToolCall, NormalizedToolResult } from "./types";
 
@@ -187,6 +189,35 @@ const tools: Record<string, ToolFn> = {
         ? "Let them know a team member will reach out to walk them through the Proactive Path and find the right fit."
         : "Let them know a team member will follow up to confirm the details and schedule a time.";
     return `Saved ${displayName}'s details and their ${intentLabel.toLowerCase()} request. ${next}`;
+  },
+
+  /** Read the next real openings so the agent can offer them on the call. */
+  check_availability: async () => {
+    if (!calendlyConfigured()) {
+      return "Scheduling isn't connected. Ask their preferred day and time and capture it; the team will confirm.";
+    }
+    const slots = await getAvailableSlots(6);
+    if (!slots.length) {
+      return "No openings in the next week. Ask their preferred day and time and capture it; the team will confirm.";
+    }
+    return `Offer these openings, in Pacific time: ${slots.map((s) => s.label).join("; ")}. Once they pick one, call send_booking_link with that time.`;
+  },
+
+  /** Text the caller a one-tap link to lock in the time they chose. */
+  send_booking_link: async (args, ctx) => {
+    const phone = str(args.phone) || str(ctx.fromNumber);
+    const chosenTime = str(args.chosenTime) || str(args.time);
+    const name = str(args.name);
+    const email = str(args.email);
+    const link = await createSchedulingLink({ name: name || undefined, email: email || undefined });
+    if (!link) {
+      return "Couldn't create the booking link. Capture their preferred time and let them know the team will confirm.";
+    }
+    if (phone && isTwilioConfigured()) {
+      const body = `Handy Pioneers: tap to confirm your assessment${chosenTime ? ` (${chosenTime})` : ""}: ${link}`;
+      await sendSms(phone, body).catch((e) => console.error("[voiceAgent] booking SMS failed:", e));
+    }
+    return `Texted the booking link to ${phone || "the caller"}${chosenTime ? ` for ${chosenTime}` : ""}. Tell them to tap it to lock in the time, and that you have it noted.`;
   },
 
   /** Hand the live call to a person. Actual bridging is the platform's job. */
