@@ -415,6 +415,7 @@ function EstimateStep({ ctx, onBack, onNext }: { ctx: CloseContext; onBack: () =
     >
       <EstimateDocument
         showPricing={priceRevealed}
+        membershipTier={ctx.property?.membershipTier ?? null}
         estimate={{
           ...ctx.estimate,
           customerName: ctx.customer.name,

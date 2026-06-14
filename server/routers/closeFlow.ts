@@ -77,6 +77,7 @@ export const closeFlowRouter = router({
         null;
 
       let membershipTierLabel: string | null = null;
+      let membershipTier: MemberTier | null = null;
       if (property?.membershipId) {
         const [m] = await db
           .select({ tier: threeSixtyMemberships.tier, status: threeSixtyMemberships.status })
@@ -84,7 +85,8 @@ export const closeFlowRouter = router({
           .where(eq(threeSixtyMemberships.id, property.membershipId))
           .limit(1);
         if (m?.status === "active") {
-          membershipTierLabel = TIER_DEFINITIONS[m.tier as MemberTier]?.label ?? null;
+          membershipTier = m.tier as MemberTier;
+          membershipTierLabel = TIER_DEFINITIONS[membershipTier]?.label ?? null;
         }
       }
 
@@ -271,6 +273,7 @@ export const closeFlowRouter = router({
               zip: property.zip,
               sqft: property.sqft ?? null,
               membershipTierLabel,
+              membershipTier,
             }
           : null,
         roadmaps,

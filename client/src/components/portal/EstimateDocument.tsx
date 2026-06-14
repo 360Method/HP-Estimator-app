@@ -6,6 +6,7 @@
  * prices only (never costs or margins).
  */
 import { Button } from "@/components/ui/button";
+import { calcMemberDiscount, TIER_DEFINITIONS, type MemberTier } from "@shared/threeSixtyTiers";
 
 const HP_LOGO = "https://d2xsxph8kpxj0f.cloudfront.net/310519663386531688/jKW2dpQJM3yXZZUUDoADTE/hp-logo_42a4678f.jpg";
 const HP_ADDRESS = "808 SE Chkalov Dr, 3-433\nVancouver, WA 98683";
@@ -84,12 +85,20 @@ export default function EstimateDocument({
   onApprove,
   children,
   showPricing = true,
+  membershipTier,
 }: {
   estimate: EstimateDocumentData;
   canApprove?: boolean;
   onApprove?: () => void;
   /** Rendered inside the document wrapper after the totals (e.g. the portal's footer CTA) */
   children?: React.ReactNode;
+  /**
+   * Opt-in membership pricing on the estimate. A tier shows retail vs the
+   * member price (their savings on this project); null shows the
+   * "become a member and save up to $X" upsell (Maximum tier). Undefined
+   * (the default) shows nothing, so other surfaces are unaffected.
+   */
+  membershipTier?: MemberTier | null;
   /**
    * When false, every dollar figure is withheld (unit prices, amounts,
    * subtotals, totals, deposit) and only the scope renders. The close flow
@@ -299,6 +308,41 @@ export default function EstimateDocument({
             <span>{fmtMoney(depositCents)}</span>
           </div>
         )}
+
+        {/* Membership pricing: retail (above) vs member price, or the upsell. */}
+        {membershipTier !== undefined && (() => {
+          const workCents = subtotalCents; // discount applies to the work, not tax
+          const effRate = workCents > 0 ? taxAmountCents / workCents : 0;
+          if (membershipTier) {
+            const disc = calcMemberDiscount(membershipTier, workCents);
+            if (disc <= 0) return null;
+            const memberWork = workCents - disc;
+            const memberTotal = memberWork + Math.round(memberWork * effRate);
+            return (
+              <div className="mt-3 pt-3 border-t border-gray-200">
+                <div className="flex justify-between text-sm" style={{ color: "#15803d" }}>
+                  <span>{TIER_DEFINITIONS[membershipTier].label} member savings</span>
+                  <span>− {fmtMoney(disc)}</span>
+                </div>
+                <div className="flex justify-between font-bold text-base">
+                  <span>Your member price</span>
+                  <span>{fmtMoney(memberTotal)}</span>
+                </div>
+              </div>
+            );
+          }
+          const maxDisc = calcMemberDiscount("gold", workCents);
+          if (maxDisc <= 0) return null;
+          return (
+            <div className="mt-3 rounded-lg p-3" style={{ background: "#eef5ee", border: "1px solid #cfe3cf" }}>
+              <p className="text-sm" style={{ color: "#1a2e1a" }}>
+                Members save on every project. As a <strong>Maximum Protection</strong> member you would save{" "}
+                <strong style={{ color: "#15803d" }}>{fmtMoney(maxDisc)}</strong> on this one — plus four seasonal
+                visits, the annual scan, and member rates on everything after.
+              </p>
+            </div>
+          );
+        })()}
       </div>}
 
       {children}
