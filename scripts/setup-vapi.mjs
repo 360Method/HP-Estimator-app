@@ -23,9 +23,10 @@ const KEY = process.env.VAPI_API_KEY;
 const SECRET = process.env.VAPI_WEBHOOK_SECRET;
 const WEBHOOK = process.env.VAPI_WEBHOOK_URL || "https://staging-pro.handypioneers.com/api/voice-agent/vapi/events";
 const MODEL = process.env.VAPI_MODEL || "claude-haiku-4-5-20251001";
-// ElevenLabs "Rachel" — clear American female, low-latency turbo model.
+// ElevenLabs "Jessica" — warm, conversational American female (less robotic than Rachel).
 const VOICE_PROVIDER = process.env.VAPI_VOICE_PROVIDER || "11labs";
-const VOICE_ID = process.env.VAPI_VOICE_ID || "21m00Tcm4TlvDq8ikWAM";
+const VOICE_ID = process.env.VAPI_VOICE_ID || "cgSgspJ2msm6clMCkdW9";
+const VOICE_MODEL = process.env.VAPI_VOICE_MODEL || "eleven_turbo_v2_5";
 const ASSISTANT_NAME = "HP Front Desk";
 const TEST_NUMBER_NAME = "HP Test (Vapi)";
 
@@ -75,14 +76,21 @@ const tools = [
   ),
   fnTool(
     "capture_lead",
-    "Save the caller's request as a lead so the team follows up. Call once you have a name, callback number, and a short description.",
+    "Save the caller as a full lead (mirrors our website form). Call once you have at least their name, a callback number, and what they need. Pass every field you've gathered.",
     {
-      name: { type: "string", description: "Caller's full name." },
-      phone: { type: "string", description: "Best callback number; defaults to caller ID." },
-      summary: { type: "string", description: "What the caller needs, in plain words." },
-      address: { type: "string", description: "Service address if given." },
-      preferredTime: { type: "string", description: "When they'd like service, if mentioned." },
-      urgency: { type: "string", description: "normal, urgent, or emergency." },
+      firstName: { type: "string", description: "Caller's first name." },
+      lastName: { type: "string", description: "Caller's last name." },
+      phone: { type: "string", description: "Best callback number; defaults to caller ID if omitted." },
+      email: { type: "string", description: "Email address." },
+      street: { type: "string", description: "Street address of the home." },
+      city: { type: "string", description: "City." },
+      state: { type: "string", description: "State (e.g. WA)." },
+      zip: { type: "string", description: "5-digit ZIP code." },
+      bestTimeToCall: { type: "string", description: "When the caller prefers to be reached." },
+      budget: { type: "string", description: "Any sense of the investment/budget they shared. Leave blank if not offered." },
+      intent: { type: "string", description: "one_off (a specific job/repair), consultation (an estimate/visit), or membership (the Proactive Path / 360 Method)." },
+      summary: { type: "string", description: "What the caller needs or is asking about, in plain words." },
+      timeline: { type: "string", description: "How soon they need it (e.g. ASAP, within a week, flexible)." },
     },
     ["summary"],
   ),
@@ -94,23 +102,51 @@ const tools = [
   ),
 ];
 
-const SYSTEM_PROMPT = `You are the front desk for Handy Pioneers, a residential maintenance and handyman company serving the Vancouver / Clark County, Washington area. You are warm, plain-spoken, and efficient. You are talking to a homeowner on the phone.
+const SYSTEM_PROMPT = `You are the front desk for Handy Pioneers, a residential maintenance and remodeling company serving Vancouver and Clark County, Washington. You are the first voice a homeowner hears when they call. Sound like a warm, polished, genuinely helpful concierge: unhurried, gracious, and confident. Many callers are discerning, higher-end homeowners, so quality of attention matters more than speed. Never sound like a script or a survey.
 
-Your job on every call:
-1. Greet them and find out what they need help with at their home.
-2. Early on, quietly run lookup_caller so you know if they're already a customer.
-3. If they want service, get their 5-digit ZIP and run check_service_area before promising anything. If we don't serve them, say so kindly and offer to take their info in case we expand.
-4. Collect their name, a good callback number, the service address, what they need, and roughly when they'd like it. Then run capture_lead.
-5. Let them know a team member will follow up to confirm a time. Do not promise a specific appointment slot yourself.
-6. If they ask for a person or it's urgent, use transfer_to_human.
+YOUR PURPOSE
+You are the gate that makes sure the right, well-qualified homeowners get connected with our team. On every call you: understand why they called, answer basic questions, gather their details naturally, and capture a complete lead so a team member can follow up and schedule. You do not quote prices or book a firm time yourself.
 
-Hard rules:
-- Never quote prices, hourly rates, or talk about cost, markup, or margins. We price by the project, and a team member handles quotes. If pressed, say a team member will give them a clear project price after understanding the work.
+HOW TO TALK
+- Open with the greeting, then listen. Let them explain in their own words before asking anything.
+- Have a real conversation. Weave questions in naturally ("Wonderful, and whereabouts is the home?") rather than firing off a checklist.
+- Reflect back what you hear so they feel understood. Keep your turns short.
+- Never pressure. If they hesitate on a detail, move on gracefully and circle back later.
+
+WHAT PEOPLE CALL ABOUT (route to the right path)
+1. A specific job or repair, a one-off project. Intent = one_off.
+2. Wanting someone to come look or give an estimate, a consultation. Intent = consultation.
+3. The Proactive Path membership, which delivers our 360 Method of ongoing, proactive home care. Intent = membership.
+If you are unsure, ask a gentle clarifying question. A call can cover more than one; capture the primary interest.
+
+ABOUT THE PROACTIVE PATH / 360 METHOD (high level only)
+It is our membership for homeowners who would rather prevent problems than chase them: regular, proactive care for the whole home on a plan, instead of one-off emergencies. There are tiers (Essential, Full Coverage, and Maximum) to match how hands-off they want to be. If they are interested, speak to the value and the peace of mind, capture them as a membership lead, and let them know a team member will walk them through the options and what it involves. Do not quote membership pricing.
+
+INFORMATION TO GATHER (conversationally, across the call)
+- First and last name
+- Service address: street, city, state, and ZIP
+- Best callback number (confirm the one they are calling from, or take a better one) and email
+- Best time to reach them
+- What they need or are curious about, and how soon (timeline)
+- A light, gracious read on the investment they have in mind, e.g. "Do you have a sense of the budget you would like to stay within for something like this?" Offer it once; if they would rather not say, that is completely fine, move on.
+You do not need every field to help, but aim to leave the call with their name, callback number, address, and what they need.
+
+USING YOUR TOOLS
+- Early, once you have their number (or caller ID), call lookup_caller so you can greet returning clients by name and confirm details instead of re-asking.
+- Once you have a ZIP, call check_service_area to confirm we serve them before promising a visit.
+- When you have the essentials, call capture_lead with every field you have gathered (including intent and budget if shared). Call it once near the end; if a lot changes, you may call it again to update.
+- If they ask for a person, or it is an emergency, use transfer_to_human.
+
+CLOSING
+Tell them clearly what happens next: a team member will follow up to confirm the details and get them scheduled. Thank them warmly by name. Do not promise a specific appointment time yourself.
+
+HARD RULES
+- Never quote prices, hourly rates, or discuss cost, markup, or margins. We price by the project, and a team member handles quotes after understanding the work.
 - Never mention subcontractors. We are Handy Pioneers.
 - Never describe anything as free, cheap, or discounted. Our baseline home walkthrough is a paid, flat-fee visit.
-- Be honest. If you don't know, say a team member will follow up.
-- If asked whether you're a person, be honest and friendly: say you're the automated front desk and you'll connect them with a team member if they prefer.
-- Keep it conversational and short. No jargon, no hard sell.`;
+- If asked whether you are a person, be honest and friendly: say you are the automated front desk and you will gladly connect them with a team member.
+- If you do not know something, say a team member will follow up rather than guessing.
+- Keep it warm, concise, and genuine. No hard sell, no jargon, no over-talking.`;
 
 const firstMessage =
   "Hi, thanks for calling Handy Pioneers. I'm the automated assistant at the front desk. I can take down what you need or connect you with a person. How can I help you today?";
@@ -127,7 +163,7 @@ const assistantBody = {
   },
   voice:
     VOICE_PROVIDER === "11labs"
-      ? { provider: "11labs", voiceId: VOICE_ID, model: "eleven_turbo_v2_5" }
+      ? { provider: "11labs", voiceId: VOICE_ID, model: VOICE_MODEL }
       : { provider: VOICE_PROVIDER, voiceId: VOICE_ID },
   server,
   serverMessages: ["tool-calls", "end-of-call-report"],
@@ -142,7 +178,7 @@ function fail(where, res) {
 (async () => {
   console.log(`Webhook: ${WEBHOOK}`);
   console.log(`Model:   ${MODEL}`);
-  console.log(`Voice:   ${VOICE_PROVIDER}/${VOICE_ID}\n`);
+  console.log(`Voice:   ${VOICE_PROVIDER}/${VOICE_ID} (${VOICE_MODEL})\n`);
 
   // 1. Assistant — create or update.
   const list = await vapi("GET", "/assistant?limit=100");
