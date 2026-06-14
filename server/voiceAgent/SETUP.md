@@ -4,9 +4,17 @@ This connects an AI phone agent (Vapi) to the Handy Pioneers line so it can
 answer calls, confirm the service area, capture leads, and hand calls to a
 person. Every call and transcript lands in the same Inbox as the Twilio calls.
 
-The app side is already built and vendor-neutral. This guide is the Vapi
-dashboard side, which needs your hands. Do **staging** first, then repeat the
-two URL/secret steps for production once you're happy.
+The app side is already built and vendor-neutral. The Vapi side can be built
+from the API with `scripts/setup-vapi.mjs` (idempotent), or by hand with the
+steps below.
+
+> **Provisioned 2026-06-13 via `scripts/setup-vapi.mjs`:**
+> assistant "HP Front Desk" (`595194ca-2b0e-4a76-add7-f566f37f498b`), all four
+> tools, greeting + system prompt, model `claude-3-5-sonnet-20241022`, voice
+> `vapi/Elliot`, webhook -> staging. Attached to a **Vapi test number**:
+> **+1 (360) 614-1198**. The live Twilio line (360) 838-6731 is untouched until
+> go-live. Re-run: `railway run --service hp-estimator-staging -- node scripts/setup-vapi.mjs`.
+> Swap the model with `VAPI_MODEL=...`, the voice with `VAPI_VOICE_ID=...`.
 
 ## What you'll need
 - The HP Twilio number: **+1 (360) 838-6731**
@@ -43,7 +51,7 @@ Assistants → Create.
 - **Model:** Anthropic → Claude (keeps us on our standard brain). Any current
   Claude model is fine.
 - **Voice:** pick a warm, natural US voice (11Labs or PlayHT options are good).
-- **First message:** `Thanks for calling Handy Pioneers, this is the front desk. How can I help with your home today?`
+- **First message:** `Hi, thanks for calling Handy Pioneers. I'm the automated assistant at the front desk. I can take down what you need or connect you with a person. How can I help you today?`
 - **System prompt:** paste the block in the next section.
 
 ### 4. Add the tools (functions)
@@ -153,6 +161,8 @@ Hard rules:
 - Never describe anything as free, cheap, or discounted. Our baseline home
   walkthrough is a paid, flat-fee visit.
 - Be honest. If you don't know, say a team member will follow up.
+- If asked whether you're a person, be honest and friendly: say you're the
+  automated front desk and you'll connect them with a team member if they prefer.
 - Keep it conversational and short. No jargon, no hard sell.
 ```
 
