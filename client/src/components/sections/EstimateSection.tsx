@@ -562,6 +562,10 @@ export default function EstimateSection() {
           totalPrice={totals.totalPrice}
           depositLabel={depositLabel}
           depositAmount={depositAmount}
+          taxEnabled={state.global.taxEnabled}
+          taxRateCode={state.global.taxRateCode}
+          customTaxPct={state.global.customTaxPct}
+          taxAmount={taxAmount}
           scopeSummary={state.jobInfo.scope}
           lineItemsText={generatePlainText()}
           lineItemsJson={JSON.stringify(

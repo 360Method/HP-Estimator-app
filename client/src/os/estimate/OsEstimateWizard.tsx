@@ -535,6 +535,16 @@ export default function OsEstimateWizard() {
   const customer = state.customers.find((c) => c.id === clientId);
   const fmt = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 
+  // Deposit mirrors the full calculator (EstimateSection): the configured
+  // deposit policy off the pre-tax total, not a hardcoded 50%. Both paths
+  // then present and invoice the same deposit.
+  const depositAmount = state.depositType === "pct"
+    ? (totals.totalPrice * state.depositValue) / 100
+    : state.depositValue;
+  const depositLabel = state.depositType === "pct"
+    ? `${state.depositValue}% deposit required to schedule work; balance due upon project completion`
+    : `$${state.depositValue.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })} deposit required to schedule work; balance due upon project completion`;
+
   // ── Open full calculator (lossless hand-off) ─────────────────
   // applyToContext dispatches into the reducer, so the picks land in
   // state.phases/customItems one render later. The pending flag waits for
@@ -1186,8 +1196,8 @@ export default function OsEstimateWizard() {
           customerName={customer?.displayName ?? "Customer"}
           jobTitle={jobTitle || "Project Estimate"}
           totalPrice={totals.totalPrice}
-          depositLabel={`50% deposit (${fmt(grandTotal / 2)})`}
-          depositAmount={grandTotal / 2}
+          depositLabel={depositLabel}
+          depositAmount={depositAmount}
           taxEnabled={state.global.taxEnabled}
           taxRateCode={state.global.taxRateCode}
           customTaxPct={state.global.customTaxPct}
