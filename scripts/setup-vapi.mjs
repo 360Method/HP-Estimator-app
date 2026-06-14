@@ -22,8 +22,10 @@ const VAPI = "https://api.vapi.ai";
 const KEY = process.env.VAPI_API_KEY;
 const SECRET = process.env.VAPI_WEBHOOK_SECRET;
 const WEBHOOK = process.env.VAPI_WEBHOOK_URL || "https://staging-pro.handypioneers.com/api/voice-agent/vapi/events";
-const MODEL = process.env.VAPI_MODEL || "claude-3-5-sonnet-20241022";
-const VOICE_ID = process.env.VAPI_VOICE_ID || "Elliot";
+const MODEL = process.env.VAPI_MODEL || "claude-haiku-4-5-20251001";
+// ElevenLabs "Rachel" — clear American female, low-latency turbo model.
+const VOICE_PROVIDER = process.env.VAPI_VOICE_PROVIDER || "11labs";
+const VOICE_ID = process.env.VAPI_VOICE_ID || "21m00Tcm4TlvDq8ikWAM";
 const ASSISTANT_NAME = "HP Front Desk";
 const TEST_NUMBER_NAME = "HP Test (Vapi)";
 
@@ -123,7 +125,10 @@ const assistantBody = {
     messages: [{ role: "system", content: SYSTEM_PROMPT }],
     tools,
   },
-  voice: { provider: "vapi", voiceId: VOICE_ID },
+  voice:
+    VOICE_PROVIDER === "11labs"
+      ? { provider: "11labs", voiceId: VOICE_ID, model: "eleven_turbo_v2_5" }
+      : { provider: VOICE_PROVIDER, voiceId: VOICE_ID },
   server,
   serverMessages: ["tool-calls", "end-of-call-report"],
 };
@@ -137,7 +142,7 @@ function fail(where, res) {
 (async () => {
   console.log(`Webhook: ${WEBHOOK}`);
   console.log(`Model:   ${MODEL}`);
-  console.log(`Voice:   vapi/${VOICE_ID}\n`);
+  console.log(`Voice:   ${VOICE_PROVIDER}/${VOICE_ID}\n`);
 
   // 1. Assistant — create or update.
   const list = await vapi("GET", "/assistant?limit=100");
