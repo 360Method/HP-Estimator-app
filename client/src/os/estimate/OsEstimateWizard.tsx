@@ -150,6 +150,7 @@ export default function OsEstimateWizard() {
   });
   const brainHealth = trpc.aiBrain.health.useQuery(undefined, { staleTime: 5 * 60_000, refetchOnWindowFocus: false });
   const rewritePhase = trpc.estimate.rewritePhase.useMutation();
+  const sendEstimate = trpc.estimate.send.useMutation();
 
   const pbRows: PbRow[] = useMemo(() => {
     const rows = (pbQuery.data as PbRow[] | undefined) ?? [];
@@ -623,18 +624,15 @@ export default function OsEstimateWizard() {
     }
   }
 
-  async function openSend() {
-    // The review screen IS the approval gate for the wizard flow.
+  // The review screen IS the approval gate for the wizard flow. Both the
+  // present-on-site path and the email path stamp readiness + persist the
+  // snapshot first so the server's margin backstop reads a fresh belowFloor.
+  async function persistApprovalSnapshot() {
     const approvedAt = new Date().toISOString();
     const readyProposal = { ...state.estimateProposal, status: "ready_for_customer" as const, approvedAt };
     setEstimateProposal({ status: "ready_for_customer", approvedAt });
     if (oppId) {
       updateOpportunity(oppId, { value: Math.round(totals.totalPrice) });
-      // Persist value + snapshot to the DB row so the server records the
-      // authoritative margin audit (Rec 1) and commissions can read GP at sale.
-      // Proposal + deposit ride along so readiness survives a reload.
-      // Awaited so estimate.send's margin backstop reads a fresh belowFloor,
-      // not the value from the last save.
       try {
         await updateOpp.mutateAsync({
           id: oppId,
@@ -655,7 +653,61 @@ export default function OsEstimateWizard() {
         // backstop falls back to the last persisted audit.
       }
     }
+  }
+
+  async function openSend() {
+    await persistApprovalSnapshot();
     setShowSendDialog(true);
+  }
+
+  /**
+   * Present on the iPad now without emailing the customer. Creates the
+   * portal estimate record silently (so the close flow can present it and
+   * take a deposit on site) and drops straight into the close flow. Nothing
+   * reaches the customer's inbox until you choose to email it later.
+   */
+  async function presentNow() {
+    if (!customer?.email) {
+      toast.error("Add an email to this client first — the on-site presentation runs through their portal record.");
+      return;
+    }
+    if (state.customItems.some(isUnpricedSpotItem)) {
+      toast.error("Price every line before presenting.");
+      return;
+    }
+    await persistApprovalSnapshot();
+    try {
+      await sendEstimate.mutateAsync({
+        sendEmail: false,
+        sendSms: false,
+        toEmail: customer.email,
+        estimateNumber: state.jobInfo.jobNumber || `HP-${Date.now().toString().slice(-6)}`,
+        customerName: customer.displayName ?? "Customer",
+        jobTitle: jobTitle || "Project Estimate",
+        totalPrice: totals.totalPrice,
+        depositLabel,
+        depositAmount,
+        scopeSummary: jobTitle,
+        lineItemsText: portalPhases.map((p) => `${p.phaseName}\n${p.items.map((i) => `  • ${i.scopeOfWork || i.name}`).join("\n")}\n  Investment: ${fmt(p.phaseTotal)}`).join("\n\n"),
+        lineItemsJson: JSON.stringify(portalPhases),
+        taxEnabled: state.global.taxEnabled,
+        taxRateCode: state.global.taxRateCode,
+        customTaxPct: state.global.customTaxPct,
+        taxAmount: tax?.taxAmount,
+        hpCustomerId: customer.id,
+        hpOpportunityId: oppId ?? undefined,
+        overrideMarginFloor: floorOverridden || undefined,
+      });
+    } catch (e) {
+      toast.error((e as Error).message || "Could not prepare the estimate for presentation");
+      return;
+    }
+    if (oppId) updateOpportunity(oppId, { stage: "Sent", sentAt: new Date().toISOString() });
+    if (oppId && soldByConsultantId != null) {
+      setSoldBy.mutate({ opportunityId: oppId, consultantId: soldByConsultantId });
+    }
+    const propertyId = state.opportunities.find((o) => o.id === oppId)?.propertyId;
+    navigate(`/os/close/${customer.id}${propertyId ? `?propertyId=${encodeURIComponent(propertyId)}` : ""}`);
   }
 
   // ── UI bits ──────────────────────────────────────────────────
@@ -1184,8 +1236,25 @@ export default function OsEstimateWizard() {
               </select>
             </div>
           )}
-          <button type="button" onClick={openSend} className={primaryBtn + " w-full"} style={{ background: "var(--hp-gold-deep)" }}>
-            Send to {customer?.displayName ?? "customer"}
+          <button
+            type="button"
+            onClick={presentNow}
+            disabled={sendEstimate.isPending}
+            className={primaryBtn + " w-full"}
+            style={{ background: "var(--hp-gold-deep)" }}
+          >
+            {sendEstimate.isPending ? "Preparing…" : "Present on iPad now"}
+          </button>
+          <p className="text-[11px] text-center text-muted-foreground -mt-1">
+            Opens the on-site close. Nothing is emailed to {customer?.displayName ?? "the customer"} until you choose to.
+          </p>
+          <button
+            type="button"
+            onClick={openSend}
+            className="w-full text-sm px-5 py-2.5 rounded-lg border font-semibold"
+            style={{ ...inputStyle, color: "var(--hp-ink)" }}
+          >
+            Email it to {customer?.displayName ?? "the customer"} instead
           </button>
         </div>
       )}
