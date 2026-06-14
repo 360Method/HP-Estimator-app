@@ -973,7 +973,7 @@ export default function OsEstimateWizard() {
                     <CustomItemRow ci={ci} lockNotes defaultExpanded={isUnpricedSpotItem(ci)} />
                     {range && (
                       <p className="text-[11px] -mt-2 mb-1 ml-1 text-muted-foreground">
-                        Inspection range: {fmt(range.low)} to {fmt(range.high)}. Starts at the low end; raise it to fit the scope.
+                        Inspection range: {fmt(range.low)} to {fmt(range.high)}. Starts at the midpoint; adjust to fit the scope.
                       </p>
                     )}
                     {isUnpricedSpotItem(ci) && (

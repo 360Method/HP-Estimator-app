@@ -6,9 +6,9 @@
  * visible together on the price check, each PRICED from the inspection's
  * own planning range so nothing reads as "needs pricing" out of the gate.
  *
- * The range is a customer-facing retail bracket, so we start at its low
- * end and back into the hard cost at the global margin (price = cost / (1 -
- * gm)), drop that into the material field, and leave labor at zero. The
+ * The range is a customer-facing retail bracket, so we start at its
+ * midpoint and back into the hard cost at the global margin (price = cost /
+ * (1 - gm)), drop that into the material field, and leave labor at zero. The
  * full calculator engine drives the line from there, so the consultant
  * rebalances material vs. labor, changes the margin, or raises the price
  * toward the high end. We deliberately do NOT guess a price-book SKU: a
@@ -36,9 +36,11 @@ export function seedCustomsFromSpotFindings(
   const gm = globalMarkupPct > 0 && globalMarkupPct < 1 ? globalMarkupPct : 0.4;
   return findings.map((finding, idx) => {
     const description = (finding.recommended_approach || finding.finding || finding.category).slice(0, 300);
-    // Start at the low end so we never auto-inflate a quote; the consultant
-    // raises it toward the high end as the scope warrants.
-    const startPrice = finding.low > 0 ? finding.low : 0;
+    // Start at the midpoint of the range, a balanced planning baseline the
+    // consultant nudges up or down to fit the scope.
+    const low = finding.low > 0 ? finding.low : 0;
+    const high = finding.high > low ? finding.high : low;
+    const startPrice = low > 0 ? (low + high) / 2 : 0;
     const hardCost = startPrice > 0 ? Math.round(startPrice * (1 - gm)) : 0;
     return {
       description,
