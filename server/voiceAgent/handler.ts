@@ -24,6 +24,7 @@ import {
 } from "../db";
 import { onLeadCreated, customerLinkUrl } from "../leadRouting";
 import { sendSms, isTwilioConfigured } from "../twilio";
+import { sendEmail } from "../gmail";
 import { normalizeZip } from "../lib/priorityTranslation/serviceArea";
 import { extractLeadFromTranscript } from "./extract";
 import type { NormalizedCallReport } from "./types";
@@ -45,7 +46,8 @@ function appBaseUrl(): string {
   );
 }
 
-/** Text the owner so they can call a fresh lead back immediately, with a deep link. */
+/** Alert the owner so they can call a fresh lead back immediately, with a deep
+ *  link. Sends by text (when Twilio works) and by email (reliable today). */
 async function sendLeadAlert(input: {
   displayName: string;
   need: string;
@@ -54,12 +56,25 @@ async function sendLeadAlert(input: {
   customerId: string;
   opportunityId: string;
 }): Promise<void> {
-  const to = process.env.LEAD_ALERT_PHONE;
-  if (!to || !isTwilioConfigured()) return;
   const link = `${appBaseUrl()}${customerLinkUrl(input.customerId, input.opportunityId)}`;
   const where = input.city ? ` in ${input.city}` : "";
-  const body = `New call lead: ${input.displayName}${where}. ${input.need}. Call back ${input.callerPhone}. Open the lead: ${link}`;
-  await sendSms(to, body).catch((e) => console.error("[voiceAgent] lead alert SMS failed:", e));
+  const line = `New call lead: ${input.displayName}${where}. ${input.need}. Call back ${input.callerPhone}.`;
+
+  const smsTo = process.env.LEAD_ALERT_PHONE;
+  if (smsTo && isTwilioConfigured()) {
+    await sendSms(smsTo, `${line} Open the lead: ${link}`).catch((e) => console.error("[voiceAgent] lead alert SMS failed:", e));
+  }
+
+  const emailTo = process.env.LEAD_ALERT_EMAIL;
+  if (emailTo) {
+    await sendEmail({
+      to: emailTo,
+      subject: `New call lead: ${input.displayName}${where}`,
+      body: `${line}\n\nOpen the lead in the portal: ${link}`,
+      html: `<p>${line}</p><p><a href="${link}">Open the lead in the portal</a></p>`,
+      skipReplyToken: true,
+    }).catch((e) => console.error("[voiceAgent] lead alert email failed:", e));
+  }
 }
 
 export async function handleCallReport(report: NormalizedCallReport): Promise<void> {

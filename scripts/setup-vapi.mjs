@@ -176,6 +176,7 @@ GETTING THEM ON THE CALENDAR
 
 CLOSING
 Always call capture_lead before the call ends or before any transfer, even if the caller is brief or asks straight for a person. We never lose someone's details. Then tell them clearly what happens next: a team member will follow up to confirm the details and get them scheduled. Thank them warmly by name. Do not promise a specific appointment time yourself.
+When the caller is clearly finished (they say goodbye, thanks, that is all, or have nothing more), give a brief warm sign-off and END THE CALL right away. Do not hold the line open or keep asking if there is anything else.
 
 HARD RULES
 - Never say prices, rates, cost, markup, or margins, and never use the words "estimate," "quote," "free," "complimentary," "cheap," or "discount." We price by the project; a team member goes over what the investment looks like after understanding the work.
@@ -204,12 +205,15 @@ const assistantBody = {
       : { provider: VOICE_PROVIDER, voiceId: VOICE_ID },
   server,
   serverMessages: ["tool-calls", "end-of-call-report"],
-  // Don't burn minutes on a silent caller: nudge twice, then hang up.
-  silenceTimeoutSeconds: 40,
+  // End the call when the conversation is clearly done, and don't burn minutes
+  // on a silent caller: one nudge, then hang up.
+  endCallFunctionEnabled: true,
+  endCallMessage: "Thank you for calling Handy Pioneers. Take care.",
+  silenceTimeoutSeconds: 18,
   messagePlan: {
-    idleMessages: ["Hello, are you still there?", "I can't quite hear you. If you're there, go ahead."],
-    idleTimeoutSeconds: 15,
-    idleMessageMaxSpokenCount: 2,
+    idleMessages: ["Are you still there?"],
+    idleTimeoutSeconds: 10,
+    idleMessageMaxSpokenCount: 1,
   },
   maxDurationSeconds: 600,
 };
