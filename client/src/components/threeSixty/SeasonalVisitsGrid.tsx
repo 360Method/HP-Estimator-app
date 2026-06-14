@@ -23,7 +23,7 @@ const SEASONS: SeasonData[] = [
     tasks: [
       "Swap HVAC filters; test heat-pump output and flag efficiency drop",
       "Document paint and stain condition; touch up or scope a repaint",
-      "Start irrigation; test backflow preventer and adjust coverage",
+      "Start the irrigation system; check coverage and flag the backflow device for its certified test",
       "Inspect crawl-space vapor barrier; resecure lifted sections",
       "Clear blocked attic vents; flag insulation gaps",
       "Clean and seal the deck during the dry-season window",

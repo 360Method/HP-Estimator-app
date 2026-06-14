@@ -268,8 +268,14 @@ export function getTierPriceForBand(
   band: HomeSizeBand = "standard",
 ): number {
   if (cadence === "monthly") return MEMBERSHIP_MONTHLY_GRID[band][tier];
+  // Round to whole dollars (no cents), matching the marketing site.
   const flat = TIER_DEFINITIONS[tier].pricing[cadence];
-  return Math.round(flat * (BAND_MULTIPLIER[band] ?? 1));
+  return Math.round((flat * (BAND_MULTIPLIER[band] ?? 1)) / 100) * 100;
+}
+
+/** Round a cents amount to whole dollars (no cents) for clean display. */
+export function roundToWholeDollar(cents: number): number {
+  return Math.round(cents / 100) * 100;
 }
 
 /** Stripe recurring interval for a cadence, for dynamic (size-banded) prices. */

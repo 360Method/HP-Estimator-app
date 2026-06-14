@@ -132,7 +132,7 @@ export default function MembershipStep({
   // of them. Discount applies to the work, not the tax pass-through.
   const estTaxCents = (ctx.estimate as { taxAmount?: number } | null)?.taxAmount ?? 0;
   const estWorkCents = Math.max(0, (ctx.estimate?.totalAmount ?? 0) - estTaxCents);
-  const estSavingsCents = estWorkCents > 0 ? calcMemberDiscount(tier, estWorkCents) : 0;
+  const estSavingsCents = estWorkCents > 0 ? Math.round(calcMemberDiscount(tier, estWorkCents) / 100) * 100 : 0;
 
   const startCardCheckout = () => {
     if (!property) return;

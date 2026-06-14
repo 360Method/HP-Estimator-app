@@ -42,11 +42,14 @@ function bracketLabel(ceilingCents: number, prevCents: number): string {
   return `${formatDollars(prevCents)}–${formatDollars(ceilingCents)}`;
 }
 
+// Whole-dollar amounts everywhere — no cents.
+const whole = (cents: number) => Math.round(cents / 100) * 100;
+
 function monthlyEquiv(id: MemberTier, cadence: BillingCadence, band?: HomeSizeBand): number {
   const price = band ? getTierPriceForBand(id, cadence, band) : getTierPrice(id, cadence);
   if (cadence === "monthly") return price;
-  if (cadence === "quarterly") return Math.round((price * 4) / 12);
-  return Math.round(price / 12);
+  if (cadence === "quarterly") return whole((price * 4) / 12);
+  return whole(price / 12);
 }
 
 function annualSavings(id: MemberTier, cadence: BillingCadence, band?: HomeSizeBand): number {
@@ -54,7 +57,7 @@ function annualSavings(id: MemberTier, cadence: BillingCadence, band?: HomeSizeB
   const monthly = (band ? getTierPriceForBand(id, "monthly", band) : getTierPrice(id, "monthly")) * 12;
   const price = band ? getTierPriceForBand(id, cadence, band) : getTierPrice(id, cadence);
   const total = cadence === "quarterly" ? price * 4 : price;
-  return Math.max(0, monthly - total);
+  return Math.max(0, whole(monthly - total));
 }
 
 export default function RichTierCards({
